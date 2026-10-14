@@ -21,9 +21,10 @@ const exe = platform() === "win32" ? ".exe" : "";
 const tar = platform() === "win32" ? join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe") : "tar";
 
 // Where each tool's executable lands inside its extracted archive.
-const binDir = {
+export const binDir = {
     go: dir => join(dir, "go", "bin"),
     hyperfine: dir => dir,
+    node: dir => platform() === "win32" ? dir : join(dir, "bin"),
 };
 
 async function install(name, tool) {
@@ -60,9 +61,10 @@ async function install(name, tool) {
     console.log(`ok   ${name} ${tool.version} ${binDir[name](dir)}`);
 }
 
-// hyperfine's Linux/macOS archives contain one top-level directory (hyperfine-vX-target/); lift its contents.
+// hyperfine's Linux/macOS archives and all Node archives contain one top-level
+// directory (hyperfine-vX-target/, node-vX-platform/); lift its contents.
 function flattenSingleTopDir(name, dir) {
-    if (name !== "hyperfine") return;
+    if (name !== "hyperfine" && name !== "node") return;
     const entries = readdirSync(dir, { withFileTypes: true });
     if (entries.length === 1 && entries[0].isDirectory()) {
         const inner = join(dir, entries[0].name);

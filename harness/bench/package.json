@@ -1,0 +1,11 @@
+{
+  "name": "neversharp-bench",
+  "private": true,
+  "type": "module",
+  "description": "Benchmark harness: pinned compiler releases, parse-only drivers, hyperfine wrappers, result schema, report generator.",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "typescript6": "npm:typescript@6.0.3",
+    "typescript7": "npm:typescript@7.0.2"
+  }
+}

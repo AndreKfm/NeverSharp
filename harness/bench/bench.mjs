@@ -1,0 +1,153 @@
+// Copyright 2026 Andre Kaufmann
+// SPDX-License-Identifier: Apache-2.0
+//
+// Benchmark runner. For every (repository, configuration) pair:
+//   1. one validation run: the driver's output must report the expected file count;
+//   2. wall-clock via hyperfine (--shell=none, warmup, N runs, JSON export);
+//   3. a separate memory pass under peakmem (not timed together with step 2).
+// Writes artifacts/bench/results/<runId>/run.json (schema: result.schema.json)
+// plus the raw hyperfine exports. A run whose rig checks fail is still written
+// but marked protocolCompliant=false; the report labels it as a probe.
+//
+// Usage: node bench.mjs [--repos a,b] [--configs x,y] [--runs 20] [--warmup 3]
+//                       [--mem-runs 5] [--label text]
+
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join, relative } from "node:path";
+import { benchDir, exe, pins, repoRoot } from "./common.mjs";
+import { captureEnvironment } from "./env.mjs";
+import { mad, median } from "./stats.mjs";
+
+const arg = (name, fallback) => process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : fallback;
+const tools = join(repoRoot, ".tools");
+const bin = join(repoRoot, "artifacts", "bin");
+const node = join(tools, `node-${pins.tools.node.version}`, "node" + exe);
+const hyperfine = join(tools, `hyperfine-${pins.tools.hyperfine.version}`, "hyperfine" + exe);
+const peakmem = join(bin, "peakmem", "peakmem" + exe);
+const parseGo = join(bin, "parse-go" + exe);
+const here = import.meta.dirname;
+
+// Configurations of the parse-only suite. Every configuration is reported; none is dropped after the fact.
+const configurations = [
+    { id: "tsc6-parse", label: "tsc 6.0.3 (Node 24), single-threaded", command: list => [node, join(here, "parse-ts.mjs"), list] },
+    { id: "tsgo7-parse", label: "typescript-go 7.0.2, parallel (default)", command: list => [parseGo, list] },
+    { id: "tsgo7-parse-single", label: "typescript-go 7.0.2, single-threaded", command: list => [parseGo, "--single", list] },
+];
+
+const runs = Number(arg("--runs", "20"));
+const warmup = Number(arg("--warmup", "3"));
+const memRuns = Number(arg("--mem-runs", "5"));
+const repoFilter = arg("--repos", undefined)?.split(",");
+const configFilter = arg("--configs", undefined)?.split(",");
+const label = arg("--label", "");
+
+const fileManifest = JSON.parse(readFileSync(join(benchDir, "filelists", "manifest.json"), "utf8"));
+const repos = pins.benchmarkCorpus.repos.map(r => r.name).filter(r => !repoFilter || repoFilter.includes(r));
+const configs = configurations.filter(c => !configFilter || configFilter.includes(c.id));
+
+// hyperfine --shell=none splits the command line with POSIX shell-word rules, where a
+// backslash is an escape character: pass paths with forward slashes (valid on Windows).
+const quote = s => {
+    const v = s.replaceAll("\\", "/");
+    return /[\s"']/.test(v) ? `'${v}'` : v;
+};
+const version = (cmd, args) => execFileSync(cmd, args, { encoding: "utf8" }).trim().split("\n")[0];
+const toolchain = {
+    node: version(node, ["--version"]),
+    hyperfine: version(hyperfine, ["--version"]),
+    goToolset: execFileSync(join(tools, `go-${pins.tools.go.version}`, "go", "bin", "go" + exe), ["version", "-m", parseGo], { encoding: "utf8" }).match(/microsoft_toolset_version=(\S+)/)?.[1] ?? "unknown",
+    dotnetSdk: version("dotnet", ["--version"]),
+    typescript6: JSON.parse(readFileSync(join(here, "node_modules", "typescript6", "package.json"), "utf8")).version,
+    typescript7: JSON.parse(readFileSync(join(here, "node_modules", "typescript7", "package.json"), "utf8")).version,
+};
+
+const startedAt = new Date();
+const runId = startedAt.toISOString().replace(/[:.]/g, "-");
+const outDir = join(benchDir, "results", runId);
+mkdirSync(outDir, { recursive: true });
+
+console.log("capturing environment and checking rig ...");
+const environment = await captureEnvironment(toolchain);
+for (const c of environment.checks) console.log(`  ${c.ok ? "ok  " : "FAIL"} ${c.id}: ${c.value} (required: ${c.required})`);
+if (!environment.protocolCompliant) console.log("  -> rig checks failed: results are recorded as a PROBE, not as protocol results");
+
+const results = [];
+for (const repo of repos) {
+    const list = join(benchDir, "filelists", `${repo}.txt`);
+    const corpus = fileManifest.repos[repo];
+    for (const config of configs) {
+        const command = config.command(list);
+        // 1. validation
+        const check = spawnSync(command[0], command.slice(1), { encoding: "utf8" });
+        if (check.status !== 0) throw new Error(`${config.id} on ${repo} failed: ${check.stderr}`);
+        const output = JSON.parse(check.stdout.trim().split("\n").pop());
+        if (output.files !== corpus.files) throw new Error(`${config.id} on ${repo}: parsed ${output.files} files, expected ${corpus.files}`);
+
+        // 2. wall-clock
+        const exportFile = join(outDir, `hyperfine-${repo}-${config.id}.json`);
+        console.log(`\n== ${repo} / ${config.id}`);
+        execFileSync(hyperfine, ["--shell=none", "--warmup", String(warmup), "--runs", String(runs), "--export-json", exportFile,
+            "--command-name", `${repo}/${config.id}`, command.map(quote).join(" ")], { stdio: "inherit" });
+        const hf = JSON.parse(readFileSync(exportFile, "utf8")).results[0];
+        const times = hf.times;
+        const med = median(times);
+
+        // 3. memory
+        const peaks = [];
+        for (let i = 0; i < memRuns; i++) {
+            const r = spawnSync(peakmem, command, { encoding: "utf8" });
+            if (r.status !== 0) throw new Error(`peakmem ${config.id} on ${repo} failed: ${r.stderr}`);
+            peaks.push(JSON.parse(r.stderr.trim().split("\n").pop()));
+        }
+
+        results.push({
+            repo,
+            config: config.id,
+            configLabel: config.label,
+            kind: "parse",
+            command: command.map(c => c.startsWith(repoRoot) ? relative(repoRoot, c).split("\\").join("/") : c),
+            output,
+            timing: {
+                unit: "s",
+                times,
+                median: med,
+                mad: mad(times),
+                madOverMedianPercent: 100 * mad(times) / med,
+                mean: hf.mean,
+                stddev: hf.stddev,
+                min: hf.min,
+                max: hf.max,
+                userMean: hf.user,
+                systemMean: hf.system,
+            },
+            throughput: { filesPerSecond: corpus.files / med, megabytesPerSecond: corpus.bytes / 1e6 / med },
+            memory: {
+                runs: memRuns,
+                peakWorkingSetBytes: peaks.map(p => p.peakWorkingSetBytes),
+                peakCommitBytes: peaks.map(p => p.peakCommitBytes),
+                medianPeakWorkingSetBytes: median(peaks.map(p => p.peakWorkingSetBytes)),
+                medianPeakCommitBytes: median(peaks.map(p => p.peakCommitBytes)),
+            },
+            runtime: null, // C# configurations: bytes allocated, GC count, GC pause (from the driver's own report)
+            hyperfineExport: relative(outDir, exportFile),
+        });
+    }
+}
+
+const run = {
+    schemaVersion: 1,
+    runId,
+    label,
+    startedAt: startedAt.toISOString(),
+    finishedAt: new Date().toISOString(),
+    protocolCompliant: environment.protocolCompliant,
+    suite: "parse",
+    settings: { runs, warmup, memRuns, hyperfineShell: "none" },
+    environment,
+    corpus: Object.fromEntries(repos.map(r => [r, { commit: fileManifest.repos[r].commit, files: fileManifest.repos[r].files, bytes: fileManifest.repos[r].bytes, contentSha256: fileManifest.repos[r].contentSha256 }])),
+    configurations: configs.map(c => ({ id: c.id, label: c.label })),
+    results,
+};
+writeFileSync(join(outDir, "run.json"), JSON.stringify(run, null, 1));
+console.log(`\nwritten ${join(outDir, "run.json")}`);

@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/AndreKfm/NeverSharp/harness/bench/result.schema.json",
+  "title": "NeverSharp benchmark run",
+  "description": "One benchmark run as written by harness/bench/bench.mjs (schemaVersion 1).",
+  "type": "object",
+  "required": ["schemaVersion", "runId", "startedAt", "finishedAt", "protocolCompliant", "suite", "settings", "environment", "corpus", "configurations", "results"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "runId": { "type": "string" },
+    "label": { "type": "string" },
+    "startedAt": { "type": "string", "format": "date-time" },
+    "finishedAt": { "type": "string", "format": "date-time" },
+    "protocolCompliant": { "type": "boolean", "description": "True only if every environment check passed. Non-compliant runs are probes and are never reported as results." },
+    "suite": { "enum": ["parse"] },
+    "settings": {
+      "type": "object",
+      "required": ["runs", "warmup", "memRuns", "hyperfineShell"],
+      "properties": {
+        "runs": { "type": "integer", "minimum": 1 },
+        "warmup": { "type": "integer", "minimum": 0 },
+        "memRuns": { "type": "integer", "minimum": 1 },
+        "hyperfineShell": { "type": "string" }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "required": ["machine", "rig", "toolchain", "git", "pinsSha256", "checks", "protocolCompliant"],
+      "properties": {
+        "machine": {
+          "type": "object",
+          "required": ["cpu", "cores", "logicalProcessors", "nominalMHz", "ramBytes", "board", "bios", "os", "osVersion"]
+        },
+        "rig": {
+          "type": "object",
+          "required": ["scheme", "minProcessorStateAc", "maxProcessorStateAc", "idleCpuPercent", "processorPerformanceUnderLoadPercent"]
+        },
+        "toolchain": {
+          "type": "object",
+          "required": ["node", "hyperfine", "goToolset", "dotnetSdk", "typescript6", "typescript7"]
+        },
+        "git": {
+          "type": "object",
+          "required": ["commit", "dirty"],
+          "properties": { "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" }, "dirty": { "type": "boolean" } }
+        },
+        "pinsSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "required", "value", "ok"],
+            "properties": { "id": { "type": "string" }, "required": { "type": "string" }, "value": { "type": "string" }, "ok": { "type": "boolean" } }
+          }
+        },
+        "protocolCompliant": { "type": "boolean" }
+      }
+    },
+    "corpus": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["commit", "files", "bytes", "contentSha256"],
+        "properties": {
+          "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+          "files": { "type": "integer" },
+          "bytes": { "type": "integer" },
+          "contentSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        }
+      }
+    },
+    "configurations": {
+      "type": "array",
+      "items": { "type": "object", "required": ["id", "label"] }
+    },
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["repo", "config", "kind", "command", "output", "timing", "throughput", "memory", "runtime", "hyperfineExport"],
+        "properties": {
+          "repo": { "type": "string" },
+          "config": { "type": "string" },
+          "kind": { "enum": ["parse"] },
+          "command": { "type": "array", "items": { "type": "string" } },
+          "output": { "type": "object", "required": ["files", "nodes"], "description": "The driver's own report from the validation run." },
+          "timing": {
+            "type": "object",
+            "required": ["unit", "times", "median", "mad", "madOverMedianPercent", "mean", "stddev", "min", "max"],
+            "properties": {
+              "unit": { "const": "s" },
+              "times": { "type": "array", "items": { "type": "number" } },
+              "median": { "type": "number" },
+              "mad": { "type": "number", "description": "Median absolute deviation, unscaled." },
+              "madOverMedianPercent": { "type": "number" }
+            }
+          },
+          "throughput": {
+            "type": "object",
+            "required": ["filesPerSecond", "megabytesPerSecond"],
+            "properties": { "filesPerSecond": { "type": "number" }, "megabytesPerSecond": { "type": "number", "description": "10^6 bytes of on-disk source per second of median wall-clock." } }
+          },
+          "memory": {
+            "type": "object",
+            "required": ["runs", "peakWorkingSetBytes", "peakCommitBytes", "medianPeakWorkingSetBytes", "medianPeakCommitBytes"]
+          },
+          "runtime": {
+            "description": "C# configurations only: the driver's own GC report. Null for other configurations.",
+            "oneOf": [
+              { "type": "null" },
+              {
+                "type": "object",
+                "required": ["allocatedBytes", "gen0", "gen1", "gen2", "pauseMs"],
+                "properties": {
+                  "allocatedBytes": { "type": "integer" },
+                  "gen0": { "type": "integer" },
+                  "gen1": { "type": "integer" },
+                  "gen2": { "type": "integer" },
+                  "pauseMs": { "type": "number" }
+                }
+              }
+            ]
+          },
+          "hyperfineExport": { "type": "string" }
+        }
+      }
+    }
+  }
+}

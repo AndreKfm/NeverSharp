@@ -7,7 +7,7 @@ Items marked **[DECISION, CONFIRMED]** were proposed by the assistant and approv
 
 | Component | Value |
 |---|---|
-| CPU | AMD Ryzen 9 3900X, 12 cores / 24 threads (SMT on), Zen 2, 2 CCDs / 4 CCXs, max boost reported 4150 MHz |
+| CPU | AMD Ryzen 9 3900X, 12 cores / 24 threads (SMT on), Zen 2, 2 CCDs / 4 CCXs. Windows reports a nominal frequency of 4150 MHz (the part's specified base clock is 3.8 GHz); see 2.1 |
 | Mainboard | MSI X570-A PRO (MS-7C37), BIOS H.60 (2019-11-06) |
 | Memory | 64 GB DDR4, 4 × 16 GB Corsair CMW64GX4M4C3200C16, configured 3200 MT/s |
 | Storage (benchmark volume D:) | Corsair Force MP510 NVMe SSD, 1.8 TB |
@@ -15,7 +15,7 @@ Items marked **[DECISION, CONFIRMED]** were proposed by the assistant and approv
 | GPU | NVIDIA GeForce RTX 2060 (not used) |
 | OS | Windows 11 Pro 10.0.26200, UBR 6584 |
 | Form factor | Desktop, no battery |
-| Node.js | 22.18.0 (runs tsc 6.0) |
+| Node.js | 24.21.0, pinned and installed into `.tools/` (runs tsc 6.0.3). The system Node (22.18.0, behind a Volta shim) is not used for measurements. |
 
 ## 2. Measurement-relevant state (as found)
 
@@ -30,16 +30,29 @@ Items marked **[DECISION, CONFIRMED]** were proposed by the assistant and approv
 | Windows Search service | running | benchmark directory excluded from indexing |
 | Virtualization-based security | running | unchanged, see 3.4 |
 
+### 2.1 Clock behavior, measured 2026-10-14
+
+Measured with the Windows performance counters `ProcessorFrequency` and `PercentProcessorPerformance` (WMI class `Win32_PerfFormattedData_Counters_ProcessorInformation`):
+
+| Load | Nominal frequency | Processor performance | Effective clock |
+|---|---|---|---|
+| all 24 logical processors busy | 4150 MHz | 100 % | 4150 MHz |
+| one thread busy (highest core) | 4150 MHz | 100 % | 4150 MHz |
+
+The clock is the same under single-thread and all-core load and never exceeds the nominal value. This is a fixed all-core clock. Which firmware setting produces it is not recorded and does not need to be: the protocol requires the measured property of 3.1 ("no clock above nominal under any load"), not a particular BIOS setting, and `harness/bench/env.mjs` verifies that property before every run (`boost-off`). The firmware is left as found; the project makes no BIOS changes.
+
+Minimum processor state was 5 % when first recorded and 100 % at the time of this measurement.
+
 ## 3. Decisions
 
-### 3.1 [DECISION, CONFIRMED] Core Performance Boost off for all protocol measurements
+### 3.1 [DECISION, CONFIRMED] No clock above nominal under any load (boost off or fixed clock)
 
 Precision Boost raises the clock depending on temperature, load and the number of active cores. Two consequences:
 
 - It is the largest single source of run-to-run variance on this CPU.
 - It is not neutral between the two sides. Boost favors lightly threaded work. typescript-go parses and checks in parallel; tsc 6.0 is single-threaded. With boost on, the less parallel side gets a higher clock than the more parallel side. (Whether the C# port parallelizes the way typescript-go does is a separate protocol question.)
 
-With boost off, all cores run at the 3.8 GHz base clock. This is the closest Windows equivalent of the brief's "CPU governor fixed". A run with boost on may be reported, labeled post hoc.
+Requirement: no core runs above the nominal clock under any load, so the clock does not depend on how many threads a configuration uses. This is the closest Windows equivalent of the brief's "CPU governor fixed". On the reference machine it is met by a fixed all-core clock of 4150 MHz (section 2.1), not by the 3.8 GHz base clock assumed when this decision was written. A run with boost on may be reported, labeled post hoc.
 
 ### 3.2 [DECISION, CONFIRMED] SMT stays on
 
@@ -59,9 +72,9 @@ The BIOS (H.60, 2019) is old. It is not updated during the project, because a BI
 
 ## 4. Setup steps for the maintainer
 
-These steps need administrator rights or BIOS access, so the maintainer does them, not the assistant.
+These steps need administrator rights, so the maintainer does them, not the assistant. Applied by the maintainer on 2026-10-14.
 
-1. **BIOS:** set *Core Performance Boost* to *Disabled* (MSI: OC → Advanced CPU Configuration → AMD Overclocking / Core Performance Boost, depending on BIOS version).
+1. **Clock:** no action on the reference machine. The clock is already fixed (section 2.1); the `boost-off` check guards it. A different machine with an active boost would need it disabled.
 2. **Minimum processor state 100 % (AC)**, in an elevated shell:
    ```
    powercfg /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMIN 100
