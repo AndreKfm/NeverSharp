@@ -429,3 +429,6 @@ FodyWeavers.xsd
 
 # Reference checkouts (fetched by scripts/fetch-references.mjs, never committed)
 external/
+
+# Pinned toolchain (installed by scripts/install-tools.mjs, never committed)
+.tools/

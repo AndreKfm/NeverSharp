@@ -108,3 +108,18 @@ Third-party material that a port inherits:
 **[DECISION] `tests/cases/**` and baselines are not vendored.** They are fetched at the pinned commit like the source. Permitted under Apache-2.0 either way; not vendoring keeps the repository small and makes the pin the only version that can be tested against.
 
 **[DECISION, CONFIRMED 2026-10-14] DCO, not CLA.** See CONTRIBUTING.md. Caveat: a DCO certifies origin; it does not grant the maintainer any rights beyond Apache-2.0 itself. Apache-2.0 §2 already allows sublicensing, so the project can always ship contributions under Apache-2.0, but relicensing under different terms would need a CLA. If "keeping license control" means the ability to relicense, a CLA is required instead.
+
+## 5. Toolchain
+
+Pinned in [pins.json](../pins.json) (`tools`) and [global.json](../global.json); installed into `.tools/` by `node scripts/install-tools.mjs`, which verifies each archive's SHA-256 before extracting. Nothing is installed system-wide.
+
+| Tool | Version | Source | Purpose |
+|---|---|---|---|
+| .NET SDK | 10.0.402 (runtime 10.0.13) | global.json, `rollForward: disable` | C# port, BenchmarkDotNet |
+| Go | 1.26.9 | go.dev/dl (official archives) | Building the typescript-go AST dumper |
+| hyperfine | 1.20.0 | github.com/sharkdp/hyperfine releases | CLI wall-clock measurement |
+
+- **Go 1.26.9:** typescript-go 7.0.2 declares `go 1.26`; 1.26.9 is the latest 1.26 patch release as of 2026-10-14. typescript-go's own CI installs Microsoft's Go distribution (`.github/actions/setup-go`, `go1.26`). That matters only for the dumper, which measures correctness, not speed. The benchmark uses Microsoft's shipped npm binary (`@typescript/typescript-<platform>@7.0.2`), so no Go toolchain of ours is involved in any timing.
+- **[DECISION] hyperfine 1.20.0 (2025-11-18), not 1.21.0 (2026-10-05) or 2.0.0 (2026-10-07).** The newer releases were 9 and 7 days old at pin time, and 2.0.0 is a new major version whose JSON export may change. 1.20.0 has been stable for 11 months.
+- **[DECISION] .NET SDK 10.0.402 (runtime 10.0.13) with `rollForward: disable`.** The latest .NET 10 servicing release as of 2026-10-14 (released 2026-10-13, per builds.dotnet.microsoft.com release metadata). Exact pinning means a machine without this SDK fails loudly instead of silently measuring a different runtime. Before the pre-registration tag, re-check for a newer 10.0.x servicing release; a re-pin after the tag is an amendment.
+- **NativeAOT on Windows** links with MSVC `link.exe`. The ILCompiler package (10.0.13) locates it via `vswhere -latest -prerelease`, which on the reference machine selects Visual Studio 18 Insiders (MSVC 14.51.36231), not the installed Build Tools 2019. That `vcvarsall.bat` calls `vswhere.exe` by name, so `C:\Program Files (x86)\Microsoft Visual Studio\Installer` must be on `PATH`, otherwise the publish fails with MSB3073. Requirement for the harness (not yet built): set this explicitly and record the linker version with each NativeAOT result. Git Bash drops the `ProgramFiles(x86)` variable, so NativeAOT builds must run from PowerShell or cmd. Code generation is done by ILC, not the linker; the linker version is recorded for completeness, not because it is expected to affect timings.

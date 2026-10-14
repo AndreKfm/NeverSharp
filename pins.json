@@ -47,6 +47,34 @@
       }
     }
   },
+  "tools": {
+    "$comment": "Pinned toolchain, installed into .tools/ by scripts/install-tools.mjs and verified by SHA-256. The .NET SDK is pinned in global.json.",
+    "go": {
+      "version": "1.26.9",
+      "purpose": "Building the typescript-go AST dumper (not the benchmark binary, which is Microsoft's npm release)",
+      "archives": {
+        "win32-x64":    { "url": "https://go.dev/dl/go1.26.9.windows-amd64.zip",   "sha256": "d722201a9c0c086d1610e111c48203009af690892ed708072bd5ae20160e7a59" },
+        "linux-x64":    { "url": "https://go.dev/dl/go1.26.9.linux-amd64.tar.gz",  "sha256": "42d158b4d8f7b61ac0a830567c940a86098fb7aac52e467a5ebec03ef5cc2f8d" },
+        "linux-arm64":  { "url": "https://go.dev/dl/go1.26.9.linux-arm64.tar.gz",  "sha256": "4a97373d49fcacdcf3694fea368a500b00ee3e963974f3e7514132717632f052" },
+        "darwin-arm64": { "url": "https://go.dev/dl/go1.26.9.darwin-arm64.tar.gz", "sha256": "f9bb7c0a02506c5d9bf0d1eb1f7ee6c7684f844ae49558308a0427b830e022cc" }
+      }
+    },
+    "hyperfine": {
+      "version": "1.20.0",
+      "archives": {
+        "win32-x64":    { "url": "https://github.com/sharkdp/hyperfine/releases/download/v1.20.0/hyperfine-v1.20.0-x86_64-pc-windows-msvc.zip",        "sha256": "2508c549b049b1d4342d08edc1cb42bfac169082b6e3069431b5bab9822dbb32" },
+        "linux-x64":    { "url": "https://github.com/sharkdp/hyperfine/releases/download/v1.20.0/hyperfine-v1.20.0-x86_64-unknown-linux-musl.tar.gz",  "sha256": "3285ec7959285288137043dd81dce0dde056227018a8277532d9a364b4f03c2b" },
+        "linux-arm64":  { "url": "https://github.com/sharkdp/hyperfine/releases/download/v1.20.0/hyperfine-v1.20.0-aarch64-unknown-linux-gnu.tar.gz",  "sha256": "90875cb1db7a1d797c311174d061728361e58fc70e3b62262a00635ac3b1997c" },
+        "darwin-arm64": { "url": "https://github.com/sharkdp/hyperfine/releases/download/v1.20.0/hyperfine-v1.20.0-aarch64-apple-darwin.tar.gz",      "sha256": "8ee7067016620447c9d2d6234ec9a4680f958b7ad983549b56334668f63075b5" }
+      }
+    },
+    "dotnet": {
+      "sdk": "10.0.402",
+      "runtime": "10.0.13",
+      "released": "2026-10-13",
+      "$comment": "Pinned in global.json with rollForward=disable."
+    }
+  },
   "benchmarkCorpus": {
     "$comment": "Exactly the five codebases in Microsoft's 'Announcing TypeScript 7.0' post (2026-07-08). The post names no commits, commands or hardware, so commits were selected by the rule in docs/references.md, section 'Benchmark corpus': git rev-list --first-parent -1 --before=2026-07-08T00:00:00Z <default branch>. None of these repositories is vendored.",
     "source": "https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/",
