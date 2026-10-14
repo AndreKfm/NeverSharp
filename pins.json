@@ -1,0 +1,61 @@
+{
+  "$comment": "Single source of truth for every upstream input. Changing any value here is a protocol amendment (new dated tag + public note). Resolved 2026-10-14 from GitHub and the npm registry; see docs/references.md.",
+  "references": {
+    "typescript": {
+      "role": "Port source and oracle 1 (tsc 6.0, JavaScript)",
+      "repository": "https://github.com/microsoft/TypeScript",
+      "tag": "v6.0.3",
+      "commit": "050880ce59e30b356b686bd3144efe24f875ebc8",
+      "commitDate": "2026-04-15T22:34:47Z",
+      "license": "Apache-2.0",
+      "npm": {
+        "package": "typescript",
+        "version": "6.0.3",
+        "gitHead": "050880ce59e30b356b686bd3144efe24f875ebc8",
+        "published": "2026-04-16T23:38:27.905Z",
+        "tarball": "https://registry.npmjs.org/typescript/-/typescript-6.0.3.tgz",
+        "integrity": "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="
+      }
+    },
+    "typescript-go": {
+      "role": "Performance baseline and oracle 2 (TypeScript 7.0, Go)",
+      "repository": "https://github.com/microsoft/typescript-go",
+      "tag": "typescript/v7.0.2",
+      "commit": "2bd066d87f5bafd315be9f40889d0a60b9e58e0b",
+      "commitDate": "2026-07-07T21:22:40-07:00",
+      "license": "Apache-2.0",
+      "goDirective": "1.26",
+      "portedFromTypeScript": {
+        "$comment": "Value of the _submodules/TypeScript gitlink at the pinned typescript-go commit. NOT identical to v6.0.3; see docs/references.md, section 'Oracle delta'.",
+        "branch": "tsgo-port",
+        "commit": "4d4f005c8541e0255a9d8791205fdce326e462bc",
+        "commitDate": "2026-06-29T22:47:36Z"
+      },
+      "npm": {
+        "package": "typescript",
+        "version": "7.0.2",
+        "gitHead": "2bd066d87f5bafd315be9f40889d0a60b9e58e0b",
+        "published": "2026-07-08T15:55:18.431Z",
+        "tarball": "https://registry.npmjs.org/typescript/-/typescript-7.0.2.tgz",
+        "integrity": "sha512-8FYau96o3NKOhbjKi/qNvG/W5jhzxkbdm5sj9AbZ/5T5sWqn3hJgLfGx27sRKZWTvyzCP8dLRBTf5tBTSRVUNA==",
+        "nativeBinaries": {
+          "@typescript/typescript-linux-x64": "sha512-EYdf2cNg7rgCWJnxCdJ+F3V39O8ihb37eHAu1LK8oAFizgTQbPOK7zHHXbPt8rX24COqODXeI3sIf0fCXG7H/A==",
+          "@typescript/typescript-linux-arm64": "sha512-Qh4eU4/y3yDjnfjjyPYihMj5/ODIlmt+Bzu17OI+fiSRDW57QmU5SiN63exPRNJPKUzcc1INa1NXdrJ+MqHjUQ==",
+          "@typescript/typescript-win32-x64": "sha512-0BQ3HkAHHlKLSp1qRvf3SUhGpGsDuhB/jgFw75guyqbxJqEaS0Cw/VFO8i2nHglJUzQCRtMMR/IBAKE3ETMC4g==",
+          "@typescript/typescript-darwin-arm64": "sha512-gowzar9MwS/aRWp6f3a4KUqzRjAZjOsmGNCM6LcTgXum+dBfgsBVMN+AgvOCCbguXyick6LJhpBszxMebJ8syA=="
+        }
+      }
+    }
+  },
+  "benchmarkCorpus": {
+    "$comment": "Exactly the five codebases in Microsoft's 'Announcing TypeScript 7.0' post (2026-07-08). The post names no commits, commands or hardware, so commits were selected by the rule in docs/references.md, section 'Benchmark corpus': git rev-list --first-parent -1 --before=2026-07-08T00:00:00Z <default branch>. None of these repositories is vendored.",
+    "source": "https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/",
+    "repos": [
+      { "name": "vscode",     "repository": "https://github.com/microsoft/vscode",            "branch": "main",   "license": "MIT",                      "commit": "f507e492b81074fff62b0806d47760671c3990b5" },
+      { "name": "sentry",     "repository": "https://github.com/getsentry/sentry",            "branch": "master", "license": "non-OSI (GitHub: NOASSERTION)", "commit": "b4e1ddf51f55e4aa973b2d0c028485f13de779a6" },
+      { "name": "bluesky",    "repository": "https://github.com/bluesky-social/social-app",   "branch": "main",   "license": "MIT",                      "commit": "ea3d6827c75c2c2063bdb8d3240c62d8f041c7fa" },
+      { "name": "playwright", "repository": "https://github.com/microsoft/playwright",        "branch": "main",   "license": "Apache-2.0",               "commit": "a061d963659048a43169bd87c84960d89f496cdb" },
+      { "name": "tldraw",     "repository": "https://github.com/tldraw/tldraw",               "branch": "main",   "license": "non-OSI (GitHub: NOASSERTION)", "commit": "9986114e3493118095f60146becd0219e100745e" }
+    ]
+  }
+}

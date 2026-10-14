@@ -1,0 +1,31 @@
+NeverSharp
+Copyright 2026 Andre Kaufmann
+
+This product includes software developed by Microsoft Corporation
+(TypeScript, typescript-go), licensed under the Apache License 2.0.
+
+  TypeScript     https://github.com/microsoft/TypeScript
+                 tag v6.0.3, commit 050880ce59e30b356b686bd3144efe24f875ebc8
+                 Portions Copyright (c) Microsoft Corporation.
+
+  typescript-go  https://github.com/microsoft/typescript-go
+                 tag typescript/v7.0.2, commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
+                 Portions Copyright (c) Microsoft Corporation.
+
+Source files under src/ that are ported from these projects carry a header
+naming the upstream file and commit they were ported from.
+
+The upstream license and third-party notice files are reproduced unmodified
+in licenses/:
+
+  licenses/TypeScript/LICENSE.txt
+  licenses/TypeScript/ThirdPartyNoticeText.txt
+  licenses/typescript-go/LICENSE
+  licenses/typescript-go/NOTICE.txt
+
+The Unicode identifier tables in the TypeScript scanner are derived from
+Unicode data; the Unicode, Inc. license is reproduced in
+licenses/TypeScript/ThirdPartyNoticeText.txt.
+
+"TypeScript" is a trademark of Microsoft Corporation. NeverSharp is not
+affiliated with, sponsored by, or endorsed by Microsoft Corporation.

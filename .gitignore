@@ -426,3 +426,6 @@ FodyWeavers.xsd
 
 # Official VS Code C# Dev Kit Extension exclusion
 #*.lscache
+
+# Reference checkouts (fetched by scripts/fetch-references.mjs, never committed)
+external/
