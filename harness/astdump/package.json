@@ -1,0 +1,10 @@
+{
+  "name": "neversharp-astdump",
+  "private": true,
+  "type": "module",
+  "description": "Canonical AST dumpers (tsc 6.0 side) and comparer for the Phase 1 equivalence gate.",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "typescript": "6.0.3"
+  }
+}

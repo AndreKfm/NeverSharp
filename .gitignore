@@ -432,3 +432,7 @@ external/
 
 # Pinned toolchain (installed by scripts/install-tools.mjs, never committed)
 .tools/
+
+# Harness outputs and dependencies
+artifacts/
+node_modules/
