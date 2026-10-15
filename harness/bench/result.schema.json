@@ -15,12 +15,13 @@
     "suite": { "enum": ["parse"] },
     "settings": {
       "type": "object",
-      "required": ["runs", "warmup", "memRuns", "hyperfineShell"],
+      "required": ["runs", "warmup", "memRuns", "hyperfineShell", "processPriority"],
       "properties": {
         "runs": { "type": "integer", "minimum": 1 },
         "warmup": { "type": "integer", "minimum": 0 },
         "memRuns": { "type": "integer", "minimum": 1 },
-        "hyperfineShell": { "type": "string" }
+        "hyperfineShell": { "type": "string" },
+        "processPriority": { "enum": ["high", "normal"], "description": "Priority class every driver sets for itself at start and reports back." }
       }
     },
     "environment": {

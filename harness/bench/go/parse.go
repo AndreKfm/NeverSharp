@@ -13,7 +13,10 @@
 // All SourceFiles stay referenced until the end, as a Program keeps them, so
 // memory and GC behavior reflect a compiler's parse phase.
 //
-// Prints one JSON line (file count, bytes, node count).
+// With NEVERSHARP_PRIORITY=high the process first raises itself to the high
+// priority class (priority_windows.go); the class in effect is reported.
+//
+// Prints one JSON line (file count, bytes, node count, priority class).
 //
 // Usage: parse-go [--single] <file list>
 
@@ -38,6 +41,10 @@ func main() {
 	if len(args) > 0 && args[0] == "--single" {
 		single = true
 		args = args[1:]
+	}
+	priority := currentPriority()
+	if os.Getenv("NEVERSHARP_PRIORITY") == "high" {
+		priority = raisePriority()
 	}
 	list, err := os.ReadFile(args[0])
 	if err != nil {
@@ -72,5 +79,5 @@ func main() {
 	if single {
 		mode = "single"
 	}
-	fmt.Printf("{\"driver\":\"tsgo-7.0.2-%s\",\"files\":%d,\"bytes\":%d,\"nodes\":%d}\n", mode, len(sourceFiles), chars.Load(), nodes.Load())
+	fmt.Printf("{\"driver\":\"tsgo-7.0.2-%s\",\"files\":%d,\"bytes\":%d,\"nodes\":%d,\"priority\":\"%s\"}\n", mode, len(sourceFiles), chars.Load(), nodes.Load(), priority)
 }

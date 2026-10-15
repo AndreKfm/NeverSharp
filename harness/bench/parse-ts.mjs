@@ -9,13 +9,21 @@
 // All SourceFiles stay referenced until the end, as a Program keeps them, so
 // memory and GC behavior reflect a compiler's parse phase.
 //
-// Prints one JSON line (file count, characters, node count) so the work cannot
-// be optimized away and both drivers can be checked to parse the same input.
+// With NEVERSHARP_PRIORITY=high the process first raises itself to the high
+// priority class; the class in effect is reported.
+//
+// Prints one JSON line (file count, characters, node count, priority class) so
+// the work cannot be optimized away and both drivers can be checked to parse
+// the same input.
 //
 // Usage: node parse-ts.mjs <file list>
 
 import { readFileSync } from "node:fs";
+import { constants, getPriority, setPriority } from "node:os";
 import ts from "typescript6";
+
+if (process.env.NEVERSHARP_PRIORITY === "high") setPriority(constants.priority.PRIORITY_HIGH);
+const priority = { [constants.priority.PRIORITY_HIGH]: "high", [constants.priority.PRIORITY_NORMAL]: "normal" }[getPriority()] ?? "other";
 
 const files = readFileSync(process.argv[2], "utf8").split("\n").filter(Boolean);
 const options = { languageVersion: ts.ScriptTarget.Latest, jsDocParsingMode: ts.JSDocParsingMode.ParseForTypeErrors };
@@ -31,4 +39,4 @@ for (const file of files) {
     nodes += sourceFile.nodeCount;
     sourceFiles.push(sourceFile);
 }
-process.stdout.write(JSON.stringify({ driver: "tsc-6.0.3", files: sourceFiles.length, chars, nodes }) + "\n");
+process.stdout.write(JSON.stringify({ driver: "tsc-6.0.3", files: sourceFiles.length, chars, nodes, priority }) + "\n");

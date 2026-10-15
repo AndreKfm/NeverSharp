@@ -76,6 +76,7 @@ Decisions:
 - **Absolute executable paths only.** On the reference machine, `node` on PATH is a Volta shim that starts the real Node as a child process. Through the shim, peakmem reported 13 MB peak working set for a run that actually peaks at 115 MB: the shim's memory, not Node's. The harness never resolves executables through PATH.
 - **[DECISION B7] Fixed order, no interleaving.** For each repository, the configurations run in the order of section 1; hyperfine runs all N runs of one configuration before the next. Interleaving would spread slow drift (thermal, background) evenly; it is not done because hyperfine does not support it and a custom runner is one more thing to defend. The variance gate (section 6) is the safeguard against drift.
 - **[DECISION B8] Peak memory = peak working set** (`PeakWorkingSetSize`, the Windows counterpart of peak RSS), plus peak commit (`PeakPagefileUsage`), read after exit with `GetProcessMemoryInfo` on the still-open process handle by `peakmem` (.NET 10). Measured in separate runs so that timing is not affected; median of M runs (default 5).
+- **[DECISION B9] Drivers run in the high priority class.** With `--priority high` (the default), `bench.mjs` sets `NEVERSHARP_PRIORITY=high`; every driver raises its own process to `HIGH_PRIORITY_CLASS` as its first action (Go: `SetPriorityClass` via `golang.org/x/sys/windows`; Node: `os.setPriority`) and reports the class in effect, and the runner rejects a driver whose report differs. Reason: on the reference machine the idle baseline is 7–10 % CPU, mostly kernel time, and short parallel runs (0.1–0.15 s on 24 threads) are as slow as their slowest thread, so any preempted core stretches the run (section 8). High priority lets the measured process preempt normal-priority background work, for every configuration alike; the C# driver must do the same. It needs no administrator rights and changes nothing on the system beyond the lifetime of the process. Why not simpler: Windows does not pass a high priority class on to child processes, so starting hyperfine at high priority would leave the drivers at normal priority; a job object with a priority-class limit would cover children, but needs a privilege that normal users do not have (`ERROR_PRIVILEGE_NOT_HELD`); a launcher process per run would add its own start-up to every measurement. hyperfine itself stays at normal priority. The effect on variance is not yet measured (section 8).
 - **Statistics.** Median and MAD (median absolute deviation, unscaled) over the N timed runs. Throughput = parse-set file count and on-disk bytes / median wall-clock. MB = 10^6 bytes.
 - **Defaults:** N = 20 timed runs after 3 warmup runs, M = 5 memory runs.
 
@@ -108,23 +109,24 @@ A run with any failed check is written with `protocolCompliant: false`; the repo
 
 ## 8. Probe results
 
-Three full runs with protocol settings (N = 20 after 3 warmup runs, M = 5, all repositories and configurations). **All are probes, not protocol results:** `idle-before-run` failed in all three, `harness-committed` in A and B. Nothing below is a published number; it is input for fixing the rig.
+Four full runs with protocol settings (N = 20 after 3 warmup runs, M = 5, all repositories and configurations). **All are probes, not protocol results:** `idle-before-run` failed in all four, `harness-committed` in A and B. All four ran at normal priority (before B9). Nothing below is a published number; it is input for fixing the rig.
 
 | Run | Defender exclusion | Idle CPU before run |
 |---|---|---|
 | A `2026-10-14T17-05-33-178Z` | no | 9.7 % |
 | B `2026-10-14T17-27-54-080Z` | yes (applied by the maintainer between A and B) | 18.0 % |
 | C `2026-10-14T18-19-00-873Z` | yes; IDE, browser and assistant activity stopped | 40.7 % (see below) |
+| D `2026-10-15T09-23-40-112Z` | yes; other workloads finished | 9.7 % |
 
-MAD/median per configuration and repository (gate: < 3 %), runs A / B / C:
+MAD/median per configuration and repository (gate: < 3 %), runs A / B / C / D:
 
 | Configuration | vscode | sentry | bluesky | playwright | tldraw |
 |---|---:|---:|---:|---:|---:|
-| tsc6-parse | 1.41 / 0.89 / 1.76 | **3.69** / 1.32 / 2.02 | 0.91 / 1.83 / 1.70 | 0.48 / 1.24 / 1.78 | 2.08 / 1.36 / 1.53 |
-| tsgo7-parse | **3.25** / **3.13** / 2.07 | 1.91 / **4.40** / 2.77 | **3.15** / **6.02** / 2.76 | **3.30** / **3.26** / 2.76 | **3.36** / **3.17** / **3.25** |
-| tsgo7-parse-single | **3.85** / 0.66 / 0.73 | 0.30 / 1.56 / 0.53 | 1.59 / 1.15 / 0.91 | 0.64 / 1.08 / 0.93 | 0.92 / 0.86 / 0.57 |
+| tsc6-parse | 1.41 / 0.89 / 1.76 / 1.03 | **3.69** / 1.32 / 2.02 / 2.75 | 0.91 / 1.83 / 1.70 / 1.37 | 0.48 / 1.24 / 1.78 / 1.15 | 2.08 / 1.36 / 1.53 / 0.29 |
+| tsgo7-parse | **3.25** / **3.13** / 2.07 / 1.57 | 1.91 / **4.40** / 2.77 / 2.83 | **3.15** / **6.02** / 2.76 / **3.50** | **3.30** / **3.26** / 2.76 / **5.39** | **3.36** / **3.17** / **3.25** / **3.52** |
+| tsgo7-parse-single | **3.85** / 0.66 / 0.73 / 0.31 | 0.30 / 1.56 / 0.53 / 0.46 | 1.59 / 1.15 / 0.91 / 0.59 | 0.64 / 1.08 / 0.93 / 0.76 | 0.92 / 0.86 / 0.57 / 0.64 |
 
-Variance gate: fail in all three runs. Run B: all tsc and single-threaded Go cells pass, all five parallel Go cells fail (3.13–6.02 %). Run C: 14 of 15 cells pass; parallel Go is at 2.07–2.77 % on four repositories and fails only on tldraw (3.25 %).
+Variance gate: fail in all four runs. Run B: all tsc and single-threaded Go cells pass, all five parallel Go cells fail (3.13–6.02 %). Run C: 14 of 15 cells pass; parallel Go is at 2.07–2.77 % on four repositories and fails only on tldraw (3.25 %). Run D (9.7 % idle load, no other workloads): all 10 tsc and single-threaded Go cells pass (0.29–2.75 %); parallel Go passes on vscode (1.57 %) and sentry (2.83 %) and fails on the three shortest runs, bluesky, playwright and tldraw (3.50 / 5.39 / 3.52 %, medians 0.10–0.16 s). The per-run times show a continuous spread of about ±10–15 ms, not two clusters.
 
 Findings:
 
@@ -134,7 +136,8 @@ Findings:
 
 Next steps, before any port number exists:
 
-1. A run from a committed harness on an idle machine, started by the maintainer: IDE, browser and assistant closed, no other workloads running.
+1. Done: run D on a machine without other workloads. Its 9.7 % idle load is the machine's baseline (7–10 % in repeated measurements, mostly kernel time), so `idle-before-run` cannot pass at 5 % on this machine. The 5 % limit was set before this baseline was known; whether to adjust it is open.
+1. Next: a run with drivers at high priority (decision B9) from a committed harness, to measure whether it brings the short parallel runs under 3 %.
 2. If the parallel configuration still fails on an idle machine: investigate and fix the rig. Not acceptable as fixes: changing the threshold, dropping the configuration, changing GOMAXPROCS (it would no longer be typescript-go's default), or raising N (that sharpens the MAD estimate, it does not reduce the spread). Any change to the measurement method is an amendment before the pre-registration tag.
 
 Note: the variance gate blocks *publishing* port numbers (kill criterion 3), not porting. Phase 1 work can start while the rig is being fixed.

@@ -10,7 +10,11 @@
 // but marked protocolCompliant=false; the report labels it as a probe.
 //
 // Usage: node bench.mjs [--repos a,b] [--configs x,y] [--runs 20] [--warmup 3]
-//                       [--mem-runs 5] [--label text]
+//                       [--mem-runs 5] [--priority high|normal] [--label text]
+//
+// --priority high (default): every driver raises itself to the high priority
+// class at start (NEVERSHARP_PRIORITY=high) and reports the class in effect;
+// the runner rejects a driver whose reported class differs.
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -41,6 +45,9 @@ const memRuns = Number(arg("--mem-runs", "5"));
 const repoFilter = arg("--repos", undefined)?.split(",");
 const configFilter = arg("--configs", undefined)?.split(",");
 const label = arg("--label", "");
+const priority = arg("--priority", "high");
+if (priority !== "high" && priority !== "normal") throw new Error("--priority must be high or normal");
+const driverEnv = { ...process.env, NEVERSHARP_PRIORITY: priority };
 
 const fileManifest = JSON.parse(readFileSync(join(benchDir, "filelists", "manifest.json"), "utf8"));
 const repos = pins.benchmarkCorpus.repos.map(r => r.name).filter(r => !repoFilter || repoFilter.includes(r));
@@ -79,16 +86,17 @@ for (const repo of repos) {
     for (const config of configs) {
         const command = config.command(list);
         // 1. validation
-        const check = spawnSync(command[0], command.slice(1), { encoding: "utf8" });
+        const check = spawnSync(command[0], command.slice(1), { encoding: "utf8", env: driverEnv });
         if (check.status !== 0) throw new Error(`${config.id} on ${repo} failed: ${check.stderr}`);
         const output = JSON.parse(check.stdout.trim().split("\n").pop());
         if (output.files !== corpus.files) throw new Error(`${config.id} on ${repo}: parsed ${output.files} files, expected ${corpus.files}`);
+        if (output.priority !== priority) throw new Error(`${config.id} on ${repo}: driver reports priority class ${output.priority}, expected ${priority}`);
 
         // 2. wall-clock
         const exportFile = join(outDir, `hyperfine-${repo}-${config.id}.json`);
         console.log(`\n== ${repo} / ${config.id}`);
         execFileSync(hyperfine, ["--shell=none", "--warmup", String(warmup), "--runs", String(runs), "--export-json", exportFile,
-            "--command-name", `${repo}/${config.id}`, command.map(quote).join(" ")], { stdio: "inherit" });
+            "--command-name", `${repo}/${config.id}`, command.map(quote).join(" ")], { stdio: "inherit", env: driverEnv });
         const hf = JSON.parse(readFileSync(exportFile, "utf8")).results[0];
         const times = hf.times;
         const med = median(times);
@@ -96,7 +104,7 @@ for (const repo of repos) {
         // 3. memory
         const peaks = [];
         for (let i = 0; i < memRuns; i++) {
-            const r = spawnSync(peakmem, command, { encoding: "utf8" });
+            const r = spawnSync(peakmem, command, { encoding: "utf8", env: driverEnv });
             if (r.status !== 0) throw new Error(`peakmem ${config.id} on ${repo} failed: ${r.stderr}`);
             peaks.push(JSON.parse(r.stderr.trim().split("\n").pop()));
         }
@@ -143,7 +151,7 @@ const run = {
     finishedAt: new Date().toISOString(),
     protocolCompliant: environment.protocolCompliant,
     suite: "parse",
-    settings: { runs, warmup, memRuns, hyperfineShell: "none" },
+    settings: { runs, warmup, memRuns, hyperfineShell: "none", processPriority: priority },
     environment,
     corpus: Object.fromEntries(repos.map(r => [r, { commit: fileManifest.repos[r].commit, files: fileManifest.repos[r].files, bytes: fileManifest.repos[r].bytes, contentSha256: fileManifest.repos[r].contentSha256 }])),
     configurations: configs.map(c => ({ id: c.id, label: c.label })),

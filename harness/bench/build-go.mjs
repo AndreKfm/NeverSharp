@@ -22,7 +22,15 @@ if (head !== pins.references["typescript-go"].commit) throw new Error(`typescrip
 const binDir = join(artifactsDir, "bin");
 mkdirSync(binDir, { recursive: true });
 const overlay = join(binDir, "parse-go.overlay.json");
-writeFileSync(overlay, JSON.stringify({ Replace: { [join(module, "cmd", "neversharp-parse", "main.go")]: join(repoRoot, "harness", "bench", "go", "parse.go") } }));
+const target = join(module, "cmd", "neversharp-parse");
+const source = join(repoRoot, "harness", "bench", "go");
+writeFileSync(overlay, JSON.stringify({
+    Replace: {
+        [join(target, "main.go")]: join(source, "parse.go"),
+        [join(target, "priority_windows.go")]: join(source, "priority_windows.go"),
+        [join(target, "priority_other.go")]: join(source, "priority_other.go"),
+    },
+}));
 const output = join(binDir, "parse-go" + exe);
 const env = { ...process.env, GOROOT: "", GOTOOLCHAIN: "local", GOFLAGS: "-mod=mod", CGO_ENABLED: "0", GOAMD64: "v1" };
 execFileSync(goBin, ["build", "-overlay", overlay, "-trimpath", "-ldflags=-s -w", "-tags=noembed", "-o", output, "./cmd/neversharp-parse"], { cwd: module, stdio: "inherit", env });
