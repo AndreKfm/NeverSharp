@@ -88,7 +88,7 @@ Before every run, `env.mjs` records the environment and checks the rig settings 
 | `min-processor-state` | minimum processor state (AC) = 100 % |
 | `max-processor-state` | maximum processor state (AC) = 100 % |
 | `boost-off` | `% Processor Performance` under a 2.5 s all-core load ≤ 101 % (no clock above nominal) |
-| `idle-before-run` | mean CPU utilization over 1.5 s before the run < 5 % |
+| `idle-before-run` | mean CPU utilization over 3 s before the run < 5 %, read from the OS processor-time counters (`os.cpus()`), so the check starts no process of its own |
 | `harness-committed` | clean working tree: every number comes from a committed harness |
 
 A run with any failed check is written with `protocolCompliant: false`; the report marks it as a **probe** and it is never reported as a result. The Defender path exclusion cannot be verified without administrator rights and is recorded as such.
@@ -108,31 +108,33 @@ A run with any failed check is written with `protocolCompliant: false`; the repo
 
 ## 8. Probe results
 
-Two full runs with protocol settings (N = 20 after 3 warmup runs, M = 5, all repositories and configurations). **Both are probes, not protocol results:** in both, `harness-committed` failed (uncommitted harness changes) and `idle-before-run` failed (an IDE and the assistant session were running). Nothing below is a published number; it is input for fixing the rig.
+Three full runs with protocol settings (N = 20 after 3 warmup runs, M = 5, all repositories and configurations). **All are probes, not protocol results:** `idle-before-run` failed in all three, `harness-committed` in A and B. Nothing below is a published number; it is input for fixing the rig.
 
 | Run | Defender exclusion | Idle CPU before run |
 |---|---|---|
 | A `2026-10-14T17-05-33-178Z` | no | 9.7 % |
 | B `2026-10-14T17-27-54-080Z` | yes (applied by the maintainer between A and B) | 18.0 % |
+| C `2026-10-14T18-19-00-873Z` | yes; IDE, browser and assistant activity stopped | 40.7 % (see below) |
 
-MAD/median per configuration and repository (gate: < 3 %), run A / run B:
+MAD/median per configuration and repository (gate: < 3 %), runs A / B / C:
 
 | Configuration | vscode | sentry | bluesky | playwright | tldraw |
 |---|---:|---:|---:|---:|---:|
-| tsc6-parse | 1.41 / 0.89 | **3.69** / 1.32 | 0.91 / 1.83 | 0.48 / 1.24 | 2.08 / 1.36 |
-| tsgo7-parse | **3.25** / **3.13** | 1.91 / **4.40** | **3.15** / **6.02** | **3.30** / **3.26** | **3.36** / **3.17** |
-| tsgo7-parse-single | **3.85** / 0.66 | 0.30 / 1.56 | 1.59 / 1.15 | 0.64 / 1.08 | 0.92 / 0.86 |
+| tsc6-parse | 1.41 / 0.89 / 1.76 | **3.69** / 1.32 / 2.02 | 0.91 / 1.83 / 1.70 | 0.48 / 1.24 / 1.78 | 2.08 / 1.36 / 1.53 |
+| tsgo7-parse | **3.25** / **3.13** / 2.07 | 1.91 / **4.40** / 2.77 | **3.15** / **6.02** / 2.76 | **3.30** / **3.26** / 2.76 | **3.36** / **3.17** / **3.25** |
+| tsgo7-parse-single | **3.85** / 0.66 / 0.73 | 0.30 / 1.56 / 0.53 | 1.59 / 1.15 / 0.91 | 0.64 / 1.08 / 0.93 | 0.92 / 0.86 / 0.57 |
 
-Variance gate: fail in both runs. In run B, all tsc and single-threaded Go cells pass (0.66–1.83 %); all five parallel Go cells fail (3.13–6.02 %).
+Variance gate: fail in all three runs. Run B: all tsc and single-threaded Go cells pass, all five parallel Go cells fail (3.13–6.02 %). Run C: 14 of 15 cells pass; parallel Go is at 2.07–2.77 % on four repositories and fails only on tldraw (3.25 %).
 
 Findings:
 
 - **The Defender hypothesis was wrong.** After run A, the high system time of parallel typescript-go (about 5× its wall-clock) was attributed to on-access scanning. With the exclusion in place, the ratio is unchanged (A: 4.7–6.1, B: 4.6–5.6). The system time belongs to the parallel run itself (24 threads, memory commit, scheduling), not to the scanner. The exclusion stays in place as specified in hardware.md, but it does not explain the variance.
-- **Working hypothesis:** a parallel run of 0.1–0.5 s that occupies all 24 hardware threads is as slow as its slowest thread, so any background activity that takes a core for a moment stretches the whole run; a single-threaded configuration is simply scheduled on another free core. That matches parallel-only failures with 10–18 % background load. It is untested until a run on an idle machine exists.
+- **Background load in run C was real, not an artifact of the check.** The 40.7 % reading prompted a test of the old WMI-based idle check against the OS counters: both agreed (about 30–40 % at the time), the check itself added only a few percent. The load came from other workloads on the machine unrelated to the project (about 2–3 cores in total).
+- **Working hypothesis:** a parallel run of 0.1–0.5 s that occupies all 24 hardware threads is as slow as its slowest thread, so any background activity that takes a core for a moment stretches the whole run; a single-threaded configuration is simply scheduled on another free core. That matches parallel-only failures with 10–18 % background load, and parallel Go improving markedly in run C once interactive work stopped. It is not confirmed until a run passes the idle check.
 
 Next steps, before any port number exists:
 
-1. A run from a committed harness on an idle machine (IDE, browser and assistant closed), started by the maintainer.
+1. A run from a committed harness on an idle machine, started by the maintainer: IDE, browser and assistant closed, no other workloads running.
 2. If the parallel configuration still fails on an idle machine: investigate and fix the rig. Not acceptable as fixes: changing the threshold, dropping the configuration, changing GOMAXPROCS (it would no longer be typescript-go's default), or raising N (that sharpens the MAD estimate, it does not reduce the spread). Any change to the measurement method is an amendment before the pre-registration tag.
 
 Note: the variance gate blocks *publishing* port numbers (kill criterion 3), not porting. Phase 1 work can start while the rig is being fixed.

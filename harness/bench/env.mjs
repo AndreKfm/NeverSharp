@@ -11,7 +11,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { availableParallelism } from "node:os";
+import { availableParallelism, cpus } from "node:os";
 import { join } from "node:path";
 import { Worker } from "node:worker_threads";
 import { repoRoot } from "./common.mjs";
@@ -59,10 +59,19 @@ async function processorPerformanceUnderLoad() {
     return Math.max(...samples);
 }
 
-function idleCpuPercent() {
-    const samples = powershell(`1..3 | ForEach-Object { ${counter("Win32_PerfFormattedData_PerfOS_Processor", "PercentProcessorTime")}; Start-Sleep -Milliseconds 500 }`)
-        .split(/\s+/).map(Number).filter(Number.isFinite);
-    return samples.reduce((a, b) => a + b, 0) / samples.length;
+// Mean CPU utilization over 3 s from the OS's per-processor time counters
+// (os.cpus()), so the check itself starts no process that would add load.
+async function idleCpuPercent() {
+    const snapshot = () => cpus().reduce((acc, c) => {
+        const t = c.times;
+        acc.idle += t.idle;
+        acc.total += t.user + t.nice + t.sys + t.idle + t.irq;
+        return acc;
+    }, { idle: 0, total: 0 });
+    const before = snapshot();
+    await new Promise(r => setTimeout(r, 3000));
+    const after = snapshot();
+    return 100 * (1 - (after.idle - before.idle) / (after.total - before.total));
 }
 
 function git() {
@@ -71,13 +80,13 @@ function git() {
 }
 
 export async function captureEnvironment(toolchain) {
-    const idle = idleCpuPercent();
+    const idle = await idleCpuPercent();
     const rig = { ...powerSettings(), idleCpuPercent: idle, processorPerformanceUnderLoadPercent: await processorPerformanceUnderLoad(), defenderExclusion: "not verifiable without administrator rights" };
     const checks = [
         { id: "min-processor-state", required: "100", value: String(rig.minProcessorStateAc), ok: rig.minProcessorStateAc === 100 },
         { id: "max-processor-state", required: "100", value: String(rig.maxProcessorStateAc), ok: rig.maxProcessorStateAc === 100 },
         { id: "boost-off", required: "processor performance under all-core load <= 101 %", value: `${rig.processorPerformanceUnderLoadPercent} %`, ok: rig.processorPerformanceUnderLoadPercent <= 101 },
-        { id: "idle-before-run", required: "mean CPU < 5 %", value: `${idle.toFixed(1)} %`, ok: idle < 5 },
+        { id: "idle-before-run", required: "mean CPU over 3 s < 5 %", value: `${idle.toFixed(1)} %`, ok: idle < 5 },
     ];
     const repo = git();
     checks.push({ id: "harness-committed", required: "clean working tree", value: repo.dirty ? "dirty" : "clean", ok: !repo.dirty });
