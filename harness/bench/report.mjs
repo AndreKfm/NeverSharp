@@ -92,7 +92,20 @@ for (const c of configs) {
 }
 push("", `Variance gate (rig check): **${gatePass ? "PASS" : "FAIL"}**${run.protocolCompliant ? "" : " (probe run; the gate is only binding for protocol results)"}.`, "");
 
-push("## Table 4. Runtime metrics (C# configurations only)", "");
+push("## Table 4. Fixed cost (empty file list)", "",
+    "Process start-up, runtime initialization and driver overhead, measured with the same method on an empty file list. Reported for context, never subtracted from Table 1.", "");
+if (!run.fixedCost?.length) push("Not measured in this run.", "");
+else {
+    push(row(["Configuration", "Median (s)", "MAD/median", "Share of the smallest repository's median", "Peak working set (MiB)"]), row(["---", "---:", "---:", "---:", "---:"]));
+    for (const f of run.fixedCost) {
+        const medians = run.results.filter(x => x.config === f.config).map(x => x.timing.median);
+        const share = medians.length ? `${(100 * f.timing.median / Math.min(...medians)).toFixed(1)} %` : "n/a";
+        push(row([f.config, s(f.timing.median), pct(f.timing.madOverMedianPercent), share, mib(f.memory.medianPeakWorkingSetBytes)]));
+    }
+    push("");
+}
+
+push("## Table 5. Runtime metrics (C# configurations only)", "");
 const runtime = run.results.filter(x => x.runtime);
 if (runtime.length === 0) push("No C# configuration in this run.", "");
 else {

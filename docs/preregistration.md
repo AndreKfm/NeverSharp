@@ -48,6 +48,8 @@ Known oracle difference, pre-registered: typescript-go 7.0.2 was ported from Typ
 
 Parse set: every git-tracked `.ts .tsx .mts .cts` file at the pinned commit (B1). A content hash over all paths and contents is recorded in every result.
 
+**Tuning corpus** (A5, A1). Used for every choice that depends on speed, in both tracks: the 23,910 `tests/cases/**` units of the equivalence corpus plus TypeScript v6.0.3's own `src/**/*.ts` (601 files, 16.8 MiB of real-world code that is not in the benchmark corpus). The benchmark corpus is used for nothing but the final measurements.
+
 **Equivalence corpus.** 50,177 parse units: every file under `tests/cases/**` of TypeScript `v6.0.3`, split into units as TypeScript's own test harness does (23,910 units), plus every file of the five parse sets (26,267 units) ([ast-dump-format.md](ast-dump-format.md), section 2).
 
 ## 4. Equivalence gates
@@ -86,7 +88,7 @@ The ruleset files are committed before Phase 1 starts and pinned by that commit;
 
 ### 5.2 Multi-model workflow
 
-Each module is ported independently by several AI models from the same inputs: the TypeScript source file at the pinned commit, the corresponding typescript-go file as a worked example, the port rules, and the dump tooling. Gate 1, then Gate 2. Only survivors are ranked, on the primary endpoint of section 8 and then on bytes allocated. Every failure is logged with the diff that killed it; those logs are published.
+Each module is ported independently by several AI models from the same inputs: the TypeScript source file at the pinned commit, the corresponding typescript-go file as a worked example, the port rules, and the dump tooling. Gate 1, then Gate 2. Only survivors are ranked, by module-level median wall-clock on the **tuning corpus** (section 3) and then by bytes allocated; never on the benchmark corpus (A1). Every failure is logged with the diff that killed it; those logs are published.
 
 **[OPEN]** The models (exact model identifiers and versions) and the number of attempts per model are fixed before Phase 1 starts and listed here.
 
@@ -103,7 +105,7 @@ Source and equivalence as Track F: ported from tsc 6.0.3, Gate 1 byte-identical 
 3. **No GC wherever possible.** Ported code carries `[NoAlloc(Constraints.NoLock | Constraints.NoBlock)]` by default, verified by the repository's NoAlloc analyzer ([analyzers/NeverSharp.NoAlloc/](../analyzers/NeverSharp.NoAlloc/), diagnostics NS001–NS015 as errors). Code that cannot meet it says so with `Allow` + `Reason` or `[NoAllocUnchecked(reason)]`; the number of such members is reported with every Track O result.
 4. **Syntax tree as structs in arenas.** Nodes are structs stored in large pooled arrays and referenced by index; arena growth is the only allocation of the parse phase. (typescript-go uses a slice arena for node lists, but individual nodes are heap objects; Track F keeps the source's node objects.)
 5. **Variant process, before each step continues.** For each step (module or function, as listed in the Phase 1 plan), at most **3 variants** are built: different optimization strategies, implementations by different AI models, or both. Each variant must pass Gate 1 and Gate 2 (Track O ruleset, below). Survivors are measured at two levels: **micro** (BenchmarkDotNet with MemoryDiagnoser, per function) and **module** (the parse-only harness on the tuning corpus). The step continues with the winner only.
-6. **Tuning corpus ≠ benchmark corpus.** Variants are compared on the tuning corpus only: the 23,910 `tests/cases/**` units of the equivalence corpus. The five benchmark repositories are not used for any choice in Track O; they are measured once, for the result. Otherwise the result would be fitted to the corpus it is judged on.
+6. **Tuning corpus ≠ benchmark corpus.** Variants are compared on the tuning corpus only (section 3). The five benchmark repositories are not used for any choice in Track O; they are measured once, for the result. Otherwise the result would be fitted to the corpus it is judged on.
 7. **Selection rule.** The winner is the variant with the lowest module-level median on the tuning corpus; if the 95 % intervals of the best variants overlap, the one with fewer bytes allocated wins, then the simpler one (fewer lines). Every variant, its numbers and the reason it lost are logged and published.
 
 **Track O Gate 2:** the Track F settings of 5.1 (nullable, warnings as errors, `AnalysisLevel` all, code style) plus the NoAlloc analyzer; the banned-API list is reduced to reflection, `dynamic` and `System.Linq` in `src/`. Intrinsics, `Unsafe` and `stackalloc` are allowed.
@@ -132,6 +134,8 @@ Source and equivalence as Track F: ported from tsc 6.0.3, Gate 1 byte-identical 
 - CLI wall-clock with hyperfine, `--shell=none`, 3 warmup runs, **N = 20** timed runs per (repository, configuration); fixed configuration order (B7).
 - Peak working set (Windows counterpart of peak RSS) and peak commit from 5 separate runs (B8).
 - Rig checks before every run: processor states, no clock above nominal under load, idle median of ten 1 s windows < 12 % (B10), clean committed harness. A run that fails any check is a probe and is never reported as a result.
+- **Driver file reading (A8):** every C# driver reads and decodes files with the semantics of `ts.sys.readFile` (UTF-16 LE/BE and UTF-8 byte order marks detected, UTF-8 otherwise). Track F uses the counterpart API (`File.ReadAllText`); in Track O, reading and decoding is step O1 and measured like every other step.
+- **Fixed cost (A2):** every configuration also runs on an empty file list (process start-up, runtime initialization, driver overhead), with the same method, in the same run. Reported next to every result, never subtracted from it.
 - **Same session:** every comparison comes from one protocol-compliant run that contains both the C# configurations and the typescript-go configurations. The baseline of 2026-10-21 validates the rig; it is not reused as the comparison partner of a later C# run.
 
 ### 6.4 Configurations, all reported
@@ -147,6 +151,18 @@ Source and equivalence as Track F: ported from tsc 6.0.3, Gate 1 byte-identical 
 | `cs-jit-srv` / `cs-jit-srv-single` | C# .NET 10 JIT, Server GC | secondary |
 | `cs-o-aot-ws` / `cs-o-aot-ws-single` | Track O, NativeAOT, Workstation GC | **primary Track O configuration** (parallel) |
 | `cs-o-aot-srv`, `cs-o-jit-ws`, `cs-o-jit-srv` (each also `-single`) | Track O, other runtime and GC combinations | Track O secondary |
+
+**Configuration contents (A7).** All configurations use .NET defaults except what their name states; the project and runtime properties are committed before Phase 1 and are part of the protocol:
+
+| Property | `-aot-` | `-jit-` |
+|---|---|---|
+| `PublishAot` | true | false |
+| `PublishReadyToRun` | false | false |
+| `TieredCompilation`, `TieredPGO` | not applicable | default (on) |
+| `ServerGarbageCollector` | false for `-ws`, true for `-srv` | same |
+| `ConcurrentGarbageCollection`, GC dynamic adaptation (DATAS) | default | default |
+| `IlcInstructionSet`, `IlcOptimizationPreference` | unset (defaults) | not applicable |
+| `InvariantGlobalization` | true (repository default; the parser uses no culture-sensitive operations) | true |
 
 The `cs-*` rows without `-o-` are Track F. Parallel C# configurations schedule one work item per file (read + parse), the counterpart of typescript-go's `core.WorkGroup`, with the runtime's default degree of parallelism.
 
@@ -183,7 +199,9 @@ A claim that C# is *faster* than typescript-go additionally requires the upper b
 
 **Secondary endpoints.** Per-repository ratios with their intervals; all other C# configurations against `tsgo7-parse`; single-threaded C# against `tsgo7-parse-single`; peak memory ratios. A parity statement about a secondary configuration is allowed only with a Bonferroni-adjusted interval (98.75 % for the four parallel C# configurations) and is labeled secondary. Secondary results never replace the primary verdict.
 
-**Track O endpoint.** The same G, interval and decision rule for `cs-o-aot-ws` against `tsgo7-parse`, from the same run as the Track F verdict if both are ready, otherwise from its own protocol-compliant run with `tsgo7-parse` in it. It is reported as **"optimized track"** next to, never instead of, the Track F verdict. Secondary Track O configurations follow the secondary rule above.
+**Track O endpoint.** The same G, interval and decision rule for `cs-o-aot-ws` against `tsgo7-parse`, from the same run as the Track F verdict if both are ready, otherwise from its own protocol-compliant run with `tsgo7-parse` in it. It is reported as **"optimized track"** next to, never instead of, the Track F verdict, together with the list of Track O steps evaluated (each with its winning variant) and not evaluated (A9). Secondary Track O configurations follow the secondary rule above.
+
+**Linux replication (A4).** After the Windows verdict, the deciding measurement is repeated on the same hardware under a native Linux installation (not WSL), with the same harness, corpus, configurations and decision rule, and reported as a pre-registered **secondary replication**. Its verdict is reported next to the Windows verdict; if the two differ, both are stated, and neither replaces the other. Distribution, kernel and rig settings for Linux are fixed by amendment before that run. Until it exists, every result states "Windows only".
 
 **One final measurement.** The verdict comes from the first protocol-compliant run after Gate 1 and Gate 2 pass for the complete Phase 1 module. Replication runs may be published, each in full and alongside the first; they do not replace it.
 
@@ -212,6 +230,17 @@ Out of scope for v1: emitter, language service, incremental parsing (syntax curs
 
 ## 11. Reporting rule
 
+**Wording rule (A3).** Every published claim about speed
+
+- names the track ("faithful" or "optimized");
+- names the measured scope ("parsing" in Phase 1);
+- gives G with its 95 % interval;
+- lists every repository whose own interval lies above 1.20;
+- states the peak working-set ratio in the same sentence;
+- says "Windows only" until the Linux replication exists.
+
+Template (illustrative numbers, not a result): *"Parsing, faithful track: the C# port takes 1.12× [1.08, 1.17] the wall-clock of typescript-go (geometric mean over Microsoft's five benchmark repositories; per repository …; above 1.20: none), with 0.9× its peak memory. Windows only."*
+
 Nothing outside this protocol is reported as a result. Post-hoc observations are allowed and are labeled **post hoc** wherever they appear. Every failure of Gate 1 or Gate 2 is logged with its diff. Probe runs are never reported as results. All result files (run.json, report, raw hyperfine exports) are published with every result.
 
 ## 12. Amendment rule
@@ -233,6 +262,7 @@ For transparency, the decisions that were revised during Phase 0, before this do
 | 2026-10-21 | Variance gate on single-threaded configurations; CI-based verdicts | spread of short parallel runs in probe runs; **decided after seeing probe data**; its rationale was later qualified by the quiet baseline run | B11, benchmark-harness.md §9 |
 | 2026-10-21 | Idle check: median of ten 1 s windows instead of one 3 s mean | single short window decided by momentary spikes | B10 amendment |
 | 2026-10-21 | Two tracks: faithful (carries the verdict) and optimized (SIMD, stack allocation, NoAlloc, arenas, ≤ 3 measured variants per step, separately labeled) | author's decision before any C# code | §1, §5.4 |
+| 2026-10-21 | Additions from the hostile review: A1 ranking on the tuning corpus (closes a gap: Track F ranking was on the benchmark corpus), A2 fixed-cost run, A3 wording rule, A4 Linux replication, A5 tuning corpus with TypeScript's own sources, A7 pinned configurations, A8 driver file reading, A9 Track O coverage list | author's decision | hostile-review.md |
 | 2026-10-21 | Phase 1 budget 8 weeks → 12 weeks → 18 weeks, common to both tracks | two tracks do not fit into 8 weeks; the Phase 1 plan's estimate (≈ 123 h) does not fit into 12 weeks (84 h) | §9, phase1-plan.md §9 |
 
 ## 13. Prior art
@@ -247,4 +277,8 @@ typescript-go (the reference and the method this project copies); oxc and swc (R
 - [ ] JSDoc section of the dump format specified and the tsc 6.0.3 side implemented (4.2).
 - [ ] Analyzer ruleset committed for both tracks (5.1, 5.4).
 - [ ] C# driver contract: `NEVERSHARP_PRIORITY`, JSON output with file count, node count, priority, GC metrics (6.3, 7).
+- [ ] Tuning corpus manifest generated (section 3).
+- [ ] Configuration project files committed (A7).
+- [ ] **A6** feasibility: cross-check of the Go driver's parse time against tsgo's own reported parse time; adopted or dropped with reason.
+- [ ] Harness support for Linux (rig checks, peak memory) before the replication run (A4); may follow the tag.
 - [ ] Repository published, so the tag date is publicly verifiable.

@@ -106,7 +106,7 @@ Consequence: about 1,300 more lines to port (JSDoc parser and scanning) than a J
 | O7 | Node lists | ranges in one index arena; per-list pooled arrays; small-list inline storage |
 | O8 | Parallel scheduling | `Parallel.ForEach`; thread-pool work items (work-group counterpart); partitioned queue, largest files first |
 
-**Process per step:** build up to 3 variants → Gate 1 (or G1a) and Track O Gate 2 → measure survivors with BenchmarkDotNet (MemoryDiagnoser) per function and with the parse-only harness on the tuning corpus (`tests/cases`, 23,910 units) → select by the pre-registered rule (lowest module-level median; if the 95 % intervals overlap, fewer bytes allocated, then fewer lines) → log all variants and numbers → continue with the winner. The five benchmark repositories are never used for a choice.
+**Process per step:** build up to 3 variants → Gate 1 (or G1a) and Track O Gate 2 → measure survivors with BenchmarkDotNet (MemoryDiagnoser) per function and with the parse-only harness on the tuning corpus (`tests/cases` units plus TypeScript v6.0.3's own `src/**/*.ts`; pre-registration §3) → select by the pre-registered rule (lowest module-level median; if the 95 % intervals overlap, fewer bytes allocated, then fewer lines) → log all variants and numbers → continue with the winner. The five benchmark repositories are never used for a choice.
 
 **[DECISION, CONFIRMED] Order of Track O steps by profile:** O1–O8 are candidates, not a fixed sequence. The order is set by a profile of the finished Track F parser on the tuning corpus: steps whose code takes the largest share of time go first. If the budget runs short, the remaining steps are skipped and reported as not evaluated.
 

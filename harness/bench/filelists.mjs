@@ -38,4 +38,6 @@ for (const repo of pins.benchmarkCorpus.repos) {
     manifest.repos[repo.name] = { commit: repo.commit, files: files.length, bytes, contentSha256: content.digest("hex"), relativePaths: files };
     console.log(`${repo.name.padEnd(11)} ${String(files.length).padStart(6)} files ${(bytes / 1048576).toFixed(1).padStart(7)} MiB`);
 }
+// Empty list for the fixed-cost runs (process start-up, runtime init, driver overhead).
+writeFileSync(join(outDir, "empty.txt"), "");
 writeFileSync(join(outDir, "manifest.json"), JSON.stringify(manifest, null, 1));

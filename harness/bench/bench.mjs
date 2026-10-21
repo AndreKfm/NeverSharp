@@ -80,69 +80,80 @@ const environment = await captureEnvironment(toolchain);
 for (const c of environment.checks) console.log(`  ${c.ok ? "ok  " : "FAIL"} ${c.id}: ${c.value} (required: ${c.required})`);
 if (!environment.protocolCompliant) console.log("  -> rig checks failed: results are recorded as a PROBE, not as protocol results");
 
+// Validation, wall-clock and memory for one (file list, configuration) pair.
+function measure(name, list, expectedFiles, config) {
+    const command = config.command(list);
+    // 1. validation
+    const check = spawnSync(command[0], command.slice(1), { encoding: "utf8", env: driverEnv });
+    if (check.status !== 0) throw new Error(`${config.id} on ${name} failed: ${check.stderr}`);
+    const output = JSON.parse(check.stdout.trim().split("\n").pop());
+    if (output.files !== expectedFiles) throw new Error(`${config.id} on ${name}: parsed ${output.files} files, expected ${expectedFiles}`);
+    if (output.priority !== priority) throw new Error(`${config.id} on ${name}: driver reports priority class ${output.priority}, expected ${priority}`);
+
+    // 2. wall-clock
+    const exportFile = join(outDir, `hyperfine-${name}-${config.id}.json`);
+    console.log(`\n== ${name} / ${config.id}`);
+    execFileSync(hyperfine, ["--shell=none", "--warmup", String(warmup), "--runs", String(runs), "--export-json", exportFile,
+        "--command-name", `${name}/${config.id}`, command.map(quote).join(" ")], { stdio: "inherit", env: driverEnv });
+    const hf = JSON.parse(readFileSync(exportFile, "utf8")).results[0];
+    const times = hf.times;
+    const med = median(times);
+
+    // 3. memory
+    const peaks = [];
+    for (let i = 0; i < memRuns; i++) {
+        const r = spawnSync(peakmem, command, { encoding: "utf8", env: driverEnv });
+        if (r.status !== 0) throw new Error(`peakmem ${config.id} on ${name} failed: ${r.stderr}`);
+        peaks.push(JSON.parse(r.stderr.trim().split("\n").pop()));
+    }
+
+    return {
+        config: config.id,
+        configLabel: config.label,
+        command: command.map(c => c.startsWith(repoRoot) ? relative(repoRoot, c).split("\\").join("/") : c),
+        output,
+        timing: {
+            unit: "s",
+            times,
+            median: med,
+            mad: mad(times),
+            madOverMedianPercent: 100 * mad(times) / med,
+            mean: hf.mean,
+            stddev: hf.stddev,
+            min: hf.min,
+            max: hf.max,
+            userMean: hf.user,
+            systemMean: hf.system,
+        },
+        memory: {
+            runs: memRuns,
+            peakWorkingSetBytes: peaks.map(p => p.peakWorkingSetBytes),
+            peakCommitBytes: peaks.map(p => p.peakCommitBytes),
+            medianPeakWorkingSetBytes: median(peaks.map(p => p.peakWorkingSetBytes)),
+            medianPeakCommitBytes: median(peaks.map(p => p.peakCommitBytes)),
+        },
+        runtime: null, // C# configurations: bytes allocated, GC count, GC pause (from the driver's own report)
+        hyperfineExport: relative(outDir, exportFile),
+    };
+}
+
 const results = [];
 for (const repo of repos) {
-    const list = join(benchDir, "filelists", `${repo}.txt`);
     const corpus = fileManifest.repos[repo];
     for (const config of configs) {
-        const command = config.command(list);
-        // 1. validation
-        const check = spawnSync(command[0], command.slice(1), { encoding: "utf8", env: driverEnv });
-        if (check.status !== 0) throw new Error(`${config.id} on ${repo} failed: ${check.stderr}`);
-        const output = JSON.parse(check.stdout.trim().split("\n").pop());
-        if (output.files !== corpus.files) throw new Error(`${config.id} on ${repo}: parsed ${output.files} files, expected ${corpus.files}`);
-        if (output.priority !== priority) throw new Error(`${config.id} on ${repo}: driver reports priority class ${output.priority}, expected ${priority}`);
-
-        // 2. wall-clock
-        const exportFile = join(outDir, `hyperfine-${repo}-${config.id}.json`);
-        console.log(`\n== ${repo} / ${config.id}`);
-        execFileSync(hyperfine, ["--shell=none", "--warmup", String(warmup), "--runs", String(runs), "--export-json", exportFile,
-            "--command-name", `${repo}/${config.id}`, command.map(quote).join(" ")], { stdio: "inherit", env: driverEnv });
-        const hf = JSON.parse(readFileSync(exportFile, "utf8")).results[0];
-        const times = hf.times;
-        const med = median(times);
-
-        // 3. memory
-        const peaks = [];
-        for (let i = 0; i < memRuns; i++) {
-            const r = spawnSync(peakmem, command, { encoding: "utf8", env: driverEnv });
-            if (r.status !== 0) throw new Error(`peakmem ${config.id} on ${repo} failed: ${r.stderr}`);
-            peaks.push(JSON.parse(r.stderr.trim().split("\n").pop()));
-        }
-
+        const m = measure(repo, join(benchDir, "filelists", `${repo}.txt`), corpus.files, config);
         results.push({
             repo,
-            config: config.id,
-            configLabel: config.label,
             kind: "parse",
-            command: command.map(c => c.startsWith(repoRoot) ? relative(repoRoot, c).split("\\").join("/") : c),
-            output,
-            timing: {
-                unit: "s",
-                times,
-                median: med,
-                mad: mad(times),
-                madOverMedianPercent: 100 * mad(times) / med,
-                mean: hf.mean,
-                stddev: hf.stddev,
-                min: hf.min,
-                max: hf.max,
-                userMean: hf.user,
-                systemMean: hf.system,
-            },
-            throughput: { filesPerSecond: corpus.files / med, megabytesPerSecond: corpus.bytes / 1e6 / med },
-            memory: {
-                runs: memRuns,
-                peakWorkingSetBytes: peaks.map(p => p.peakWorkingSetBytes),
-                peakCommitBytes: peaks.map(p => p.peakCommitBytes),
-                medianPeakWorkingSetBytes: median(peaks.map(p => p.peakWorkingSetBytes)),
-                medianPeakCommitBytes: median(peaks.map(p => p.peakCommitBytes)),
-            },
-            runtime: null, // C# configurations: bytes allocated, GC count, GC pause (from the driver's own report)
-            hyperfineExport: relative(outDir, exportFile),
+            ...m,
+            throughput: { filesPerSecond: corpus.files / m.timing.median, megabytesPerSecond: corpus.bytes / 1e6 / m.timing.median },
         });
     }
 }
+
+// Fixed cost (A2): every configuration on an empty file list: process start-up,
+// runtime initialization and driver overhead. Reported next to the results, never subtracted.
+const fixedCost = configs.map(config => measure("fixed-cost", join(benchDir, "filelists", "empty.txt"), 0, config));
 
 const run = {
     schemaVersion: 1,
@@ -157,6 +168,7 @@ const run = {
     corpus: Object.fromEntries(repos.map(r => [r, { commit: fileManifest.repos[r].commit, files: fileManifest.repos[r].files, bytes: fileManifest.repos[r].bytes, contentSha256: fileManifest.repos[r].contentSha256 }])),
     configurations: configs.map(c => ({ id: c.id, label: c.label, threads: c.threads })),
     results,
+    fixedCost,
 };
 writeFileSync(join(outDir, "run.json"), JSON.stringify(run, null, 1));
 console.log(`\nwritten ${join(outDir, "run.json")}`);

@@ -4,7 +4,7 @@
   "title": "NeverSharp benchmark run",
   "description": "One benchmark run as written by harness/bench/bench.mjs (schemaVersion 1).",
   "type": "object",
-  "required": ["schemaVersion", "runId", "startedAt", "finishedAt", "protocolCompliant", "suite", "settings", "environment", "corpus", "configurations", "results"],
+  "required": ["schemaVersion", "runId", "startedAt", "finishedAt", "protocolCompliant", "suite", "settings", "environment", "corpus", "configurations", "results", "fixedCost"],
   "properties": {
     "schemaVersion": { "const": 1 },
     "runId": { "type": "string" },
@@ -81,6 +81,11 @@
         "required": ["id", "label", "threads"],
         "properties": { "threads": { "enum": ["single", "parallel"], "description": "Single-threaded configurations form the rig check of the variance gate." } }
       }
+    },
+    "fixedCost": {
+      "type": "array",
+      "description": "One entry per configuration: the same measurement on an empty file list (start-up, runtime init, driver overhead). Never subtracted from results.",
+      "items": { "type": "object", "required": ["config", "command", "output", "timing", "memory", "hyperfineExport"] }
     },
     "results": {
       "type": "array",
