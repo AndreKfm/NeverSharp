@@ -1,6 +1,6 @@
 # Pre-registration: a faithful C# port of the TypeScript compiler, measured against typescript-go
 
-Status: **draft, not yet tagged.** This document becomes binding when it is committed, tagged `prereg/v1`, and the tag is timestamped (§11.1). Until then every item is open to change; items marked **[DECISION, CONFIRMED]** were proposed by the author's assistant and confirmed by the author on 2026-10-21, items marked **[OPEN]** need the author's input.
+Status: **binding since tag `prereg/v1`, 2026-10-21**, timestamped with OpenTimestamps (§11.1; proof in `docs/timestamps/`). Changes only by dated amendment tags (§12). Phase 1 budget: 2026-10-21 to 2027-02-24 (18 weeks, §9). Items marked **[DECISION, CONFIRMED]** were proposed by the author's assistant and confirmed by the author on 2026-10-21, items marked **[OPEN]** need the author's input.
 
 Author: Andre Kaufmann. Repository: NeverSharp. License: Apache-2.0.
 
@@ -312,5 +312,5 @@ typescript-go (the reference and the method this project copies); oxc and swc (R
 - [ ] Configuration project files committed (A7): `eng/RuntimeConfiguration.props` committed; a NativeAOT publish of each configuration is verified once the first driver exists (M0).
 - [x] **A6** feasible and adopted: `harness/bench/crosscheck.mjs` runs in the deciding session and is reported with the result: per repository, the Go driver's parse time (median minus fixed cost) against tsgo's own `Parse time` (`--extendedDiagnostics`, resolution and lib files off, median of 5). Feasibility check 2026-10-21 (different sessions, not a measurement): driver/tsgo 0.72–1.05 across the five repositories, i.e. the driver is not slower than tsgo's own parse phase except +5 % on vscode.
 - [ ] Harness support for Linux (rig checks, peak memory) before the replication run (A4); may follow the tag.
-- [ ] OpenTimestamps proof for the tag (§11.1); the OpenTimestamps client is installed at tag time.
+- [x] OpenTimestamps proof for the tag (§11.1): `docs/timestamps/prereg-v1.txt` and its `.ots` proof, opentimestamps-client 0.7.2.
 - [ ] Repository published when the author decides the project is done (not a condition for the tag; §11.1 covers the timestamp).
