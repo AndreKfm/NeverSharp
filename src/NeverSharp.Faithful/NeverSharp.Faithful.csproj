@@ -9,4 +9,8 @@
     <!-- Generated data shared by both tracks (tools/NeverSharp.Generate): diagnostic messages, enums. -->
     <Compile Include="$(RepoRoot)src/Generated/*.g.cs" LinkBase="Generated" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Ported code is internal (as in TypeScript, where it is not public API); the module gates test it directly. -->
+    <InternalsVisibleTo Include="NeverSharp.Faithful.Tests" />
+  </ItemGroup>
 </Project>

@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Module gates of Track F that are not dump comparisons (phase1-plan.md §4, M1: unit tests).
+    Expected values come from tsc 6.0.3 itself: harness/port/vectors-*.mjs writes them to artifacts/vectors/.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="$(RepoRoot)src/NeverSharp.Faithful/NeverSharp.Faithful.csproj" />
+  </ItemGroup>
+</Project>

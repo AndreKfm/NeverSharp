@@ -20,4 +20,14 @@ Budget: 2026-10-21 to 2027-02-24 (pre-registration §9). Plan: [phase1-plan.md](
 
 ## Modules M1–M5
 
-Not started. Each module: 3 attempts in Track F (pre-registration §5.2), logged here with gates and diffs.
+Each module: 3 attempts in Track F (pre-registration §5.2), logged here with gates and diffs. Porting infrastructure: `harness/port/modules.mjs` (unit list per module from the slice), `harness/port/gate.mjs` (Gate 2 + module gate, run by attempts and orchestrator), `tests/NeverSharp.Faithful.Tests` (module gates that are not dump comparisons), vectors from tsc 6.0.3 (`harness/port/vectors-*.mjs`).
+
+### M1: Core
+
+Brief: [modules/M1.md](modules/M1.md); units: [modules/M1-units.md](modules/M1-units.md) (91 units, 889 lines). Gate: Gate 2 + 8 unit tests over about 690,000 calls compared with tsc 6.0.3 (every file name of the equivalence corpus, path edge cases, spelling suggestions). Harness checked with a deliberately wrong stub before the attempts (builds under Gate 2, fails the tests with readable diffs).
+
+| Attempt | Model | Gate runs | Result | Notes |
+|---|---|---|---|---|
+| 1 | Opus 5.5 | | running | |
+| 2 | Opus 5.5 | | running | |
+| 3 | Sonnet 5.5 | | running | |
