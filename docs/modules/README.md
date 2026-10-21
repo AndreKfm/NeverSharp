@@ -10,3 +10,4 @@ Learned in M1 and M2; each new brief repeats them.
 2. **A gate run is any run of a gate part over the whole suite or corpus.** Running the build, the unit tests, or a full dump or comparison by hand counts toward the brief's limit like a full gate run; probing single units or small sets with one's own tools does not.
 3. **Own scratch folder.** Each attempt keeps helper files only in `<session scratch>/<module>-attempt-<n>/` and does not read other folders there.
 4. **Write C# with the file tools.** Shell heredocs in this environment drop backslashes.
+5. **Two attempts from M5 on** (prereg/v3): attempt 1 Opus 5.5, attempt 2 Sonnet 5.5, medium effort; sub-agents only where the module's size requires them, at most 4.

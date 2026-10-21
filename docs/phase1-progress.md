@@ -69,8 +69,17 @@ Events:
 - **All three attempts stopped on the account's monthly spend limit** (HTTP 429) about 50 minutes in, before any build or gate run; resumed after the author's go-ahead. Wall-clock durations of these attempts are therefore not comparable with M1/M2.
 - **Brief corrected during the attempts (orchestrator error):** the brief excluded `createSyntaxCursor` as incremental parsing, but `reparseTopLevelAwait` reuses nodes through it (`parser.ts:1864`), so files with top-level `await` need it. Attempt 1 found this and ported it anyway. The unit list and brief were corrected (951 units) and the same correction was sent to all three attempts when they were resumed.
 
-| Attempt | Model | Gate runs | Result | Notes |
-|---|---|---|---|---|
-| 1 | Opus 5.5 | | running | |
-| 2 | Opus 5.5 | | running | |
-| 3 | Sonnet 5.5 | | running | |
+| Attempt | Model | Gate runs | Gate (orchestrator rerun) | Median (99.9 % CI) | Allocated | Rank | Commit |
+|---|---|---:|---|---|---:|---:|---|
+| 1 | Opus 5.5 (+ sub-agents) | 0 | stopped before finishing (author, token cost); never built | — | — | — | attempts/M34/attempt-1 (incomplete) |
+| 2 | Opus 5.5 (+ 5 sub-agents) | 5 | pass, G1 ParseNone 50,177/50,177 | **2,476 ms** (2,460–2,496) | **726 MB** | **1, merged** | b7a8826 → main |
+| 3 | Sonnet 5.5 (+ 11 sub-agents) | 6 + 1 correction round | pass, G1 ParseNone 50,177/50,177 | 2,532 ms (2,523–2,548) | 1,009 MB | 2 | 325a8e5, c03c38f |
+
+Ranking as fixed in the brief (`M34.ParseTuningCorpus`, NativeAOT, 3 warmup + 20 iterations, one after another); raw reports `results/ranking/M34/`. Intervals do not overlap.
+
+More events:
+
+- **Static state (decided by the author: strict reading):** attempt 3 kept TypeScript's module-level `intersectingChangeSet` as a thread-safe static `ConditionalWeakTable`; the brief allows no mutable static state besides the parser pool. The original agent could not be resumed (stopped by an interruption), so a fresh agent (Sonnet 5.5, medium effort, no sub-agents) made only this change in attempt 3's worktree (per-parser `HashSet`, cleared in `ClearState`; 12 lines added, 14 removed; gate passed) before the ranking.
+- **Virtual dispatch:** attempt 3's `Node.NameForTransformFlags` (virtual, 58 overrides) has its counterpart in typescript-go's per-type `nodeData.Name()` (`internal/ast/ast.go:209`, `:1215`); accepted under rule 3.
+- **Attempt 1 stopped** by the author for token cost after the spend-limit pause; its unfinished, never-built work is kept on `attempts/M34/attempt-1`. From M5 on, two attempts per module (prereg/v3).
+- Both finished attempts reached 50,177/50,177 on their first full gate run (attempt 2 after two hand builds; attempt 3 after three builds), i.e. the "long tail of error recovery" the plan feared did not materialise for the ParseNone gate.

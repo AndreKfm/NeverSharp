@@ -107,7 +107,7 @@ Each module is ported independently by several AI models from the same inputs: t
 | Track F, attempt 3 per module | Claude Sonnet 5.5 (`claude-sonnet-5-5`) | independent porting agent, fresh context; keeps a comparison between models |
 | Track O variants | Claude Opus 5.5 (`claude-opus-5-5`) | one agent per variant; variants differ by optimization strategy (§5.4) |
 
-- **3 attempts per Track F module** (confirmed by the author), the same upper bound as Track O's variants.
+- **3 attempts per Track F module** (confirmed by the author), the same upper bound as Track O's variants. **Amended (prereg/v3, 2026-10-21): from module M5 on, 2 attempts per Track F module — attempt 1 Opus 5.5, attempt 2 Sonnet 5.5 — and agents run at medium reasoning effort; high effort only for Track O optimization work.** Reason: token cost (the three M3+M4 attempts with their sub-agents hit the account's spend limit). Two attempts keep both the chance of a passing port and the model comparison; the spread between independent attempts of one model is no longer measured from M5 on.
 - **An attempt** is one agent run from the identical inputs. It may iterate against the Gate 1 and Gate 2 diffs until it passes or its budget is used up; attempts do not see each other's code. The orchestrator records each attempt's iterations, final diffs and pass/fail.
 - Why this split: two Opus attempts carry the chance of reaching byte-identical output within the budget; the Sonnet attempt keeps the brief's comparison between models at small cost. With a single model family the comparison measures mostly the spread between independent attempts; this is stated with every ranking.
 - Model identifiers are recorded with each attempt's log. If a listed model is unavailable when a module is ported, the replacement is an amendment.
@@ -300,6 +300,7 @@ For transparency, the decisions that were revised during Phase 0, before this do
 
 | Date | Tag | Change | Reason | Where |
 |---|---|---|---|---|
+| 2026-10-21 | `prereg/v3` | §5.2: 2 attempts per Track F module from M5 on (1 × Opus 5.5, 1 × Sonnet 5.5), agents at medium effort, high only for Track O | token cost; M3+M4 attempt 1 was stopped by the author before finishing (logged in phase1-progress.md) | phase1-progress.md, modules/README.md |
 | 2026-10-21 | `prereg/v2` | §6.4 A7 table: property name `ServerGarbageCollector` → `ServerGarbageCollection` | erratum: `ServerGarbageCollector` is not an MSBuild property and is silently ignored, so the `-srv` configurations would have run with Workstation GC; the intent (Server GC for `-srv`) is unchanged. Found by the first publish of the four configurations, before any C# measurement. | eng/RuntimeConfiguration.props, phase1-progress.md |
 
 ## 13. Prior art
