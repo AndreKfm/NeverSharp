@@ -300,7 +300,7 @@ For transparency, the decisions that were revised during Phase 0, before this do
 
 | Date | Tag | Change | Reason | Where |
 |---|---|---|---|---|
-| 2026-10-21 | pending (`prereg/v2`) | §6.4 A7 table: property name `ServerGarbageCollector` → `ServerGarbageCollection` | erratum: `ServerGarbageCollector` is not an MSBuild property and is silently ignored, so the `-srv` configurations would have run with Workstation GC; the intent (Server GC for `-srv`) is unchanged. Found by the first publish of the four configurations, before any C# measurement. | eng/RuntimeConfiguration.props, phase1-progress.md |
+| 2026-10-21 | `prereg/v2` | §6.4 A7 table: property name `ServerGarbageCollector` → `ServerGarbageCollection` | erratum: `ServerGarbageCollector` is not an MSBuild property and is silently ignored, so the `-srv` configurations would have run with Workstation GC; the intent (Server GC for `-srv`) is unchanged. Found by the first publish of the four configurations, before any C# measurement. | eng/RuntimeConfiguration.props, phase1-progress.md |
 
 ## 13. Prior art
 
