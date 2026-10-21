@@ -34,9 +34,10 @@ const here = import.meta.dirname;
 
 // Configurations of the parse-only suite. Every configuration is reported; none is dropped after the fact.
 const configurations = [
-    { id: "tsc6-parse", label: "tsc 6.0.3 (Node 24), single-threaded", command: list => [node, join(here, "parse-ts.mjs"), list] },
-    { id: "tsgo7-parse", label: "typescript-go 7.0.2, parallel (default)", command: list => [parseGo, list] },
-    { id: "tsgo7-parse-single", label: "typescript-go 7.0.2, single-threaded", command: list => [parseGo, "--single", list] },
+    // threads: "single" configurations form the rig check of the variance gate (decision B11).
+    { id: "tsc6-parse", label: "tsc 6.0.3 (Node 24), single-threaded", threads: "single", command: list => [node, join(here, "parse-ts.mjs"), list] },
+    { id: "tsgo7-parse", label: "typescript-go 7.0.2, parallel (default)", threads: "parallel", command: list => [parseGo, list] },
+    { id: "tsgo7-parse-single", label: "typescript-go 7.0.2, single-threaded", threads: "single", command: list => [parseGo, "--single", list] },
 ];
 
 const runs = Number(arg("--runs", "20"));
@@ -154,7 +155,7 @@ const run = {
     settings: { runs, warmup, memRuns, hyperfineShell: "none", processPriority: priority },
     environment,
     corpus: Object.fromEntries(repos.map(r => [r, { commit: fileManifest.repos[r].commit, files: fileManifest.repos[r].files, bytes: fileManifest.repos[r].bytes, contentSha256: fileManifest.repos[r].contentSha256 }])),
-    configurations: configs.map(c => ({ id: c.id, label: c.label })),
+    configurations: configs.map(c => ({ id: c.id, label: c.label, threads: c.threads })),
     results,
 };
 writeFileSync(join(outDir, "run.json"), JSON.stringify(run, null, 1));

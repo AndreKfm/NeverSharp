@@ -72,7 +72,11 @@
     },
     "configurations": {
       "type": "array",
-      "items": { "type": "object", "required": ["id", "label"] }
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "threads"],
+        "properties": { "threads": { "enum": ["single", "parallel"], "description": "Single-threaded configurations form the rig check of the variance gate." } }
+      }
     },
     "results": {
       "type": "array",

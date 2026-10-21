@@ -8,7 +8,7 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { median } from "./stats.mjs";
+import { bootstrapGeometricMeanRatio, bootstrapMedianRatio, median } from "./stats.mjs";
 
 const file = process.argv[2];
 const out = process.argv.includes("--out") ? process.argv[process.argv.indexOf("--out") + 1] : join(dirname(file), "report.md");
@@ -63,25 +63,34 @@ for (const r of repos) for (const c of configs) {
 }
 push("");
 
-push(`## Table 2. Median wall-clock relative to \`${BASELINE}\``, "", "Ratio > 1 means slower than typescript-go's default (parallel) configuration.", "",
+const ci = x => `${x.estimate.toFixed(2)} [${x.low.toFixed(2)}, ${x.high.toFixed(2)}]`;
+push(`## Table 2. Median wall-clock relative to \`${BASELINE}\`, with 95 % confidence interval`, "",
+    "Ratio of medians; ratio > 1 means slower than typescript-go's default (parallel) configuration. Interval: percentile bootstrap, 10,000 resamples of both samples, fixed seed. The geometric mean resamples every repository jointly.", "",
     row(["Configuration", ...repos, "Geometric mean"]), row(["---", ...repos.map(() => "---:"), "---:"]));
 for (const c of configs) {
-    const ratios = repos.map(r => result(r, c.id) && result(r, BASELINE) ? result(r, c.id).timing.median / result(r, BASELINE).timing.median : undefined);
-    const valid = ratios.filter(v => v !== undefined);
-    const geo = valid.length ? Math.exp(valid.reduce((a, v) => a + Math.log(v), 0) / valid.length) : undefined;
-    push(row([c.id, ...ratios.map(v => v === undefined ? "n/a" : v.toFixed(2)), geo === undefined ? "n/a" : geo.toFixed(2)]));
+    const pairs = repos.map(r => result(r, c.id) && result(r, BASELINE) ? [result(r, c.id).timing.times, result(r, BASELINE).timing.times] : undefined);
+    const cells = pairs.map(p => p === undefined ? "n/a" : c.id === BASELINE ? "1.00" : ci(bootstrapMedianRatio(p[0], p[1])));
+    const valid = pairs.filter(p => p !== undefined);
+    const geo = valid.length === 0 ? "n/a" : c.id === BASELINE ? "1.00" : ci(bootstrapGeometricMeanRatio(valid));
+    push(row([c.id, ...cells, geo]));
 }
 push("");
 
-push(`## Table 3. Variance gate (MAD/median < ${VARIANCE_LIMIT} %)`, "", row(["Configuration", ...repos, "Worst"]), row(["---", ...repos.map(() => "---:"), "---:"]));
+// Decision B11: single-threaded configurations are the rig check; parallel configurations report their spread.
+const threadsOf = c => c.threads ?? (c.id.endsWith("-single") || c.id.startsWith("tsc") ? "single" : "parallel");
+push(`## Table 3. Variance gate (MAD/median < ${VARIANCE_LIMIT} %)`, "",
+    "Binding rows: single-threaded configurations (rig check). Parallel rows: reported spread, not gated; their run-to-run spread is a property of the parallel program (docs/benchmark-harness.md, B11).", "",
+    row(["Configuration", "Role", ...repos, "Worst"]), row(["---", "---", ...repos.map(() => "---:"), "---:"]));
 let gatePass = true;
 for (const c of configs) {
+    const binding = threadsOf(c) === "single";
     const v = repos.map(r => result(r, c.id)?.timing.madOverMedianPercent);
     const worst = Math.max(...v.filter(x => x !== undefined));
-    if (worst >= VARIANCE_LIMIT) gatePass = false;
-    push(row([c.id, ...v.map(x => x === undefined ? "n/a" : (x >= VARIANCE_LIMIT ? `**${pct(x)}**` : pct(x))), worst >= VARIANCE_LIMIT ? `**${pct(worst)}**` : pct(worst)]));
+    if (binding && worst >= VARIANCE_LIMIT) gatePass = false;
+    const fmt = x => x === undefined ? "n/a" : (binding && x >= VARIANCE_LIMIT ? `**${pct(x)}**` : pct(x));
+    push(row([c.id, binding ? "rig check" : "reported", ...v.map(fmt), fmt(worst)]));
 }
-push("", `Variance gate: **${gatePass ? "PASS" : "FAIL"}**${run.protocolCompliant ? "" : " (probe run; the gate is only binding for protocol results)"}.`, "");
+push("", `Variance gate (rig check): **${gatePass ? "PASS" : "FAIL"}**${run.protocolCompliant ? "" : " (probe run; the gate is only binding for protocol results)"}.`, "");
 
 push("## Table 4. Runtime metrics (C# configurations only)", "");
 const runtime = run.results.filter(x => x.runtime);

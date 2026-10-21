@@ -86,7 +86,8 @@ export async function captureEnvironment(toolchain) {
         { id: "min-processor-state", required: "100", value: String(rig.minProcessorStateAc), ok: rig.minProcessorStateAc === 100 },
         { id: "max-processor-state", required: "100", value: String(rig.maxProcessorStateAc), ok: rig.maxProcessorStateAc === 100 },
         { id: "boost-off", required: "processor performance under all-core load <= 101 %", value: `${rig.processorPerformanceUnderLoadPercent} %`, ok: rig.processorPerformanceUnderLoadPercent <= 101 },
-        { id: "idle-before-run", required: "mean CPU over 3 s < 5 %", value: `${idle.toFixed(1)} %`, ok: idle < 5 },
+        // 12 %: the reference machine's measured idle baseline is 7-10 % (docs/benchmark-harness.md, B10).
+        { id: "idle-before-run", required: "mean CPU over 3 s < 12 %", value: `${idle.toFixed(1)} %`, ok: idle < 12 },
     ];
     const repo = git();
     checks.push({ id: "harness-committed", required: "clean working tree", value: repo.dirty ? "dirty" : "clean", ok: !repo.dirty });

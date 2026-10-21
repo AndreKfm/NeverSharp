@@ -89,60 +89,62 @@ Before every run, `env.mjs` records the environment and checks the rig settings 
 | `min-processor-state` | minimum processor state (AC) = 100 % |
 | `max-processor-state` | maximum processor state (AC) = 100 % |
 | `boost-off` | `% Processor Performance` under a 2.5 s all-core load ≤ 101 % (no clock above nominal) |
-| `idle-before-run` | mean CPU utilization over 3 s before the run < 5 %, read from the OS processor-time counters (`os.cpus()`), so the check starts no process of its own |
+| `idle-before-run` | mean CPU utilization over 3 s before the run < 12 % (B10), read from the OS processor-time counters (`os.cpus()`), so the check starts no process of its own |
 | `harness-committed` | clean working tree: every number comes from a committed harness |
 
 A run with any failed check is written with `protocolCompliant: false`; the report marks it as a **probe** and it is never reported as a result. The Defender path exclusion cannot be verified without administrator rights and is recorded as such.
 
-**Variance gate** (kill criterion 3): every baseline configuration on every repository must have MAD/median < 3 % in a protocol-compliant run before any port numbers are published.
+- **[DECISION B10, CONFIRMED 2026-10-21] Idle limit 12 %.** The limit was first set to 5 % before the machine's baseline was known. Measured repeatedly with nothing else running, the reference machine idles at 7–10 % CPU, mostly kernel time that no user process accounts for; at 5 % no run could ever be protocol-compliant. 12 % is the measured baseline plus a margin. The check still catches a second workload (in run C, other work on the machine pushed it to 40 %).
+- **[DECISION B11, CONFIRMED 2026-10-21] Variance gate (kill criterion 3) = rig check on the single-threaded configurations; parallel configurations report their spread; verdicts use confidence intervals.**
+  - The gate: in a protocol-compliant run, every **single-threaded** configuration (`tsc6-parse`, `tsgo7-parse-single`, later the single-threaded C# configurations) on every repository must have MAD/median < 3 %. If not, the rig is not fit to publish numbers.
+  - **Parallel** configurations (`tsgo7-parse`, later parallel C# configurations) are not gated. Their MAD/median is reported in every run, next to the median.
+  - **Relative claims** (the parity hypothesis, any "X is N× faster") use the ratio of medians with a 95 % percentile-bootstrap confidence interval (10,000 resamples of both samples, fixed seed; geometric mean over repositories resamples all of them jointly). The exact decision rule for the parity claim on this interval is fixed in the pre-registration document.
+  - Why: across five probe runs, single-threaded configurations stayed at 0.3–2.8 %, except two cells in run A (3.69 % and 3.85 %, uncommitted work and an IDE running), while parallel typescript-go on the three short repositories (0.10–0.16 s per run) spread 2–6 %. Neither the Defender exclusion, nor running the drivers at high priority (B9), nor GC counts explain the spread (section 8). The spread belongs to the parallel program: a 24-thread run of 0.1 s is sensitive to how work and GC fall onto threads in each run. A rig fix cannot remove it, and gating on it would make the three small repositories unusable as baselines, i.e. drop part of Microsoft's corpus in effect.
+  - **Disclosure:** this decision was taken after seeing probe data, and it narrows the scope of a gate that this document had earlier said must not be relaxed. It was taken before any C# code or port number exists, and the probe data on which it rests are listed in section 8. The 3 % threshold itself is unchanged.
 
 ## 7. Result schema and report
 
-- `artifacts/bench/results/<runId>/run.json`, schema [harness/bench/result.schema.json](../harness/bench/result.schema.json) (`schemaVersion` 1): environment, rig checks, corpus hashes, settings, and per (repository, configuration): command, driver output, all timed runs, median, MAD, MAD/median, throughput, memory runs, runtime metrics (C# only), raw hyperfine export.
+- `artifacts/bench/results/<runId>/run.json`, schema [harness/bench/result.schema.json](../harness/bench/result.schema.json) (`schemaVersion` 1): environment, rig checks, corpus hashes, settings (including the drivers' priority class), configurations (including `threads`: single or parallel), and per (repository, configuration): command, driver output, all timed runs, median, MAD, MAD/median, throughput, memory runs, runtime metrics (C# only), raw hyperfine export.
 - `report.mjs` produces the protocol's tables:
   1. wall-clock, throughput and peak memory per repository and configuration;
-  2. median wall-clock relative to `tsgo7-parse`, per repository and geometric mean;
-  3. the variance gate;
+  2. median wall-clock relative to `tsgo7-parse`, per repository and geometric mean, each with its 95 % confidence interval;
+  3. the variance gate: single-threaded rows binding (rig check), parallel rows reported;
   4. runtime metrics of C# configurations (bytes allocated, GC count per generation, total GC pause).
 
   The BenchmarkDotNet table (in-process, supplementary) is added with the first C# code.
 
 ## 8. Probe results
 
-Four full runs with protocol settings (N = 20 after 3 warmup runs, M = 5, all repositories and configurations). **All are probes, not protocol results:** `idle-before-run` failed in all four, `harness-committed` in A and B. All four ran at normal priority (before B9). Nothing below is a published number; it is input for fixing the rig.
+Five full runs with protocol settings (N = 20 after 3 warmup runs, M = 5, all repositories and configurations). **All are probes, not protocol results:** each failed `idle-before-run` as it was defined at the time (< 5 %), A and B also `harness-committed`. Nothing below is a published number; these runs are the evidence for decisions B9–B11.
 
-| Run | Defender exclusion | Idle CPU before run |
+| Run | Conditions | Idle CPU before run |
 |---|---|---|
-| A `2026-10-14T17-05-33-178Z` | no | 9.7 % |
-| B `2026-10-14T17-27-54-080Z` | yes (applied by the maintainer between A and B) | 18.0 % |
-| C `2026-10-14T18-19-00-873Z` | yes; IDE, browser and assistant activity stopped | 40.7 % (see below) |
-| D `2026-10-15T09-23-40-112Z` | yes; other workloads finished | 9.7 % |
+| A `2026-10-14T17-05-33-178Z` | no Defender exclusion | 9.7 % |
+| B `2026-10-14T17-27-54-080Z` | Defender exclusion applied | 18.0 % |
+| C `2026-10-14T18-19-00-873Z` | IDE, browser and assistant activity stopped; other work on the machine | 40.7 % |
+| D `2026-10-15T09-23-40-112Z` | no other workloads | 9.7 % |
+| E `2026-10-15T10-25-24-571Z` | as D, drivers at high priority (B9) | 16.3 % |
 
-MAD/median per configuration and repository (gate: < 3 %), runs A / B / C / D:
+MAD/median per configuration and repository (threshold 3 %), runs A / B / C / D / E:
 
 | Configuration | vscode | sentry | bluesky | playwright | tldraw |
 |---|---:|---:|---:|---:|---:|
-| tsc6-parse | 1.41 / 0.89 / 1.76 / 1.03 | **3.69** / 1.32 / 2.02 / 2.75 | 0.91 / 1.83 / 1.70 / 1.37 | 0.48 / 1.24 / 1.78 / 1.15 | 2.08 / 1.36 / 1.53 / 0.29 |
-| tsgo7-parse | **3.25** / **3.13** / 2.07 / 1.57 | 1.91 / **4.40** / 2.77 / 2.83 | **3.15** / **6.02** / 2.76 / **3.50** | **3.30** / **3.26** / 2.76 / **5.39** | **3.36** / **3.17** / **3.25** / **3.52** |
-| tsgo7-parse-single | **3.85** / 0.66 / 0.73 / 0.31 | 0.30 / 1.56 / 0.53 / 0.46 | 1.59 / 1.15 / 0.91 / 0.59 | 0.64 / 1.08 / 0.93 / 0.76 | 0.92 / 0.86 / 0.57 / 0.64 |
+| tsc6-parse | 1.41 / 0.89 / 1.76 / 1.03 / 0.96 | **3.69** / 1.32 / 2.02 / 2.75 / 1.12 | 0.91 / 1.83 / 1.70 / 1.37 / 1.13 | 0.48 / 1.24 / 1.78 / 1.15 / 0.64 | 2.08 / 1.36 / 1.53 / 0.29 / 0.52 |
+| tsgo7-parse | **3.25** / **3.13** / 2.07 / 1.57 / 2.82 | 1.91 / **4.40** / 2.77 / 2.83 / 2.66 | **3.15** / **6.02** / 2.76 / **3.50** / **3.30** | **3.30** / **3.26** / 2.76 / **5.39** / **4.35** | **3.36** / **3.17** / **3.25** / **3.52** / 1.99 |
+| tsgo7-parse-single | **3.85** / 0.66 / 0.73 / 0.31 / 0.38 | 0.30 / 1.56 / 0.53 / 0.46 / 0.47 | 1.59 / 1.15 / 0.91 / 0.59 / 0.96 | 0.64 / 1.08 / 0.93 / 0.76 / 0.90 | 0.92 / 0.86 / 0.57 / 0.64 / 0.53 |
 
-Variance gate: fail in all four runs. Run B: all tsc and single-threaded Go cells pass, all five parallel Go cells fail (3.13–6.02 %). Run C: 14 of 15 cells pass; parallel Go is at 2.07–2.77 % on four repositories and fails only on tldraw (3.25 %). Run D (9.7 % idle load, no other workloads): all 10 tsc and single-threaded Go cells pass (0.29–2.75 %); parallel Go passes on vscode (1.57 %) and sentry (2.83 %) and fails on the three shortest runs, bluesky, playwright and tldraw (3.50 / 5.39 / 3.52 %, medians 0.10–0.16 s). The per-run times show a continuous spread of about ±10–15 ms, not two clusters.
+Under B11, the rig check (single-threaded rows) passes in runs B–E and fails in run A (two cells, 3.69 % and 3.85 %, with uncommitted work and an IDE running).
 
-Findings:
+Findings, in the order they were made:
 
-- **The Defender hypothesis was wrong.** After run A, the high system time of parallel typescript-go (about 5× its wall-clock) was attributed to on-access scanning. With the exclusion in place, the ratio is unchanged (A: 4.7–6.1, B: 4.6–5.6). The system time belongs to the parallel run itself (24 threads, memory commit, scheduling), not to the scanner. The exclusion stays in place as specified in hardware.md, but it does not explain the variance.
-- **Background load in run C was real, not an artifact of the check.** The 40.7 % reading prompted a test of the old WMI-based idle check against the OS counters: both agreed (about 30–40 % at the time), the check itself added only a few percent. The load came from other workloads on the machine unrelated to the project (about 2–3 cores in total).
-- **Working hypothesis:** a parallel run of 0.1–0.5 s that occupies all 24 hardware threads is as slow as its slowest thread, so any background activity that takes a core for a moment stretches the whole run; a single-threaded configuration is simply scheduled on another free core. That matches parallel-only failures with 10–18 % background load, and parallel Go improving markedly in run C once interactive work stopped. It is not confirmed until a run passes the idle check.
+1. **Defender is not the cause** (A → B). The high system time of parallel typescript-go, about 5× its wall-clock, was first attributed to on-access scanning. With the exclusion in place the ratio is unchanged (A: 4.7–6.1, B: 4.6–5.6); it belongs to the parallel run itself (24 threads, memory commit, scheduling).
+2. **Background load matters for parallel runs** (C, D). With other work on the machine (C) or without (D), single-threaded rows pass; parallel rows improve once other work stops but still fail on the three shortest repositories (medians 0.10–0.16 s). The 40.7 % reading in C was checked against Windows' own counters and was real.
+3. **The idle baseline is 7–10 %** (D and repeated checks), mostly kernel time. The 5 % limit was unattainable → B10.
+4. **High priority does not remove the spread** (E). With every driver in the high priority class, parallel rows are at 1.99–4.35 %; playwright and bluesky still fail, tldraw passes, vscode gets worse. Sorted per-run times are evenly spread (playwright: 132–154 ms), not a tight cluster with outliers.
+5. **GC count does not explain it** (diagnostic, not a protocol run). Playwright, parallel, high priority, 20 runs with `GODEBUG=gctrace=1`: 141–160 ms wall-clock, 8–10 GC cycles per run, 3.7–8.6 ms total stop-the-world pause; correlation between wall-clock and GC cycle count 0.19.
+6. **Conclusion → B11.** The spread is a property of short parallel runs of the measured program, not of the rig.
 
-Next steps, before any port number exists:
-
-1. Done: run D on a machine without other workloads. Its 9.7 % idle load is the machine's baseline (7–10 % in repeated measurements, mostly kernel time), so `idle-before-run` cannot pass at 5 % on this machine. The 5 % limit was set before this baseline was known; whether to adjust it is open.
-1. Next: a run with drivers at high priority (decision B9) from a committed harness, to measure whether it brings the short parallel runs under 3 %.
-2. If the parallel configuration still fails on an idle machine: investigate and fix the rig. Not acceptable as fixes: changing the threshold, dropping the configuration, changing GOMAXPROCS (it would no longer be typescript-go's default), or raising N (that sharpens the MAD estimate, it does not reduce the spread). Any change to the measurement method is an amendment before the pre-registration tag.
-
-Note: the variance gate blocks *publishing* port numbers (kill criterion 3), not porting. Phase 1 work can start while the rig is being fixed.
-
-Post hoc observation, probe data, not a result: tsc 6.0.3 takes 9.9–11.9× the wall-clock of parallel typescript-go for parsing (run A, geometric mean 11.2×), and single-threaded typescript-go is 2.2–3.1× faster than tsc 6.0.3. The order of magnitude matches Microsoft's published ~10× for full builds.
+Post hoc observation, probe data, not a result: tsc 6.0.3 takes about 11–12× the wall-clock of parallel typescript-go for parsing (run E, geometric mean 11.94, 95 % CI [11.81, 12.11]), and single-threaded typescript-go is 2.2–3.1× faster than tsc 6.0.3 (run A). The order of magnitude matches Microsoft's published ~10× for full builds.
 
 ## 9. Not covered yet
 
