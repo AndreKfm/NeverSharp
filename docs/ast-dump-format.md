@@ -128,3 +128,17 @@ Observations:
 **[DECISION 4, CONFIRMED] JSDoc content is not compared with typescript-go.** (Originally: "not in dump v0". Since format version 1 the dump contains a JSDoc section, compared with tsc 6.0.3 only; see section 4.) Only the presence of a JSDoc comment (`HasJSDoc`) is compared. Reasons: neither child visitor includes JSDoc; typescript-go parses JSDoc in TS files lazily and turns JSDoc in JS files into synthesized TypeScript nodes. The final in/out decision for v1 belongs to the Phase 1 plan (task 4). If JSDoc is in scope, the C# gate (decision 1) adds a JSDoc section compared against tsc 6.0.3 only, since typescript-go's JSDoc representation is not comparable node for node.
 
 **[DECISION 5, CONFIRMED] `fourslash/` files are parsed as whole files.** Extracting their `////` content would be a second splitting rule of our own. As test scripts they are valid TypeScript and exercise the parser as they are.
+
+## 8. Token-stream dump (scanner gate G1a)
+
+Written by `harness/astdump/dump-tokens-ts.mjs` for tsc 6.0.3; the C# scanners of both tracks must reproduce it byte for byte before parser work starts ([phase1-plan.md](phase1-plan.md) §4). Each unit is scanned with `ts.createScanner(ScriptTarget.Latest, skipTrivia: true, languageVariant)` (JSX variant for TSX/JSX units) until `EndOfFileToken`, without the parser's contextual rescans (JSX text, regular expressions, template continuations, `>` splitting); errors that only those rescans would avoid are therefore part of the expected output.
+
+```
+<Kind> <fullStart> <start> <end>[ <TokenFlag>|...][ =<JSON token value>]
+!scan <code> <start> <length>
+```
+
+- Token flags are TypeScript's `TokenFlags` names, sorted; the value (`getTokenValue()`, JSON-encoded) is written for identifiers, private identifiers, literals and template parts.
+- `!scan` lines are the scanner's error callbacks in emission order; `start` is the scanner position at the callback (as the parser's `scanError` uses it).
+
+On the equivalence corpus: 50,177 units, 22,809,973 tokens; the most frequent scanner diagnostics are 1127 (Invalid character), 1160 (Unterminated template literal), 1351, 1002.
