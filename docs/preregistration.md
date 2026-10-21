@@ -1,0 +1,221 @@
+# Pre-registration: a faithful C# port of the TypeScript compiler, measured against typescript-go
+
+Status: **draft, not yet tagged.** This document becomes binding when it is committed and tagged `prereg/v1` with the tag date. Until then every item is open to change; items marked **[DECISION, CONFIRMED]** were proposed by the author's assistant and confirmed by the author on 2026-10-21, items marked **[OPEN]** need the author's input.
+
+Author: Andre Kaufmann. Repository: NeverSharp. License: Apache-2.0.
+
+"TypeScript" is a trademark of Microsoft Corporation. This project is not affiliated with or endorsed by Microsoft.
+
+## 1. Question
+
+> Does a faithful C# port of tsc land within 20 % of typescript-go's wall-clock on Microsoft's benchmark corpus?
+
+This is a question, not a claim. The protocol below fixes, before any C# code exists, what will be measured, how, what counts as an answer, and when the project stops.
+
+**Scope of the answer per phase.** Phase 1 answers the question for **parsing only** (scanner + parser). A Phase 1 result says nothing about the full compiler. Later phases extend the measured scope (section 10).
+
+## 2. Ground truth
+
+Two independent references, pinned by commit ([references.md](references.md), [pins.json](../pins.json)):
+
+| Role | Repository | Tag | Commit |
+|---|---|---|---|
+| Port source and oracle 1 | microsoft/TypeScript | `v6.0.3` | `050880ce59e30b356b686bd3144efe24f875ebc8` |
+| Performance baseline and oracle 2 | microsoft/typescript-go | `typescript/v7.0.2` | `2bd066d87f5bafd315be9f40889d0a60b9e58e0b` |
+
+The Go side is Microsoft's code. Nothing written for this project is used as a comparison target. The only code of ours on the Go side is the parse-only driver loop (about 30 lines around typescript-go's own `core.WorkGroup`, `osvfs` and `parser.ParseSourceFile`), built with Microsoft's Go toolset and the release flags ([benchmark-harness.md](benchmark-harness.md), B5).
+
+Known oracle difference, pre-registered: typescript-go 7.0.2 was ported from TypeScript `4d4f005c` (branch `tsgo-port`), not from `v6.0.3`. In the Phase 1 scope the two differ in one line of `scanJsDocToken` ([references.md](references.md), section 2).
+
+## 3. Corpora
+
+**Benchmark corpus.** Exactly the five codebases of Microsoft's "Announcing TypeScript 7.0" (2026-07-08): VS Code, Sentry, Bluesky (social-app), Playwright, tldraw. No additions, no removals. Microsoft published no commits; the commits were selected by a mechanical rule fixed before looking at them: the last first-parent commit of the default branch before 2026-07-08T00:00:00Z ([references.md](references.md), section 3).
+
+| Repository | Commit | Parse set: files | MiB |
+|---|---|---:|---:|
+| vscode | `f507e492b81074fff62b0806d47760671c3990b5` | 11,724 | 134.6 |
+| sentry | `b4e1ddf51f55e4aa973b2d0c028485f13de779a6` | 8,932 | 43.8 |
+| bluesky | `ea3d6827c75c2c2063bdb8d3240c62d8f041c7fa` | 1,688 | 6.9 |
+| playwright | `a061d963659048a43169bd87c84960d89f496cdb` | 1,415 | 16.4 |
+| tldraw | `9986114e3493118095f60146becd0219e100745e` | 2,508 | 13.0 |
+
+Parse set: every git-tracked `.ts .tsx .mts .cts` file at the pinned commit (B1). A content hash over all paths and contents is recorded in every result.
+
+**Equivalence corpus.** 50,177 parse units: every file under `tests/cases/**` of TypeScript `v6.0.3`, split into units as TypeScript's own test harness does (23,910 units), plus every file of the five parse sets (26,267 units) ([ast-dump-format.md](ast-dump-format.md), section 2).
+
+## 4. Equivalence gates
+
+### 4.1 Canonical AST dump
+
+Defined in [ast-dump-format.md](ast-dump-format.md): one line per node in pre-order (kind name, UTF-16 `pos`, `end`, sorted NodeFlags names), children as each implementation's own child visitor yields them, then parse diagnostics (code, start, length).
+
+### 4.2 Gate 1 (per module, per model in the multi-model workflow)
+
+The C# dump must be **byte-identical to the tsc 6.0.3 dump on all 50,177 units, raw, without normalization**, in the `!diag` section and, because JSDoc is in Phase 1 scope (section 5.3), in the JSDoc section added to the dump format before Phase 1 starts. One mismatch fails the module. There is no tolerance and no exclusion list for the C# side.
+
+### 4.3 Oracle agreement
+
+tsc 6.0.3 and typescript-go 7.0.2 are compared after the nine normalization rules N1–N9 ([ast-dump-format.md](ast-dump-format.md), section 5). Result, deterministic for the pinned inputs: 50,092 units identical, 85 units differ, each listed with its category in [harness/astdump/oracle-divergences.tsv](../harness/astdump/oracle-divergences.tsv). The C# dump is additionally reported against the typescript-go dump under the same normalization, as a cross-check.
+
+## 5. Port rules
+
+The port mirrors typescript-go's approach (a port, not a rewrite).
+
+1. **Functions and data.** No class hierarchies beyond what the TypeScript source has. Node representation as in the source: kind, pos, end, parent, flags.
+2. **Strings and positions are UTF-16**, as in TypeScript. (typescript-go uses UTF-8 because Go strings are bytes; C# strings are UTF-16, so the source's representation is kept.)
+3. **No optimization without a counterpart in typescript-go**, cited by file and function in a comment and in the commit message. Examples of counterparts that may be mirrored: parser and scanner pooling (`getParser`/`putParser`, `internal/parser/parser.go`), slice arenas for nodes (`nodeSliceArena`), parallel parsing of files on a work group (`core.WorkGroup`, `internal/core/workgroup.go`; used in `internal/compiler/program.go`).
+4. **Idiomatic C# substitutions** (`ReadOnlySpan<char>` instead of substring slicing, structs for small immutable records) only where typescript-go made the analogous Go substitution, cited by file.
+5. **Every ported file** carries the header of [CONTRIBUTING.md](../CONTRIBUTING.md) naming the TypeScript source file and commit and the typescript-go file used as a structural reference.
+
+### 5.1 Gate 2: analyzer ruleset
+
+**[DECISION, CONFIRMED 2026-10-21]** Gate 2 is a Release build of the port with zero diagnostics under:
+
+- `<Nullable>enable</Nullable>`, `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>`, `<AnalysisLevel>10.0-all</AnalysisLevel>`, `<EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>`;
+- `Microsoft.CodeAnalysis.BannedApiAnalyzers` with a banned list derived from the port rules: `System.Linq` in `src/` (no counterpart in Go, allocates), `System.Reflection` and `dynamic`, `System.Text.RegularExpressions` (the TypeScript scanner and parser use no regular expressions), parallelism other than the work-group counterpart of rule 3;
+- a header check for rule 5.
+
+The ruleset files are committed before Phase 1 starts and pinned by that commit; changing them later is an amendment (section 12). Suppressions are allowed only with a comment citing the typescript-go counterpart.
+
+### 5.2 Multi-model workflow
+
+Each module is ported independently by several AI models from the same inputs: the TypeScript source file at the pinned commit, the corresponding typescript-go file as a worked example, the port rules, and the dump tooling. Gate 1, then Gate 2. Only survivors are ranked, on the primary endpoint of section 8 and then on bytes allocated. Every failure is logged with the diff that killed it; those logs are published.
+
+**[OPEN]** The models (exact model identifiers and versions) and the number of attempts per model are fixed before Phase 1 starts and listed here.
+
+### 5.3 JSDoc
+
+**[DECISION, CONFIRMED 2026-10-21] JSDoc parsing is in Phase 1 scope.** tsc parses JSDoc during parsing (in the benchmark: `JSDocParsingMode.ParseForTypeErrors`, i.e. all JSDoc in JS files, JSDoc with `@see`/`@link` in TS files), and typescript-go does the equivalent work. A C# parser without JSDoc would do less work than both references and get a speed advantage it did not earn. Consequence for Gate 1: the dump format gains a JSDoc section (JSDoc nodes and JSDoc diagnostics), compared against tsc 6.0.3 only, because typescript-go's JSDoc representation is not comparable node for node ([ast-dump-format.md](ast-dump-format.md), decision 4). The detailed scope is in the Phase 1 plan.
+
+## 6. Measurement
+
+### 6.1 Reference machine
+
+[hardware.md](hardware.md): AMD Ryzen 9 3900X (12 cores / 24 threads, SMT on, fixed all-core clock 4150 MHz as measured), 64 GB DDR4-3200, MSI X570-A PRO, BIOS H.60, Corsair Force MP510 NVMe (benchmark volume), Windows 11 Pro 10.0.26200.6584. Power plan High performance, minimum and maximum processor state 100 %. Defender on with a path exclusion for the project directory; VBS unchanged. No hardware, BIOS, OS feature or driver change during the project; any such change is an amendment and requires a new baseline.
+
+### 6.2 Toolchain
+
+| Tool | Version |
+|---|---|
+| .NET SDK | 10.0.402 (runtime 10.0.13), `global.json` with `rollForward: disable` |
+| Go | Microsoft build of Go 1.26.4-1 (the toolset of the tsgo 7.0.2 release binary), release flags |
+| Node.js | 24.21.0 (runs tsc 6.0.3) |
+| hyperfine | 1.20.0 |
+| tsc | npm `typescript@6.0.3`, integrity-checked |
+
+### 6.3 Method
+
+[benchmark-harness.md](benchmark-harness.md), sections 4–7, in force at the tagged commit:
+
+- Parse-only drivers read every file of the parse set, parse it, and keep all trees alive until the end (B2), in the high priority class (B9).
+- CLI wall-clock with hyperfine, `--shell=none`, 3 warmup runs, **N = 20** timed runs per (repository, configuration); fixed configuration order (B7).
+- Peak working set (Windows counterpart of peak RSS) and peak commit from 5 separate runs (B8).
+- Rig checks before every run: processor states, no clock above nominal under load, idle median of ten 1 s windows < 12 % (B10), clean committed harness. A run that fails any check is a probe and is never reported as a result.
+- **Same session:** every comparison comes from one protocol-compliant run that contains both the C# configurations and the typescript-go configurations. The baseline of 2026-10-21 validates the rig; it is not reused as the comparison partner of a later C# run.
+
+### 6.4 Configurations, all reported
+
+| Id | What | Role |
+|---|---|---|
+| `tsgo7-parse` | typescript-go 7.0.2, parallel (default) | **baseline** |
+| `tsgo7-parse-single` | typescript-go 7.0.2, single-threaded | reference |
+| `tsc6-parse` | tsc 6.0.3 on Node 24, single-threaded | reference |
+| `cs-aot-ws` / `cs-aot-ws-single` | C# NativeAOT, Workstation GC, parallel / single-threaded | **primary C# configuration** (parallel) |
+| `cs-aot-srv` / `cs-aot-srv-single` | C# NativeAOT, Server GC | secondary |
+| `cs-jit-ws` / `cs-jit-ws-single` | C# .NET 10 JIT (TieredPGO default), Workstation GC | secondary |
+| `cs-jit-srv` / `cs-jit-srv-single` | C# .NET 10 JIT, Server GC | secondary |
+
+Parallel C# configurations schedule one work item per file (read + parse), the counterpart of typescript-go's `core.WorkGroup`, with the runtime's default degree of parallelism.
+
+**[DECISION, CONFIRMED 2026-10-21] The primary C# configuration is NativeAOT with Workstation GC, parallel.** It is fixed now so that it cannot be chosen after the numbers exist. Reasons: typescript-go ships as a natively compiled single binary, so NativeAOT is the like-for-like deployment model for a CLI wall-clock comparison; Workstation GC is the .NET default. The other configurations are always reported; they cannot carry the primary claim (section 8).
+
+## 7. Metrics
+
+| Metric | Source | Role |
+|---|---|---|
+| Wall-clock per repository (median of N = 20) | hyperfine | **primary** |
+| MAD/median | hyperfine timings | reported; rig gate on single-threaded configurations (B11) |
+| Files/s, MB/s (10^6 bytes) | parse set size / median | reported |
+| Peak working set, peak commit | peakmem, median of 5 | reported |
+| Bytes allocated, GC count per generation, total GC pause | C# driver (`GC.GetTotalAllocatedBytes`, `GC.CollectionCount`, `GC.GetTotalPauseDuration`) | reported, C# only |
+| In-process parse time and allocations | BenchmarkDotNet with MemoryDiagnoser | supplementary table |
+
+## 8. Endpoints and decision rule
+
+**Primary endpoint.** For the primary C# configuration `cs-aot-ws` against the baseline `tsgo7-parse`, from one protocol-compliant run:
+
+> G = geometric mean over the five repositories of median(C#) / median(typescript-go),
+
+with a 95 % percentile-bootstrap confidence interval: 10,000 resamples, independent resampling of the 20 timed runs of each (repository, configuration), all repositories resampled jointly, seed `20261021` (`harness/bench/stats.mjs`).
+
+**[DECISION, CONFIRMED 2026-10-21] Decision rule:**
+
+| Interval for G | Verdict |
+|---|---|
+| upper bound ≤ 1.20 | **parity claim allowed**: "within 20 % of typescript-go" for parsing |
+| lower bound > 1.20 | **no parity**: "more than 20 % slower than typescript-go" for parsing |
+| contains 1.20 | **inconclusive**: reported as such; neither claim is made |
+
+A claim that C# is *faster* than typescript-go additionally requires the upper bound < 1.00.
+
+**Secondary endpoints.** Per-repository ratios with their intervals; all other C# configurations against `tsgo7-parse`; single-threaded C# against `tsgo7-parse-single`; peak memory ratios. A parity statement about a secondary configuration is allowed only with a Bonferroni-adjusted interval (98.75 % for the four parallel C# configurations) and is labeled secondary. Secondary results never replace the primary verdict.
+
+**One final measurement.** The verdict comes from the first protocol-compliant run after Gate 1 and Gate 2 pass for the complete Phase 1 module. Replication runs may be published, each in full and alongside the first; they do not replace it.
+
+**Variance gate (kill criterion 3).** Every single-threaded configuration on every repository has MAD/median < 3 % in the deciding run; otherwise the rig is fixed and the run repeated before any number is published (B11). The parallel configurations' MAD/median is reported next to each median.
+
+## 9. Kill criteria for the project
+
+1. **Oracles disagree.** Stop and publish if the comparison of tsc 6.0.3 and typescript-go 7.0.2 shows any difference that is neither removed by a pre-registered normalization rule (N1–N9) nor listed in the pre-registered divergence list ([ast-dump-format.md](ast-dump-format.md), decision 3).
+2. **Phase 1 not equivalent in time.** Phase 1 (scanner + parser incl. JSDoc) does not pass Gate 1 within **8 calendar weeks from the tag date at about 7 h/week**: publish the gap analysis (the failing units and categories) and stop.
+3. **Rig variance.** The variance gate fails on the reference machine and cannot be fixed: no port numbers are published.
+
+## 10. Phases
+
+| Phase | Scope | Measured as |
+|---|---|---|
+| 0 | harness, corpus, baselines, this document | — |
+| 1 | `scanner.ts`, `parser.ts` and the slice of `types.ts`, `utilities.ts`, `diagnosticMessages.json` they need | parse-only, this document |
+| 2 | binder | pre-registered by amendment before Phase 2 code exists |
+| 3 | checker | monthly "% of conformance suite passing" progress line; method pre-registered by amendment before Phase 3 code exists |
+
+Out of scope for v1: emitter, language service, incremental parsing (syntax cursor), tsserver/LSP, the public compiler API.
+
+**[DECISION, CONFIRMED 2026-10-21]** The optional reference column "oxc_parser (Rust), best-in-class per language, not a port" from the project brief is **not** part of the pre-registered results. It adds a third toolchain and invites a debate about which non-port parser is representative, without bearing on the question. It may be added later as a column labeled post hoc.
+
+## 11. Reporting rule
+
+Nothing outside this protocol is reported as a result. Post-hoc observations are allowed and are labeled **post hoc** wherever they appear. Every failure of Gate 1 or Gate 2 is logged with its diff. Probe runs are never reported as results. All result files (run.json, report, raw hyperfine exports) are published with every result.
+
+## 12. Amendment rule
+
+The protocol changes only by a new dated tag (`prereg/v2`, …) with a public note of what changed and why, and only before the next measurement whose outcome the change could affect. Changes to pinned inputs (pins.json, global.json, the analyzer ruleset, the normalization rules, the divergence list) are amendments.
+
+### 12.1 Changes before the first tag
+
+For transparency, the decisions that were revised during Phase 0, before this document was tagged. Each is documented where it was made.
+
+| Date | Change | Reason | Where |
+|---|---|---|---|
+| 2026-10-14 | Go toolchain: upstream Go 1.26.9 → Microsoft Go 1.26.4-1 | identical toolset to the tsgo release binary | references.md §5 |
+| 2026-10-14 | Equivalence corpus extended by the benchmark sources; divergence list 74 → 85 units | the brief requires the benchmark sources in the corpus | ast-dump-format.md |
+| 2026-10-14 | Parse-only drivers keep all trees alive | discarding trees made memory and GC unrealistic | benchmark-harness.md B2 |
+| 2026-10-14 | Reference machine: fixed all-core clock documented instead of "boost off = 3.8 GHz" | measured behavior of the machine | hardware.md §2.1 |
+| 2026-10-15 | Drivers in the high priority class | background load on short parallel runs | benchmark-harness.md B9 |
+| 2026-10-21 | Idle limit 5 % → 12 % | the machine idles at 7–10 % | B10 |
+| 2026-10-21 | Variance gate on single-threaded configurations; CI-based verdicts | spread of short parallel runs in probe runs; **decided after seeing probe data**; its rationale was later qualified by the quiet baseline run | B11, benchmark-harness.md §9 |
+| 2026-10-21 | Idle check: median of ten 1 s windows instead of one 3 s mean | single short window decided by momentary spikes | B10 amendment |
+
+## 13. Prior art
+
+typescript-go (the reference and the method this project copies); oxc and swc (Rust parsers, not ports); ezno and stc (Rust type-checker attempts, experimental or abandoned).
+
+## 14. Before tagging
+
+- [x] Author confirmed every **[DECISION]** in this document (2026-10-21).
+- [ ] **[OPEN]** Multi-model workflow: models and attempts per model (5.2).
+- [ ] Phase 1 plan committed (module boundary, JSDoc scope details, effort estimate).
+- [ ] JSDoc section of the dump format specified and the tsc 6.0.3 side implemented (4.2).
+- [ ] Analyzer ruleset committed (5.1).
+- [ ] C# driver contract: `NEVERSHARP_PRIORITY`, JSON output with file count, node count, priority, GC metrics (6.3, 7).
+- [ ] Repository published, so the tag date is publicly verifiable.
