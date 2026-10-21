@@ -1,0 +1,19 @@
+NeverSharp pre-registration timestamp
+
+tag:                 prereg/v3
+tag object:          decdfd268315919cca8c1d1e9ccd8f9fc2a93805
+tagged commit:       0b3e17da52b5b4aad3d35f6d99b902f1910c0606
+commit tree:         16124a53b6e615ed67a59bb9f52b829d13f8a69e
+commit date:         2026-10-21T18:20:46+02:00
+
+SHA-256 of files at the tagged commit (content as stored in git, `git show <commit>:<path> | sha256sum`):
+docs/preregistration.md                   223e6757693d4fdc3fb9dd8138312f19d66c5b211c791e479788882cb9b4582d
+docs/phase1-plan.md                       cfcc59b98fd3df87a8218c3ed1a635e7dc3c2d9f34d5bc863adbf2539f6bb1bc
+docs/benchmark-harness.md                 e2f238408fa0a62a6277ff79b1663d8f3a35509712f95d33402e1c2463c023ab
+docs/ast-dump-format.md                   e970643185d32fb696af8d93f399ac9ef1f021fb54c34459422af5d8b860f3b5
+docs/hostile-review.md                    965f3e70c651b44a0b7230190e14a007c2ae17ea1053ecb30d0fbc605aa88fcc
+pins.json                                 fb8d8763ad34ac6874a5982259f6198bba16d29db30224ec3ae6f88c1f9eb882
+harness/astdump/oracle-divergences.tsv    1364a2510829d72ac21ba9dd3926fa08b9b3017bbcbe83e87f86495a6f681968
+eng/RuntimeConfiguration.props            3af439ebad63990a0c5552e18082e5ba221bb1adfd6c69ae6b89ee67c3bfffb3
+
+Verify: ots verify docs/timestamps/prereg-v3.txt.ots  (after the proof has been upgraded with ots upgrade)
