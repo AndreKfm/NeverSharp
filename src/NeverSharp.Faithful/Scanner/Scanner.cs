@@ -8,7 +8,6 @@
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
 // Modified: translated from TypeScript to C#.
 
-using System.Runtime.CompilerServices;
 using NeverSharp.Generated;
 
 namespace NeverSharp.Faithful;
@@ -26,11 +25,6 @@ internal sealed partial class Scanner
     // TypeScript). Like NaN it is unequal to every character code, it is not EOF (-1), it fails every `>`/`>=` test
     // and every range test the scanner makes, and charSize gives 1 for it, as for undefined.
     private const int CharCodeUndefined = int.MinValue;
-
-    // The small character tests and accessors (isLineBreak, isDigit, isIdentifierPart, charCodeUnchecked, codePointAt,
-    // charSize, ...) carry MethodImplOptions.AggressiveInlining. Their counterparts in typescript-go
-    // (internal/stringutil/util.go IsLineBreak, IsDigit, ...; internal/scanner/scanner.go char, charAt) are leaf functions
-    // that the Go compiler inlines; NativeAOT does not inline them into the very large scan method on its own.
 
     internal static bool TokenIsIdentifierOrKeyword(SyntaxKind token)
     {
@@ -509,14 +503,12 @@ internal sealed partial class Scanner
         return ComputeLineAndCharacterOfPosition(GetLineStarts(sourceFile), position);
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static bool IsWhiteSpaceLike(int ch)
     {
         return IsWhiteSpaceSingleLine(ch) || IsLineBreak(ch);
     }
 
     /// <summary>Does not include line breaks. For that, see isWhiteSpaceLike.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static bool IsWhiteSpaceSingleLine(int ch)
     {
         // Note: nextLine is in the Zs space, and should be considered to be a whitespace.
@@ -535,7 +527,6 @@ internal sealed partial class Scanner
             ch == (int)CharacterCodes.byteOrderMark;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static bool IsLineBreak(int ch)
     {
         // ES5 7.3:
@@ -555,32 +546,27 @@ internal sealed partial class Scanner
             ch == (int)CharacterCodes.paragraphSeparator;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsDigit(int ch)
     {
         return ch >= (int)CharacterCodes._0 && ch <= (int)CharacterCodes._9;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsHexDigit(int ch)
     {
         return IsDigit(ch) || ch >= (int)CharacterCodes.A && ch <= (int)CharacterCodes.F || ch >= (int)CharacterCodes.a && ch <= (int)CharacterCodes.f;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsASCIILetter(int ch)
     {
         return ch >= (int)CharacterCodes.A && ch <= (int)CharacterCodes.Z || ch >= (int)CharacterCodes.a && ch <= (int)CharacterCodes.z;
     }
 
     // Section 6.1.4
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsWordCharacter(int ch)
     {
         return IsASCIILetter(ch) || IsDigit(ch) || ch == (int)CharacterCodes._;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsOctalDigit(int ch)
     {
         return ch >= (int)CharacterCodes._0 && ch <= (int)CharacterCodes._7;
@@ -984,14 +970,12 @@ internal sealed partial class Scanner
         return null;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static bool IsIdentifierStart(int ch, ScriptTarget languageVersion)
     {
         return IsASCIILetter(ch) || ch == (int)CharacterCodes.Dollar || ch == (int)CharacterCodes._ ||
             ch > (int)CharacterCodes.maxAsciiCharacter && IsUnicodeIdentifierStart(ch, languageVersion);
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static bool IsIdentifierPart(int ch, ScriptTarget languageVersion, LanguageVariant identifierVariant = LanguageVariant.Standard)
     {
         return IsWordCharacter(ch) || ch == (int)CharacterCodes.Dollar ||
@@ -1055,7 +1039,6 @@ internal sealed partial class Scanner
         return new Scanner(languageVersion, skipTrivia, languageVariant, textInitial, onError, start, length);
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int CodePointAt(string s, int i)
     {
         // TODO(jakebailey): this is wrong and should have ?? 0; but all users are okay with it
@@ -1076,7 +1059,6 @@ internal sealed partial class Scanner
         return first;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int CharSize(int ch)
     {
         if (ch >= 0x10000)
@@ -1130,7 +1112,6 @@ internal sealed partial class Scanner
     }
 
     // String.prototype.charCodeAt for the static functions: NaN (CharCodeUndefined) outside the string.
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int CharCodeAt(string text, int index)
     {
         return (uint)index < (uint)text.Length ? text[index] : CharCodeUndefined;

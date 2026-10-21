@@ -11,7 +11,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text;
-using System.Runtime.CompilerServices;
 using NeverSharp.Generated;
 
 namespace NeverSharp.Faithful;
@@ -122,7 +121,6 @@ internal sealed partial class Scanner
     /// should only be used when pos is guaranteed to be within the bounds of `text` as this
     /// function does not perform bounds checks.
     /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private int CodePointUnchecked(int pos)
     {
         return CodePointAt(text, pos);
@@ -142,7 +140,6 @@ internal sealed partial class Scanner
     /// should only be used when pos is guaranteed to be within the bounds of `text` as this
     /// function does not perform bounds checks.
     /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private int CharCodeUnchecked(int pos)
     {
         // TypeScript's `text.charCodeAt(pos)` gives NaN past the end of the string, which the callers rely on.
@@ -154,7 +151,6 @@ internal sealed partial class Scanner
     /// Returns the char code for the character at the given position within `text`. If
     /// `pos` is outside the bounds set for `text`, `CharacterCodes.EOF` is returned instead.
     /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private int CharCodeChecked(int pos)
     {
         return pos >= 0 && pos < end ? CharCodeUnchecked(pos) : (int)CharacterCodes.EOF;
