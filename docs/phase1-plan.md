@@ -51,6 +51,12 @@ typescript-go generates its node types, factory, child visitor and kind enums fr
 
 Track F and Track O get different emitters from the same schema: node classes (Track F), struct records in arenas (Track O).
 
+**Amended 2026-10-21 (confirmed by the author), after inspecting `nodeFactory.ts`:**
+
+- The factory `create*` functions are **ported, not generated** (part of M3, multi-agent workflow). They are not plain constructors: they compute and propagate `TransformFlags`, convert names (`asName`), recognize keywords (`stringToToken` in `createIdentifier`) and call the parenthesizer rules (null implementations in the parser's factory, but called). A generated constructor would skip that work, which would make Track F unfaithful and let it do less than tsc.
+- The schema is extracted **directly from TypeScript 6.0.3's sources** (node interfaces in `types.ts`, `forEachChildTable` in `parser.ts`), not seeded from typescript-go's `ast.json`, which describes Go's AST (own JS node kinds, no `JSDocUnknownType`, different child shapes).
+- The generator therefore produces node types and `ForEachChild` (translated mechanically from `forEachChildTable`, so the child order is TypeScript's by construction). Effort: M3 grows by about 6–8 h, taken from the budget's (already absent) reserve.
+
 ## 4. Module boundaries and order (both tracks)
 
 | # | Module | Content | Gate before the next module |

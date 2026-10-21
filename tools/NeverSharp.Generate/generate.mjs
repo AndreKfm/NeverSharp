@@ -12,7 +12,11 @@ import { mkdirSync } from "node:fs";
 import { outDir } from "./common.mjs";
 import { generateDiagnostics } from "./diagnostics.mjs";
 import { generateEnums } from "./enums.mjs";
+import { emitFaithful } from "./emit-faithful.mjs";
+import { extractSchema } from "./schema.mjs";
 
 mkdirSync(outDir, { recursive: true });
 console.log(`diagnostic messages: ${generateDiagnostics()}`);
 console.log(`enums: ${generateEnums()}`);
+const faithful = emitFaithful(extractSchema());
+console.log(`track F nodes: ${faithful.classes} classes, ${faithful.fields} fields, ${faithful.forEachChildEntries} forEachChild entries${faithful.collisions.length ? `, renamed (name = class): ${faithful.collisions.join(", ")}` : ""}`);
