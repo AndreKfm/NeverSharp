@@ -10,14 +10,19 @@
 // - Parallel by default: one work item per file (read + parse) on the thread pool,
 //   the counterpart of typescript-go's core.WorkGroup (internal/core/workgroup.go);
 //   --single: sequential.
+// - Parse each file as tsc's compiler host does (harness/bench/parse-ts.mjs): file name with
+//   forward slashes, script kind from the extension, languageVersion Latest,
+//   JSDocParsingMode.ParseForTypeErrors (executeCommandLine.ts), setParentNodes false.
 // - Keep every result alive until the end; print one JSON line.
-//
-// The parse call is added when the track's parser exists (Phase 1 M4); until then
-// the driver reads the files and reports 0 nodes.
 
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
+#if TRACK_OPTIMIZED
+#error Track O has no parser yet
+#endif
+using NeverSharp.Faithful;
+using NeverSharp.Generated;
 
 var single = args.Length > 0 && args[0] == "--single";
 var listPath = args[single ? 1 : 0];
@@ -40,12 +45,13 @@ using (var self = Process.GetCurrentProcess())
 
 var files = File.ReadAllLines(listPath).Where(l => l.Length > 0).ToArray();
 var texts = new string[files.Length];
-var nodeCounts = new int[files.Length];
+var sourceFiles = new SourceFile[files.Length];
+var options = new CreateSourceFileOptions { LanguageVersion = ScriptTarget.Latest, JsDocParsingMode = JSDocParsingMode.ParseForTypeErrors };
 
 void ParseOne(int i)
 {
     texts[i] = ReadFile(files[i]);
-    nodeCounts[i] = 0; // parser call added in Phase 1 M4; the result will be kept in an array like texts
+    sourceFiles[i] = Parser.CreateSourceFile(files[i].Replace('\\', '/'), texts[i], options, setParentNodes: false, KindOf(files[i]));
 }
 
 if (single)
@@ -70,7 +76,7 @@ long chars = 0, nodes = 0;
 for (var i = 0; i < files.Length; i++)
 {
     chars += texts[i].Length;
-    nodes += nodeCounts[i];
+    nodes += sourceFiles[i].NodeCount;
 }
 
 #if TRACK_OPTIMIZED
@@ -86,7 +92,19 @@ Console.WriteLine(string.Create(inv,
     $"\"allocatedBytes\":{GC.GetTotalAllocatedBytes(true)},\"gen0\":{GC.CollectionCount(0)},\"gen1\":{GC.CollectionCount(1)},\"gen2\":{GC.CollectionCount(2)}," +
     $"\"gcPauseMs\":{GC.GetTotalPauseDuration().TotalMilliseconds.ToString("0.###", inv)}}}"));
 GC.KeepAlive(texts);
+GC.KeepAlive(sourceFiles);
 return 0;
+
+// parse-ts.mjs: the same mapping as typescript-go's core.GetScriptKindFromFileName.
+static ScriptKind KindOf(string name) => Path.GetExtension(name).ToLowerInvariant() switch
+{
+    ".ts" or ".mts" or ".cts" => ScriptKind.TS,
+    ".tsx" => ScriptKind.TSX,
+    ".js" or ".mjs" or ".cjs" => ScriptKind.JS,
+    ".jsx" => ScriptKind.JSX,
+    ".json" => ScriptKind.JSON,
+    _ => ScriptKind.Unknown,
+};
 
 // sys.ts readFile: byte order marks decide the encoding, UTF-8 otherwise.
 static string ReadFile(string path)

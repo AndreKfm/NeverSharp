@@ -13,5 +13,10 @@
     <!-- Ported code is internal (as in TypeScript, where it is not public API); the module gates test it directly. -->
     <InternalsVisibleTo Include="NeverSharp.Faithful.Tests" />
     <InternalsVisibleTo Include="NeverSharp.Dump" />
+    <!-- The parse-only drivers (tools/NeverSharp.ParseDriver), one assembly per runtime configuration. -->
+    <InternalsVisibleTo Include="parse-cs-faithful-aot-ws" />
+    <InternalsVisibleTo Include="parse-cs-faithful-aot-srv" />
+    <InternalsVisibleTo Include="parse-cs-faithful-jit-ws" />
+    <InternalsVisibleTo Include="parse-cs-faithful-jit-srv" />
   </ItemGroup>
 </Project>
