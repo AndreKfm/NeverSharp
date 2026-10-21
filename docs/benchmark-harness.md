@@ -167,7 +167,7 @@ Run `2026-10-21T06-13-30-572Z`, the first run that passed every rig check. Archi
 
 | | |
 |---|---|
-| Harness | commit `7470b7b`, clean working tree |
+| Harness | commit `6718e4e` (recorded in run.json as `7470b7b` before the email rewrite, see PROVENANCE.md in the archive), clean working tree |
 | Rig | min/max processor state 100/100 %, 100 % processor performance under all-core load, idle median 4.1 % (1 s windows: 10.8, 11.1, 16.0, 14.3, 4.0, 2.8, 1.7, 2.7, 2.3, 4.2) |
 | Settings | N = 20 after 3 warmup runs, M = 5, drivers at high priority (B9) |
 

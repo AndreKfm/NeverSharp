@@ -1,6 +1,6 @@
 # Hostile review of the protocol (Phase 0, task 5)
 
-Status: 2026-10-21; additions decided (section 4). Reviewed: [preregistration.md](preregistration.md), [benchmark-harness.md](benchmark-harness.md), [phase1-plan.md](phase1-plan.md), [ast-dump-format.md](ast-dump-format.md), [hardware.md](hardware.md) at commit `c83b5fc`.
+Status: 2026-10-21; additions decided (section 4). Reviewed: [preregistration.md](preregistration.md), [benchmark-harness.md](benchmark-harness.md), [phase1-plan.md](phase1-plan.md), [ast-dump-format.md](ast-dump-format.md), [hardware.md](hardware.md) at commit `ea69966`.
 
 Two reviewers who want a particular answer:
 
