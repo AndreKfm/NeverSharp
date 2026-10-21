@@ -20,4 +20,17 @@
     <Compile Include="$(RepoRoot)src/NeverSharp.Faithful/**/*.cs" Exclude="$(RepoRoot)src/NeverSharp.Faithful/bin/**;$(RepoRoot)src/NeverSharp.Faithful/obj/**" LinkBase="Faithful" />
     <Compile Include="$(RepoRoot)src/Generated/*.g.cs" LinkBase="Generated" />
   </ItemGroup>
+  <!--
+    BenchmarkDotNet depends on Microsoft.Diagnostics.Tracing.TraceEvent, which exports the top-level namespace
+    Diagnostics (Diagnostics.Tracing.*). Compiled together with the ported sources, that namespace hides the
+    generated class NeverSharp.Generated.Diagnostics (global namespace members win over using directives).
+    An extern alias takes the assembly out of the global namespace; nothing here uses it.
+  -->
+  <Target Name="AliasTraceEvent" AfterTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <ReferencePath Condition="'%(Filename)' == 'Microsoft.Diagnostics.Tracing.TraceEvent'">
+        <Aliases>traceevent</Aliases>
+      </ReferencePath>
+    </ItemGroup>
+  </Target>
 </Project>
