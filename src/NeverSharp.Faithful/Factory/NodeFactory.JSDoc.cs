@@ -181,7 +181,7 @@ internal sealed partial class NodeFactory
         // NodeArrays' elements are stored.
         var typeParametersArray = AsNodeArray(typeParameters);
         node.TypeParameters = typeParametersArray != null ? ToArray<JSDocTemplateTag>(typeParametersArray) : null;
-        node.Parameters = ToArray<JSDocParameterTag>(CreateNodeArray(parameters));
+        node.Parameters = ToArray<Node>(CreateNodeArray(parameters)); // may hold a JSDocThisTag
         node.Type = type!;
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         // node.locals = undefined; // initialized by binder (LocalsContainer)
