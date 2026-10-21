@@ -68,10 +68,13 @@ export const modules = {
         afterModules: ["M1", "M2"],
         // M5 (JSDocParser) and incremental parsing (not in Phase 1) are left out by namespace.
         excludeNamespaces: { "parser.ts": ["JSDocParser", "IncrementalParser"] },
+        // ... except what the parser itself calls: reparseTopLevelAwait (parser.ts:1864) reuses nodes
+        // through IncrementalParser.createSyntaxCursor (corrected 2026-10-21, reported by attempt 1).
+        keepInExcludedNamespaces: { "parser.ts": ["createSyntaxCursor"] },
         // Generated instead of ported (src/NeverSharp.Faithful/Generated/NodeVisitor.g.cs), or M5.
         excludeNames: { "parser.ts": [/^forEachChild$/, /^forEachChildTable$/, /^forEachChildIn/, /^parseIsolatedJSDocComment$/, /^parseJSDocTypeExpressionForTests$/] },
         notPorted: {
-            "parser.ts": "forEachChild and forEachChildTable with its forEachChildIn* helpers: generated (NodeVisitor.ForEachChild); namespace JSDocParser, parseIsolatedJSDocComment, parseJSDocTypeExpressionForTests: module M5; namespace IncrementalParser and createSyntaxCursor: incremental parsing, not in Phase 1 (the parser runs with syntaxCursor undefined)",
+            "parser.ts": "forEachChild and forEachChildTable with its forEachChildIn* helpers: generated (NodeVisitor.ForEachChild); namespace JSDocParser, parseIsolatedJSDocComment, parseJSDocTypeExpressionForTests: module M5; namespace IncrementalParser except createSyntaxCursor: incremental parsing, not in Phase 1 (createSyntaxCursor is in scope: reparseTopLevelAwait uses it)",
             "factory/parenthesizerRules.ts, factory/nodeConverters.ts": "createParenthesizerRules, createNodeConverters: the parser's factory is created with NoParenthesizerRules | NoNodeConverters; only the null implementations are ported",
             "performance.ts, performanceCore.ts, tracing.ts": "instrumentation, no-ops for parsing: calls are left out",
             "debug.ts": "formatting helpers and debug-info attachment, as in M1",
@@ -127,7 +130,8 @@ export function unitList(moduleId) {
             ? [...new Set(slice.units.filter(u => u.file === file && u.kind === "value").map(u => u.name))].filter(n => !earlier.has(`${file}:${n}`) && !excludedName(n))
             : names;
         for (const name of wanted) {
-            const decls = declarationsOf(sf, name).filter(d => !spans.some(([a, b]) => d.getStart(sf) >= a && d.end <= b));
+            const kept = (def.keepInExcludedNamespaces?.[file] ?? []).includes(name);
+            const decls = declarationsOf(sf, name).filter(d => kept || !spans.some(([a, b]) => d.getStart(sf) >= a && d.end <= b));
             if (decls.length === 0) {
                 if (names === "*" && declarationsOf(sf, name).length > 0) continue; // only inside an excluded namespace
                 throw new Error(`${file}: no declaration of ${name}`);

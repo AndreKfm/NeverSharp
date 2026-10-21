@@ -62,7 +62,12 @@ Events and decisions:
 
 ### M3 + M4: AST factory and parser
 
-Brief: [modules/M34.md](modules/M34.md); units: [modules/M34-units.md](modules/M34-units.md) (950 units, 13,203 lines). Gate: Gate 2, unit tests, G1a, G1 with `JSDocParsingMode.ParseNone` against tsc's ParseNone dump on all 50,177 units (plan amendment in phase1-plan.md §4: JSDoc parsing changes non-JSDoc output in 279 units, so stripping the JSDoc section from the ParseAll dump would not be equivalent). Limit 100 gate runs.
+Brief: [modules/M34.md](modules/M34.md); units: [modules/M34-units.md](modules/M34-units.md) (951 units, 13,303 lines). Gate: Gate 2, unit tests, G1a, G1 with `JSDocParsingMode.ParseNone` against tsc's ParseNone dump on all 50,177 units (plan amendment in phase1-plan.md §4: JSDoc parsing changes non-JSDoc output in 279 units, so stripping the JSDoc section from the ParseAll dump would not be equivalent). Limit 100 gate runs.
+
+Events:
+
+- **All three attempts stopped on the account's monthly spend limit** (HTTP 429) about 50 minutes in, before any build or gate run; resumed after the author's go-ahead. Wall-clock durations of these attempts are therefore not comparable with M1/M2.
+- **Brief corrected during the attempts (orchestrator error):** the brief excluded `createSyntaxCursor` as incremental parsing, but `reparseTopLevelAwait` reuses nodes through it (`parser.ts:1864`), so files with top-level `await` need it. Attempt 1 found this and ported it anyway. The unit list and brief were corrected (951 units) and the same correction was sent to all three attempts when they were resumed.
 
 | Attempt | Model | Gate runs | Result | Notes |
 |---|---|---|---|---|
