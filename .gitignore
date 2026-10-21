@@ -436,3 +436,4 @@ external/
 # Harness outputs and dependencies
 artifacts/
 node_modules/
+.claude/worktrees/

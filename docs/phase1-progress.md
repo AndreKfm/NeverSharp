@@ -26,8 +26,14 @@ Each module: 3 attempts in Track F (pre-registration §5.2), logged here with ga
 
 Brief: [modules/M1.md](modules/M1.md); units: [modules/M1-units.md](modules/M1-units.md) (91 units, 889 lines). Gate: Gate 2 + 8 unit tests over about 690,000 calls compared with tsc 6.0.3 (every file name of the equivalence corpus, path edge cases, spelling suggestions). Harness checked with a deliberately wrong stub before the attempts (builds under Gate 2, fails the tests with readable diffs).
 
-| Attempt | Model | Gate runs | Result | Notes |
-|---|---|---|---|---|
-| 1 | Opus 5.5 | | running | |
-| 2 | Opus 5.5 | | running | |
-| 3 | Sonnet 5.5 | | running | |
+| Attempt | Model | Gate runs | Gate (orchestrator rerun) | Median (99.9 % CI) | Allocated | Rank | Commit |
+|---|---|---:|---|---|---:|---:|---|
+| 1 | Opus 5.5 (`claude-opus-5-5`) | 2 | pass | **4.884 ms** (4.871–4.922) | **5.27 MB** | **1, merged** | b1ea711 → main |
+| 2 | Opus 5.5 (`claude-opus-5-5`) | 1 | pass | 5.323 ms (5.310–5.339) | 6.06 MB | 2 | 74394cb |
+| 3 | Sonnet 5.5 (`claude-sonnet-5-5`) | 4 (3 failed on analyzer/header findings) | pass | 5.380 ms (5.360–5.393) | 6.06 MB | 3 | 7295657 |
+
+Ranking workload and job as fixed in the brief (`bench/NeverSharp.Benchmarks`, `M1.ParseSourceFilePathWork`: the path work of `parseSourceFile` for the 24,511 file names of the tuning corpus; BenchmarkDotNet 0.15.8, NativeAOT, 3 warmup + 20 iterations, outliers removed by BenchmarkDotNet; 2026-10-21, attempts measured one after another). Raw reports: `results/ranking/M1/`. The intervals do not overlap, so the first criterion decides. Attempt branches kept as `attempts/M1/attempt-1..3`. Two fixes in the benchmark project before the measured run, neither touching attempt code: the Visual Studio Installer directory on PATH for the NativeAOT linker, and `NoWarn CS0649` (the compiler skips this check for internal fields in the Faithful project because of `InternalsVisibleTo`; the benchmark compiles the sources into an assembly without it).
+
+Units left out by all three (allowed by the brief, no meaning for C# values): `emptyMap`, `hasOwnProperty`, `hasProperty`, `isArray`, `isString`; attempt 3 also `toArray`. Common deviations: exceptions are `InvalidOperationException` with TypeScript's exact message; `Debug.getFunctionName` gives `""` (reflection is banned); regular expressions replaced by hand-written matching; `assertionCache` records levels instead of swapping functions for `noop`.
+
+**Open item for later modules:** all three map `toUpperCase`/`toLowerCase` to .NET's simple invariant case mapping; JavaScript uses full Unicode case mapping (`ß` → `SS`). Used by `getSpellingSuggestion` and `equateStringsCaseInsensitive`; Gate 1 shows whether it is reached.

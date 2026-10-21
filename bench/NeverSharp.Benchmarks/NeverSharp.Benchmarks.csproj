@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    BenchmarkDotNet benchmarks: ranking of Track F attempts (pre-registration §5.2) and Track O variants.
+    Compiles the Track F sources of the checkout it lives in directly (not a project reference), so the
+    internal ported code is reachable and each attempt's worktree can be measured as it is.
+    Usage: dotnet run -c Release, with the BenchmarkDotNet argument filter *M1* after the separator (see Program.cs)
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <!-- Ported code is compiled in; its analyzers run in its own project (Gate 2), not here. -->
+    <RunAnalyzers>false</RunAnalyzers>
+    <!-- CS0649: the compiler skips this check for internal fields in the Faithful project (InternalsVisibleTo), not here. -->
+    <NoWarn>$(NoWarn);CS1591;CS0649</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="$(RepoRoot)src/NeverSharp.Faithful/**/*.cs" Exclude="$(RepoRoot)src/NeverSharp.Faithful/bin/**;$(RepoRoot)src/NeverSharp.Faithful/obj/**" LinkBase="Faithful" />
+    <Compile Include="$(RepoRoot)src/Generated/*.g.cs" LinkBase="Generated" />
+  </ItemGroup>
+</Project>
