@@ -1,6 +1,6 @@
 # Benchmark harness (Phase 0, task 2)
 
-Status: draft, built 2026-10-14. Items marked **[DECISION]** are open to veto before the pre-registration tag.
+Status: built 2026-10-14; first protocol baseline 2026-10-21 (section 9). Items marked **[DECISION]** are open to veto before the pre-registration tag.
 Code: [harness/bench/](../harness/bench/).
 
 ## 1. What it measures
@@ -158,7 +158,45 @@ Findings, in the order they were made:
 
 Post hoc observation, probe data, not a result: tsc 6.0.3 takes about 11–12× the wall-clock of parallel typescript-go for parsing (run E: geometric mean 11.94, 95 % CI [11.81, 12.11]; run G: 12.24 [12.08, 12.38]), and single-threaded typescript-go is 2.2–3.1× faster than tsc 6.0.3 (run A). The order of magnitude matches Microsoft's published ~10× for full builds.
 
-## 9. Not covered yet
+## 9. Baseline (protocol result)
+
+Run `2026-10-21T06-13-30-572Z`, the first run that passed every rig check. Archived unchanged in [results/baseline/2026-10-21T06-13-30-572Z/](../results/baseline/2026-10-21T06-13-30-572Z/) (run.json, report.md, all 15 hyperfine exports, the file-list manifest).
+
+| | |
+|---|---|
+| Harness | commit `7470b7b`, clean working tree |
+| Rig | min/max processor state 100/100 %, 100 % processor performance under all-core load, idle median 4.1 % (1 s windows: 10.8, 11.1, 16.0, 14.3, 4.0, 2.8, 1.7, 2.7, 2.3, 4.2) |
+| Settings | N = 20 after 3 warmup runs, M = 5, drivers at high priority (B9) |
+
+Median wall-clock (s) and MAD/median:
+
+| Repository | tsc6-parse | tsgo7-parse (parallel) | tsgo7-parse-single |
+|---|---:|---:|---:|
+| vscode | 12.03 (0.78 %) | 1.046 (1.51 %) | 5.005 (0.35 %) |
+| sentry | 4.813 (2.52 %) | 0.3998 (2.30 %) | 2.286 (0.81 %) |
+| bluesky | 1.234 (1.16 %) | 0.0986 (1.95 %) | 0.4200 (0.84 %) |
+| playwright | 1.799 (0.99 %) | 0.1406 (1.70 %) | 0.5855 (0.56 %) |
+| tldraw | 1.861 (0.82 %) | 0.1522 (2.82 %) | 0.7055 (1.17 %) |
+
+Relative to `tsgo7-parse`, ratio of medians with 95 % bootstrap interval:
+
+| Configuration | vscode | sentry | bluesky | playwright | tldraw | Geometric mean |
+|---|---:|---:|---:|---:|---:|---:|
+| tsc6-parse | 11.49 [11.40, 11.76] | 12.04 [11.76, 12.55] | 12.52 [12.19, 12.77] | 12.80 [12.51, 12.94] | 12.23 [11.85, 12.47] | **12.21 [12.10, 12.35]** |
+| tsgo7-parse-single | 4.78 [4.75, 4.89] | 5.72 [5.61, 5.84] | 4.26 [4.16, 4.33] | 4.16 [4.08, 4.21] | 4.64 [4.49, 4.73] | **4.68 [4.64, 4.72]** |
+
+Peak working set (median of 5): tsc 6.0.3 368–3,192 MiB, typescript-go parallel 156–2,175 MiB, single-threaded 142–2,111 MiB (bluesky – vscode). Full table: report.md in the archive.
+
+**Variance gate (kill criterion 3): pass.** Worst rig-check cell 2.52 % (sentry, tsc).
+
+**Observation that qualifies B11:** in this quiet run, the parallel configuration is also below 3 % on every repository (1.51–2.82 %). The 2–6 % spread of the probe runs was therefore mostly background load, not, as B11's rationale assumed, a property of the parallel program that a quieter rig could not remove. B11 stays as decided: gating on the single-threaded configurations is not weaker in this run (all 15 cells pass), and it keeps a protocol run valid if a parallel configuration lands just above 3 % on a slightly busier day. But its stated reason was too strong, and is recorded here as corrected.
+
+What this baseline is and is not:
+
+- It is the reference for Phase 1: the C# parse-only driver will be measured with the same harness, the same corpus and the same rig checks, and compared to `tsgo7-parse` under the decision rule fixed in the pre-registration.
+- It is **parse-only**. The ratio tsc 6.0.3 / typescript-go of about 12× is not comparable with Microsoft's full-build numbers (7.7–11.9× in the TypeScript 7.0 announcement), which include binding, checking and emit.
+
+## 10. Not covered yet
 
 - **Full builds** (`tsc -p` / `tsgo -p` per repository, Microsoft's published comparison). Reproducing them would show that the rig reproduces Microsoft's ratio, but it requires installing each repository's npm dependencies (thousands of packages, several GB) and picking a tsconfig per repository. Proposed as a separate, optional step (with `--ignore-scripts`), labeled as a rig sanity check, not as a protocol metric for Phase 1.
 - **C# configurations** and BenchmarkDotNet: with the first ported code.

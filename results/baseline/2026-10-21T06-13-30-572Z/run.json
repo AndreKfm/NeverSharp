@@ -1,0 +1,1296 @@
+{
+ "schemaVersion": 1,
+ "runId": "2026-10-21T06-13-30-572Z",
+ "label": "baseline",
+ "startedAt": "2026-10-21T06:13:30.572Z",
+ "finishedAt": "2026-10-21T06:29:43.613Z",
+ "protocolCompliant": true,
+ "suite": "parse",
+ "settings": {
+  "runs": 20,
+  "warmup": 3,
+  "memRuns": 5,
+  "hyperfineShell": "none",
+  "processPriority": "high"
+ },
+ "environment": {
+  "machine": {
+   "cpu": "AMD Ryzen 9 3900X 12-Core Processor",
+   "cores": 12,
+   "logicalProcessors": 24,
+   "nominalMHz": 4150,
+   "ramBytes": 68667592704,
+   "board": "Micro-Star International Co., Ltd. X570-A PRO (MS-7C37)",
+   "bios": "H.60",
+   "os": "Microsoft Windows 11 Pro",
+   "osVersion": "10.0.26200.6584"
+  },
+  "rig": {
+   "scheme": "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c",
+   "minProcessorStateAc": 100,
+   "maxProcessorStateAc": 100,
+   "idleCpuPercent": 4.089065047705464,
+   "idleCpuSamplesPercent": [
+    10.8,
+    11.1,
+    16,
+    14.3,
+    4,
+    2.8,
+    1.7,
+    2.7,
+    2.3,
+    4.2
+   ],
+   "processorPerformanceUnderLoadPercent": 100,
+   "defenderExclusion": "not verifiable without administrator rights"
+  },
+  "toolchain": {
+   "node": "v24.21.0",
+   "hyperfine": "hyperfine 1.20.0",
+   "goToolset": "go1.26.4-1-microsoft",
+   "dotnetSdk": "10.0.402",
+   "typescript6": "6.0.3",
+   "typescript7": "7.0.2"
+  },
+  "git": {
+   "commit": "7470b7bc845ad9c48f796c9631dc5d26d68520ef",
+   "dirty": false
+  },
+  "pinsSha256": "fb8d8763ad34ac6874a5982259f6198bba16d29db30224ec3ae6f88c1f9eb882",
+  "checks": [
+   {
+    "id": "min-processor-state",
+    "required": "100",
+    "value": "100",
+    "ok": true
+   },
+   {
+    "id": "max-processor-state",
+    "required": "100",
+    "value": "100",
+    "ok": true
+   },
+   {
+    "id": "boost-off",
+    "required": "processor performance under all-core load <= 101 %",
+    "value": "100 %",
+    "ok": true
+   },
+   {
+    "id": "idle-before-run",
+    "required": "median CPU of ten 1 s windows < 12 %",
+    "value": "4.1 % (range 1.7-16.0 %)",
+    "ok": true
+   },
+   {
+    "id": "harness-committed",
+    "required": "clean working tree",
+    "value": "clean",
+    "ok": true
+   }
+  ],
+  "protocolCompliant": true
+ },
+ "corpus": {
+  "vscode": {
+   "commit": "f507e492b81074fff62b0806d47760671c3990b5",
+   "files": 11724,
+   "bytes": 141176715,
+   "contentSha256": "f33e0251c23c3cee54409172978b1ef7aacd4e17dcadafbb885f3ad89efdc979"
+  },
+  "sentry": {
+   "commit": "b4e1ddf51f55e4aa973b2d0c028485f13de779a6",
+   "files": 8932,
+   "bytes": 45939778,
+   "contentSha256": "3ba46c2b876d0df7fbbceb524bdd81303ba35b6e398e4ab9c315734c03a9b5b3"
+  },
+  "bluesky": {
+   "commit": "ea3d6827c75c2c2063bdb8d3240c62d8f041c7fa",
+   "files": 1688,
+   "bytes": 7193919,
+   "contentSha256": "638f361331b171ea89434b49ef7c59620f53b95b646f01e9cd58db0daa5b812c"
+  },
+  "playwright": {
+   "commit": "a061d963659048a43169bd87c84960d89f496cdb",
+   "files": 1415,
+   "bytes": 17232419,
+   "contentSha256": "8973287a414f44ab46e091db5192a937af06f3e04ce749cca506580ee1c9f64a"
+  },
+  "tldraw": {
+   "commit": "9986114e3493118095f60146becd0219e100745e",
+   "files": 2508,
+   "bytes": 13626240,
+   "contentSha256": "6bdd86f34367126da15dd2a7c4ad6e576972af039cd607681d58f514ed3385cc"
+  }
+ },
+ "configurations": [
+  {
+   "id": "tsc6-parse",
+   "label": "tsc 6.0.3 (Node 24), single-threaded",
+   "threads": "single"
+  },
+  {
+   "id": "tsgo7-parse",
+   "label": "typescript-go 7.0.2, parallel (default)",
+   "threads": "parallel"
+  },
+  {
+   "id": "tsgo7-parse-single",
+   "label": "typescript-go 7.0.2, single-threaded",
+   "threads": "single"
+  }
+ ],
+ "results": [
+  {
+   "repo": "vscode",
+   "config": "tsc6-parse",
+   "configLabel": "tsc 6.0.3 (Node 24), single-threaded",
+   "kind": "parse",
+   "command": [
+    ".tools/node-24.21.0/node.exe",
+    "harness/bench/parse-ts.mjs",
+    "artifacts/bench/filelists/vscode.txt"
+   ],
+   "output": {
+    "driver": "tsc-6.0.3",
+    "files": 11724,
+    "chars": 141087167,
+    "nodes": 16928765,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     12.0451984,
+     11.759913000000001,
+     12.0319575,
+     12.0373787,
+     11.9817401,
+     12.0324655,
+     11.9132329,
+     11.8970102,
+     12.6037841,
+     13.4850675,
+     12.4676163,
+     12.0225685,
+     11.9551229,
+     12.2213946,
+     12.0243046,
+     13.0859746,
+     11.8089276,
+     12.0452818,
+     11.9122049,
+     11.9728225
+    ],
+    "median": 12.02813105,
+    "mad": 0.09395315000000082,
+    "madOverMedianPercent": 0.781111792093426,
+    "mean": 12.16519831,
+    "stddev": 0.4354633448087968,
+    "min": 11.759913000000001,
+    "max": 13.4850675,
+    "userMean": 17.6859375,
+    "systemMean": 2.065625
+   },
+   "throughput": {
+    "filesPerSecond": 974.7150202524605,
+    "megabytesPerSecond": 11.737211243637056
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     3346554880,
+     3346632704,
+     3338780672,
+     3346534400,
+     3344683008
+    ],
+    "peakCommitBytes": [
+     3380989952,
+     3380793344,
+     3372564480,
+     3380989952,
+     3378573312
+    ],
+    "medianPeakWorkingSetBytes": 3346534400,
+    "medianPeakCommitBytes": 3380793344
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-vscode-tsc6-parse.json"
+  },
+  {
+   "repo": "vscode",
+   "config": "tsgo7-parse",
+   "configLabel": "typescript-go 7.0.2, parallel (default)",
+   "kind": "parse",
+   "command": [
+    "artifacts/bin/parse-go.exe",
+    "artifacts/bench/filelists/vscode.txt"
+   ],
+   "output": {
+    "driver": "tsgo-7.0.2-parallel",
+    "files": 11724,
+    "bytes": 141176715,
+    "nodes": 16924254,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     1.0120822,
+     1.0456492,
+     1.0379651,
+     1.0310224,
+     1.0507823,
+     1.025011,
+     1.0528718,
+     1.1099298,
+     1.0495774,
+     1.0214766,
+     1.0515572,
+     1.0473381,
+     1.0041853,
+     1.0625314,
+     1.0048612,
+     1.0993098,
+     1.0549432,
+     1.0166102,
+     1.0596289,
+     0.9946772
+    ],
+    "median": 1.04649365,
+    "mad": 0.015754500000000005,
+    "madOverMedianPercent": 1.505455862058982,
+    "mean": 1.041600515,
+    "stddev": 0.029572788185429678,
+    "min": 0.9946772,
+    "max": 1.1099298,
+    "userMean": 9.06015625,
+    "systemMean": 5.20625
+   },
+   "throughput": {
+    "filesPerSecond": 11203.125790586499,
+    "megabytesPerSecond": 134.9045118429529
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     2299850752,
+     2273730560,
+     2293309440,
+     2270228480,
+     2280128512
+    ],
+    "peakCommitBytes": [
+     2328608768,
+     2321121280,
+     2325516288,
+     2311802880,
+     2326056960
+    ],
+    "medianPeakWorkingSetBytes": 2280128512,
+    "medianPeakCommitBytes": 2325516288
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-vscode-tsgo7-parse.json"
+  },
+  {
+   "repo": "vscode",
+   "config": "tsgo7-parse-single",
+   "configLabel": "typescript-go 7.0.2, single-threaded",
+   "kind": "parse",
+   "command": [
+    "artifacts/bin/parse-go.exe",
+    "--single",
+    "artifacts/bench/filelists/vscode.txt"
+   ],
+   "output": {
+    "driver": "tsgo-7.0.2-single",
+    "files": 11724,
+    "bytes": 141176715,
+    "nodes": 16924254,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     5.0025548,
+     4.9911974,
+     4.9638119,
+     5.0117689,
+     5.0051021,
+     5.0051579,
+     4.9467353,
+     4.9963503,
+     4.9871176,
+     5.0152316,
+     4.9756838000000005,
+     4.9878744,
+     5.0150514,
+     4.9703063,
+     5.0230324,
+     5.0483187,
+     5.0411984,
+     5.0248594,
+     5.0121492,
+     5.0265082
+    ],
+    "median": 5.00513,
+    "mad": 0.01757900000000001,
+    "madOverMedianPercent": 0.35121964864049504,
+    "mean": 5.002500499999999,
+    "stddev": 0.025736961187979822,
+    "min": 4.9467353,
+    "max": 5.0483187,
+    "userMean": 5.08671875,
+    "systemMean": 2.14140625
+   },
+   "throughput": {
+    "filesPerSecond": 2342.3967009847893,
+    "megabytesPerSecond": 28.206403230285726
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     2212134912,
+     2213122048,
+     2212904960,
+     2213097472,
+     2215100416
+    ],
+    "peakCommitBytes": [
+     2287259648,
+     2285174784,
+     2283339776,
+     2284011520,
+     2281508864
+    ],
+    "medianPeakWorkingSetBytes": 2213097472,
+    "medianPeakCommitBytes": 2284011520
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-vscode-tsgo7-parse-single.json"
+  },
+  {
+   "repo": "sentry",
+   "config": "tsc6-parse",
+   "configLabel": "tsc 6.0.3 (Node 24), single-threaded",
+   "kind": "parse",
+   "command": [
+    ".tools/node-24.21.0/node.exe",
+    "harness/bench/parse-ts.mjs",
+    "artifacts/bench/filelists/sentry.txt"
+   ],
+   "output": {
+    "driver": "tsc-6.0.3",
+    "files": 8932,
+    "chars": 45930262,
+    "nodes": 5516696,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     4.9657309000000005,
+     4.7743965,
+     4.9514782,
+     4.6934628,
+     4.9732413,
+     4.921578,
+     4.8324305,
+     4.9361779,
+     4.7942899,
+     4.7777028,
+     4.9788584,
+     4.6653592,
+     4.9929764,
+     4.9679713,
+     4.6698194,
+     4.7132313,
+     4.978503,
+     4.7183309,
+     4.7410246,
+     4.7020502
+    ],
+    "median": 4.8133602,
+    "mad": 0.12135754999999993,
+    "madOverMedianPercent": 2.521264666625197,
+    "mean": 4.837430675,
+    "stddev": 0.12375072757386063,
+    "min": 4.6653592,
+    "max": 4.9929764,
+    "userMean": 6.43984375,
+    "systemMean": 1.22890625
+   },
+   "throughput": {
+    "filesPerSecond": 1855.6683125439065,
+    "megabytesPerSecond": 9.544221934606098
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     1274253312,
+     1273745408,
+     1274052608,
+     1274077184,
+     1273610240
+    ],
+    "peakCommitBytes": [
+     1266921472,
+     1266212864,
+     1266221056,
+     1266286592,
+     1265786880
+    ],
+    "medianPeakWorkingSetBytes": 1274052608,
+    "medianPeakCommitBytes": 1266221056
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-sentry-tsc6-parse.json"
+  },
+  {
+   "repo": "sentry",
+   "config": "tsgo7-parse",
+   "configLabel": "typescript-go 7.0.2, parallel (default)",
+   "kind": "parse",
+   "command": [
+    "artifacts/bin/parse-go.exe",
+    "artifacts/bench/filelists/sentry.txt"
+   ],
+   "output": {
+    "driver": "tsgo-7.0.2-parallel",
+    "files": 8932,
+    "bytes": 45939778,
+    "nodes": 5509288,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.38633850000000003,
+     0.3888071,
+     0.39114210000000005,
+     0.37369670000000005,
+     0.3873396,
+     0.3948547,
+     0.3944109,
+     0.4013661,
+     0.40952170000000004,
+     0.3775233,
+     0.40222650000000004,
+     0.4011614,
+     0.40598300000000004,
+     0.4131117,
+     0.3927099,
+     0.42746530000000005,
+     0.4065285,
+     0.39844110000000005,
+     0.43245870000000003,
+     0.4121773
+    ],
+    "median": 0.39980125,
+    "mad": 0.009189799999999998,
+    "madOverMedianPercent": 2.2985921129561246,
+    "mean": 0.39986320500000005,
+    "stddev": 0.014807556646966836,
+    "min": 0.37369670000000005,
+    "max": 0.43245870000000003,
+    "userMean": 3.5703125,
+    "systemMean": 2.58359375
+   },
+   "throughput": {
+    "filesPerSecond": 22341.10073442742,
+    "megabytesPerSecond": 114.90653918665836
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     832778240,
+     859811840,
+     830803968,
+     838897664,
+     831520768
+    ],
+    "peakCommitBytes": [
+     857522176,
+     882012160,
+     853684224,
+     858116096,
+     854315008
+    ],
+    "medianPeakWorkingSetBytes": 832778240,
+    "medianPeakCommitBytes": 857522176
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-sentry-tsgo7-parse.json"
+  },
+  {
+   "repo": "sentry",
+   "config": "tsgo7-parse-single",
+   "configLabel": "typescript-go 7.0.2, single-threaded",
+   "kind": "parse",
+   "command": [
+    "artifacts/bin/parse-go.exe",
+    "--single",
+    "artifacts/bench/filelists/sentry.txt"
+   ],
+   "output": {
+    "driver": "tsgo-7.0.2-single",
+    "files": 8932,
+    "bytes": 45939778,
+    "nodes": 5509288,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     2.3050999,
+     2.2899262,
+     2.2427806,
+     2.2980599,
+     2.2844058,
+     2.2901554,
+     2.2816557,
+     2.2651886,
+     2.2552058,
+     2.3205268,
+     2.3054397,
+     2.2680502000000002,
+     2.309345,
+     2.2879976,
+     2.2512119999999998,
+     2.2687775,
+     2.2950317,
+     2.2613407,
+     2.2566302,
+     2.2990112
+    ],
+    "median": 2.2862017000000003,
+    "mad": 0.018524849999999926,
+    "madOverMedianPercent": 0.8102893983501073,
+    "mean": 2.2817920250000006,
+    "stddev": 0.021919760349652193,
+    "min": 2.2427806,
+    "max": 2.3205268,
+    "userMean": 2.09921875,
+    "systemMean": 1.3265625
+   },
+   "throughput": {
+    "filesPerSecond": 3906.9168743947653,
+    "megabytesPerSecond": 20.094367876640103
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     796692480,
+     806010880,
+     799940608,
+     796200960,
+     800460800
+    ],
+    "peakCommitBytes": [
+     814403584,
+     816463872,
+     814018560,
+     813682688,
+     814125056
+    ],
+    "medianPeakWorkingSetBytes": 799940608,
+    "medianPeakCommitBytes": 814125056
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-sentry-tsgo7-parse-single.json"
+  },
+  {
+   "repo": "bluesky",
+   "config": "tsc6-parse",
+   "configLabel": "tsc 6.0.3 (Node 24), single-threaded",
+   "kind": "parse",
+   "command": [
+    ".tools/node-24.21.0/node.exe",
+    "harness/bench/parse-ts.mjs",
+    "artifacts/bench/filelists/bluesky.txt"
+   ],
+   "output": {
+    "driver": "tsc-6.0.3",
+    "files": 1688,
+    "chars": 7191714,
+    "nodes": 957981,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     1.2004809,
+     1.2269216,
+     1.2503015,
+     1.2420389,
+     1.2347979,
+     1.2124487,
+     1.2227047,
+     1.2563554,
+     1.1941543000000001,
+     1.2531232,
+     1.2494407,
+     1.2247575,
+     1.2256265,
+     1.2428755,
+     1.2649449000000001,
+     1.2458593,
+     1.2331401,
+     1.178144,
+     1.2510608,
+     1.2208376
+    ],
+    "median": 1.233969,
+    "mad": 0.014301549999999996,
+    "madOverMedianPercent": 1.1589877865651401,
+    "mean": 1.2315007000000002,
+    "stddev": 0.022455566398486632,
+    "min": 1.178144,
+    "max": 1.2649449000000001,
+    "userMean": 1.7796875,
+    "systemMean": 0.41953125
+   },
+   "throughput": {
+    "filesPerSecond": 1367.9436031213102,
+    "megabytesPerSecond": 5.829902534018277
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     403849216,
+     404348928,
+     385503232,
+     385138688,
+     385208320
+    ],
+    "peakCommitBytes": [
+     376758272,
+     376659968,
+     357363712,
+     357965824,
+     357638144
+    ],
+    "medianPeakWorkingSetBytes": 385503232,
+    "medianPeakCommitBytes": 357965824
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-bluesky-tsc6-parse.json"
+  },
+  {
+   "repo": "bluesky",
+   "config": "tsgo7-parse",
+   "configLabel": "typescript-go 7.0.2, parallel (default)",
+   "kind": "parse",
+   "command": [
+    "artifacts/bin/parse-go.exe",
+    "artifacts/bench/filelists/bluesky.txt"
+   ],
+   "output": {
+    "driver": "tsgo-7.0.2-parallel",
+    "files": 1688,
+    "bytes": 7193919,
+    "nodes": 957323,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.10422500000000001,
+     0.09902330000000001,
+     0.10041080000000001,
+     0.0975121,
+     0.1012712,
+     0.0976028,
+     0.0988904,
+     0.0967803,
+     0.097415,
+     0.09557610000000001,
+     0.1017335,
+     0.1005553,
+     0.09552730000000001,
+     0.096018,
+     0.10205940000000001,
+     0.1016403,
+     0.106606,
+     0.09690270000000001,
+     0.09822360000000001,
+     0.0971332
+    ],
+    "median": 0.098557,
+    "mad": 0.0019260499999999986,
+    "madOverMedianPercent": 1.9542498249743787,
+    "mean": 0.099255315,
+    "stddev": 0.0029912000255618238,
+    "min": 0.09552730000000001,
+    "max": 0.106606,
+    "userMean": 0.65,
+    "systemMean": 0.5671875
+   },
+   "throughput": {
+    "filesPerSecond": 17127.144697992026,
+    "megabytesPerSecond": 72.99247136175005
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     163966976,
+     165564416,
+     162861056,
+     161738752,
+     163479552
+    ],
+    "peakCommitBytes": [
+     177074176,
+     178536448,
+     175202304,
+     174022656,
+     176955392
+    ],
+    "medianPeakWorkingSetBytes": 163479552,
+    "medianPeakCommitBytes": 176955392
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-bluesky-tsgo7-parse.json"
+  },
+  {
+   "repo": "bluesky",
+   "config": "tsgo7-parse-single",
+   "configLabel": "typescript-go 7.0.2, single-threaded",
+   "kind": "parse",
+   "command": [
+    "artifacts/bin/parse-go.exe",
+    "--single",
+    "artifacts/bench/filelists/bluesky.txt"
+   ],
+   "output": {
+    "driver": "tsgo-7.0.2-single",
+    "files": 1688,
+    "bytes": 7193919,
+    "nodes": 957323,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.4122562,
+     0.4768025,
+     0.44848170000000004,
+     0.42514500000000005,
+     0.42564430000000003,
+     0.42022370000000003,
+     0.41872600000000004,
+     0.41829890000000003,
+     0.42119140000000005,
+     0.42319850000000003,
+     0.4137633,
+     0.424238,
+     0.4191441,
+     0.42191850000000003,
+     0.41789740000000003,
+     0.4152793,
+     0.41971610000000004,
+     0.4161599,
+     0.4257214,
+     0.41984180000000004
+    ],
+    "median": 0.42003275000000007,
+    "mad": 0.003519300000000003,
+    "madOverMedianPercent": 0.8378632380451292,
+    "mean": 0.4241824000000001,
+    "stddev": 0.014433070127132927,
+    "min": 0.4122562,
+    "max": 0.4768025,
+    "userMean": 0.33671875,
+    "systemMean": 0.29375
+   },
+   "throughput": {
+    "filesPerSecond": 4018.7342534599975,
+    "megabytesPerSecond": 17.12704306985586
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     148951040,
+     149041152,
+     148819968,
+     149000192,
+     152522752
+    ],
+    "peakCommitBytes": [
+     158887936,
+     157917184,
+     159006720,
+     158208000,
+     160497664
+    ],
+    "medianPeakWorkingSetBytes": 149000192,
+    "medianPeakCommitBytes": 158887936
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-bluesky-tsgo7-parse-single.json"
+  },
+  {
+   "repo": "playwright",
+   "config": "tsc6-parse",
+   "configLabel": "tsc 6.0.3 (Node 24), single-threaded",
+   "kind": "parse",
+   "command": [
+    ".tools/node-24.21.0/node.exe",
+    "harness/bench/parse-ts.mjs",
+    "artifacts/bench/filelists/playwright.txt"
+   ],
+   "output": {
+    "driver": "tsc-6.0.3",
+    "files": 1415,
+    "chars": 17223262,
+    "nodes": 1909612,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     1.7736979000000002,
+     1.801999,
+     1.7917498,
+     1.7821861,
+     1.8079112,
+     1.7855814,
+     1.7995955000000001,
+     1.7951246,
+     1.8054684,
+     1.8176834,
+     1.8568252,
+     1.7768994,
+     1.8064314000000001,
+     1.7753372,
+     1.8353862,
+     1.76938,
+     1.7989774,
+     1.7763055,
+     1.8596172000000002,
+     1.8260254
+    ],
+    "median": 1.79928645,
+    "mad": 0.01774864999999992,
+    "madOverMedianPercent": 0.9864271472727381,
+    "mean": 1.80210911,
+    "stddev": 0.026182944375658795,
+    "min": 1.76938,
+    "max": 1.8596172000000002,
+    "userMean": 2.8875,
+    "systemMean": 0.48671875
+   },
+   "throughput": {
+    "filesPerSecond": 786.422862240751,
+    "megabytesPerSecond": 9.577362737322899
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     584196096,
+     580980736,
+     582356992,
+     582230016,
+     584171520
+    ],
+    "peakCommitBytes": [
+     561119232,
+     557518848,
+     559067136,
+     559079424,
+     560758784
+    ],
+    "medianPeakWorkingSetBytes": 582356992,
+    "medianPeakCommitBytes": 559079424
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-playwright-tsc6-parse.json"
+  },
+  {
+   "repo": "playwright",
+   "config": "tsgo7-parse",
+   "configLabel": "typescript-go 7.0.2, parallel (default)",
+   "kind": "parse",
+   "command": [
+    "artifacts/bin/parse-go.exe",
+    "artifacts/bench/filelists/playwright.txt"
+   ],
+   "output": {
+    "driver": "tsgo-7.0.2-parallel",
+    "files": 1415,
+    "bytes": 17232419,
+    "nodes": 1908699,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.1397361,
+     0.140959,
+     0.14503860000000002,
+     0.1396751,
+     0.1347515,
+     0.1414862,
+     0.14896820000000002,
+     0.1426377,
+     0.1399979,
+     0.1429256,
+     0.1498506,
+     0.13844510000000002,
+     0.14414010000000002,
+     0.13895090000000002,
+     0.14021070000000002,
+     0.1381349,
+     0.1339585,
+     0.1456994,
+     0.1464311,
+     0.1377314
+    ],
+    "median": 0.14058485,
+    "mad": 0.0023953500000000044,
+    "madOverMedianPercent": 1.703846467097987,
+    "mean": 0.14148642999999997,
+    "stddev": 0.004259343832230255,
+    "min": 0.1339585,
+    "max": 0.1498506,
+    "userMean": 0.9515625,
+    "systemMean": 0.75546875
+   },
+   "throughput": {
+    "filesPerSecond": 10065.095918941479,
+    "megabytesPerSecond": 122.57664321582304
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     282337280,
+     279908352,
+     283045888,
+     281067520,
+     284422144
+    ],
+    "peakCommitBytes": [
+     299003904,
+     297197568,
+     301948928,
+     297431040,
+     297648128
+    ],
+    "medianPeakWorkingSetBytes": 282337280,
+    "medianPeakCommitBytes": 297648128
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-playwright-tsgo7-parse.json"
+  },
+  {
+   "repo": "playwright",
+   "config": "tsgo7-parse-single",
+   "configLabel": "typescript-go 7.0.2, single-threaded",
+   "kind": "parse",
+   "command": [
+    "artifacts/bin/parse-go.exe",
+    "--single",
+    "artifacts/bench/filelists/playwright.txt"
+   ],
+   "output": {
+    "driver": "tsgo-7.0.2-single",
+    "files": 1415,
+    "bytes": 17232419,
+    "nodes": 1908699,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.5817110000000001,
+     0.5856249,
+     0.5855954,
+     0.5909735,
+     0.5938081000000001,
+     0.5853326000000001,
+     0.5826348,
+     0.5816309000000001,
+     0.5935402000000001,
+     0.5795407,
+     0.5850276,
+     0.5813609000000001,
+     0.5834598000000001,
+     0.5844384,
+     0.5895487,
+     0.5880395,
+     0.5893838,
+     0.5931501,
+     0.5837051000000001,
+     0.5868431000000001
+    ],
+    "median": 0.585464,
+    "mad": 0.0032910999999999357,
+    "madOverMedianPercent": 0.5621353319759944,
+    "mean": 0.5862674550000001,
+    "stddev": 0.0042862686312744504,
+    "min": 0.5795407,
+    "max": 0.5938081000000001,
+    "userMean": 0.5671875,
+    "systemMean": 0.38359375
+   },
+   "throughput": {
+    "filesPerSecond": 2416.8864353743356,
+    "megabytesPerSecond": 29.433780727764645
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     266461184,
+     268447744,
+     270536704,
+     267198464,
+     267042816
+    ],
+    "peakCommitBytes": [
+     279900160,
+     277942272,
+     279162880,
+     276672512,
+     276824064
+    ],
+    "medianPeakWorkingSetBytes": 267198464,
+    "medianPeakCommitBytes": 277942272
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-playwright-tsgo7-parse-single.json"
+  },
+  {
+   "repo": "tldraw",
+   "config": "tsc6-parse",
+   "configLabel": "tsc 6.0.3 (Node 24), single-threaded",
+   "kind": "parse",
+   "command": [
+    ".tools/node-24.21.0/node.exe",
+    "harness/bench/parse-ts.mjs",
+    "artifacts/bench/filelists/tldraw.txt"
+   ],
+   "output": {
+    "driver": "tsc-6.0.3",
+    "files": 2508,
+    "chars": 13584009,
+    "nodes": 1842333,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     1.8709313,
+     1.878914,
+     1.8501558,
+     1.845129,
+     1.8648268,
+     1.8438611,
+     1.8445204,
+     1.8844728000000002,
+     1.8811136,
+     1.8580023,
+     1.8585769,
+     1.8756839,
+     1.8858608000000001,
+     1.8632578,
+     1.8078331,
+     1.8918354000000002,
+     1.8596095,
+     1.8513866,
+     1.8345882,
+     1.8626861
+    ],
+    "median": 1.8611478,
+    "mad": 0.015277450000000026,
+    "madOverMedianPercent": 0.8208617284452114,
+    "mean": 1.8606622699999995,
+    "stddev": 0.02019404385652,
+    "min": 1.8078331,
+    "max": 1.8918354000000002,
+    "userMean": 2.93125,
+    "systemMean": 0.5484375
+   },
+   "throughput": {
+    "filesPerSecond": 1347.555524606912,
+    "megabytesPerSecond": 7.3214174607734
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     567816192,
+     568328192,
+     568414208,
+     567795712,
+     567910400
+    ],
+    "peakCommitBytes": [
+     543821824,
+     544948224,
+     544763904,
+     544206848,
+     545714176
+    ],
+    "medianPeakWorkingSetBytes": 567910400,
+    "medianPeakCommitBytes": 544763904
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-tldraw-tsc6-parse.json"
+  },
+  {
+   "repo": "tldraw",
+   "config": "tsgo7-parse",
+   "configLabel": "typescript-go 7.0.2, parallel (default)",
+   "kind": "parse",
+   "command": [
+    "artifacts/bin/parse-go.exe",
+    "artifacts/bench/filelists/tldraw.txt"
+   ],
+   "output": {
+    "driver": "tsgo-7.0.2-parallel",
+    "files": 2508,
+    "bytes": 13626240,
+    "nodes": 1840542,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.1465873,
+     0.1522464,
+     0.153723,
+     0.14820540000000001,
+     0.1522619,
+     0.152155,
+     0.1476114,
+     0.1425042,
+     0.1560188,
+     0.1438645,
+     0.1595436,
+     0.15104330000000002,
+     0.1502506,
+     0.15771010000000002,
+     0.14877300000000002,
+     0.1500368,
+     0.1591188,
+     0.1604294,
+     0.15988650000000001,
+     0.1604151
+    ],
+    "median": 0.15220070000000002,
+    "mad": 0.004292300000000013,
+    "madOverMedianPercent": 2.8201578573554604,
+    "mean": 0.15261925499999998,
+    "stddev": 0.005588585004648692,
+    "min": 0.1425042,
+    "max": 0.1604294,
+    "userMean": 1.10390625,
+    "systemMean": 0.81953125
+   },
+   "throughput": {
+    "filesPerSecond": 16478.24221570597,
+    "megabytesPerSecond": 89.5281033530069
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     288141312,
+     284463104,
+     283070464,
+     288509952,
+     284426240
+    ],
+    "peakCommitBytes": [
+     301748224,
+     299544576,
+     298242048,
+     303403008,
+     300724224
+    ],
+    "medianPeakWorkingSetBytes": 284463104,
+    "medianPeakCommitBytes": 300724224
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-tldraw-tsgo7-parse.json"
+  },
+  {
+   "repo": "tldraw",
+   "config": "tsgo7-parse-single",
+   "configLabel": "typescript-go 7.0.2, single-threaded",
+   "kind": "parse",
+   "command": [
+    "artifacts/bin/parse-go.exe",
+    "--single",
+    "artifacts/bench/filelists/tldraw.txt"
+   ],
+   "output": {
+    "driver": "tsgo-7.0.2-single",
+    "files": 2508,
+    "bytes": 13626240,
+    "nodes": 1840542,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.7066089000000001,
+     0.7082114,
+     0.6941405,
+     0.7049584000000001,
+     0.7182272000000001,
+     0.7184998,
+     0.6968543,
+     0.7060151,
+     0.6975039000000001,
+     0.7061255000000001,
+     0.6940949000000001,
+     0.7082896000000001,
+     0.7044776,
+     0.7200026,
+     0.7143364000000001,
+     0.7178169000000001,
+     0.6970054,
+     0.7042731000000001,
+     0.6952964,
+     0.7010875000000001
+    ],
+    "median": 0.70548675,
+    "mad": 0.00823210000000002,
+    "madOverMedianPercent": 1.166868123320533,
+    "mean": 0.7056912700000002,
+    "stddev": 0.008534030863493098,
+    "min": 0.6940949000000001,
+    "max": 0.7200026,
+    "userMean": 0.62421875,
+    "systemMean": 0.45234375
+   },
+   "throughput": {
+    "filesPerSecond": 3554.9923510257277,
+    "megabytesPerSecond": 19.314664662376718
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     268611584,
+     268595200,
+     269193216,
+     269627392,
+     268099584
+    ],
+    "peakCommitBytes": [
+     281976832,
+     281780224,
+     277667840,
+     277254144,
+     282529792
+    ],
+    "medianPeakWorkingSetBytes": 268611584,
+    "medianPeakCommitBytes": 281780224
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-tldraw-tsgo7-parse-single.json"
+  }
+ ]
+}
