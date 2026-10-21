@@ -88,7 +88,16 @@ More events:
 
 Brief: [modules/M5.md](modules/M5.md); units: [modules/M5-units.md](modules/M5-units.md) (4 units, 1,088 lines). Gate: Gate 2, unit tests, G1a, G1 with ParseNone (regression), **Gate 1** (ParseAll with the JSDoc section against `dumps/ts`, all 50,177 units). Two attempts (prereg/v3), medium effort, limit 60 gate runs, no sub-agents. Ranking: `M5.ParseTuningCorpus` (ParseForTypeErrors).
 
-| Attempt | Model | Gate runs | Result | Notes |
-|---|---|---|---|---|
-| 1 | Opus 5.5 | | running | |
-| 2 | Sonnet 5.5 | | running | |
+| Attempt | Model | Gate runs | Gate (orchestrator rerun) | Median (99.9 % CI) | Allocated | Rank | Commit |
+|---|---|---:|---|---|---:|---:|---|
+| 1 | Opus 5.5 (`claude-opus-5-5`), medium | 3 | pass, Gate 1 50,177/50,177 | **2,461 ms** (2,450–2,474) | 737.8 MB | **1, merged** | 96ca1d9 → main |
+| 2 | Sonnet 5.5 (`claude-sonnet-5-5`), medium | 2 | pass, Gate 1 50,177/50,177 | 2,486 ms (2,471–2,507) | 738.1 MB | 2 | c0d715d |
+
+**Gate 1 complete for Track F** (2026-10-21): the merged parser reproduces tsc 6.0.3's canonical AST dump, JSDoc section included, on all 50,177 units of the equivalence corpus; all earlier gates still pass on main.
+
+Ranking (`M5.ParseTuningCorpus`, ParseForTypeErrors, NativeAOT): the 99.9 % intervals overlap slightly (2,471–2,474 ms); pre-registration §5.2 ranks Track F by the median first, so attempt 1 is first; allocation is practically equal. Raw reports `results/ranking/M5/`, branches `attempts/M5/attempt-1..2`.
+
+Events:
+
+- **Generator defect found by the attempts:** `JSDocSignature.parameters` is declared `readonly JSDocParameterTag[]` in types.ts, but the parser also stores other JSDoc tags there (`@this` inside `@callback`, unit 012584 callbackTag4.ts). Attempt 2 (finished first) patched the generated file to pass, against the brief's letter; the orchestrator fixed the generator (field `Node[]?`, 48464cc) and offered exactly this change to attempt 1 while it was running, which used it. Both attempts thus made the same, now sanctioned change; the merge takes the generated file from the generator.
+- Attempt 1's one optimization (setting `NodeFlags.JSDoc` in the context directly instead of `doInsideOfContext` with a closure) has its counterpart in typescript-go's `parseJSDocComment` (`internal/parser/jsdoc.go`, saves and sets `p.contextFlags`).
