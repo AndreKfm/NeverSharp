@@ -192,7 +192,7 @@ A claim that C# is *faster* than typescript-go additionally requires the upper b
 ## 9. Kill criteria for the project
 
 1. **Oracles disagree.** Stop and publish if the comparison of tsc 6.0.3 and typescript-go 7.0.2 shows any difference that is neither removed by a pre-registered normalization rule (N1–N9) nor listed in the pre-registered divergence list ([ast-dump-format.md](ast-dump-format.md), decision 3).
-2. **Phase 1 not equivalent in time.** Common budget for both tracks: **12 calendar weeks from the tag date at about 7 h/week** (decided by the author 2026-10-21).
+2. **Phase 1 not equivalent in time.** Common budget for both tracks: **18 calendar weeks from the tag date at about 7 h/week** (decided by the author 2026-10-21, after the effort estimate in [phase1-plan.md](phase1-plan.md), section 9).
    - Track F does not pass Gate 1 within the budget: publish the gap analysis (the failing units and categories) and stop the project; without Track F there is no verdict.
    - Track O does not pass Gate 1 within the budget: publish its gap analysis and end Track O; the Track F verdict is unaffected.
 3. **Rig variance.** The variance gate fails on the reference machine and cannot be fixed: no port numbers are published.
@@ -233,7 +233,7 @@ For transparency, the decisions that were revised during Phase 0, before this do
 | 2026-10-21 | Variance gate on single-threaded configurations; CI-based verdicts | spread of short parallel runs in probe runs; **decided after seeing probe data**; its rationale was later qualified by the quiet baseline run | B11, benchmark-harness.md §9 |
 | 2026-10-21 | Idle check: median of ten 1 s windows instead of one 3 s mean | single short window decided by momentary spikes | B10 amendment |
 | 2026-10-21 | Two tracks: faithful (carries the verdict) and optimized (SIMD, stack allocation, NoAlloc, arenas, ≤ 3 measured variants per step, separately labeled) | author's decision before any C# code | §1, §5.4 |
-| 2026-10-21 | Phase 1 budget 8 weeks → 12 weeks, common to both tracks | two tracks do not fit into 8 weeks at about 7 h/week | §9 |
+| 2026-10-21 | Phase 1 budget 8 weeks → 12 weeks → 18 weeks, common to both tracks | two tracks do not fit into 8 weeks; the Phase 1 plan's estimate (≈ 123 h) does not fit into 12 weeks (84 h) | §9, phase1-plan.md §9 |
 
 ## 13. Prior art
 
@@ -243,7 +243,7 @@ typescript-go (the reference and the method this project copies); oxc and swc (R
 
 - [x] Author confirmed every **[DECISION]** in this document (2026-10-21).
 - [ ] **[OPEN]** Multi-model workflow: models and attempts per model (5.2).
-- [ ] Phase 1 plan committed (module boundary, JSDoc scope details, effort estimate).
+- [x] Phase 1 plan committed ([phase1-plan.md](phase1-plan.md)): module boundaries, JSDoc scope, effort estimate.
 - [ ] JSDoc section of the dump format specified and the tsc 6.0.3 side implemented (4.2).
 - [ ] Analyzer ruleset committed for both tracks (5.1, 5.4).
 - [ ] C# driver contract: `NEVERSHARP_PRIORITY`, JSON output with file count, node count, priority, GC metrics (6.3, 7).
