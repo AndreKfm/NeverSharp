@@ -89,12 +89,13 @@ Before every run, `env.mjs` records the environment and checks the rig settings 
 | `min-processor-state` | minimum processor state (AC) = 100 % |
 | `max-processor-state` | maximum processor state (AC) = 100 % |
 | `boost-off` | `% Processor Performance` under a 2.5 s all-core load ≤ 101 % (no clock above nominal) |
-| `idle-before-run` | mean CPU utilization over 3 s before the run < 12 % (B10), read from the OS processor-time counters (`os.cpus()`), so the check starts no process of its own |
+| `idle-before-run` | median CPU utilization of ten consecutive 1 s windows before the run < 12 % (B10); all ten values are recorded. Read from the OS processor-time counters (`os.cpus()`), so the check starts no process of its own |
 | `harness-committed` | clean working tree: every number comes from a committed harness |
 
 A run with any failed check is written with `protocolCompliant: false`; the report marks it as a **probe** and it is never reported as a result. The Defender path exclusion cannot be verified without administrator rights and is recorded as such.
 
 - **[DECISION B10, CONFIRMED 2026-10-21] Idle limit 12 %.** The limit was first set to 5 % before the machine's baseline was known. Measured repeatedly with nothing else running, the reference machine idles at 7–10 % CPU, mostly kernel time that no user process accounts for; at 5 % no run could ever be protocol-compliant. 12 % is the measured baseline plus a margin. The check still catches a second workload (in run C, other work on the machine pushed it to 40 %).
+  - **Amended 2026-10-21 (confirmed by the author): median of ten 1 s windows instead of the mean of one 3 s window.** With the single 3 s window, runs F and G failed the check at their start (30.7 % and 20.3 %) although the machine measured 3–12 % in repeated 3 s windows between runs, and run G then passed the rig check with its best values so far. A single short window is decided by momentary spikes (the terminal, a remote display session) rather than by a second workload. The median of ten 1 s windows ignores a spike of a few seconds and still fails when another workload runs throughout. A first test of the new check: median 7.9 %, individual windows 2.8–18.2 %. The limit of 12 % is unchanged.
 - **[DECISION B11, CONFIRMED 2026-10-21] Variance gate (kill criterion 3) = rig check on the single-threaded configurations; parallel configurations report their spread; verdicts use confidence intervals.**
   - The gate: in a protocol-compliant run, every **single-threaded** configuration (`tsc6-parse`, `tsgo7-parse-single`, later the single-threaded C# configurations) on every repository must have MAD/median < 3 %. If not, the rig is not fit to publish numbers.
   - **Parallel** configurations (`tsgo7-parse`, later parallel C# configurations) are not gated. Their MAD/median is reported in every run, next to the median.
@@ -115,7 +116,7 @@ A run with any failed check is written with `protocolCompliant: false`; the repo
 
 ## 8. Probe results
 
-Five full runs with protocol settings (N = 20 after 3 warmup runs, M = 5, all repositories and configurations). **All are probes, not protocol results:** each failed `idle-before-run` as it was defined at the time (< 5 %), A and B also `harness-committed`. Nothing below is a published number; these runs are the evidence for decisions B9–B11.
+Seven full runs with protocol settings (N = 20 after 3 warmup runs, M = 5, all repositories and configurations). **All are probes, not protocol results:** each failed `idle-before-run` as it was defined at the time (A–E: mean of 3 s < 5 %; F, G: mean of 3 s < 12 %), A and B also `harness-committed`. Nothing below is a published number; these runs are the evidence for decisions B9–B11 and the amendment of B10.
 
 | Run | Conditions | Idle CPU before run |
 |---|---|---|
@@ -124,8 +125,10 @@ Five full runs with protocol settings (N = 20 after 3 warmup runs, M = 5, all re
 | C `2026-10-14T18-19-00-873Z` | IDE, browser and assistant activity stopped; other work on the machine | 40.7 % |
 | D `2026-10-15T09-23-40-112Z` | no other workloads | 9.7 % |
 | E `2026-10-15T10-25-24-571Z` | as D, drivers at high priority (B9) | 16.3 % |
+| F `2026-10-21T04-47-39-910Z` | B9–B11 in force; remote display session | 30.7 % |
+| G `2026-10-21T05-48-49-163Z` | B9–B11 in force | 20.3 % |
 
-MAD/median per configuration and repository (threshold 3 %), runs A / B / C / D / E:
+MAD/median per configuration and repository (threshold 3 %), runs A / B / C / D / E (runs F and G below):
 
 | Configuration | vscode | sentry | bluesky | playwright | tldraw |
 |---|---:|---:|---:|---:|---:|
@@ -133,7 +136,15 @@ MAD/median per configuration and repository (threshold 3 %), runs A / B / C / D 
 | tsgo7-parse | **3.25** / **3.13** / 2.07 / 1.57 / 2.82 | 1.91 / **4.40** / 2.77 / 2.83 / 2.66 | **3.15** / **6.02** / 2.76 / **3.50** / **3.30** | **3.30** / **3.26** / 2.76 / **5.39** / **4.35** | **3.36** / **3.17** / **3.25** / **3.52** / 1.99 |
 | tsgo7-parse-single | **3.85** / 0.66 / 0.73 / 0.31 / 0.38 | 0.30 / 1.56 / 0.53 / 0.46 / 0.47 | 1.59 / 1.15 / 0.91 / 0.59 / 0.96 | 0.64 / 1.08 / 0.93 / 0.76 / 0.90 | 0.92 / 0.86 / 0.57 / 0.64 / 0.53 |
 
-Under B11, the rig check (single-threaded rows) passes in runs B–E and fails in run A (two cells, 3.69 % and 3.85 %, with uncommitted work and an IDE running).
+Runs F and G, under B9–B11:
+
+| Configuration | Role | vscode | sentry | bluesky | playwright | tldraw |
+|---|---|---:|---:|---:|---:|---:|
+| tsc6-parse | rig check | 1.80 / 0.69 | 2.63 / 2.20 | 0.70 / 0.68 | 1.31 / 0.91 | 1.01 / 0.89 |
+| tsgo7-parse | reported | 1.89 / 0.96 | 5.48 / 1.94 | 1.56 / 3.13 | 2.77 / 3.15 | 3.16 / 2.74 |
+| tsgo7-parse-single | rig check | 1.30 / 0.31 | 0.90 / 0.62 | 1.15 / 0.60 | 0.55 / 0.54 | 0.44 / 0.85 |
+
+Under B11, the rig check (single-threaded rows) passes in runs B–G and fails in run A (two cells, 3.69 % and 3.85 %, with uncommitted work and an IDE running). Run G is the quietest run so far: worst rig-check cell 2.20 %, parallel typescript-go 0.96–3.15 %.
 
 Findings, in the order they were made:
 
@@ -143,8 +154,9 @@ Findings, in the order they were made:
 4. **High priority does not remove the spread** (E). With every driver in the high priority class, parallel rows are at 1.99–4.35 %; playwright and bluesky still fail, tldraw passes, vscode gets worse. Sorted per-run times are evenly spread (playwright: 132–154 ms), not a tight cluster with outliers.
 5. **GC count does not explain it** (diagnostic, not a protocol run). Playwright, parallel, high priority, 20 runs with `GODEBUG=gctrace=1`: 141–160 ms wall-clock, 8–10 GC cycles per run, 3.7–8.6 ms total stop-the-world pause; correlation between wall-clock and GC cycle count 0.19.
 6. **Conclusion → B11.** The spread is a property of short parallel runs of the measured program, not of the rig.
+7. **The idle check, not the machine, failed F and G** → amendment of B10. Both runs passed the rig check (G with its best values so far) but failed `idle-before-run` at their start. A test whether the version calls `bench.mjs` makes just before the check inflate the reading was negative; the load simply fluctuates between 3 % and 12 % in 3 s windows, with occasional spikes.
 
-Post hoc observation, probe data, not a result: tsc 6.0.3 takes about 11–12× the wall-clock of parallel typescript-go for parsing (run E, geometric mean 11.94, 95 % CI [11.81, 12.11]), and single-threaded typescript-go is 2.2–3.1× faster than tsc 6.0.3 (run A). The order of magnitude matches Microsoft's published ~10× for full builds.
+Post hoc observation, probe data, not a result: tsc 6.0.3 takes about 11–12× the wall-clock of parallel typescript-go for parsing (run E: geometric mean 11.94, 95 % CI [11.81, 12.11]; run G: 12.24 [12.08, 12.38]), and single-threaded typescript-go is 2.2–3.1× faster than tsc 6.0.3 (run A). The order of magnitude matches Microsoft's published ~10× for full builds.
 
 ## 9. Not covered yet
 

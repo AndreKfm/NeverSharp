@@ -15,6 +15,7 @@ import { availableParallelism, cpus } from "node:os";
 import { join } from "node:path";
 import { Worker } from "node:worker_threads";
 import { repoRoot } from "./common.mjs";
+import { median } from "./stats.mjs";
 
 const powershell = (script) => execFileSync("pwsh", ["-NoProfile", "-NonInteractive", "-Command", script], { encoding: "utf8" }).trim();
 
@@ -59,19 +60,26 @@ async function processorPerformanceUnderLoad() {
     return Math.max(...samples);
 }
 
-// Mean CPU utilization over 3 s from the OS's per-processor time counters
-// (os.cpus()), so the check itself starts no process that would add load.
-async function idleCpuPercent() {
+// CPU utilization in ten consecutive 1 s windows from the OS's per-processor
+// time counters (os.cpus()), so the check itself starts no process that would
+// add load. The check uses the median: a momentary spike (terminal, remote
+// display) does not fail it, a second workload running throughout does (B10).
+async function idleCpuSamples() {
     const snapshot = () => cpus().reduce((acc, c) => {
         const t = c.times;
         acc.idle += t.idle;
         acc.total += t.user + t.nice + t.sys + t.idle + t.irq;
         return acc;
     }, { idle: 0, total: 0 });
-    const before = snapshot();
-    await new Promise(r => setTimeout(r, 3000));
-    const after = snapshot();
-    return 100 * (1 - (after.idle - before.idle) / (after.total - before.total));
+    const samples = [];
+    let before = snapshot();
+    for (let i = 0; i < 10; i++) {
+        await new Promise(r => setTimeout(r, 1000));
+        const after = snapshot();
+        samples.push(100 * (1 - (after.idle - before.idle) / (after.total - before.total)));
+        before = after;
+    }
+    return samples;
 }
 
 function git() {
@@ -80,14 +88,21 @@ function git() {
 }
 
 export async function captureEnvironment(toolchain) {
-    const idle = await idleCpuPercent();
-    const rig = { ...powerSettings(), idleCpuPercent: idle, processorPerformanceUnderLoadPercent: await processorPerformanceUnderLoad(), defenderExclusion: "not verifiable without administrator rights" };
+    const idleSamples = await idleCpuSamples();
+    const idle = median(idleSamples);
+    const rig = {
+        ...powerSettings(),
+        idleCpuPercent: idle,
+        idleCpuSamplesPercent: idleSamples.map(v => Math.round(v * 10) / 10),
+        processorPerformanceUnderLoadPercent: await processorPerformanceUnderLoad(),
+        defenderExclusion: "not verifiable without administrator rights",
+    };
     const checks = [
         { id: "min-processor-state", required: "100", value: String(rig.minProcessorStateAc), ok: rig.minProcessorStateAc === 100 },
         { id: "max-processor-state", required: "100", value: String(rig.maxProcessorStateAc), ok: rig.maxProcessorStateAc === 100 },
         { id: "boost-off", required: "processor performance under all-core load <= 101 %", value: `${rig.processorPerformanceUnderLoadPercent} %`, ok: rig.processorPerformanceUnderLoadPercent <= 101 },
         // 12 %: the reference machine's measured idle baseline is 7-10 % (docs/benchmark-harness.md, B10).
-        { id: "idle-before-run", required: "mean CPU over 3 s < 12 %", value: `${idle.toFixed(1)} %`, ok: idle < 12 },
+        { id: "idle-before-run", required: "median CPU of ten 1 s windows < 12 %", value: `${idle.toFixed(1)} % (range ${Math.min(...idleSamples).toFixed(1)}-${Math.max(...idleSamples).toFixed(1)} %)`, ok: idle < 12 },
     ];
     const repo = git();
     checks.push({ id: "harness-committed", required: "clean working tree", value: repo.dirty ? "dirty" : "clean", ok: !repo.dirty });

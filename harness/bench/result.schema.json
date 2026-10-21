@@ -34,7 +34,11 @@
         },
         "rig": {
           "type": "object",
-          "required": ["scheme", "minProcessorStateAc", "maxProcessorStateAc", "idleCpuPercent", "processorPerformanceUnderLoadPercent"]
+          "required": ["scheme", "minProcessorStateAc", "maxProcessorStateAc", "idleCpuPercent", "idleCpuSamplesPercent", "processorPerformanceUnderLoadPercent"],
+          "properties": {
+            "idleCpuPercent": { "type": "number", "description": "Median of idleCpuSamplesPercent; the value the idle check compares with its limit." },
+            "idleCpuSamplesPercent": { "type": "array", "items": { "type": "number" }, "minItems": 10, "maxItems": 10, "description": "CPU utilization in ten consecutive 1 s windows before the run." }
+          }
         },
         "toolchain": {
           "type": "object",
