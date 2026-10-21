@@ -24,6 +24,23 @@ internal static class Vectors
         return dir?.FullName ?? throw new InvalidOperationException("repository root (global.json) not found");
     }
 
+    /// <summary>The raw lines of a vector file (e.g. the unit texts of M2).</summary>
+    public static IEnumerable<string> ReadLines(string module, string name)
+    {
+        var file = Path.Combine(Root, "artifacts", "vectors", module, name + ".jsonl");
+        if (!File.Exists(file))
+        {
+            throw new InvalidOperationException($"{file} missing: run node harness/port/vectors-{module.ToLowerInvariant()}.mjs");
+        }
+        foreach (var text in File.ReadLines(file, Encoding.UTF8))
+        {
+            if (text.Length > 0)
+            {
+                yield return text;
+            }
+        }
+    }
+
     public static IEnumerable<Vector> Read(string module, string name)
     {
         var file = Path.Combine(Root, "artifacts", "vectors", module, name + ".jsonl");

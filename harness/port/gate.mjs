@@ -7,13 +7,16 @@
 //
 //   Gate 2: dotnet build of src/NeverSharp.Faithful in Release with the Track F
 //           analyzer ruleset (warnings are errors), plus the header check;
-//   module gate: M1 = the unit tests in tests/NeverSharp.Faithful.Tests against
-//           vectors computed by tsc 6.0.3 (harness/port/vectors-m1.mjs).
+//   unit tests: tests/NeverSharp.Faithful.Tests against vectors computed by tsc 6.0.3
+//           (harness/port/vectors-m1.mjs, vectors-m2.mjs); all tests run in every module's
+//           gate from M1 on (regression);
+//   M2: G1a, the token-stream dump of every equivalence unit (tools/NeverSharp.Dump)
+//           compared byte for byte with tsc 6.0.3 (harness/astdump/compare-tokens.mjs).
 //
-// Reference sources, tools and vectors are read from the main checkout (they are
-// not in git): pass --main <path>, default: this checkout.
+// Reference sources, tools, the corpus and vectors are read from the main checkout
+// (they are not in git): pass --main <path>, default: this checkout.
 //
-// Usage: node harness/port/gate.mjs --module M1 [--main D:/.../NeverSharp]
+// Usage: node harness/port/gate.mjs --module M1|M2 [--main D:/.../NeverSharp]
 // Exit code 0 only if every gate passes; prints one line per gate and a JSON summary.
 
 import { spawnSync } from "node:child_process";
@@ -25,32 +28,40 @@ const arg = (n, f) => process.argv.includes(n) ? process.argv[process.argv.index
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const main = arg("--main", root);
 const moduleId = arg("--module", "M1");
+if (!["M1", "M2"].includes(moduleId)) throw new Error(`no gate defined for ${moduleId}`);
 
-// Worktrees lack the untracked inputs: link the vectors in by copying (small enough, read-only use).
-const vectors = join(root, "artifacts", "vectors", moduleId);
-if (!existsSync(vectors)) {
-    const source = join(main, "artifacts", "vectors", moduleId);
-    if (!existsSync(source)) throw new Error(`vectors missing: run node harness/port/vectors-${moduleId.toLowerCase()}.mjs in ${main}`);
+// Worktrees lack the untracked inputs: copy the unit-test vectors in (read-only use).
+for (const m of ["M1", "M2"]) {
+    const vectors = join(root, "artifacts", "vectors", m);
+    if (existsSync(vectors)) continue;
+    const source = join(main, "artifacts", "vectors", m);
+    if (!existsSync(source)) throw new Error(`vectors missing: run node harness/port/vectors-${m.toLowerCase()}.mjs in ${main}`);
     cpSync(source, vectors, { recursive: true });
 }
 
 const results = [];
-function gate(name, command, args, opts = {}) {
+function gate(name, command, args, { showOutput = false, ...opts } = {}) {
     const started = Date.now();
     const r = spawnSync(command, args, { cwd: root, encoding: "utf8", maxBuffer: 1 << 28, env: { ...process.env, DOTNET_CLI_UI_LANGUAGE: "en" }, ...opts });
-    const output = (r.stdout ?? "") + (r.stderr ?? "");
+    const output = (r.stdout ?? "") + (r.stderr ?? "") + (r.error ? `\n${r.error.message}` : "");
     const pass = r.status === 0;
     results.push({ gate: name, pass, seconds: Math.round((Date.now() - started) / 100) / 10 });
     console.log(`${pass ? "PASS" : "FAIL"}  ${name}`);
-    if (!pass) console.log(output.split("\n").filter(l => /error|fail|differ|line \d+:|problem|missing/i.test(l)).slice(0, 80).join("\n") || output.slice(-4000));
+    if (!pass && showOutput) console.log(output.slice(-6000));
+    else if (!pass) console.log(output.split("\n").filter(l => /error|fail|differ|line \d+:|problem|missing/i.test(l)).slice(0, 80).join("\n") || output.slice(-4000));
     return pass;
 }
 
 const node = process.execPath;
 gate("gate2-build", "dotnet", ["build", "src/NeverSharp.Faithful", "-c", "Release", "-nologo", "-v", "q", "-p:RunAnalyzersDuringBuild=true"]);
 gate("gate2-headers", node, ["scripts/check-headers.mjs"]);
-if (moduleId === "M1") {
-    gate("m1-unit-tests", "dotnet", ["test", "--project", "tests/NeverSharp.Faithful.Tests", "-c", "Release"]);
+gate("unit-tests", "dotnet", ["test", "--project", "tests/NeverSharp.Faithful.Tests", "-c", "Release"]);
+if (moduleId === "M2") {
+    const corpus = join(main, "artifacts", "equivalence");
+    const actual = join(root, "artifacts", "dumps", "cs-faithful-tokens");
+    const dumped = gate("g1a-dump", "dotnet", ["run", "-c", "Release", "--project", "tools/NeverSharp.Dump", "--", "tokens", "--corpus", corpus, "--out", actual],
+        { timeout: 20 * 60 * 1000, showOutput: true });
+    if (dumped) gate("g1a-compare", node, ["harness/astdump/compare-tokens.mjs", "--corpus", corpus, "--actual", actual, "--show", "15"], { showOutput: true });
 }
 const pass = results.every(r => r.pass);
 console.log(JSON.stringify({ module: moduleId, pass, results }));

@@ -10,7 +10,7 @@
 // generated Diagnostics object are units of their own, so only the messages
 // that are used count.
 //
-// Usage: node slice.mjs [--roots createSourceFile,forEachChild] [--json out.json]
+// Usage: node slice.mjs [--roots createSourceFile,forEachChild] [--root-file parser.ts] [--json out.json]
 
 import { readdirSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -114,8 +114,9 @@ function resolve(identifier) {
     return [...declarations, ...mapped];
 }
 
-// Roots: the named declarations in parser.ts.
-const parserFile = program.getSourceFile(join(compilerDir, "parser.ts").replaceAll("\\", "/")) ?? program.getSourceFiles().find(f => f.fileName.endsWith("/compiler/parser.ts"));
+// Roots: the named declarations in the root file (default parser.ts; --root-file scanner.ts for the scanner module).
+const rootFile = arg("--root-file", "parser.ts");
+const parserFile = program.getSourceFiles().find(f => f.fileName.endsWith(`/compiler/${rootFile}`));
 ts.forEachChild(parserFile, function visit(n) {
     if ((ts.isFunctionDeclaration(n) || ts.isVariableDeclaration(n)) && n.name && rootNames.includes(n.name.getText())) addUnit(unitOf(n));
     ts.forEachChild(n, visit);

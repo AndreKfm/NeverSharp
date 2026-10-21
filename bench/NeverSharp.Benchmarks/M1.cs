@@ -47,7 +47,7 @@ public class M1
         return declarationFiles;
     }
 
-    private static string FindRoot()
+    internal static string FindRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "global.json")))

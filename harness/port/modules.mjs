@@ -35,6 +35,17 @@ export const modules = {
         // Units of these files deliberately left out of every module (phase1-plan.md §2).
         notPorted: { "debug.ts": "formatting helpers and debug-info attachment (formatEnum, formatSyntaxKind, attachNodeArrayDebugInfo, …): replaced by plain exception messages" },
     },
+    // Scanner: every scanner.ts unit the parser slice reaches, plus what the scanner slice
+    // (slice.mjs --root-file scanner.ts) reaches outside scanner.ts and M1.
+    M2: {
+        title: "Scanner",
+        units: {
+            "scanner.ts": "*",
+            "utilities.ts": ["parsePseudoBigInt", "forEachEntry", "getNameOfScriptTarget"],
+            "commandLineParser.ts": ["targetOptionDeclaration"],
+            "types.ts": ["LanguageFeatureMinimumTarget"],
+        },
+    },
 };
 
 // Declarations of a unit name in a file: functions (all overloads plus the body), variable statements, enums.

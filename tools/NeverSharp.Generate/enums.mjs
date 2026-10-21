@@ -60,5 +60,26 @@ export function generateEnums() {
         lines.push("}", "#pragma warning restore CA1069", "");
     }
     writeFileSync(join(outDir, "Enums.g.cs"), lines.join("\n"));
+
+    // Name tables for the dump writers (tools/NeverSharp.Dump): the first declared name per value, as the
+    // tsc dumpers pick them from the enum object (harness/astdump/dump-ts.mjs, dump-tokens-ts.mjs).
+    const firstNames = (e, singleBitOnly) => {
+        const names = new Map();
+        for (const m of e.members) {
+            if (names.has(m.value) || singleBitOnly && (m.value === 0 || (m.value & (m.value - 1)) !== 0)) continue;
+            names.set(m.value, m.name);
+        }
+        return [...names].sort((a, b) => a[0] - b[0]);
+    };
+    const byName = Object.fromEntries(emitted.map(e => [e.name, e]));
+    const table = (name, singleBitOnly) => [`    public static readonly (int Value, string Name)[] ${name} =`, "    [",
+        ...firstNames(byName[name], singleBitOnly).map(([v, n]) => `        (${v}, ${csString(n)}),`), "    ];"];
+    const names = [header("src/compiler/types.ts (enum declarations)"), "namespace NeverSharp.Dump;", "",
+        "/// <summary>First declared name per value (single-bit members only for flag enums), as the tsc dumpers choose them.</summary>",
+        "internal static class EnumNames", "{",
+        ...table("SyntaxKind", false), "",
+        ...table("TokenFlags", true), "",
+        ...table("NodeFlags", true), "}", ""];
+    writeFileSync(join(repoRoot, "tools", "NeverSharp.Dump", "EnumNames.g.cs"), names.join("\n"));
     return emitted.length;
 }

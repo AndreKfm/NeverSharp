@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Canonical dump writers of the C# tracks (docs/ast-dump-format.md): token-stream dump (§8, gate G1a);
+    the AST dump follows with the parser (M4). Orchestrator code, not ported: not under Gate 2.
+    Usage: see Program.cs (mode "tokens", options corpus and out).
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="$(RepoRoot)src/NeverSharp.Faithful/NeverSharp.Faithful.csproj" />
+  </ItemGroup>
+</Project>

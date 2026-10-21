@@ -12,5 +12,6 @@
   <ItemGroup>
     <!-- Ported code is internal (as in TypeScript, where it is not public API); the module gates test it directly. -->
     <InternalsVisibleTo Include="NeverSharp.Faithful.Tests" />
+    <InternalsVisibleTo Include="NeverSharp.Dump" />
   </ItemGroup>
 </Project>

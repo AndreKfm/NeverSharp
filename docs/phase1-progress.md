@@ -13,7 +13,8 @@ Budget: 2026-10-21 to 2027-02-24 (pre-registration §9). Plan: [phase1-plan.md](
 | Track F emitter: node classes, `NodeAllocator`, `ForEachChild` | done 2026-10-21 | `emit-faithful.mjs` → `src/NeverSharp.Faithful/Generated/`: 244 classes, 920 fields (declared by the interface **and** assigned in parser.ts / nodeFactory.ts / utilities.ts; type brands and never-assigned properties dropped), `ForEachChild` with the semantics of `visitNode`/`visitNodes`/`forEach`. Fields declared `?: undefined` but assigned for grammar errors (e.g. `FunctionTypeNode.modifiers`) get their type from the `forEachChild` usage. Builds clean under Gate 2. Correctness of the child order is checked by Gate 1 once the parser exists. |
 | Track O emitter (arena records) | deferred | built when Track O starts (it starts from finished Track F modules; the arena layout is variant step O6) |
 | Token-stream dump (G1a), tsc side | done 2026-10-21 | `harness/astdump/dump-tokens-ts.mjs`; format in ast-dump-format.md §8; 22,809,973 tokens on the equivalence corpus |
-| C# dump writer and C# token-stream dump | open | |
+| C# token-stream dump (G1a) | done 2026-10-21 | `tools/NeverSharp.Dump tokens` (format ast-dump-format.md §8), `harness/astdump/compare-tokens.mjs` (byte comparison, no normalization). Checked before any scanner existed by replaying tsc's own token dumps through the C# writer with a throwaway stub scanner: 50,177 of 50,177 units identical (22,809,973 tokens). |
+| C# AST dump writer | open | with the parser (M4) |
 | Parse-only drivers (both tracks); NativeAOT publish of the four configurations | done 2026-10-21 (driver frame) | `tools/NeverSharp.ParseDriver`: one executable per track × runtime (`parse-cs-<track>-<runtime>`), driver contract of benchmark-harness.md §4.1 (sys.ts BOM semantics, high priority, one thread-pool work item per file or `--single`, GC metrics). The parse call is added in M4. `harness/bench/build-cs.mjs` publishes all four configurations and checks that each reports its runtime from `RuntimeFeature.IsDynamicCodeSupported` and `GCSettings.IsServerGC`. This check found a wrong property name (`ServerGarbageCollector`, silently ignored) in `eng/RuntimeConfiguration.props` and in the tagged pre-registration; fixed, erratum in preregistration.md §12.2. |
 | Harness integration: `cs-*` configurations | done 2026-10-21 | `harness/bench/bench.mjs`: the 16 C# configurations of pre-registration §6.4; validation checks the reported runtime and a node count above zero (the frame driver is rejected until M4). Smoke test: fixed-cost run of `cs-aot-ws` and `cs-jit-srv-single`. |
 | Harness integration: `dump-cs` | open | with the C# dump writer |
@@ -37,3 +38,13 @@ Ranking workload and job as fixed in the brief (`bench/NeverSharp.Benchmarks`, `
 Units left out by all three (allowed by the brief, no meaning for C# values): `emptyMap`, `hasOwnProperty`, `hasProperty`, `isArray`, `isString`; attempt 3 also `toArray`. Common deviations: exceptions are `InvalidOperationException` with TypeScript's exact message; `Debug.getFunctionName` gives `""` (reflection is banned); regular expressions replaced by hand-written matching; `assertionCache` records levels instead of swapping functions for `noop`.
 
 **Open item for later modules:** all three map `toUpperCase`/`toLowerCase` to .NET's simple invariant case mapping; JavaScript uses full Unicode case mapping (`ß` → `SS`). Used by `getSpellingSuggestion` and `equateStringsCaseInsensitive`; Gate 1 shows whether it is reached.
+
+### M2: Scanner
+
+Brief: [modules/M2.md](modules/M2.md); units: [modules/M2-units.md](modules/M2-units.md) (67 units, 3,854 lines). Gate: Gate 2, unit tests (M1 + M2: about 1.4 million calls of the exported scanner helpers compared with tsc 6.0.3, `harness/port/vectors-m2.mjs`), G1a on all 50,177 units. Test plumbing checked with a deliberately wrong stub before the attempts.
+
+| Attempt | Model | Gate runs | Result | Notes |
+|---|---|---|---|---|
+| 1 | Opus 5.5 | | running | |
+| 2 | Opus 5.5 | | running | |
+| 3 | Sonnet 5.5 | | running | |
