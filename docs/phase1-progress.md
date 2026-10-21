@@ -43,8 +43,19 @@ Units left out by all three (allowed by the brief, no meaning for C# values): `e
 
 Brief: [modules/M2.md](modules/M2.md); units: [modules/M2-units.md](modules/M2-units.md) (67 units, 3,854 lines). Gate: Gate 2, unit tests (M1 + M2: about 1.4 million calls of the exported scanner helpers compared with tsc 6.0.3, `harness/port/vectors-m2.mjs`), G1a on all 50,177 units. Test plumbing checked with a deliberately wrong stub before the attempts.
 
-| Attempt | Model | Gate runs | Result | Notes |
-|---|---|---|---|---|
-| 1 | Opus 5.5 | | running | |
-| 2 | Opus 5.5 | | running | |
-| 3 | Sonnet 5.5 | | running | |
+| Attempt | Model | Gate runs | Gate (orchestrator rerun) | Median (99.9 % CI) | Allocated | Rank | Commit |
+|---|---|---:|---|---|---:|---:|---|
+| 1 | Opus 5.5 (`claude-opus-5-5`) | 2 | pass, G1a 50,177/50,177 | **186.6 ms** (185.7–187.0) | **89.3 MB** | **1, merged** | 0d2fb3b → main |
+| 2 | Opus 5.5 (`claude-opus-5-5`) | 4 (3 + 1 correction round) | pass, G1a 50,177/50,177 | 225.9 ms (224.9–226.7) | 121.0 MB | 2 | a3b46c2, ea0afea |
+| 3 | Sonnet 5.5 (`claude-sonnet-5-5`) | 1 counted (see below) | pass, G1a 50,177/50,177 | 228.1 ms (227.6–228.8) | 93.5 MB | 3 | 13661b5 |
+
+Ranking as fixed in the brief (`M2.ScanTuningCorpus`, BenchmarkDotNet 0.15.8, NativeAOT, 3 warmup + 20 iterations; 2026-10-21, one after another on an otherwise idle machine). Raw reports: `results/ranking/M2/`; branches `attempts/M2/attempt-1..3`. Intervals do not overlap; the first criterion decides.
+
+Events and decisions:
+
+- **Rule 3, compiler hints (decided by the author, 2026-10-21):** attempt 2 had put `[MethodImpl(MethodImplOptions.AggressiveInlining)]` on 16 leaf helpers, citing the Go compiler's automatic inlining, and flagged the claim itself. Decision: strict reading — a compiler or JIT hint has no counterpart in typescript-go's code (Go has no force-inline directive), so it is not allowed in Track F; such tuning belongs to Track O. Attempt 2 removed the attributes itself in a correction round within its gate budget (23 deleted lines, nothing added; gate passed), then all three were measured. Future briefs state the rule explicitly.
+- **Other optimizations** (all three replaced quadratic string `+=` by builders, citing `strings.Builder`/parts + `strings.Join` in `internal/scanner/scanner.go`; attempt 1 also ASCII fast paths in `scanIdentifier` and after line breaks, attempt 2 `numberCache` and `scanHexDigits`): counterparts checked in typescript-go's `scanner.go`, they exist.
+- **Benchmark harness fix before the measured run:** BenchmarkDotNet's dependency `Microsoft.Diagnostics.Tracing.TraceEvent` exports a top-level namespace `Diagnostics` that hid the generated `Diagnostics` class (reported by attempt 3, which had added a using alias in its own code); fixed with an extern alias in the benchmark project (8e407ff), identical for all attempts.
+- **Gate-run counting:** attempt 3 ran the gate's parts (tests, dump, compare) by hand before its single counted gate run; the brief did not define hand runs of the parts, so its count is not comparable. From M3 on, any run of a gate part counts.
+- **Independence caveat:** the three attempts shared one scratch directory (the session's); top-level helper files collided (`gen-tables.mjs`, `tables.cs.txt`, `gen-ch.mjs`: generators of the Unicode identifier tables and character-code constants, i.e. data generated from `scanner.ts`, not scanner logic). Attempt 1 noticed an overwrite and moved to a subfolder. Whether an attempt read another's helper output cannot be ruled out. From M3 on, each attempt gets its own scratch folder.
+- **Testing beyond the gate:** all three attempts wrote their own differential tests against tsc 6.0.3 for the paths G1a does not reach (rescans, regex validator, JSX, JSDoc scanning, lookahead), each reporting 0 differences (attempt 3 found and fixed a `toString(8)` bug for huge legacy octal literals this way). These are the attempts' own checks, not gates; G1 (M4/M5) covers these paths.
