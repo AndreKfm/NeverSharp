@@ -1,6 +1,6 @@
 # Pre-registration: a faithful C# port of the TypeScript compiler, measured against typescript-go
 
-Status: **draft, not yet tagged.** This document becomes binding when it is committed and tagged `prereg/v1` with the tag date. Until then every item is open to change; items marked **[DECISION, CONFIRMED]** were proposed by the author's assistant and confirmed by the author on 2026-10-21, items marked **[OPEN]** need the author's input.
+Status: **draft, not yet tagged.** This document becomes binding when it is committed, tagged `prereg/v1`, and the tag is timestamped (§11.1). Until then every item is open to change; items marked **[DECISION, CONFIRMED]** were proposed by the author's assistant and confirmed by the author on 2026-10-21, items marked **[OPEN]** need the author's input.
 
 Author: Andre Kaufmann. Repository: NeverSharp. License: Apache-2.0.
 
@@ -251,6 +251,16 @@ Template (illustrative numbers, not a result): *"Parsing, faithful track: the C#
 
 Nothing outside this protocol is reported as a result. Post-hoc observations are allowed and are labeled **post hoc** wherever they appear. Every failure of Gate 1 or Gate 2 is logged with its diff. Probe runs are never reported as results. All result files (run.json, report, raw hyperfine exports) are published with every result.
 
+### 11.1 Timestamp of the pre-registration
+
+The repository stays private until the project's results are published (author's decision, 2026-10-21), so a commit or tag date alone could not show that this document existed before the first C# measurement. **[DECISION, CONFIRMED 2026-10-21] Every pre-registration tag (`prereg/v1` and every later amendment tag) gets an OpenTimestamps proof:**
+
+1. A stamp file `docs/timestamps/prereg-vN.txt` records the tag name, the full hash of the tagged commit, and the SHA-256 of `docs/preregistration.md` at that commit.
+2. `ots stamp` submits only the hash of that stamp file to the public OpenTimestamps calendars; the content stays private. The resulting `prereg-vN.txt.ots` proof is committed next to it, and upgraded with `ots upgrade` once the Bitcoin attestation is complete (usually a few hours).
+3. Anyone can later verify with `ots verify` that the stamp file, and through the hashes in it the tagged commit and this document, existed no later than the time of the Bitcoin block.
+
+The proof shows existence at a time, not authorship, and not that no earlier version existed; earlier versions are visible in the repository history once it is public.
+
 ## 12. Amendment rule
 
 The protocol changes only by a new dated tag (`prereg/v2`, …) with a public note of what changed and why, and only before the next measurement whose outcome the change could affect. Changes to pinned inputs (pins.json, global.json, the analyzer ruleset, the normalization rules, the divergence list) are amendments.
@@ -289,4 +299,5 @@ typescript-go (the reference and the method this project copies); oxc and swc (R
 - [ ] Configuration project files committed (A7): `eng/RuntimeConfiguration.props` committed; a NativeAOT publish of each configuration is verified once the first driver exists (M0).
 - [x] **A6** feasible and adopted: `harness/bench/crosscheck.mjs` runs in the deciding session and is reported with the result: per repository, the Go driver's parse time (median minus fixed cost) against tsgo's own `Parse time` (`--extendedDiagnostics`, resolution and lib files off, median of 5). Feasibility check 2026-10-21 (different sessions, not a measurement): driver/tsgo 0.72–1.05 across the five repositories, i.e. the driver is not slower than tsgo's own parse phase except +5 % on vscode.
 - [ ] Harness support for Linux (rig checks, peak memory) before the replication run (A4); may follow the tag.
-- [ ] Repository published, so the tag date is publicly verifiable.
+- [ ] OpenTimestamps proof for the tag (§11.1); the OpenTimestamps client is installed at tag time.
+- [ ] Repository published when the author decides the project is done (not a condition for the tag; §11.1 covers the timestamp).
