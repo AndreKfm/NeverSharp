@@ -15,12 +15,16 @@ namespace NeverSharp.Benchmarks;
 public class M34
 {
     private (string FileName, string Text, ScriptKind Kind)[] files = [];
-    private readonly CreateSourceFileOptions options = new() { LanguageVersion = ScriptTarget.Latest, JsDocParsingMode = JSDocParsingMode.ParseNone };
+    private CreateSourceFileOptions options = null!;
+
+    /// <summary>ParseNone for M3 + M4; M5 measures with JSDoc parsing as tsc's host does it.</summary>
+    protected virtual JSDocParsingMode Mode => JSDocParsingMode.ParseNone;
 
     [GlobalSetup]
     public void Setup()
     {
         var list = Environment.GetEnvironmentVariable("NEVERSHARP_FILELIST") ?? Path.Combine(M1.FindRoot(), "artifacts", "bench", "filelists", "tuning.txt");
+        options = new CreateSourceFileOptions { LanguageVersion = ScriptTarget.Latest, JsDocParsingMode = Mode };
         var names = File.ReadAllLines(list);
         files = new (string, string, ScriptKind)[names.Length];
         for (var i = 0; i < names.Length; i++)
@@ -68,4 +72,13 @@ public class M34
         thread.Join();
         return nodes;
     }
+}
+
+/// <summary>
+/// Ranking workload of M5 (docs/modules/M5.md): the M34 workload with JSDocParsingMode.ParseForTypeErrors,
+/// the mode tsc's command line sets (executeCommandLine.ts) and the parse-only drivers use.
+/// </summary>
+public class M5 : M34
+{
+    protected override JSDocParsingMode Mode => JSDocParsingMode.ParseForTypeErrors;
 }

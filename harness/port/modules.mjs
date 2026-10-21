@@ -80,6 +80,15 @@ export const modules = {
             "debug.ts": "formatting helpers and debug-info attachment, as in M1",
         },
     },
+    // JSDoc parser: the units of namespace JSDocParser that the slice reaches.
+    M5: {
+        title: "JSDoc parser",
+        units: { "parser.ts": "*" },
+        afterModules: ["M1", "M2", "M34"],
+        onlyNamespaces: { "parser.ts": ["JSDocParser"] },
+        excludeNames: { "parser.ts": [/^parseIsolatedJSDocComment$/, /^parseJSDocTypeExpressionForTests$/] },
+        notPorted: { "parser.ts": "parseIsolatedJSDocComment, parseJSDocTypeExpressionForTests: test and language-service entry points, not reached by createSourceFile" },
+    },
 };
 
 // Units listed in an earlier module's generated unit list (docs/modules/<id>-units.md).
@@ -131,7 +140,9 @@ export function unitList(moduleId) {
             : names;
         for (const name of wanted) {
             const kept = (def.keepInExcludedNamespaces?.[file] ?? []).includes(name);
-            const decls = declarationsOf(sf, name).filter(d => kept || !spans.some(([a, b]) => d.getStart(sf) >= a && d.end <= b));
+            const only = namespaceSpans(sf, def.onlyNamespaces?.[file] ?? []);
+            const decls = declarationsOf(sf, name).filter(d => kept || !spans.some(([a, b]) => d.getStart(sf) >= a && d.end <= b))
+                .filter(d => only.length === 0 || only.some(([a, b]) => d.getStart(sf) >= a && d.end <= b));
             if (decls.length === 0) {
                 if (names === "*" && declarationsOf(sf, name).length > 0) continue; // only inside an excluded namespace
                 throw new Error(`${file}: no declaration of ${name}`);

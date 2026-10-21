@@ -83,3 +83,12 @@ More events:
 - **Virtual dispatch:** attempt 3's `Node.NameForTransformFlags` (virtual, 58 overrides) has its counterpart in typescript-go's per-type `nodeData.Name()` (`internal/ast/ast.go:209`, `:1215`); accepted under rule 3.
 - **Attempt 1 stopped** by the author for token cost after the spend-limit pause; its unfinished, never-built work is kept on `attempts/M34/attempt-1`. From M5 on, two attempts per module (prereg/v3).
 - Both finished attempts reached 50,177/50,177 on their first full gate run (attempt 2 after two hand builds; attempt 3 after three builds), i.e. the "long tail of error recovery" the plan feared did not materialise for the ParseNone gate.
+
+### M5: JSDoc parser
+
+Brief: [modules/M5.md](modules/M5.md); units: [modules/M5-units.md](modules/M5-units.md) (4 units, 1,088 lines). Gate: Gate 2, unit tests, G1a, G1 with ParseNone (regression), **Gate 1** (ParseAll with the JSDoc section against `dumps/ts`, all 50,177 units). Two attempts (prereg/v3), medium effort, limit 60 gate runs, no sub-agents. Ranking: `M5.ParseTuningCorpus` (ParseForTypeErrors).
+
+| Attempt | Model | Gate runs | Result | Notes |
+|---|---|---|---|---|
+| 1 | Opus 5.5 | | running | |
+| 2 | Sonnet 5.5 | | running | |
