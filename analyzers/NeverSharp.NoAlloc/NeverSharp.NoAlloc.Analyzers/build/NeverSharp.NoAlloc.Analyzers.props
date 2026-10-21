@@ -1,0 +1,6 @@
+<Project>
+  <!-- Set NeverSharpNoAllocInjectAttributes to false when referencing NeverSharp.NoAlloc.Annotations instead. -->
+  <ItemGroup>
+    <CompilerVisibleProperty Include="NeverSharpNoAllocInjectAttributes" />
+  </ItemGroup>
+</Project>

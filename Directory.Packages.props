@@ -1,0 +1,8 @@
+<Project>
+  <!-- Central package versions (pinned; changing one is an amendment once the pre-registration is tagged). -->
+  <ItemGroup>
+    <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
+    <PackageVersion Include="xunit.v3" Version="4.0.1" />
+  </ItemGroup>
+</Project>
