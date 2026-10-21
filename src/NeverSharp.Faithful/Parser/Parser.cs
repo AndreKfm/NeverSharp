@@ -380,6 +380,7 @@ internal sealed partial class Parser
         identifiers = null!;
         notParenthesizedArrow = null;
         topLevel = true;
+        intersectingChangeSet.Clear();
     }
 
     private SourceFile ParseSourceFileWorker(ScriptTarget languageVersion, bool setParentNodes, ScriptKind scriptKind, Action<SourceFile> setExternalModuleIndicator, JSDocParsingMode jsDocParsingMode)

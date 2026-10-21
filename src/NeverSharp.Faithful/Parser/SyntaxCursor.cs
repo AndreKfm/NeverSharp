@@ -36,31 +36,28 @@ internal sealed class SyntaxCursor
 internal sealed partial class Parser
 {
     // TypeScript: `const intersectingChangeSet = new WeakSet<Node | NodeArray<Node>>();`
-    // This is the one permitted static mutable collection: a WeakSet is global mutable state in TypeScript as well, and a
-    // ConditionalWeakTable is its thread-safe counterpart with weak keys (the value is a constant marker). Entries are
-    // only ever added by the incremental parser, which Phase 1 does not run (syntaxCursor is undefined).
-    private static readonly ConditionalWeakTable<object, object> IntersectingChangeSet = new();
+    // TypeScript's module-level WeakSet is per-parser instance state here (no mutable static state); reference equality,
+    // cleared in ClearState. Entries are only ever added by the incremental parser, which Phase 1 does not run.
+    private readonly HashSet<object> intersectingChangeSet = new(ReferenceEqualityComparer.Instance);
 
-    private static readonly object IntersectingChangeMarker = new();
-
-    internal static bool IntersectsIncrementalChange(Node node)
+    internal bool IntersectsIncrementalChange(Node node)
     {
-        return IntersectingChangeSet.TryGetValue(node, out _);
+        return intersectingChangeSet.Contains(node);
     }
 
-    internal static bool IntersectsIncrementalChange(NodeArray nodes)
+    internal bool IntersectsIncrementalChange(NodeArray nodes)
     {
-        return IntersectingChangeSet.TryGetValue(nodes, out _);
+        return intersectingChangeSet.Contains(nodes);
     }
 
-    internal static void MarkAsIntersectingIncrementalChange(Node node)
+    internal void MarkAsIntersectingIncrementalChange(Node node)
     {
-        IntersectingChangeSet.AddOrUpdate(node, IntersectingChangeMarker);
+        intersectingChangeSet.Add(node);
     }
 
-    internal static void MarkAsIntersectingIncrementalChange(NodeArray nodes)
+    internal void MarkAsIntersectingIncrementalChange(NodeArray nodes)
     {
-        IntersectingChangeSet.AddOrUpdate(nodes, IntersectingChangeMarker);
+        intersectingChangeSet.Add(nodes);
     }
 }
 
