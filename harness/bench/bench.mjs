@@ -135,7 +135,14 @@ function measure(name, list, expectedFiles, config) {
             medianPeakWorkingSetBytes: median(peaks.map(p => p.peakWorkingSetBytes)),
             medianPeakCommitBytes: median(peaks.map(p => p.peakCommitBytes)),
         },
-        runtime: null, // C# configurations: bytes allocated, GC count, GC pause (from the driver's own report)
+        // C# configurations report their own GC metrics (driver contract, docs/benchmark-harness.md §4.1).
+        runtime: output.allocatedBytes === undefined ? null : {
+            allocatedBytes: output.allocatedBytes,
+            gen0: output.gen0,
+            gen1: output.gen1,
+            gen2: output.gen2,
+            pauseMs: output.gcPauseMs,
+        },
         hyperfineExport: relative(outDir, exportFile),
     };
 }

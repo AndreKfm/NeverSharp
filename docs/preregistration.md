@@ -98,7 +98,19 @@ The ruleset files are committed before Phase 1 starts and pinned by that commit;
 
 Each module is ported independently by several AI models from the same inputs: the TypeScript source file at the pinned commit, the corresponding typescript-go file as a worked example, the port rules, and the dump tooling. Gate 1, then Gate 2. Only survivors are ranked, by module-level median wall-clock on the **tuning corpus** (section 3) and then by bytes allocated; never on the benchmark corpus (A1). Every failure is logged with the diff that killed it; those logs are published.
 
-**[OPEN]** The models (exact model identifiers and versions) and the number of attempts per model are fixed before Phase 1 starts and listed here.
+**[DECISION, 2026-10-21; the author delegated the choice of models to the assistant]** Models and attempts:
+
+| Role | Model | What it does |
+|---|---|---|
+| Orchestrator | Claude Opus 5.5 (`claude-opus-5-5`) | assembles the identical inputs, starts the porting agents, runs Gate 1 and Gate 2, ranks, logs; never edits an attempt's code |
+| Track F, attempts 1 and 2 per module | Claude Opus 5.5 (`claude-opus-5-5`) | independent porting agents, each with a fresh context |
+| Track F, attempt 3 per module | Claude Sonnet 5.5 (`claude-sonnet-5-5`) | independent porting agent, fresh context; keeps a comparison between models |
+| Track O variants | Claude Opus 5.5 (`claude-opus-5-5`) | one agent per variant; variants differ by optimization strategy (§5.4) |
+
+- **3 attempts per Track F module** (confirmed by the author), the same upper bound as Track O's variants.
+- **An attempt** is one agent run from the identical inputs. It may iterate against the Gate 1 and Gate 2 diffs until it passes or its budget is used up; attempts do not see each other's code. The orchestrator records each attempt's iterations, final diffs and pass/fail.
+- Why this split: two Opus attempts carry the chance of reaching byte-identical output within the budget; the Sonnet attempt keeps the brief's comparison between models at small cost. With a single model family the comparison measures mostly the spread between independent attempts; this is stated with every ranking.
+- Model identifiers are recorded with each attempt's log. If a listed model is unavailable when a module is ported, the replacement is an amendment.
 
 ### 5.3 JSDoc
 
@@ -281,6 +293,7 @@ For transparency, the decisions that were revised during Phase 0, before this do
 | 2026-10-21 | Idle check: median of ten 1 s windows instead of one 3 s mean | single short window decided by momentary spikes | B10 amendment |
 | 2026-10-21 | Two tracks: faithful (carries the verdict) and optimized (SIMD, stack allocation, NoAlloc, arenas, ≤ 3 measured variants per step, separately labeled) | author's decision before any C# code | §1, §5.4 |
 | 2026-10-21 | Additions from the hostile review: A1 ranking on the tuning corpus (closes a gap: Track F ranking was on the benchmark corpus), A2 fixed-cost run, A3 wording rule, A4 Linux replication, A5 tuning corpus with TypeScript's own sources, A7 pinned configurations, A8 driver file reading, A9 Track O coverage list | author's decision | hostile-review.md |
+| 2026-10-21 | Multi-model workflow fixed: Opus 5.5 orchestrates; Track F 3 attempts per module (2 × Opus 5.5, 1 × Sonnet 5.5); Track O variants by Opus 5.5 | author's decision on Opus 5.5 with agents and 3 attempts; split between models delegated to the assistant | §5.2 |
 | 2026-10-21 | Phase 1 budget 8 weeks → 12 weeks → 18 weeks, common to both tracks | two tracks do not fit into 8 weeks; the Phase 1 plan's estimate (≈ 123 h) does not fit into 12 weeks (84 h) | §9, phase1-plan.md §9 |
 
 ## 13. Prior art
@@ -290,11 +303,11 @@ typescript-go (the reference and the method this project copies); oxc and swc (R
 ## 14. Before tagging
 
 - [x] Author confirmed every **[DECISION]** in this document (2026-10-21).
-- [ ] **[OPEN]** Multi-model workflow: models and attempts per model (5.2).
+- [x] Multi-model workflow: models and attempts per model (5.2).
 - [x] Phase 1 plan committed ([phase1-plan.md](phase1-plan.md)): module boundaries, JSDoc scope, effort estimate.
 - [x] JSDoc section of the dump format specified and the tsc 6.0.3 side implemented (4.2; ast-dump-format.md §4, format version 1).
 - [x] Analyzer ruleset committed for both tracks (5.1, 5.4): `eng/Gate2.*.props`, `eng/BannedSymbols.*.txt`, `eng/simd.noalloc-allowlist.toml`, `scripts/check-headers.mjs`; placeholder projects `src/NeverSharp.Faithful`, `src/NeverSharp.Optimized` build clean.
-- [ ] C# driver contract: `NEVERSHARP_PRIORITY`, JSON output with file count, node count, priority, GC metrics (6.3, 7).
+- [x] C# driver contract (6.3, 7): [benchmark-harness.md](benchmark-harness.md) §4.1; the runner stores the C# GC metrics.
 - [x] Tuning corpus manifest generated (section 3): `harness/bench/tuning.mjs`, 24,511 files (23,910 tests/cases units, 601 TypeScript sources), 37.5 MiB.
 - [ ] Configuration project files committed (A7): `eng/RuntimeConfiguration.props` committed; a NativeAOT publish of each configuration is verified once the first driver exists (M0).
 - [x] **A6** feasible and adopted: `harness/bench/crosscheck.mjs` runs in the deciding session and is reported with the result: per repository, the Go driver's parse time (median minus fixed cost) against tsgo's own `Parse time` (`--extendedDiagnostics`, resolution and lib files off, median of 5). Feasibility check 2026-10-21 (different sessions, not a measurement): driver/tsgo 0.72–1.05 across the five repositories, i.e. the driver is not slower than tsgo's own parse phase except +5 % on vscode.

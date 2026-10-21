@@ -73,6 +73,21 @@ Decisions:
 - **[DECISION B4] typescript-go is measured parallel and single-threaded; the parallel default is the baseline** in relative comparisons, because that is typescript-go's wall-clock. Parallel parsing has a counterpart in typescript-go (`core.WorkGroup` in `internal/compiler/program.go`), so under the port rules the C# port may parallelize parsing the same way.
 - **[DECISION B5] The Go driver is ours, the parser and scheduling are Microsoft's.** There is no parse-only mode in the tsgo CLI. The driver is a loop of about 30 lines around `core.WorkGroup`, `osvfs` and `parser.ParseSourceFile`, compiled with Microsoft's toolset and flags. This is the one place where the Go side contains code we wrote; it is kept minimal and is published.
 
+### 4.1 Driver contract
+
+Every parse-only driver, existing or future (tsc 6.0.3, typescript-go 7.0.2, every C# configuration of both tracks), follows the same contract, so the runner treats them alike:
+
+| | |
+|---|---|
+| Invocation | `<driver> [--single] <file list>`; the file list has one absolute path per line. `--single` selects single-threaded scheduling where the driver has a parallel mode. |
+| Environment | `NEVERSHARP_PRIORITY=high`: raise the own process to the high priority class as the first action (B9). |
+| Work | read every file with `ts.sys.readFile` semantics (pre-registration A8), parse it in the measured mode (`ParseForTypeErrors`), keep every tree alive until the end (B2); parallel mode: one work item per file (read + parse), runtime default degree of parallelism. |
+| Output | exactly one JSON line on stdout as the last line: `driver` (string), `files` (count parsed), `nodes` (sum of the parser's node counts), `priority` (`"high"` or `"normal"`, the class in effect), and the size read (`chars` or `bytes`). |
+| C# drivers additionally | `allocatedBytes` (`GC.GetTotalAllocatedBytes(true)`), `gen0`, `gen1`, `gen2` (`GC.CollectionCount`), `gcPauseMs` (`GC.GetTotalPauseDuration()`), all read after the last file is parsed; the runner stores them as `runtime` in run.json and reports them in the runtime-metrics table. |
+| Exit code | 0 on success; anything else fails the run. |
+
+The runner checks `files` against the parse set and `priority` against the requested class before timing (section 2).
+
 ## 5. Measurement
 
 - **[DECISION B6] hyperfine with `--shell=none`.** No shell between hyperfine and the driver, so there is no shell start-up in the numbers and no shell-dependent noise. Commands are passed with forward-slash paths because hyperfine splits them by POSIX shell-word rules, in which a backslash is an escape character.

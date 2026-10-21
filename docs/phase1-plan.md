@@ -79,7 +79,7 @@ Consequence: about 1,300 more lines to port (JSDoc parser and scanning) than a J
 
 - **Shape:** node classes with the source's fields; functions and data; the factory and the parser's closure state as in the source (rule 1). Strings are UTF-16 (rule 2).
 - **Permitted optimizations (rule 3, with counterpart):** parser and scanner pooling (`getParser`/`putParser`, `internal/parser/parser.go`), node allocation from per-type arenas where typescript-go's schema marks `"arena": true` (`_scripts/ast.json`), node-list slice arenas (`nodeSliceArena`), parallel file parsing on a work-group counterpart (`internal/core/workgroup.go`). Each is cited where it is used.
-- **Work per module:** ported by the models of the multi-model workflow from the same inputs; Gate 1 (or G1a), then Gate 2; survivors ranked by module-level speed on the tuning corpus and bytes allocated. **[OPEN]** models and attempts per model.
+- **Work per module:** ported by the models of the multi-model workflow from the same inputs; Gate 1 (or G1a), then Gate 2; survivors ranked by module-level speed on the tuning corpus and bytes allocated. Models and attempts: pre-registration §5.2 (3 attempts per module: 2 × Opus 5.5, 1 × Sonnet 5.5, orchestrated by Opus 5.5).
 - **Measured at every step,** for the record, not for selection beyond the ranking above: each merged module gets a measurement record on the tuning corpus.
 
 ## 7. Track O: optimized port
@@ -152,5 +152,5 @@ These are estimates of the author's time with AI models doing the porting; the l
 ## 10. Open before the pre-registration tag
 
 - [x] Budget: 18 weeks (section 9).
-- [ ] **[OPEN]** Models and attempts per model (pre-registration 5.2).
+- [x] Models and attempts per model (pre-registration §5.2).
 - [x] Author confirmed the **[DECISION]** items of this plan (2026-10-21): one generator with a TS 6.0.3 schema (3), token-stream gate G1a (4), JSDoc dump section format and reproducing the v6.0.3 JSDoc defect (5), Track O starting from Track F modules and profile-ordered steps (7).
