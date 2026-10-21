@@ -14,7 +14,10 @@ Configurations (all reported; none is dropped after the fact):
 | `tsc6-parse` | tsc 6.0.3 compiler API on Node 24.21.0, single-threaded (as tsc is) |
 | `tsgo7-parse` | typescript-go 7.0.2 parser, parallel: typescript-go's default |
 | `tsgo7-parse-single` | typescript-go 7.0.2 parser, single-threaded: what tsgo's `--singleThreaded` switches |
-| C# configurations | added in Phase 1: .NET 10 JIT and NativeAOT, each with Workstation and Server GC |
+| `cs-<runtime>`, `cs-<runtime>-single` | Track F, `<runtime>` = `aot-ws` (primary), `aot-srv`, `jit-ws`, `jit-srv` (pre-registration §6.4); drivers built by `harness/bench/build-cs.mjs` |
+| `cs-o-<runtime>`, `cs-o-<runtime>-single` | Track O, same runtimes |
+
+The validation run rejects a driver that reports another runtime than its configuration names (e.g. a `-srv` build running with Workstation GC) or zero nodes on a non-empty list (a driver without a parser).
 
 ## 2. Pipeline
 

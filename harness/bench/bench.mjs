@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // Benchmark runner. For every (repository, configuration) pair:
-//   1. one validation run: the driver's output must report the expected file count;
+//   1. one validation run: the driver's output must report the expected file count, a
+//      node count above zero and, for C# drivers, the runtime its configuration names;
 //   2. wall-clock via hyperfine (--shell=none, warmup, N runs, JSON export);
 //   3. a separate memory pass under peakmem (not timed together with step 2).
 // Writes artifacts/bench/results/<runId>/run.json (schema: result.schema.json)
@@ -11,6 +12,9 @@
 //
 // Usage: node bench.mjs [--repos a,b] [--configs x,y] [--runs 20] [--warmup 3]
 //                       [--mem-runs 5] [--priority high|normal] [--corpus benchmark|tuning] [--label text]
+//
+// Default: every configuration (C# drivers: build-cs.mjs). Before the C# parsers exist,
+// select the configurations with --configs.
 //
 // --priority high (default): every driver raises itself to the high priority
 // class at start (NEVERSHARP_PRIORITY=high) and reports the class in effect;
@@ -39,6 +43,25 @@ const configurations = [
     { id: "tsgo7-parse", label: "typescript-go 7.0.2, parallel (default)", threads: "parallel", command: list => [parseGo, list] },
     { id: "tsgo7-parse-single", label: "typescript-go 7.0.2, single-threaded", threads: "single", command: list => [parseGo, "--single", list] },
 ];
+// C# configurations of pre-registration §6.4, built by build-cs.mjs. The driver reports the
+// runtime it actually runs with; the runner checks it against the configuration's name.
+const csRuntimes = {
+    "aot-ws": "NativeAOT, Workstation GC",
+    "aot-srv": "NativeAOT, Server GC",
+    "jit-ws": ".NET 10 JIT (TieredPGO default), Workstation GC",
+    "jit-srv": ".NET 10 JIT, Server GC",
+};
+for (const [track, prefix] of [["faithful", "cs"], ["optimized", "cs-o"]]) {
+    for (const [runtime, description] of Object.entries(csRuntimes)) {
+        const driver = join(bin, "cs", `${track}-${runtime}`, `parse-cs-${track}-${runtime}${exe}`);
+        const primary = runtime === "aot-ws" ? (track === "faithful" ? " (primary C# configuration)" : " (primary Track O configuration)") : "";
+        configurations.push(
+            { id: `${prefix}-${runtime}`, label: `C# Track ${track === "faithful" ? "F" : "O"}, ${description}, parallel${primary}`, threads: "parallel",
+                expectDriver: `cs-${track}-${runtime}-parallel`, command: list => [driver, list] },
+            { id: `${prefix}-${runtime}-single`, label: `C# Track ${track === "faithful" ? "F" : "O"}, ${description}, single-threaded`, threads: "single",
+                expectDriver: `cs-${track}-${runtime}-single`, command: list => [driver, "--single", list] });
+    }
+}
 
 const runs = Number(arg("--runs", "20"));
 const warmup = Number(arg("--warmup", "3"));
@@ -55,6 +78,7 @@ const corpusName = arg("--corpus", "benchmark");
 if (corpusName !== "benchmark" && corpusName !== "tuning") throw new Error("--corpus must be benchmark or tuning");
 const fileManifest = JSON.parse(readFileSync(join(benchDir, "filelists", corpusName === "tuning" ? "tuning-manifest.json" : "manifest.json"), "utf8"));
 const repos = (corpusName === "tuning" ? ["tuning"] : pins.benchmarkCorpus.repos.map(r => r.name)).filter(r => !repoFilter || repoFilter.includes(r));
+for (const id of configFilter ?? []) if (!configurations.some(c => c.id === id)) throw new Error(`unknown configuration ${id}`);
 const configs = configurations.filter(c => !configFilter || configFilter.includes(c.id));
 
 // hyperfine --shell=none splits the command line with POSIX shell-word rules, where a
@@ -92,6 +116,8 @@ function measure(name, list, expectedFiles, config) {
     const output = JSON.parse(check.stdout.trim().split("\n").pop());
     if (output.files !== expectedFiles) throw new Error(`${config.id} on ${name}: parsed ${output.files} files, expected ${expectedFiles}`);
     if (output.priority !== priority) throw new Error(`${config.id} on ${name}: driver reports priority class ${output.priority}, expected ${priority}`);
+    if (config.expectDriver && output.driver !== config.expectDriver) throw new Error(`${config.id} on ${name}: driver reports ${output.driver}, expected ${config.expectDriver}`);
+    if (expectedFiles > 0 && !(output.nodes > 0)) throw new Error(`${config.id} on ${name}: driver reports ${output.nodes} nodes (no parser behind the driver?)`);
 
     // 2. wall-clock
     const exportFile = join(outDir, `hyperfine-${name}-${config.id}.json`);
