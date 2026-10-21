@@ -5,4 +5,8 @@
     <RootNamespace>NeverSharp.Optimized</RootNamespace>
     <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
+  <ItemGroup>
+    <!-- Generated data shared by both tracks (tools/NeverSharp.Generate): diagnostic messages, enums. -->
+    <Compile Include="$(RepoRoot)src/Generated/*.g.cs" LinkBase="Generated" />
+  </ItemGroup>
 </Project>

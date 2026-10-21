@@ -40,6 +40,8 @@ per upstream file.
 - Files written from scratch carry only the copyright and SPDX lines. Under `src/`,
   where everything is expected to be ported, such a file must say so explicitly with
   `// Original code (not ported): <reason>` as its third line.
+- Files generated from upstream data (`src/Generated/*.g.cs`) carry `// Generated from <path>` with the
+  commit, `Portions Copyright (c) Microsoft Corporation.` and the change notice; the generator writes them.
 - `node scripts/check-headers.mjs` checks every file under `src/` (part of Gate 2).
 
 ## Reference checkouts
