@@ -62,6 +62,13 @@ function csType(cs, optional) {
     }
 }
 
+// Fields whose declared type in types.ts is narrower than what the parser stores (TypeScript does not
+// check at run time). JSDocSignature.parameters: parseCallbackTagParameters (parser.ts) also keeps
+// non-parameter tags there, e.g. @this inside @callback (equivalence unit callbackTag4.ts).
+const FIELD_OVERRIDES = {
+    "JSDocSignature.parameters": { type: "Node[]?", init: "", note: "types.ts: readonly JSDocParameterTag[]; the parser also stores other JSDoc tags (@this in @callback)" },
+};
+
 // Non-node property types the parser assigns. Plain data maps to a C# type here; fields typed by
 // a non-node interface of types.ts are omitted, and the port declares them in a partial class
 // with its ported type (they are part of the ported module, not of the node shapes).
@@ -137,7 +144,7 @@ export function emitFaithful(schema) {
         for (const p of props.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0)) {
             let name = pascal(p.name);
             if (name === cls) { report.collisions.push(`${cls}.${p.name}`); name += "_"; }
-            const t = csType(p.cs, p.optional);
+            const t = FIELD_OVERRIDES[`${cls}.${p.name}`] ?? csType(p.cs, p.optional);
             if (t.omit) { report.omitted = (report.omitted ?? 0) + 1; continue; }
             lines.push(`    public ${t.type} ${name}${t.init};${t.note ? ` // ${t.note}` : ""}`);
             report.fields++;

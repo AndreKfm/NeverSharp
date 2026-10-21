@@ -1133,7 +1133,7 @@ public sealed partial class JSDocSignature : Node
     public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public object? Locals; // TypeScript: SymbolTable; binder/checker data, not used by the parser
     public Node? NextContainer;
-    public JSDocParameterTag[]? Parameters;
+    public Node[]? Parameters; // types.ts: readonly JSDocParameterTag[]; the parser also stores other JSDoc tags (@this in @callback)
     public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public JSDocReturnTag Type = null!;
     public JSDocTemplateTag[]? TypeParameters;
