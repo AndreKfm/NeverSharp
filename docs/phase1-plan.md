@@ -69,6 +69,8 @@ Track F and Track O get different emitters from the same schema: node classes (T
 | M5 | JSDoc parser | `parseJSDocCommentWorker` and JSDoc type parsing, both `JSDocParsingMode.ParseAll` and `ParseForTypeErrors` | **G1 complete (Gate 1)** |
 | M6 | Measurement | protocol-compliant run with `tsgo7-parse` in the same session | — |
 
+**Amended 2026-10-21 (author: "go ahead with M3 and M4"):** M3 and M4 are ported together by the same attempts (the factory has no gate of its own). The M4 gate "G1, JSDoc section excluded" is implemented as a comparison with JSDoc parsing switched off on both sides (`JSDocParsingMode.ParseNone`, tsc dump `dumps/ts-parsenone`), because removing the JSDoc lines from tsc's ParseAll dump is not equivalent: JSDoc parsing changes non-JSDoc output in 279 units (e.g. `import("…")` in a JSDoc type sets `PossiblyContainsDynamicImport` on the source file; `harness/astdump/check-jsdoc-independence.mjs`). With ParseNone the parser never enters `namespace JSDocParser`, which is exactly M5's scope. Gate 1 proper (ParseAll) closes M5.
+
 **[DECISION, CONFIRMED] Intermediate gate G1a for the scanner.** tsc exposes its scanner (`ts.createScanner`). A token-stream dump (kind, token start, end, token flags, token value for literals and identifiers, scanner diagnostics) of every unit, scanned in normal mode, is compared byte for byte before the parser starts. It finds scanner errors where they are cheap to find; contextual rescans (`reScanGreaterToken`, template and regex rescans, JSX and JSDoc modes) are covered by G1 later.
 
 ## 5. JSDoc scope

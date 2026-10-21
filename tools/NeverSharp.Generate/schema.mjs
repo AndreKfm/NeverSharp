@@ -168,7 +168,15 @@ export function extractSchema() {
             if (elem && checker.isTypeAssignableTo(elem, nodeType)) return { k: "array", elem: concreteNames.has(symbolName(elem)) ? symbolName(elem) : "Node" };
             return { k: "object", ts: checker.typeToString(t) };
         }
-        if (all(p => checker.isTypeAssignableTo(p, nodeType))) return { k: "node", cls: parts.length === 1 && concreteNames.has(symbolName(t)) ? symbolName(t) : "Node" };
+        if (all(p => checker.isTypeAssignableTo(p, nodeType))) {
+            // Token<K>: the class NodeAllocator creates for K (EndOfFileToken has its own class, as a JSDocContainer).
+            if (parts.length === 1 && symbolName(t) === "Token") {
+                const kindArg = checker.getTypeArguments(t)[0];
+                const kindName = kindArg && checker.typeToString(kindArg).replace(/^SyntaxKind\./, "");
+                if (kindName && kindToClass[kindName]) return { k: "node", cls: kindToClass[kindName] };
+            }
+            return { k: "node", cls: parts.length === 1 && concreteNames.has(symbolName(t)) ? symbolName(t) : "Node" };
+        }
         return { k: "object", ts: checker.typeToString(t) };
     }
     const interfaces = {};

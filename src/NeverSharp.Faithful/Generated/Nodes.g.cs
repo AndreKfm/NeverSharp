@@ -83,20 +83,20 @@ public sealed partial class ArrowFunction : Node
 {
     public AsteriskToken? AsteriskToken;
     public Node Body = null!;
-    public object? EndFlowNode; // TypeScript: FlowNode; not used by the parser
+    public object? EndFlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
     public EqualsGreaterThanToken EqualsGreaterThanToken = null!;
     public ExclamationToken? ExclamationToken;
-    public object? FlowNode; // TypeScript: FlowNode; not used by the parser
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
-    public object? Locals; // TypeScript: SymbolTable; not used by the parser
+    public object? FlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
+    public object? Locals; // TypeScript: SymbolTable; binder/checker data, not used by the parser
     public NodeArray? Modifiers;
     public object? Name; // declared `?: undefined`
     public Node? NextContainer;
     public NodeArray Parameters = null!; // elements: ParameterDeclaration
     public QuestionToken? QuestionToken;
-    public object? ReturnFlowNode; // TypeScript: FlowNode; not used by the parser
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? ReturnFlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Node? Type;
     public NodeArray? TypeArguments;
     public NodeArray? TypeParameters; // elements: TypeParameterDeclaration
@@ -156,31 +156,31 @@ public sealed partial class BigIntLiteral : Node
 /// <summary>types.ts: BinaryExpression.</summary>
 public sealed partial class BinaryExpression : Node
 {
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
     public Node Left = null!;
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Node OperatorToken = null!;
     public Node Right = null!;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
 }
 
 /// <summary>types.ts: BindingElement.</summary>
 public sealed partial class BindingElement : Node
 {
     public DotDotDotToken? DotDotDotToken;
-    public object? FlowNode; // TypeScript: FlowNode; not used by the parser
+    public object? FlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
     public Node? Initializer;
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Node Name = null!;
     public Node? PropertyName;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
 }
 
 /// <summary>types.ts: Block.</summary>
 public sealed partial class Block : Node
 {
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? Locals; // TypeScript: SymbolTable; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? Locals; // TypeScript: SymbolTable; binder/checker data, not used by the parser
     public bool MultiLine;
     public Node? NextContainer;
     public NodeArray Statements = null!;
@@ -189,18 +189,16 @@ public sealed partial class Block : Node
 /// <summary>types.ts: BreakStatement.</summary>
 public sealed partial class BreakStatement : Node
 {
-    public object? FlowNode; // TypeScript: FlowNode; not used by the parser
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
+    public object? FlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
     public Identifier? Label;
 }
 
 /// <summary>types.ts: Bundle.</summary>
+// Declared by the port in a partial class: syntheticFileReferences (readonly FileReference[]), syntheticTypeReferences (readonly FileReference[]), syntheticLibReferences (readonly FileReference[]).
 public sealed partial class Bundle : Node
 {
     public SourceFile[]? SourceFiles;
-    public object? SyntheticFileReferences; // TypeScript: readonly FileReference[]; not used by the parser
-    public object? SyntheticLibReferences; // TypeScript: readonly FileReference[]; not used by the parser
-    public object? SyntheticTypeReferences; // TypeScript: readonly FileReference[]; not used by the parser
 }
 
 /// <summary>types.ts: CallExpression.</summary>
@@ -208,23 +206,23 @@ public sealed partial class CallExpression : Node
 {
     public NodeArray Arguments = null!;
     public Node Expression = null!;
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public QuestionDotToken? QuestionDotToken;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public NodeArray? TypeArguments;
 }
 
 /// <summary>types.ts: CallSignatureDeclaration.</summary>
 public sealed partial class CallSignatureDeclaration : Node
 {
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
-    public object? Locals; // TypeScript: SymbolTable; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
+    public object? Locals; // TypeScript: SymbolTable; binder/checker data, not used by the parser
     public Node? Name;
     public Node? NextContainer;
     public NodeArray Parameters = null!; // elements: ParameterDeclaration
     public QuestionToken? QuestionToken;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Node? Type;
     public NodeArray? TypeArguments;
     public NodeArray? TypeParameters; // elements: TypeParameterDeclaration
@@ -234,7 +232,7 @@ public sealed partial class CallSignatureDeclaration : Node
 public sealed partial class CaseBlock : Node
 {
     public NodeArray Clauses = null!;
-    public object? Locals; // TypeScript: SymbolTable; not used by the parser
+    public object? Locals; // TypeScript: SymbolTable; binder/checker data, not used by the parser
     public Node? NextContainer;
 }
 
@@ -242,7 +240,7 @@ public sealed partial class CaseBlock : Node
 public sealed partial class CaseClause : Node
 {
     public Node Expression = null!;
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
     public NodeArray Statements = null!;
 }
 
@@ -255,7 +253,7 @@ public sealed partial class CaseKeyword : Node
 public sealed partial class CatchClause : Node
 {
     public Block Block = null!;
-    public object? Locals; // TypeScript: SymbolTable; not used by the parser
+    public object? Locals; // TypeScript: SymbolTable; binder/checker data, not used by the parser
     public Node? NextContainer;
     public VariableDeclaration? VariableDeclaration;
 }
@@ -264,12 +262,12 @@ public sealed partial class CatchClause : Node
 public sealed partial class ClassDeclaration : Node
 {
     public NodeArray? HeritageClauses; // elements: HeritageClause
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public NodeArray Members = null!;
     public NodeArray? Modifiers;
     public Identifier? Name;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public NodeArray? TypeParameters; // elements: TypeParameterDeclaration
 }
 
@@ -277,12 +275,12 @@ public sealed partial class ClassDeclaration : Node
 public sealed partial class ClassExpression : Node
 {
     public NodeArray? HeritageClauses; // elements: HeritageClause
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public NodeArray Members = null!;
     public NodeArray? Modifiers;
     public Identifier? Name;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public NodeArray? TypeParameters; // elements: TypeParameterDeclaration
 }
 
@@ -290,15 +288,15 @@ public sealed partial class ClassExpression : Node
 public sealed partial class ClassStaticBlockDeclaration : Node
 {
     public Block Body = null!;
-    public object? EndFlowNode; // TypeScript: FlowNode; not used by the parser
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
-    public object? Locals; // TypeScript: SymbolTable; not used by the parser
+    public object? EndFlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
+    public object? Locals; // TypeScript: SymbolTable; binder/checker data, not used by the parser
     public NodeArray? Modifiers;
     public Node? Name;
     public Node? NextContainer;
-    public object? ReturnFlowNode; // TypeScript: FlowNode; not used by the parser
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? ReturnFlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
 }
 
 /// <summary>types.ts: ColonToken.</summary>
@@ -323,8 +321,8 @@ public sealed partial class ConditionalExpression : Node
 {
     public ColonToken ColonToken = null!;
     public Node Condition = null!;
-    public object? FlowNodeWhenFalse; // TypeScript: FlowNode; not used by the parser
-    public object? FlowNodeWhenTrue; // TypeScript: FlowNode; not used by the parser
+    public object? FlowNodeWhenFalse; // TypeScript: FlowNode; binder/checker data, not used by the parser
+    public object? FlowNodeWhenTrue; // TypeScript: FlowNode; binder/checker data, not used by the parser
     public QuestionToken QuestionToken = null!;
     public Node WhenFalse = null!;
     public Node WhenTrue = null!;
@@ -336,7 +334,7 @@ public sealed partial class ConditionalTypeNode : Node
     public Node CheckType = null!;
     public Node ExtendsType = null!;
     public Node FalseType = null!;
-    public object? Locals; // TypeScript: SymbolTable; not used by the parser
+    public object? Locals; // TypeScript: SymbolTable; binder/checker data, not used by the parser
     public Node? NextContainer;
     public Node TrueType = null!;
 }
@@ -349,14 +347,14 @@ public sealed partial class ConstKeyword : Node
 /// <summary>types.ts: ConstructSignatureDeclaration.</summary>
 public sealed partial class ConstructSignatureDeclaration : Node
 {
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
-    public object? Locals; // TypeScript: SymbolTable; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
+    public object? Locals; // TypeScript: SymbolTable; binder/checker data, not used by the parser
     public Node? Name;
     public Node? NextContainer;
     public NodeArray Parameters = null!; // elements: ParameterDeclaration
     public QuestionToken? QuestionToken;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Node? Type;
     public NodeArray? TypeArguments;
     public NodeArray? TypeParameters; // elements: TypeParameterDeclaration
@@ -367,18 +365,18 @@ public sealed partial class ConstructorDeclaration : Node
 {
     public AsteriskToken? AsteriskToken;
     public Block? Body;
-    public object? EndFlowNode; // TypeScript: FlowNode; not used by the parser
+    public object? EndFlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
     public ExclamationToken? ExclamationToken;
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
-    public object? Locals; // TypeScript: SymbolTable; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
+    public object? Locals; // TypeScript: SymbolTable; binder/checker data, not used by the parser
     public NodeArray? Modifiers;
     public Node? Name;
     public Node? NextContainer;
     public NodeArray Parameters = null!; // elements: ParameterDeclaration
     public QuestionToken? QuestionToken;
-    public object? ReturnFlowNode; // TypeScript: FlowNode; not used by the parser
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? ReturnFlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Node? Type;
     public NodeArray? TypeArguments;
     public NodeArray? TypeParameters; // elements: TypeParameterDeclaration
@@ -387,14 +385,14 @@ public sealed partial class ConstructorDeclaration : Node
 /// <summary>types.ts: ConstructorTypeNode.</summary>
 public sealed partial class ConstructorTypeNode : Node
 {
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
-    public object? Locals; // TypeScript: SymbolTable; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
+    public object? Locals; // TypeScript: SymbolTable; binder/checker data, not used by the parser
     public NodeArray? Modifiers;
     public Node? Name;
     public Node? NextContainer;
     public NodeArray Parameters = null!; // elements: ParameterDeclaration
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Node Type = null!;
     public NodeArray? TypeArguments;
     public NodeArray? TypeParameters; // elements: TypeParameterDeclaration
@@ -403,16 +401,16 @@ public sealed partial class ConstructorTypeNode : Node
 /// <summary>types.ts: ContinueStatement.</summary>
 public sealed partial class ContinueStatement : Node
 {
-    public object? FlowNode; // TypeScript: FlowNode; not used by the parser
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
+    public object? FlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
     public Identifier? Label;
 }
 
 /// <summary>types.ts: DebuggerStatement.</summary>
 public sealed partial class DebuggerStatement : Node
 {
-    public object? FlowNode; // TypeScript: FlowNode; not used by the parser
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
+    public object? FlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
 }
 
 /// <summary>types.ts: DeclareKeyword.</summary>
@@ -447,8 +445,8 @@ public sealed partial class DeleteExpression : Node
 public sealed partial class DoStatement : Node
 {
     public Node Expression = null!;
-    public object? FlowNode; // TypeScript: FlowNode; not used by the parser
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
+    public object? FlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
     public Node Statement = null!;
 }
 
@@ -467,44 +465,44 @@ public sealed partial class ElementAccessExpression : Node
 {
     public Node ArgumentExpression = null!;
     public Node Expression = null!;
-    public object? FlowNode; // TypeScript: FlowNode; not used by the parser
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public object? FlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public QuestionDotToken? QuestionDotToken;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
 }
 
 /// <summary>types.ts: EmptyStatement.</summary>
 public sealed partial class EmptyStatement : Node
 {
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
 }
 
 /// <summary>types.ts: EndOfFileToken.</summary>
 public sealed partial class EndOfFileToken : Node
 {
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
 }
 
 /// <summary>types.ts: EnumDeclaration.</summary>
 public sealed partial class EnumDeclaration : Node
 {
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public NodeArray Members = null!; // elements: EnumMember
     public NodeArray? Modifiers;
     public Identifier Name = null!;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
 }
 
 /// <summary>types.ts: EnumMember.</summary>
 public sealed partial class EnumMember : Node
 {
     public Node? Initializer;
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Node Name = null!;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
 }
 
 /// <summary>types.ts: EqualsGreaterThanToken.</summary>
@@ -527,11 +525,11 @@ public sealed partial class ExportAssignment : Node
 {
     public Node Expression = null!;
     public bool IsExportEquals;
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public NodeArray? Modifiers;
     public Node? Name;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
 }
 
 /// <summary>types.ts: ExportDeclaration.</summary>
@@ -541,12 +539,12 @@ public sealed partial class ExportDeclaration : Node
     public ImportAttributes? Attributes;
     public Node? ExportClause;
     public bool IsTypeOnly;
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public NodeArray? Modifiers;
     public Node? ModuleSpecifier;
     public Node? Name;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
 }
 
 /// <summary>types.ts: ExportKeyword.</summary>
@@ -558,19 +556,19 @@ public sealed partial class ExportKeyword : Node
 public sealed partial class ExportSpecifier : Node
 {
     public bool IsTypeOnly;
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Node Name = null!;
     public Node? PropertyName;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
 }
 
 /// <summary>types.ts: ExpressionStatement.</summary>
 public sealed partial class ExpressionStatement : Node
 {
     public Node Expression = null!;
-    public object? FlowNode; // TypeScript: FlowNode; not used by the parser
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
+    public object? FlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
 }
 
 /// <summary>types.ts: ExpressionWithTypeArguments.</summary>
@@ -595,10 +593,10 @@ public sealed partial class FalseLiteral : Node
 public sealed partial class ForInStatement : Node
 {
     public Node Expression = null!;
-    public object? FlowNode; // TypeScript: FlowNode; not used by the parser
+    public object? FlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
     public Node Initializer = null!;
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? Locals; // TypeScript: SymbolTable; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? Locals; // TypeScript: SymbolTable; binder/checker data, not used by the parser
     public Node? NextContainer;
     public Node Statement = null!;
 }
@@ -608,10 +606,10 @@ public sealed partial class ForOfStatement : Node
 {
     public AwaitKeyword? AwaitModifier;
     public Node Expression = null!;
-    public object? FlowNode; // TypeScript: FlowNode; not used by the parser
+    public object? FlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
     public Node Initializer = null!;
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? Locals; // TypeScript: SymbolTable; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? Locals; // TypeScript: SymbolTable; binder/checker data, not used by the parser
     public Node? NextContainer;
     public Node Statement = null!;
 }
@@ -620,11 +618,11 @@ public sealed partial class ForOfStatement : Node
 public sealed partial class ForStatement : Node
 {
     public Node? Condition;
-    public object? FlowNode; // TypeScript: FlowNode; not used by the parser
+    public object? FlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
     public Node? Incrementor;
     public Node? Initializer;
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? Locals; // TypeScript: SymbolTable; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? Locals; // TypeScript: SymbolTable; binder/checker data, not used by the parser
     public Node? NextContainer;
     public Node Statement = null!;
 }
@@ -634,18 +632,18 @@ public sealed partial class FunctionDeclaration : Node
 {
     public AsteriskToken? AsteriskToken;
     public Block? Body;
-    public object? EndFlowNode; // TypeScript: FlowNode; not used by the parser
+    public object? EndFlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
     public ExclamationToken? ExclamationToken;
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
-    public object? Locals; // TypeScript: SymbolTable; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
+    public object? Locals; // TypeScript: SymbolTable; binder/checker data, not used by the parser
     public NodeArray? Modifiers;
     public Identifier? Name;
     public Node? NextContainer;
     public NodeArray Parameters = null!; // elements: ParameterDeclaration
     public QuestionToken? QuestionToken;
-    public object? ReturnFlowNode; // TypeScript: FlowNode; not used by the parser
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? ReturnFlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Node? Type;
     public NodeArray? TypeArguments;
     public NodeArray? TypeParameters; // elements: TypeParameterDeclaration
@@ -656,19 +654,19 @@ public sealed partial class FunctionExpression : Node
 {
     public AsteriskToken? AsteriskToken;
     public Block Body = null!;
-    public object? EndFlowNode; // TypeScript: FlowNode; not used by the parser
+    public object? EndFlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
     public ExclamationToken? ExclamationToken;
-    public object? FlowNode; // TypeScript: FlowNode; not used by the parser
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
-    public object? Locals; // TypeScript: SymbolTable; not used by the parser
+    public object? FlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
+    public object? Locals; // TypeScript: SymbolTable; binder/checker data, not used by the parser
     public NodeArray? Modifiers;
     public Identifier? Name;
     public Node? NextContainer;
     public NodeArray Parameters = null!; // elements: ParameterDeclaration
     public QuestionToken? QuestionToken;
-    public object? ReturnFlowNode; // TypeScript: FlowNode; not used by the parser
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? ReturnFlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Node? Type;
     public NodeArray? TypeArguments;
     public NodeArray? TypeParameters; // elements: TypeParameterDeclaration
@@ -677,14 +675,14 @@ public sealed partial class FunctionExpression : Node
 /// <summary>types.ts: FunctionTypeNode.</summary>
 public sealed partial class FunctionTypeNode : Node
 {
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
-    public object? Locals; // TypeScript: SymbolTable; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
+    public object? Locals; // TypeScript: SymbolTable; binder/checker data, not used by the parser
     public NodeArray? Modifiers; // declared `?: undefined`; assigned for grammar errors
     public Node? Name;
     public Node? NextContainer;
     public NodeArray Parameters = null!; // elements: ParameterDeclaration
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Node Type = null!;
     public NodeArray? TypeArguments;
     public NodeArray? TypeParameters; // elements: TypeParameterDeclaration
@@ -695,19 +693,19 @@ public sealed partial class GetAccessorDeclaration : Node
 {
     public AsteriskToken? AsteriskToken;
     public Block? Body;
-    public object? EndFlowNode; // TypeScript: FlowNode; not used by the parser
+    public object? EndFlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
     public ExclamationToken? ExclamationToken;
-    public object? FlowNode; // TypeScript: FlowNode; not used by the parser
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
-    public object? Locals; // TypeScript: SymbolTable; not used by the parser
+    public object? FlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
+    public object? Locals; // TypeScript: SymbolTable; binder/checker data, not used by the parser
     public NodeArray? Modifiers;
     public Node Name = null!;
     public Node? NextContainer;
     public NodeArray Parameters = null!; // elements: ParameterDeclaration
     public QuestionToken? QuestionToken;
-    public object? ReturnFlowNode; // TypeScript: FlowNode; not used by the parser
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? ReturnFlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Node? Type;
     public NodeArray? TypeArguments;
     public NodeArray? TypeParameters; // elements: TypeParameterDeclaration
@@ -723,11 +721,11 @@ public sealed partial class HeritageClause : Node
 /// <summary>types.ts: Identifier.</summary>
 public sealed partial class Identifier : Node
 {
-    public object? EscapedText; // TypeScript: (string & { __escapedIdentifier: void; }) | InternalSymbolName; not used by the parser
-    public object? FlowNode; // TypeScript: FlowNode; not used by the parser
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? EscapedText; // TypeScript: (string & { __escapedIdentifier: void; }) | InternalSymbolName; binder/checker data, not used by the parser
+    public object? FlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
 }
 
 /// <summary>types.ts: IfStatement.</summary>
@@ -735,8 +733,8 @@ public sealed partial class IfStatement : Node
 {
     public Node? ElseStatement;
     public Node Expression = null!;
-    public object? FlowNode; // TypeScript: FlowNode; not used by the parser
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
+    public object? FlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
     public Node ThenStatement = null!;
 }
 
@@ -759,11 +757,11 @@ public sealed partial class ImportAttributes : Node
 public sealed partial class ImportClause : Node
 {
     public bool IsTypeOnly;
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Identifier? Name;
     public Node? NamedBindings;
     public SyntaxKind PhaseModifier;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
 }
 
 /// <summary>types.ts: ImportDeclaration.</summary>
@@ -772,7 +770,7 @@ public sealed partial class ImportDeclaration : Node
     public Node? AssertClause;
     public ImportAttributes? Attributes;
     public ImportClause? ImportClause;
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
     public NodeArray? Modifiers;
     public Node ModuleSpecifier = null!;
 }
@@ -781,12 +779,12 @@ public sealed partial class ImportDeclaration : Node
 public sealed partial class ImportEqualsDeclaration : Node
 {
     public bool IsTypeOnly;
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public NodeArray? Modifiers;
     public Node ModuleReference = null!;
     public Identifier Name = null!;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
 }
 
 /// <summary>types.ts: ImportExpression.</summary>
@@ -798,10 +796,10 @@ public sealed partial class ImportExpression : Node
 public sealed partial class ImportSpecifier : Node
 {
     public bool IsTypeOnly;
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Identifier Name = null!;
     public Node? PropertyName;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
 }
 
 /// <summary>types.ts: ImportTypeAssertionContainer.</summary>
@@ -829,15 +827,15 @@ public sealed partial class InKeyword : Node
 /// <summary>types.ts: IndexSignatureDeclaration.</summary>
 public sealed partial class IndexSignatureDeclaration : Node
 {
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
-    public object? Locals; // TypeScript: SymbolTable; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
+    public object? Locals; // TypeScript: SymbolTable; binder/checker data, not used by the parser
     public NodeArray? Modifiers;
     public Node? Name;
     public Node? NextContainer;
     public NodeArray Parameters = null!; // elements: ParameterDeclaration
     public QuestionToken? QuestionToken;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Node Type = null!;
     public NodeArray? TypeArguments;
     public NodeArray? TypeParameters; // elements: TypeParameterDeclaration
@@ -860,12 +858,12 @@ public sealed partial class InferTypeNode : Node
 public sealed partial class InterfaceDeclaration : Node
 {
     public NodeArray? HeritageClauses; // elements: HeritageClause
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public NodeArray Members = null!;
     public NodeArray? Modifiers;
     public Identifier Name = null!;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public NodeArray? TypeParameters; // elements: TypeParameterDeclaration
 }
 
@@ -907,11 +905,11 @@ public sealed partial class JSDocCallbackTag : Node
 {
     public object? Comment; // string or NodeArray (TypeScript: string | NodeArray<...>)
     public Node? FullName;
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
-    public object? Locals; // TypeScript: SymbolTable; not used by the parser
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
+    public object? Locals; // TypeScript: SymbolTable; binder/checker data, not used by the parser
     public Identifier? Name;
     public Node? NextContainer;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Identifier TagName = null!;
     public JSDocSignature TypeExpression = null!;
 }
@@ -934,10 +932,10 @@ public sealed partial class JSDocDeprecatedTag : Node
 public sealed partial class JSDocEnumTag : Node
 {
     public object? Comment; // string or NodeArray (TypeScript: string | NodeArray<...>)
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
-    public object? Locals; // TypeScript: SymbolTable; not used by the parser
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
+    public object? Locals; // TypeScript: SymbolTable; binder/checker data, not used by the parser
     public Node? NextContainer;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Identifier TagName = null!;
     public JSDocTypeExpression TypeExpression = null!;
 }
@@ -945,13 +943,13 @@ public sealed partial class JSDocEnumTag : Node
 /// <summary>types.ts: JSDocFunctionType.</summary>
 public sealed partial class JSDocFunctionType : Node
 {
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
-    public object? Locals; // TypeScript: SymbolTable; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
+    public object? Locals; // TypeScript: SymbolTable; binder/checker data, not used by the parser
     public Node? Name;
     public Node? NextContainer;
     public NodeArray Parameters = null!; // elements: ParameterDeclaration
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Node? Type;
     public NodeArray? TypeArguments;
     public NodeArray? TypeParameters; // elements: TypeParameterDeclaration
@@ -1056,9 +1054,9 @@ public sealed partial class JSDocParameterTag : Node
     public object? Comment; // string or NodeArray (TypeScript: string | NodeArray<...>)
     public bool IsBracketed;
     public bool IsNameFirst;
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Node Name = null!;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Identifier TagName = null!;
     public JSDocTypeExpression? TypeExpression;
 }
@@ -1076,9 +1074,9 @@ public sealed partial class JSDocPropertyTag : Node
     public object? Comment; // string or NodeArray (TypeScript: string | NodeArray<...>)
     public bool IsBracketed;
     public bool IsNameFirst;
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Node Name = null!;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Identifier TagName = null!;
     public JSDocTypeExpression? TypeExpression;
 }
@@ -1131,12 +1129,12 @@ public sealed partial class JSDocSeeTag : Node
 /// <summary>types.ts: JSDocSignature.</summary>
 public sealed partial class JSDocSignature : Node
 {
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
-    public object? Locals; // TypeScript: SymbolTable; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
+    public object? Locals; // TypeScript: SymbolTable; binder/checker data, not used by the parser
     public Node? NextContainer;
     public JSDocParameterTag[]? Parameters;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public JSDocReturnTag Type = null!;
     public JSDocTemplateTag[]? TypeParameters;
 }
@@ -1183,8 +1181,8 @@ public sealed partial class JSDocTypeLiteral : Node
 {
     public bool IsArrayType;
     public Node[]? JsDocPropertyTags;
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
 }
 
 /// <summary>types.ts: JSDocTypeTag.</summary>
@@ -1200,11 +1198,11 @@ public sealed partial class JSDocTypedefTag : Node
 {
     public object? Comment; // string or NodeArray (TypeScript: string | NodeArray<...>)
     public Node? FullName;
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
-    public object? Locals; // TypeScript: SymbolTable; not used by the parser
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
+    public object? Locals; // TypeScript: SymbolTable; binder/checker data, not used by the parser
     public Identifier? Name;
     public Node? NextContainer;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Identifier TagName = null!;
     public Node? TypeExpression;
 }
@@ -1231,17 +1229,17 @@ public sealed partial class JSDocVariadicType : Node
 public sealed partial class JsxAttribute : Node
 {
     public Node? Initializer;
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Node Name = null!;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
 }
 
 /// <summary>types.ts: JsxAttributes.</summary>
 public sealed partial class JsxAttributes : Node
 {
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public NodeArray Properties = null!;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
 }
 
 /// <summary>types.ts: JsxClosingElement.</summary>
@@ -1266,7 +1264,7 @@ public sealed partial class JsxElement : Node
 /// <summary>types.ts: JsxExpression.</summary>
 public sealed partial class JsxExpression : Node
 {
-    public Token? DotDotDotToken;
+    public DotDotDotToken? DotDotDotToken;
     public Node? Expression;
 }
 
@@ -1310,9 +1308,9 @@ public sealed partial class JsxSelfClosingElement : Node
 public sealed partial class JsxSpreadAttribute : Node
 {
     public Node Expression = null!;
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Node? Name;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
 }
 
 /// <summary>types.ts: JsxText.</summary>
@@ -1327,8 +1325,8 @@ public sealed partial class JsxText : Node
 /// <summary>types.ts: LabeledStatement.</summary>
 public sealed partial class LabeledStatement : Node
 {
-    public object? FlowNode; // TypeScript: FlowNode; not used by the parser
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
+    public object? FlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
     public Identifier Label = null!;
     public Node Statement = null!;
 }
@@ -1342,14 +1340,14 @@ public sealed partial class LiteralTypeNode : Node
 /// <summary>types.ts: MappedTypeNode.</summary>
 public sealed partial class MappedTypeNode : Node
 {
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
-    public object? Locals; // TypeScript: SymbolTable; not used by the parser
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
+    public object? Locals; // TypeScript: SymbolTable; binder/checker data, not used by the parser
     public NodeArray? Members;
     public Node? NameType;
     public Node? NextContainer;
     public Node? QuestionToken;
     public Node? ReadonlyToken;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Node? Type;
     public TypeParameterDeclaration TypeParameter = null!;
 }
@@ -1357,7 +1355,7 @@ public sealed partial class MappedTypeNode : Node
 /// <summary>types.ts: MetaProperty.</summary>
 public sealed partial class MetaProperty : Node
 {
-    public object? FlowNode; // TypeScript: FlowNode; not used by the parser
+    public object? FlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
     public SyntaxKind KeywordToken;
     public Identifier Name = null!;
 }
@@ -1367,19 +1365,19 @@ public sealed partial class MethodDeclaration : Node
 {
     public AsteriskToken? AsteriskToken;
     public Block? Body;
-    public object? EndFlowNode; // TypeScript: FlowNode; not used by the parser
+    public object? EndFlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
     public ExclamationToken? ExclamationToken;
-    public object? FlowNode; // TypeScript: FlowNode; not used by the parser
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
-    public object? Locals; // TypeScript: SymbolTable; not used by the parser
+    public object? FlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
+    public object? Locals; // TypeScript: SymbolTable; binder/checker data, not used by the parser
     public NodeArray? Modifiers;
     public Node Name = null!;
     public Node? NextContainer;
     public NodeArray Parameters = null!; // elements: ParameterDeclaration
     public QuestionToken? QuestionToken;
-    public object? ReturnFlowNode; // TypeScript: FlowNode; not used by the parser
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? ReturnFlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Node? Type;
     public NodeArray? TypeArguments;
     public NodeArray? TypeParameters; // elements: TypeParameterDeclaration
@@ -1388,15 +1386,15 @@ public sealed partial class MethodDeclaration : Node
 /// <summary>types.ts: MethodSignature.</summary>
 public sealed partial class MethodSignature : Node
 {
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
-    public object? Locals; // TypeScript: SymbolTable; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
+    public object? Locals; // TypeScript: SymbolTable; binder/checker data, not used by the parser
     public NodeArray? Modifiers;
     public Node Name = null!;
     public Node? NextContainer;
     public NodeArray Parameters = null!; // elements: ParameterDeclaration
     public QuestionToken? QuestionToken;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Node? Type;
     public NodeArray? TypeArguments;
     public NodeArray? TypeParameters; // elements: TypeParameterDeclaration
@@ -1410,17 +1408,17 @@ public sealed partial class MinusToken : Node
 /// <summary>types.ts: MissingDeclaration.</summary>
 public sealed partial class MissingDeclaration : Node
 {
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public NodeArray? Modifiers;
     public Identifier? Name;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
 }
 
 /// <summary>types.ts: ModuleBlock.</summary>
 public sealed partial class ModuleBlock : Node
 {
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
     public NodeArray Statements = null!;
 }
 
@@ -1428,13 +1426,13 @@ public sealed partial class ModuleBlock : Node
 public sealed partial class ModuleDeclaration : Node
 {
     public Node? Body;
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
-    public object? Locals; // TypeScript: SymbolTable; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
+    public object? Locals; // TypeScript: SymbolTable; binder/checker data, not used by the parser
     public NodeArray? Modifiers;
     public Node Name = null!;
     public Node? NextContainer;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
 }
 
 /// <summary>types.ts: NamedExports.</summary>
@@ -1452,39 +1450,39 @@ public sealed partial class NamedImports : Node
 /// <summary>types.ts: NamedTupleMember.</summary>
 public sealed partial class NamedTupleMember : Node
 {
-    public Token? DotDotDotToken;
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public DotDotDotToken? DotDotDotToken;
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Identifier Name = null!;
-    public Token? QuestionToken;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public QuestionToken? QuestionToken;
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Node Type = null!;
 }
 
 /// <summary>types.ts: NamespaceExport.</summary>
 public sealed partial class NamespaceExport : Node
 {
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Node Name = null!;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
 }
 
 /// <summary>types.ts: NamespaceExportDeclaration.</summary>
 public sealed partial class NamespaceExportDeclaration : Node
 {
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public NodeArray? Modifiers;
     public Identifier Name = null!;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
 }
 
 /// <summary>types.ts: NamespaceImport.</summary>
 public sealed partial class NamespaceImport : Node
 {
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Identifier Name = null!;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
 }
 
 /// <summary>types.ts: NewExpression.</summary>
@@ -1492,8 +1490,8 @@ public sealed partial class NewExpression : Node
 {
     public NodeArray? Arguments;
     public Node Expression = null!;
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public NodeArray? TypeArguments;
 }
 
@@ -1502,9 +1500,9 @@ public sealed partial class NoSubstitutionTemplateLiteral : Node
 {
     public bool HasExtendedUnicodeEscape;
     public bool IsUnterminated;
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public string? RawText;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public TokenFlags TemplateFlags;
     public string Text = null!;
 }
@@ -1518,16 +1516,16 @@ public sealed partial class NonNullExpression : Node
 /// <summary>types.ts: NotEmittedStatement.</summary>
 public sealed partial class NotEmittedStatement : Node
 {
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
 }
 
 /// <summary>types.ts: NotEmittedTypeElement.</summary>
 public sealed partial class NotEmittedTypeElement : Node
 {
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Node? Name;
     public QuestionToken? QuestionToken;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
 }
 
 /// <summary>types.ts: NullLiteral.</summary>
@@ -1540,9 +1538,9 @@ public sealed partial class NumericLiteral : Node
 {
     public bool HasExtendedUnicodeEscape;
     public bool IsUnterminated;
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public TokenFlags NumericLiteralFlags;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public string Text = null!;
 }
 
@@ -1555,11 +1553,11 @@ public sealed partial class ObjectBindingPattern : Node
 /// <summary>types.ts: ObjectLiteralExpression.</summary>
 public sealed partial class ObjectLiteralExpression : Node
 {
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public bool MultiLine;
     public NodeArray Properties = null!;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
 }
 
 /// <summary>types.ts: OmittedExpression.</summary>
@@ -1588,12 +1586,12 @@ public sealed partial class ParameterDeclaration : Node
 {
     public DotDotDotToken? DotDotDotToken;
     public Node? Initializer;
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public NodeArray? Modifiers;
     public Node Name = null!;
     public QuestionToken? QuestionToken;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Node? Type;
 }
 
@@ -1601,7 +1599,7 @@ public sealed partial class ParameterDeclaration : Node
 public sealed partial class ParenthesizedExpression : Node
 {
     public Node Expression = null!;
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
 }
 
 /// <summary>types.ts: ParenthesizedTypeNode.</summary>
@@ -1638,7 +1636,7 @@ public sealed partial class PrefixUnaryExpression : Node
 /// <summary>types.ts: PrivateIdentifier.</summary>
 public sealed partial class PrivateIdentifier : Node
 {
-    public object? EscapedText; // TypeScript: (string & { __escapedIdentifier: void; }) | InternalSymbolName; not used by the parser
+    public object? EscapedText; // TypeScript: (string & { __escapedIdentifier: void; }) | InternalSymbolName; binder/checker data, not used by the parser
 }
 
 /// <summary>types.ts: PrivateKeyword.</summary>
@@ -1650,12 +1648,12 @@ public sealed partial class PrivateKeyword : Node
 public sealed partial class PropertyAccessExpression : Node
 {
     public Node Expression = null!;
-    public object? FlowNode; // TypeScript: FlowNode; not used by the parser
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public object? FlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Node Name = null!;
     public QuestionDotToken? QuestionDotToken;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
 }
 
 /// <summary>types.ts: PropertyAssignment.</summary>
@@ -1663,12 +1661,12 @@ public sealed partial class PropertyAssignment : Node
 {
     public ExclamationToken? ExclamationToken;
     public Node Initializer = null!;
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public NodeArray? Modifiers;
     public Node Name = null!;
     public QuestionToken? QuestionToken;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
 }
 
 /// <summary>types.ts: PropertyDeclaration.</summary>
@@ -1676,12 +1674,12 @@ public sealed partial class PropertyDeclaration : Node
 {
     public ExclamationToken? ExclamationToken;
     public Node? Initializer;
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public NodeArray? Modifiers;
     public Node Name = null!;
     public QuestionToken? QuestionToken;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Node? Type;
 }
 
@@ -1689,12 +1687,12 @@ public sealed partial class PropertyDeclaration : Node
 public sealed partial class PropertySignature : Node
 {
     public Node? Initializer;
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public NodeArray? Modifiers;
     public Node Name = null!;
     public QuestionToken? QuestionToken;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Node? Type;
 }
 
@@ -1711,7 +1709,7 @@ public sealed partial class PublicKeyword : Node
 /// <summary>types.ts: QualifiedName.</summary>
 public sealed partial class QualifiedName : Node
 {
-    public object? FlowNode; // TypeScript: FlowNode; not used by the parser
+    public object? FlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
     public Node Left = null!;
     public Identifier Right = null!;
 }
@@ -1754,8 +1752,8 @@ public sealed partial class RestTypeNode : Node
 public sealed partial class ReturnStatement : Node
 {
     public Node? Expression;
-    public object? FlowNode; // TypeScript: FlowNode; not used by the parser
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
+    public object? FlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
 }
 
 /// <summary>types.ts: SatisfiesExpression.</summary>
@@ -1768,10 +1766,10 @@ public sealed partial class SatisfiesExpression : Node
 /// <summary>types.ts: SemicolonClassElement.</summary>
 public sealed partial class SemicolonClassElement : Node
 {
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Node? Name;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
 }
 
 /// <summary>types.ts: SetAccessorDeclaration.</summary>
@@ -1779,19 +1777,19 @@ public sealed partial class SetAccessorDeclaration : Node
 {
     public AsteriskToken? AsteriskToken;
     public Block? Body;
-    public object? EndFlowNode; // TypeScript: FlowNode; not used by the parser
+    public object? EndFlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
     public ExclamationToken? ExclamationToken;
-    public object? FlowNode; // TypeScript: FlowNode; not used by the parser
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
-    public object? Locals; // TypeScript: SymbolTable; not used by the parser
+    public object? FlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
+    public object? Locals; // TypeScript: SymbolTable; binder/checker data, not used by the parser
     public NodeArray? Modifiers;
     public Node Name = null!;
     public Node? NextContainer;
     public NodeArray Parameters = null!; // elements: ParameterDeclaration
     public QuestionToken? QuestionToken;
-    public object? ReturnFlowNode; // TypeScript: FlowNode; not used by the parser
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? ReturnFlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Node? Type;
     public NodeArray? TypeArguments;
     public NodeArray? TypeParameters; // elements: TypeParameterDeclaration
@@ -1802,73 +1800,63 @@ public sealed partial class ShorthandPropertyAssignment : Node
 {
     public EqualsToken? EqualsToken;
     public ExclamationToken? ExclamationToken;
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public NodeArray? Modifiers;
     public Identifier Name = null!;
     public Node? ObjectAssignmentInitializer;
     public QuestionToken? QuestionToken;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
 }
 
 /// <summary>types.ts: SourceFile.</summary>
+// Declared by the port in a partial class: amdDependencies (readonly AmdDependency[]), referencedFiles (readonly FileReference[]), typeReferenceDirectives (readonly FileReference[]), libReferenceDirectives (readonly FileReference[]), parseDiagnostics (DiagnosticWithLocation[]), bindDiagnostics (DiagnosticWithLocation[]), bindSuggestionDiagnostics (DiagnosticWithLocation[]), jsDocDiagnostics (DiagnosticWithLocation[]), commentDirectives (CommentDirective[]), checkJsDirective (CheckJsDirective), pragmas (ReadonlyPragmaMap).
 public sealed partial class SourceFile : Node
 {
-    public object? AmbientModuleNames; // TypeScript: readonly string[]; not used by the parser
-    public object? AmdDependencies; // TypeScript: readonly AmdDependency[]; not used by the parser
-    public object? BindDiagnostics; // TypeScript: DiagnosticWithLocation[]; not used by the parser
-    public object? BindSuggestionDiagnostics; // TypeScript: DiagnosticWithLocation[]; not used by the parser
-    public object? CheckJsDirective; // TypeScript: CheckJsDirective; not used by the parser
-    public object? ClassifiableNames; // TypeScript: ReadonlySet<__String>; not used by the parser
-    public object? CommentDirectives; // TypeScript: CommentDirective[]; not used by the parser
-    public object? EndFlowNode; // TypeScript: FlowNode; not used by the parser
-    public Token EndOfFileToken = null!;
-    public object? ExternalModuleIndicator; // TypeScript: true | Node; not used by the parser
+    public IReadOnlyList<string>? AmbientModuleNames; // TypeScript: readonly string[]
+    public object? ClassifiableNames; // TypeScript: ReadonlySet<__String>; binder/checker data, not used by the parser
+    public object? EndFlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
+    public EndOfFileToken EndOfFileToken = null!;
+    public object? ExternalModuleIndicator; // TypeScript: true | Node
     public string FileName = null!;
     public bool HasNoDefaultLib;
     public int IdentifierCount;
-    public object? Identifiers; // TypeScript: ReadonlyMap<string, string>; not used by the parser
+    public Dictionary<string, string>? Identifiers; // TypeScript: ReadonlyMap<string, string>
     public ModuleKind ImpliedNodeFormat;
     public Node[]? Imports;
     public bool IsDeclarationFile;
-    public object? JsDocDiagnostics; // TypeScript: DiagnosticWithLocation[]; not used by the parser
     public JSDocParsingMode JsDocParsingMode;
     public LanguageVariant LanguageVariant;
     public ScriptTarget LanguageVersion;
-    public object? LibReferenceDirectives; // TypeScript: readonly FileReference[]; not used by the parser
-    public object? LineMap; // TypeScript: readonly number[]; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
-    public object? Locals; // TypeScript: SymbolTable; not used by the parser
+    public IReadOnlyList<int>? LineMap; // TypeScript: readonly number[]
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
+    public object? Locals; // TypeScript: SymbolTable; binder/checker data, not used by the parser
     public Node[]? ModuleAugmentations;
     public string? ModuleName;
     public Node? NextContainer;
     public int NodeCount;
     public string OriginalFileName = null!;
-    public object? PackageJsonLocations; // TypeScript: readonly string[]; not used by the parser
-    public object? PackageJsonScope; // TypeScript: PackageJsonInfo; not used by the parser
-    public object? ParseDiagnostics; // TypeScript: DiagnosticWithLocation[]; not used by the parser
-    public object? Path; // TypeScript: Path; not used by the parser
-    public object? Pragmas; // TypeScript: ReadonlyPragmaMap; not used by the parser
-    public object? RedirectInfo; // TypeScript: RedirectInfo; not used by the parser
-    public object? ReferencedFiles; // TypeScript: readonly FileReference[]; not used by the parser
-    public object? ResolvedPath; // TypeScript: Path; not used by the parser
+    public IReadOnlyList<string>? PackageJsonLocations; // TypeScript: readonly string[]
+    public object? PackageJsonScope; // TypeScript: PackageJsonInfo; binder/checker data, not used by the parser
+    public string? Path; // TypeScript: Path
+    public object? RedirectInfo; // TypeScript: RedirectInfo; binder/checker data, not used by the parser
+    public string? ResolvedPath; // TypeScript: Path
     public ScriptKind ScriptKind;
-    public object? SetExternalModuleIndicator; // TypeScript: (file: SourceFile) => void; not used by the parser
+    public Action<SourceFile>? SetExternalModuleIndicator; // TypeScript: (file: SourceFile) => void
     public NodeArray Statements = null!;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public int SymbolCount;
     public string Text = null!;
-    public object? TypeReferenceDirectives; // TypeScript: readonly FileReference[]; not used by the parser
 }
 
 /// <summary>types.ts: SpreadAssignment.</summary>
 public sealed partial class SpreadAssignment : Node
 {
     public Node Expression = null!;
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Node? Name;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
 }
 
 /// <summary>types.ts: SpreadElement.</summary>
@@ -1887,9 +1875,9 @@ public sealed partial class StringLiteral : Node
 {
     public bool HasExtendedUnicodeEscape;
     public bool IsUnterminated;
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public bool SingleQuote;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public string Text = null!;
     public Node? TextSourceNode;
 }
@@ -1897,7 +1885,7 @@ public sealed partial class StringLiteral : Node
 /// <summary>types.ts: SuperExpression.</summary>
 public sealed partial class SuperExpression : Node
 {
-    public object? FlowNode; // TypeScript: FlowNode; not used by the parser
+    public object? FlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
 }
 
 /// <summary>types.ts: SwitchStatement.</summary>
@@ -1905,8 +1893,8 @@ public sealed partial class SwitchStatement : Node
 {
     public CaseBlock CaseBlock = null!;
     public Node Expression = null!;
-    public object? FlowNode; // TypeScript: FlowNode; not used by the parser
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
+    public object? FlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
     public bool PossiblyExhaustive;
 }
 
@@ -1921,7 +1909,7 @@ public sealed partial class SyntheticExpression : Node
 {
     public bool IsSpread;
     public Node? TupleNameSource;
-    public object? Type; // TypeScript: Type; not used by the parser
+    public object? Type; // TypeScript: Type; binder/checker data, not used by the parser
 }
 
 /// <summary>types.ts: SyntheticReferenceExpression.</summary>
@@ -2001,7 +1989,7 @@ public sealed partial class TemplateTail : Node
 /// <summary>types.ts: ThisExpression.</summary>
 public sealed partial class ThisExpression : Node
 {
-    public object? FlowNode; // TypeScript: FlowNode; not used by the parser
+    public object? FlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
 }
 
 /// <summary>types.ts: ThisTypeNode.</summary>
@@ -2013,8 +2001,8 @@ public sealed partial class ThisTypeNode : Node
 public sealed partial class ThrowStatement : Node
 {
     public Node Expression = null!;
-    public object? FlowNode; // TypeScript: FlowNode; not used by the parser
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
+    public object? FlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
 }
 
 /// <summary>types.ts: TrueLiteral.</summary>
@@ -2027,8 +2015,8 @@ public sealed partial class TryStatement : Node
 {
     public CatchClause? CatchClause;
     public Block? FinallyBlock;
-    public object? FlowNode; // TypeScript: FlowNode; not used by the parser
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
+    public object? FlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
     public Block TryBlock = null!;
 }
 
@@ -2041,13 +2029,13 @@ public sealed partial class TupleTypeNode : Node
 /// <summary>types.ts: TypeAliasDeclaration.</summary>
 public sealed partial class TypeAliasDeclaration : Node
 {
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
-    public object? Locals; // TypeScript: SymbolTable; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
+    public object? Locals; // TypeScript: SymbolTable; binder/checker data, not used by the parser
     public NodeArray? Modifiers;
     public Identifier Name = null!;
     public Node? NextContainer;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Node Type = null!;
     public NodeArray? TypeParameters; // elements: TypeParameterDeclaration
 }
@@ -2062,9 +2050,9 @@ public sealed partial class TypeAssertion : Node
 /// <summary>types.ts: TypeLiteralNode.</summary>
 public sealed partial class TypeLiteralNode : Node
 {
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public NodeArray Members = null!;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
 }
 
 /// <summary>types.ts: TypeOfExpression.</summary>
@@ -2086,11 +2074,11 @@ public sealed partial class TypeParameterDeclaration : Node
     public Node? Constraint;
     public Node? Default;
     public Node? Expression;
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public NodeArray? Modifiers;
     public Identifier Name = null!;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
 }
 
 /// <summary>types.ts: TypePredicateNode.</summary>
@@ -2126,10 +2114,10 @@ public sealed partial class VariableDeclaration : Node
 {
     public ExclamationToken? ExclamationToken;
     public Node? Initializer;
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
-    public object? LocalSymbol; // TypeScript: Symbol; not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
+    public object? LocalSymbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Node Name = null!;
-    public object? Symbol; // TypeScript: Symbol; not used by the parser
+    public object? Symbol; // TypeScript: Symbol; binder/checker data, not used by the parser
     public Node? Type;
 }
 
@@ -2143,8 +2131,8 @@ public sealed partial class VariableDeclarationList : Node
 public sealed partial class VariableStatement : Node
 {
     public VariableDeclarationList DeclarationList = null!;
-    public object? FlowNode; // TypeScript: FlowNode; not used by the parser
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
+    public object? FlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
     public NodeArray? Modifiers;
 }
 
@@ -2158,8 +2146,8 @@ public sealed partial class VoidExpression : Node
 public sealed partial class WhileStatement : Node
 {
     public Node Expression = null!;
-    public object? FlowNode; // TypeScript: FlowNode; not used by the parser
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
+    public object? FlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
     public Node Statement = null!;
 }
 
@@ -2167,8 +2155,8 @@ public sealed partial class WhileStatement : Node
 public sealed partial class WithStatement : Node
 {
     public Node Expression = null!;
-    public object? FlowNode; // TypeScript: FlowNode; not used by the parser
-    public object? JsDoc; // TypeScript: JSDocArray; not used by the parser
+    public object? FlowNode; // TypeScript: FlowNode; binder/checker data, not used by the parser
+    public List<JSDoc>? JsDoc; // TypeScript: JSDocArray
     public Node Statement = null!;
 }
 
@@ -2429,4 +2417,298 @@ public static partial class NodeAllocator
         SyntaxKind.SyntheticReferenceExpression => new SyntheticReferenceExpression { Kind = kind },
         _ => new Token { Kind = kind },
     };
+}
+
+/// <summary>TypeScript's <c>(node as JSDocContainer).jsDoc</c> on any node: the classes that declare <c>jsDoc</c>.</summary>
+public static partial class JSDocContainers
+{
+    public static List<JSDoc>? GetJsDoc(Node node) => node switch
+    {
+        ArrowFunction n => n.JsDoc,
+        BinaryExpression n => n.JsDoc,
+        Block n => n.JsDoc,
+        BreakStatement n => n.JsDoc,
+        CallSignatureDeclaration n => n.JsDoc,
+        CaseClause n => n.JsDoc,
+        ClassDeclaration n => n.JsDoc,
+        ClassExpression n => n.JsDoc,
+        ClassStaticBlockDeclaration n => n.JsDoc,
+        ConstructSignatureDeclaration n => n.JsDoc,
+        ConstructorDeclaration n => n.JsDoc,
+        ConstructorTypeNode n => n.JsDoc,
+        ContinueStatement n => n.JsDoc,
+        DebuggerStatement n => n.JsDoc,
+        DoStatement n => n.JsDoc,
+        ElementAccessExpression n => n.JsDoc,
+        EmptyStatement n => n.JsDoc,
+        EndOfFileToken n => n.JsDoc,
+        EnumDeclaration n => n.JsDoc,
+        EnumMember n => n.JsDoc,
+        ExportAssignment n => n.JsDoc,
+        ExportDeclaration n => n.JsDoc,
+        ExportSpecifier n => n.JsDoc,
+        ExpressionStatement n => n.JsDoc,
+        ForInStatement n => n.JsDoc,
+        ForOfStatement n => n.JsDoc,
+        ForStatement n => n.JsDoc,
+        FunctionDeclaration n => n.JsDoc,
+        FunctionExpression n => n.JsDoc,
+        FunctionTypeNode n => n.JsDoc,
+        GetAccessorDeclaration n => n.JsDoc,
+        Identifier n => n.JsDoc,
+        IfStatement n => n.JsDoc,
+        ImportDeclaration n => n.JsDoc,
+        ImportEqualsDeclaration n => n.JsDoc,
+        IndexSignatureDeclaration n => n.JsDoc,
+        InterfaceDeclaration n => n.JsDoc,
+        JSDocFunctionType n => n.JsDoc,
+        JSDocSignature n => n.JsDoc,
+        LabeledStatement n => n.JsDoc,
+        MethodDeclaration n => n.JsDoc,
+        MethodSignature n => n.JsDoc,
+        MissingDeclaration n => n.JsDoc,
+        ModuleBlock n => n.JsDoc,
+        ModuleDeclaration n => n.JsDoc,
+        NamedTupleMember n => n.JsDoc,
+        NamespaceExportDeclaration n => n.JsDoc,
+        NotEmittedStatement n => n.JsDoc,
+        ObjectLiteralExpression n => n.JsDoc,
+        ParameterDeclaration n => n.JsDoc,
+        ParenthesizedExpression n => n.JsDoc,
+        PropertyAccessExpression n => n.JsDoc,
+        PropertyAssignment n => n.JsDoc,
+        PropertyDeclaration n => n.JsDoc,
+        PropertySignature n => n.JsDoc,
+        ReturnStatement n => n.JsDoc,
+        SemicolonClassElement n => n.JsDoc,
+        SetAccessorDeclaration n => n.JsDoc,
+        ShorthandPropertyAssignment n => n.JsDoc,
+        SpreadAssignment n => n.JsDoc,
+        SwitchStatement n => n.JsDoc,
+        ThrowStatement n => n.JsDoc,
+        TryStatement n => n.JsDoc,
+        TypeAliasDeclaration n => n.JsDoc,
+        TypeParameterDeclaration n => n.JsDoc,
+        VariableDeclaration n => n.JsDoc,
+        VariableStatement n => n.JsDoc,
+        WhileStatement n => n.JsDoc,
+        WithStatement n => n.JsDoc,
+        _ => null,
+    };
+
+    public static void SetJsDoc(Node node, List<JSDoc>? jsDoc)
+    {
+        switch (node)
+        {
+            case ArrowFunction n:
+                n.JsDoc = jsDoc;
+                break;
+            case BinaryExpression n:
+                n.JsDoc = jsDoc;
+                break;
+            case Block n:
+                n.JsDoc = jsDoc;
+                break;
+            case BreakStatement n:
+                n.JsDoc = jsDoc;
+                break;
+            case CallSignatureDeclaration n:
+                n.JsDoc = jsDoc;
+                break;
+            case CaseClause n:
+                n.JsDoc = jsDoc;
+                break;
+            case ClassDeclaration n:
+                n.JsDoc = jsDoc;
+                break;
+            case ClassExpression n:
+                n.JsDoc = jsDoc;
+                break;
+            case ClassStaticBlockDeclaration n:
+                n.JsDoc = jsDoc;
+                break;
+            case ConstructSignatureDeclaration n:
+                n.JsDoc = jsDoc;
+                break;
+            case ConstructorDeclaration n:
+                n.JsDoc = jsDoc;
+                break;
+            case ConstructorTypeNode n:
+                n.JsDoc = jsDoc;
+                break;
+            case ContinueStatement n:
+                n.JsDoc = jsDoc;
+                break;
+            case DebuggerStatement n:
+                n.JsDoc = jsDoc;
+                break;
+            case DoStatement n:
+                n.JsDoc = jsDoc;
+                break;
+            case ElementAccessExpression n:
+                n.JsDoc = jsDoc;
+                break;
+            case EmptyStatement n:
+                n.JsDoc = jsDoc;
+                break;
+            case EndOfFileToken n:
+                n.JsDoc = jsDoc;
+                break;
+            case EnumDeclaration n:
+                n.JsDoc = jsDoc;
+                break;
+            case EnumMember n:
+                n.JsDoc = jsDoc;
+                break;
+            case ExportAssignment n:
+                n.JsDoc = jsDoc;
+                break;
+            case ExportDeclaration n:
+                n.JsDoc = jsDoc;
+                break;
+            case ExportSpecifier n:
+                n.JsDoc = jsDoc;
+                break;
+            case ExpressionStatement n:
+                n.JsDoc = jsDoc;
+                break;
+            case ForInStatement n:
+                n.JsDoc = jsDoc;
+                break;
+            case ForOfStatement n:
+                n.JsDoc = jsDoc;
+                break;
+            case ForStatement n:
+                n.JsDoc = jsDoc;
+                break;
+            case FunctionDeclaration n:
+                n.JsDoc = jsDoc;
+                break;
+            case FunctionExpression n:
+                n.JsDoc = jsDoc;
+                break;
+            case FunctionTypeNode n:
+                n.JsDoc = jsDoc;
+                break;
+            case GetAccessorDeclaration n:
+                n.JsDoc = jsDoc;
+                break;
+            case Identifier n:
+                n.JsDoc = jsDoc;
+                break;
+            case IfStatement n:
+                n.JsDoc = jsDoc;
+                break;
+            case ImportDeclaration n:
+                n.JsDoc = jsDoc;
+                break;
+            case ImportEqualsDeclaration n:
+                n.JsDoc = jsDoc;
+                break;
+            case IndexSignatureDeclaration n:
+                n.JsDoc = jsDoc;
+                break;
+            case InterfaceDeclaration n:
+                n.JsDoc = jsDoc;
+                break;
+            case JSDocFunctionType n:
+                n.JsDoc = jsDoc;
+                break;
+            case JSDocSignature n:
+                n.JsDoc = jsDoc;
+                break;
+            case LabeledStatement n:
+                n.JsDoc = jsDoc;
+                break;
+            case MethodDeclaration n:
+                n.JsDoc = jsDoc;
+                break;
+            case MethodSignature n:
+                n.JsDoc = jsDoc;
+                break;
+            case MissingDeclaration n:
+                n.JsDoc = jsDoc;
+                break;
+            case ModuleBlock n:
+                n.JsDoc = jsDoc;
+                break;
+            case ModuleDeclaration n:
+                n.JsDoc = jsDoc;
+                break;
+            case NamedTupleMember n:
+                n.JsDoc = jsDoc;
+                break;
+            case NamespaceExportDeclaration n:
+                n.JsDoc = jsDoc;
+                break;
+            case NotEmittedStatement n:
+                n.JsDoc = jsDoc;
+                break;
+            case ObjectLiteralExpression n:
+                n.JsDoc = jsDoc;
+                break;
+            case ParameterDeclaration n:
+                n.JsDoc = jsDoc;
+                break;
+            case ParenthesizedExpression n:
+                n.JsDoc = jsDoc;
+                break;
+            case PropertyAccessExpression n:
+                n.JsDoc = jsDoc;
+                break;
+            case PropertyAssignment n:
+                n.JsDoc = jsDoc;
+                break;
+            case PropertyDeclaration n:
+                n.JsDoc = jsDoc;
+                break;
+            case PropertySignature n:
+                n.JsDoc = jsDoc;
+                break;
+            case ReturnStatement n:
+                n.JsDoc = jsDoc;
+                break;
+            case SemicolonClassElement n:
+                n.JsDoc = jsDoc;
+                break;
+            case SetAccessorDeclaration n:
+                n.JsDoc = jsDoc;
+                break;
+            case ShorthandPropertyAssignment n:
+                n.JsDoc = jsDoc;
+                break;
+            case SpreadAssignment n:
+                n.JsDoc = jsDoc;
+                break;
+            case SwitchStatement n:
+                n.JsDoc = jsDoc;
+                break;
+            case ThrowStatement n:
+                n.JsDoc = jsDoc;
+                break;
+            case TryStatement n:
+                n.JsDoc = jsDoc;
+                break;
+            case TypeAliasDeclaration n:
+                n.JsDoc = jsDoc;
+                break;
+            case TypeParameterDeclaration n:
+                n.JsDoc = jsDoc;
+                break;
+            case VariableDeclaration n:
+                n.JsDoc = jsDoc;
+                break;
+            case VariableStatement n:
+                n.JsDoc = jsDoc;
+                break;
+            case WhileStatement n:
+                n.JsDoc = jsDoc;
+                break;
+            case WithStatement n:
+                n.JsDoc = jsDoc;
+                break;
+            default:
+                throw new InvalidOperationException($"{node.Kind} is not a JSDocContainer");
+        }
+    }
 }

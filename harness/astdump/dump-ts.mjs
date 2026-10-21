@@ -6,7 +6,10 @@
 // the timeout is recorded as "timeout" (v6.0.3 has a known non-terminating
 // path in scanJsDocToken, see docs/references.md section 2).
 //
-// Usage: node dump-ts.mjs [--corpus <dir>] [--timeout-ms <n>]
+// --jsdoc-mode none writes the dump with JSDocParsingMode.ParseNone to dumps/ts-parsenone (the
+// reference of the M3+M4 gate, which ports the parser without its JSDocParser namespace).
+//
+// Usage: node dump-ts.mjs [--corpus <dir>] [--timeout-ms <n>] [--jsdoc-mode all|none]
 
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -47,11 +50,11 @@ function flagNames(node) {
     return names;
 }
 
-function dumpUnit(text, unit) {
+function dumpUnit(text, unit, jsDocParsingMode) {
     const sourceFile = ts.createSourceFile(
         unit.fileName,
         text,
-        { languageVersion: ts.ScriptTarget.Latest, jsDocParsingMode: ts.JSDocParsingMode.ParseAll },
+        { languageVersion: ts.ScriptTarget.Latest, jsDocParsingMode },
         /*setParentNodes*/ false,
         scriptKinds[unit.kind],
     );
@@ -73,16 +76,20 @@ function dumpUnit(text, unit) {
 }
 
 if (!isMainThread) {
-    parentPort.on("message", ({ unit, input, output }) => {
+    parentPort.on("message", ({ unit, input, output, jsDocParsingMode }) => {
         const text = readFileSync(input, "utf8");
-        writeFileSync(output, dumpUnit(text, unit));
+        writeFileSync(output, dumpUnit(text, unit, jsDocParsingMode));
         parentPort.postMessage(unit.id);
     });
 }
 else {
     const corpus = arg("--corpus", join(artifactsDir, "equivalence"));
     const timeoutMs = Number(arg("--timeout-ms", "10000"));
-    const outDir = join(corpus, "dumps", "ts");
+    const jsdocMode = arg("--jsdoc-mode", "all");
+    if (jsdocMode !== "all" && jsdocMode !== "none") throw new Error("--jsdoc-mode must be all or none");
+    const jsDocParsingMode = jsdocMode === "all" ? ts.JSDocParsingMode.ParseAll : ts.JSDocParsingMode.ParseNone;
+    const dumpName = jsdocMode === "all" ? "ts" : "ts-parsenone";
+    const outDir = join(corpus, "dumps", dumpName);
     rmSync(outDir, { recursive: true, force: true });
     mkdirSync(outDir, { recursive: true });
     const { units } = JSON.parse(readFileSync(join(corpus, "manifest.json"), "utf8"));
@@ -100,7 +107,7 @@ else {
         }, timeoutMs);
         worker.once("message", () => { clearTimeout(timer); worker.removeAllListeners("error"); resolve("ok"); });
         worker.once("error", err => { clearTimeout(timer); worker = undefined; resolve({ error: String(err?.stack ?? err) }); });
-        worker.postMessage({ unit, input: join(corpus, "units", `${unit.id}.txt`), output: join(outDir, `${unit.id}.txt`) });
+        worker.postMessage({ unit, input: join(corpus, "units", `${unit.id}.txt`), output: join(outDir, `${unit.id}.txt`), jsDocParsingMode });
     });
     for (const unit of units) {
         const result = await runOne(unit);
@@ -109,6 +116,6 @@ else {
         else outcomes.error.push({ id: unit.id, error: result.error });
     }
     await worker?.terminate();
-    writeFileSync(join(corpus, "dumps", "ts.outcomes.json"), JSON.stringify({ timeoutMs, ...outcomes }, null, 1));
-    console.log(`ts: ok ${outcomes.ok.length}, timeout ${outcomes.timeout.length}, error ${outcomes.error.length} in ${((performance.now() - started) / 1000).toFixed(1)} s`);
+    writeFileSync(join(corpus, "dumps", `${dumpName}.outcomes.json`), JSON.stringify({ timeoutMs, ...outcomes }, null, 1));
+    console.log(`${dumpName}: ok ${outcomes.ok.length}, timeout ${outcomes.timeout.length}, error ${outcomes.error.length} in ${((performance.now() - started) / 1000).toFixed(1)} s`);
 }

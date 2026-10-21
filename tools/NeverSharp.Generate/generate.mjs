@@ -19,4 +19,4 @@ mkdirSync(outDir, { recursive: true });
 console.log(`diagnostic messages: ${generateDiagnostics()}`);
 console.log(`enums: ${generateEnums()}`);
 const faithful = emitFaithful(extractSchema());
-console.log(`track F nodes: ${faithful.classes} classes, ${faithful.fields} fields, ${faithful.forEachChildEntries} forEachChild entries${faithful.collisions.length ? `, renamed (name = class): ${faithful.collisions.join(", ")}` : ""}`);
+console.log(`track F nodes: ${faithful.classes} classes, ${faithful.fields} fields (${faithful.omitted ?? 0} left to the port), ${faithful.jsDocContainers} JSDoc containers, ${faithful.forEachChildEntries} forEachChild entries${faithful.collisions.length ? `, renamed (name = class): ${faithful.collisions.join(", ")}` : ""}`);

@@ -53,9 +53,33 @@ function csType(cs, optional) {
         case "undefinedOnly": return cs.usedAs === "nodes" ? { type: "NodeArray?", init: "", note: "declared `?: undefined`; assigned for grammar errors" }
             : cs.usedAs === "node" ? { type: "Node?", init: "", note: "declared `?: undefined`; assigned for grammar errors" }
             : { type: "object?", init: "", note: "declared `?: undefined`" };
-        default: return { type: "object?", init: "", note: `TypeScript: ${cs.ts}; not used by the parser` };
+        default: {
+            const mapped = OBJECT_TYPES[cs.ts];
+            if (mapped === "omit") return { omit: true };
+            if (mapped) return { type: mapped, init: "", note: `TypeScript: ${cs.ts}` };
+            return { type: "object?", init: "", note: `TypeScript: ${cs.ts}; binder/checker data, not used by the parser` };
+        }
     }
 }
+
+// Non-node property types the parser assigns. Plain data maps to a C# type here; fields typed by
+// a non-node interface of types.ts are omitted, and the port declares them in a partial class
+// with its ported type (they are part of the ported module, not of the node shapes).
+const OBJECT_TYPES = {
+    "JSDocArray": "List<JSDoc>?",
+    "Path": "string?",
+    "readonly string[]": "IReadOnlyList<string>?",
+    "readonly number[]": "IReadOnlyList<int>?",
+    "ReadonlyMap<string, string>": "Dictionary<string, string>?",
+    "(file: SourceFile) => void": "Action<SourceFile>?",
+    "true | Node": "object?",
+    "DiagnosticWithLocation[]": "omit",
+    "CommentDirective[]": "omit",
+    "readonly FileReference[]": "omit",
+    "readonly AmdDependency[]": "omit",
+    "CheckJsDirective": "omit",
+    "ReadonlyPragmaMap": "omit",
+};
 
 export function emitFaithful(schema) {
     const assigned = assignedPropertyNames();
@@ -106,11 +130,15 @@ export function emitFaithful(schema) {
         const props = (schema.interfaces[cls] ?? []).filter(p => !BASE_FIELDS.has(p.name) && assigned.has(p.name))
             .map(p => p.cs.k === "undefinedOnly" ? { ...p, cs: { ...p.cs, usedAs: usage[cls]?.[p.name] } } : p);
         fieldsOf[cls] = new Set(props.map(p => p.name));
-        lines.push(`/// <summary>types.ts: ${cls}.</summary>`, `public sealed partial class ${cls} : Node`, "{");
+        const omitted = props.filter(p => csType(p.cs, p.optional).omit).map(p => `${p.name} (${p.cs.ts})`);
+        lines.push(`/// <summary>types.ts: ${cls}.</summary>`);
+        if (omitted.length) lines.push(`// Declared by the port in a partial class: ${omitted.join(", ")}.`);
+        lines.push(`public sealed partial class ${cls} : Node`, "{");
         for (const p of props.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0)) {
             let name = pascal(p.name);
             if (name === cls) { report.collisions.push(`${cls}.${p.name}`); name += "_"; }
             const t = csType(p.cs, p.optional);
+            if (t.omit) { report.omitted = (report.omitted ?? 0) + 1; continue; }
             lines.push(`    public ${t.type} ${name}${t.init};${t.note ? ` // ${t.note}` : ""}`);
             report.fields++;
         }
@@ -122,6 +150,17 @@ export function emitFaithful(schema) {
         "    public static Node Create(SyntaxKind kind) => kind switch", "    {");
     for (const [kind, cls] of Object.entries(schema.kindToClass)) if (cls !== "Token") lines.push(`        SyntaxKind.${kind} => new ${cls} { Kind = kind },`);
     lines.push("        _ => new Token { Kind = kind },", "    };", "}", "");
+    // node.jsDoc: TypeScript reads and writes it structurally on any JSDocContainer; C# dispatches on the class.
+    const containers = classes.filter(c => fieldsOf[c].has("jsDoc"));
+    lines.push("/// <summary>TypeScript's <c>(node as JSDocContainer).jsDoc</c> on any node: the classes that declare <c>jsDoc</c>.</summary>",
+        "public static partial class JSDocContainers", "{",
+        "    public static List<JSDoc>? GetJsDoc(Node node) => node switch", "    {",
+        ...containers.map(c => `        ${c} n => n.JsDoc,`), "        _ => null,", "    };", "",
+        "    public static void SetJsDoc(Node node, List<JSDoc>? jsDoc)", "    {", "        switch (node)", "        {",
+        ...containers.flatMap(c => [`            case ${c} n:`, "                n.JsDoc = jsDoc;", "                break;"]),
+        "            default:", "                throw new InvalidOperationException($\"{node.Kind} is not a JSDocContainer\");",
+        "        }", "    }", "}", "");
+    report.jsDocContainers = containers.length;
     writeFileSync(join(outDir, "Nodes.g.cs"), lines.join("\n"));
 
     // ---- ForEachChild --------------------------------------------------------
