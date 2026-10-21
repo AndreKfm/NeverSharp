@@ -1,0 +1,18 @@
+NeverSharp pre-registration timestamp
+
+tag:                 prereg/v1
+tag object:          b25878d6e8fc02604a21a26a75d11afb06b5244b
+tagged commit:       e133726a76feb095a3c11de2eb0a4e88614dab97
+commit tree:         4c33c1e30da612e73815151acdd9ab808e37d77d
+commit date:         2026-10-21T12:38:49+02:00
+
+SHA-256 of files at the tagged commit (content as stored in git, `git show <commit>:<path> | sha256sum`):
+docs/preregistration.md                   27fdb177055e7dfbcb2b97ee6885d4d3046ca4daef47c11f4c0e2dffd664544f
+docs/phase1-plan.md                       e4a5d11cbd86b0603d44abb082d55c1f3d661a9d019d9105e1fc2da844032c1e
+docs/benchmark-harness.md                 45c04d250da0b2b458643a48bb39a76ed3956706bf6eb2e0110b318f177c497c
+docs/ast-dump-format.md                   9b633b326a071e53ccecdcc766f307ceef512e781d5f472872b0258ea2697082
+docs/hostile-review.md                    965f3e70c651b44a0b7230190e14a007c2ae17ea1053ecb30d0fbc605aa88fcc
+pins.json                                 fb8d8763ad34ac6874a5982259f6198bba16d29db30224ec3ae6f88c1f9eb882
+harness/astdump/oracle-divergences.tsv    1364a2510829d72ac21ba9dd3926fa08b9b3017bbcbe83e87f86495a6f681968
+
+Verify: ots verify docs/timestamps/prereg-v1.txt.ots  (after the proof has been upgraded with ots upgrade)
