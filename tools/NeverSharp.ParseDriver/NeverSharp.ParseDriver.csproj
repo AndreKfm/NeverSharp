@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Parse-only driver for the C# tracks (driver contract: docs/benchmark-harness.md §4.1).
+    Build one executable per track and runtime configuration:
+      dotnet publish -c Release -r win-x64 -p:NeverSharpTrack=Faithful|Optimized -p:NeverSharpRuntime=aot-ws|aot-srv|jit-ws|jit-srv
+    (harness/bench/build-cs.mjs publishes all of them).
+  -->
+  <Import Project="$(RepoRoot)eng/RuntimeConfiguration.props" />
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <NeverSharpTrack Condition="'$(NeverSharpTrack)' == ''">Faithful</NeverSharpTrack>
+    <AssemblyName>parse-cs-$(NeverSharpTrack.ToLowerInvariant())-$(NeverSharpRuntime)</AssemblyName>
+    <DefineConstants>$(DefineConstants);TRACK_$(NeverSharpTrack.ToUpperInvariant())</DefineConstants>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="$(RepoRoot)src/NeverSharp.$(NeverSharpTrack)/NeverSharp.$(NeverSharpTrack).csproj" />
+  </ItemGroup>
+</Project>

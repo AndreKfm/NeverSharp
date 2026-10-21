@@ -14,7 +14,7 @@ Budget: 2026-10-21 to 2027-02-24 (pre-registration §9). Plan: [phase1-plan.md](
 | Track O emitter (arena records) | deferred | built when Track O starts (it starts from finished Track F modules; the arena layout is variant step O6) |
 | Token-stream dump (G1a), tsc side | done 2026-10-21 | `harness/astdump/dump-tokens-ts.mjs`; format in ast-dump-format.md §8; 22,809,973 tokens on the equivalence corpus |
 | C# dump writer and C# token-stream dump | open | |
-| Parse-only drivers (both tracks); NativeAOT publish of the four configurations | open | |
+| Parse-only drivers (both tracks); NativeAOT publish of the four configurations | done 2026-10-21 (driver frame) | `tools/NeverSharp.ParseDriver`: one executable per track × runtime (`parse-cs-<track>-<runtime>`), driver contract of benchmark-harness.md §4.1 (sys.ts BOM semantics, high priority, one thread-pool work item per file or `--single`, GC metrics). The parse call is added in M4. `harness/bench/build-cs.mjs` publishes all four configurations and checks that each reports its runtime from `RuntimeFeature.IsDynamicCodeSupported` and `GCSettings.IsServerGC`. This check found a wrong property name (`ServerGarbageCollector`, silently ignored) in `eng/RuntimeConfiguration.props` and in the tagged pre-registration; fixed, erratum in preregistration.md §12.2. |
 | Harness integration (`dump-cs`, `cs-*` configurations) | open | |
 
 ## Modules M1–M5

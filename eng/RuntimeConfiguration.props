@@ -21,11 +21,11 @@
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(NeverSharpRuntime)' == 'aot-ws' Or '$(NeverSharpRuntime)' == 'jit-ws'">
-    <ServerGarbageCollector>false</ServerGarbageCollector>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(NeverSharpRuntime)' == 'aot-srv' Or '$(NeverSharpRuntime)' == 'jit-srv'">
-    <ServerGarbageCollector>true</ServerGarbageCollector>
+    <ServerGarbageCollection>true</ServerGarbageCollection>
   </PropertyGroup>
   <!-- ConcurrentGarbageCollection and GC dynamic adaptation (DATAS): defaults. -->
 

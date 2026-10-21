@@ -179,7 +179,7 @@ Source and equivalence as Track F: ported from tsc 6.0.3, Gate 1 byte-identical 
 | `PublishAot` | true | false |
 | `PublishReadyToRun` | false | false |
 | `TieredCompilation`, `TieredPGO` | not applicable | default (on) |
-| `ServerGarbageCollector` | false for `-ws`, true for `-srv` | same |
+| `ServerGarbageCollection` | false for `-ws`, true for `-srv` | same |
 | `ConcurrentGarbageCollection`, GC dynamic adaptation (DATAS) | default | default |
 | `IlcInstructionSet`, `IlcOptimizationPreference` | unset (defaults) | not applicable |
 | `InvariantGlobalization` | true (repository default; the parser uses no culture-sensitive operations) | true |
@@ -296,6 +296,12 @@ For transparency, the decisions that were revised during Phase 0, before this do
 | 2026-10-21 | Multi-model workflow fixed: Opus 5.5 orchestrates; Track F 3 attempts per module (2 × Opus 5.5, 1 × Sonnet 5.5); Track O variants by Opus 5.5 | author's decision on Opus 5.5 with agents and 3 attempts; split between models delegated to the assistant | §5.2 |
 | 2026-10-21 | Phase 1 budget 8 weeks → 12 weeks → 18 weeks, common to both tracks | two tracks do not fit into 8 weeks; the Phase 1 plan's estimate (≈ 123 h) does not fit into 12 weeks (84 h) | §9, phase1-plan.md §9 |
 
+### 12.2 Amendments after the first tag
+
+| Date | Tag | Change | Reason | Where |
+|---|---|---|---|---|
+| 2026-10-21 | pending (`prereg/v2`) | §6.4 A7 table: property name `ServerGarbageCollector` → `ServerGarbageCollection` | erratum: `ServerGarbageCollector` is not an MSBuild property and is silently ignored, so the `-srv` configurations would have run with Workstation GC; the intent (Server GC for `-srv`) is unchanged. Found by the first publish of the four configurations, before any C# measurement. | eng/RuntimeConfiguration.props, phase1-progress.md |
+
 ## 13. Prior art
 
 typescript-go (the reference and the method this project copies); oxc and swc (Rust parsers, not ports); ezno and stc (Rust type-checker attempts, experimental or abandoned).
@@ -309,7 +315,7 @@ typescript-go (the reference and the method this project copies); oxc and swc (R
 - [x] Analyzer ruleset committed for both tracks (5.1, 5.4): `eng/Gate2.*.props`, `eng/BannedSymbols.*.txt`, `eng/simd.noalloc-allowlist.toml`, `scripts/check-headers.mjs`; placeholder projects `src/NeverSharp.Faithful`, `src/NeverSharp.Optimized` build clean.
 - [x] C# driver contract (6.3, 7): [benchmark-harness.md](benchmark-harness.md) §4.1; the runner stores the C# GC metrics.
 - [x] Tuning corpus manifest generated (section 3): `harness/bench/tuning.mjs`, 24,511 files (23,910 tests/cases units, 601 TypeScript sources), 37.5 MiB.
-- [ ] Configuration project files committed (A7): `eng/RuntimeConfiguration.props` committed; a NativeAOT publish of each configuration is verified once the first driver exists (M0).
+- [x] Configuration project files committed (A7): `eng/RuntimeConfiguration.props` committed; publish of each configuration verified 2026-10-21 by `harness/bench/build-cs.mjs` (each driver reports its runtime: NativeAOT or JIT, Server or Workstation GC). The check found the erratum in §12.2.
 - [x] **A6** feasible and adopted: `harness/bench/crosscheck.mjs` runs in the deciding session and is reported with the result: per repository, the Go driver's parse time (median minus fixed cost) against tsgo's own `Parse time` (`--extendedDiagnostics`, resolution and lib files off, median of 5). Feasibility check 2026-10-21 (different sessions, not a measurement): driver/tsgo 0.72–1.05 across the five repositories, i.e. the driver is not slower than tsgo's own parse phase except +5 % on vscode.
 - [ ] Harness support for Linux (rig checks, peak memory) before the replication run (A4); may follow the tag.
 - [x] OpenTimestamps proof for the tag (§11.1): `docs/timestamps/prereg-v1.txt` and its `.ots` proof, opentimestamps-client 0.7.2.
