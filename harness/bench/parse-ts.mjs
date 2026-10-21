@@ -27,7 +27,11 @@ const priority = { [constants.priority.PRIORITY_HIGH]: "high", [constants.priori
 
 const files = readFileSync(process.argv[2], "utf8").split("\n").filter(Boolean);
 const options = { languageVersion: ts.ScriptTarget.Latest, jsDocParsingMode: ts.JSDocParsingMode.ParseForTypeErrors };
-const kinds = { ".ts": ts.ScriptKind.TS, ".mts": ts.ScriptKind.TS, ".cts": ts.ScriptKind.TS, ".tsx": ts.ScriptKind.TSX };
+// Same mapping as typescript-go's core.GetScriptKindFromFileName (the tuning corpus also has JS and JSON units).
+const kinds = {
+    ".ts": ts.ScriptKind.TS, ".mts": ts.ScriptKind.TS, ".cts": ts.ScriptKind.TS, ".tsx": ts.ScriptKind.TSX,
+    ".js": ts.ScriptKind.JS, ".mjs": ts.ScriptKind.JS, ".cjs": ts.ScriptKind.JS, ".jsx": ts.ScriptKind.JSX, ".json": ts.ScriptKind.JSON,
+};
 
 const sourceFiles = [];
 let nodes = 0;
@@ -35,7 +39,9 @@ let chars = 0;
 for (const file of files) {
     const text = ts.sys.readFile(file);
     chars += text.length;
-    const sourceFile = ts.createSourceFile(file, text, options, /*setParentNodes*/ false, kinds[file.slice(file.lastIndexOf(".")).toLowerCase()]);
+    // tsc's host passes normalized paths (forward slashes); the JSON parser asserts it.
+    const fileName = file.replaceAll("\\", "/");
+    const sourceFile = ts.createSourceFile(fileName, text, options, /*setParentNodes*/ false, kinds[file.slice(file.lastIndexOf(".")).toLowerCase()]);
     nodes += sourceFile.nodeCount;
     sourceFiles.push(sourceFile);
 }

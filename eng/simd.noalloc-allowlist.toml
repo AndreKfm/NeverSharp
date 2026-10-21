@@ -1,0 +1,73 @@
+# Copyright 2026 Andre Kaufmann
+# SPDX-License-Identifier: Apache-2.0
+#
+# Track O NoAlloc allowlist: runtime members needed by the mandatory SIMD, span and decoding
+# variants (pre-registration §5.4, phase1-plan.md §7 steps O1-O4) that the analyzer's built-in
+# BCL baseline does not list. Each entry is an assumed contract: no managed allocation, no lock,
+# no blocking. Part of the Gate 2 ruleset; changing it after the tag is an amendment.
+
+[[member]]
+symbol = "cs:*/T:System.Runtime.Intrinsics.Vector128"
+constraints = ["All"]
+runtime = "*"
+reason = "hardware intrinsics helpers: operate on registers, no allocation"
+
+[[member]]
+symbol = "cs:*/T:System.Runtime.Intrinsics.Vector128`1"
+constraints = ["All"]
+runtime = "*"
+reason = "SIMD register value type: no allocation"
+
+[[member]]
+symbol = "cs:*/T:System.Runtime.Intrinsics.Vector256"
+constraints = ["All"]
+runtime = "*"
+reason = "hardware intrinsics helpers: operate on registers, no allocation"
+
+[[member]]
+symbol = "cs:*/T:System.Runtime.Intrinsics.Vector256`1"
+constraints = ["All"]
+runtime = "*"
+reason = "SIMD register value type: no allocation"
+
+[[member]]
+symbol = "cs:*/T:System.Runtime.Intrinsics.X86.Sse2"
+constraints = ["All"]
+runtime = "*"
+reason = "x86 hardware intrinsics: single instructions, no allocation"
+
+[[member]]
+symbol = "cs:*/T:System.Runtime.Intrinsics.X86.Sse41"
+constraints = ["All"]
+runtime = "*"
+reason = "x86 hardware intrinsics: single instructions, no allocation"
+
+[[member]]
+symbol = "cs:*/T:System.Runtime.Intrinsics.X86.Avx2"
+constraints = ["All"]
+runtime = "*"
+reason = "x86 hardware intrinsics: single instructions, no allocation"
+
+[[member]]
+symbol = "cs:*/T:System.Buffers.SearchValues`1"
+constraints = ["All"]
+runtime = "*"
+reason = "lookups on a prebuilt set; creating the set (SearchValues.Create) is not covered and happens outside verified code"
+
+[[member]]
+symbol = "cs:*/M:System.MemoryExtensions.IndexOfAny``1(System.ReadOnlySpan{``0},System.Buffers.SearchValues{``0})"
+constraints = ["All"]
+runtime = "*"
+reason = "vectorized search over a span, returns an index"
+
+[[member]]
+symbol = "cs:*/M:System.MemoryExtensions.IndexOfAnyExcept``1(System.ReadOnlySpan{``0},System.Buffers.SearchValues{``0})"
+constraints = ["All"]
+runtime = "*"
+reason = "vectorized search over a span, returns an index"
+
+[[member]]
+symbol = "cs:*/M:System.Text.Unicode.Utf8.ToUtf16(System.ReadOnlySpan{System.Byte},System.Span{System.Char},System.Int32@,System.Int32@,System.Boolean,System.Boolean)"
+constraints = ["All"]
+runtime = "*"
+reason = "vectorized UTF-8 to UTF-16 transcoding into a caller-provided buffer"

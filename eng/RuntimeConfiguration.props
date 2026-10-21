@@ -1,0 +1,36 @@
+<Project>
+  <!--
+    The four pre-registered C# runtime configurations (pre-registration §6.4, A7).
+    Select one with -p:NeverSharpRuntime=aot-ws|aot-srv|jit-ws|jit-srv when publishing a driver.
+    Everything not set here stays at the .NET default; changing this file after the tag is an amendment.
+  -->
+  <PropertyGroup>
+    <NeverSharpRuntime Condition="'$(NeverSharpRuntime)' == ''">aot-ws</NeverSharpRuntime>
+    <PublishReadyToRun>false</PublishReadyToRun>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(NeverSharpRuntime)' == 'aot-ws' Or '$(NeverSharpRuntime)' == 'aot-srv'">
+    <PublishAot>true</PublishAot>
+    <!-- IlcInstructionSet and IlcOptimizationPreference deliberately unset: default baseline,
+         wider instructions only behind runtime checks (pre-registration §5.4 rule 2). -->
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(NeverSharpRuntime)' == 'jit-ws' Or '$(NeverSharpRuntime)' == 'jit-srv'">
+    <PublishAot>false</PublishAot>
+    <!-- TieredCompilation and TieredPGO: defaults (on). -->
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(NeverSharpRuntime)' == 'aot-ws' Or '$(NeverSharpRuntime)' == 'jit-ws'">
+    <ServerGarbageCollector>false</ServerGarbageCollector>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(NeverSharpRuntime)' == 'aot-srv' Or '$(NeverSharpRuntime)' == 'jit-srv'">
+    <ServerGarbageCollector>true</ServerGarbageCollector>
+  </PropertyGroup>
+  <!-- ConcurrentGarbageCollection and GC dynamic adaptation (DATAS): defaults. -->
+
+  <Target Name="NeverSharpCheckRuntime" BeforeTargets="Build"
+          Condition="'$(NeverSharpRuntime)' != 'aot-ws' And '$(NeverSharpRuntime)' != 'aot-srv' And '$(NeverSharpRuntime)' != 'jit-ws' And '$(NeverSharpRuntime)' != 'jit-srv'">
+    <Error Text="NeverSharpRuntime must be aot-ws, aot-srv, jit-ws or jit-srv (got '$(NeverSharpRuntime)')." />
+  </Target>
+</Project>

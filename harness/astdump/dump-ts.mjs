@@ -56,11 +56,14 @@ function dumpUnit(text, unit) {
         scriptKinds[unit.kind],
     );
     const nodes = [];
-    const visit = (node, depth) => {
-        nodes.push({ depth, kind: kindNames.get(node.kind), pos: node.pos, end: node.end, flags: flagNames(node) });
-        ts.forEachChild(node, child => void visit(child, depth + 1));
+    // JSDoc section (format version 1): after a node's line, each comment of its jsDoc array as a
+    // subtree whose lines are marked "@", then the node's regular children.
+    const visit = (node, depth, jsdoc) => {
+        nodes.push({ depth, kind: kindNames.get(node.kind), pos: node.pos, end: node.end, flags: flagNames(node), jsdoc });
+        for (const comment of node.jsDoc ?? []) visit(comment, depth + 1, true);
+        ts.forEachChild(node, child => void visit(child, depth + 1, jsdoc));
     };
-    visit(sourceFile, 0);
+    visit(sourceFile, 0, false);
     const diagnostics = d => ({ code: d.code, start: d.start, length: d.length });
     return renderDump(nodes, {
         diag: sourceFile.parseDiagnostics.map(diagnostics),

@@ -57,7 +57,7 @@ Verdict legend: **blocked**, **partly blocked**, **open** (not blocked; needs an
 
 ## 4. Proposed additions
 
-**Decided by the author 2026-10-21:** A1, A2, A3, A5, A7, A8, A9 adopted; A4 adopted as a Linux replication; A6 subject to a feasibility check. All are now in [preregistration.md](preregistration.md) (§3, §5.2, §6.3, §6.4, §8, §11, §14); A2 is implemented in the harness.
+**Decided by the author 2026-10-21:** A1, A2, A3, A5, A7, A8, A9 adopted; A4 adopted as a Linux replication; A6 feasible and adopted (`harness/bench/crosscheck.mjs`; feasibility check: driver/tsgo parse time 0.72–1.05). All are now in [preregistration.md](preregistration.md) (§3, §5.2, §6.3, §6.4, §8, §11, §14); A2 is implemented in the harness.
 
 | Id | Addition | Answers | Cost |
 |---|---|---|---|

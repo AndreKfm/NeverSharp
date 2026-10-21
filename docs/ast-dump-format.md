@@ -36,7 +36,7 @@ Known limitation: `fourslash/` files are parsed as the test scripts they are (Ty
 
 tsc 6.0.3 runs each unit in a worker thread with a 10 s timeout because of the known non-terminating path in `scanJsDocToken` ([references.md](references.md), section 2). **No unit timed out**, so that defect is not triggered by this corpus.
 
-## 4. Dump format, version 0
+## 4. Dump format, version 1
 
 ```
 <indent><Kind> <pos> <end>[ <Flag>|<Flag>...]     one line per node, pre-order, 2 spaces per depth level
@@ -44,6 +44,17 @@ tsc 6.0.3 runs each unit in a worker thread with a 10 s timeout because of the k
 !jsdiag <code> <start> <length>                   JS-only grammar diagnostics (typescript-go only)
 !jsdocdiag <code> <start> <length>                JSDoc parse diagnostics
 ```
+
+Version 1 (2026-10-21) adds the **JSDoc section**, written by the tsc 6.0.3 dumper only:
+
+```
+<indent><Kind> <pos> <end>[ <Flags>]              a node
+<indent+2>@<Kind> <pos> <end>[ <Flags>]           each comment of the node's jsDoc array, as a subtree
+<indent+4>@<Kind> ...                             (children by the JSDoc nodes' own visitor), marked "@"
+<indent+2><Kind> ...                              then the node's regular children
+```
+
+It is part of the C# Gate 1 (both tracks, compared with tsc 6.0.3 byte for byte) and is skipped when tsc 6.0.3 is compared with typescript-go (decision 4). On the equivalence corpus with `JSDocParsingMode.ParseAll`: 9,496 of 50,177 units have a JSDoc section, 178,463 JSDoc lines in total. Adding it changed nothing in the oracle comparison (50,092 identical, 85 pre-registered divergences).
 
 - **Children** are exactly what each implementation's own child visitor yields (`ts.forEachChild`, `ast.Node.ForEachChild`). Neither visits JSDoc comments, so JSDoc nodes are not in the tree. JSDoc *type syntax* inside regular code (`?number`, `function(string)`) is.
 - **Kind** is the enum member name, not its number: the numeric values differ between the two implementations. For TypeScript, the first declared name per value is used (aliases such as `FirstToken` are skipped). For Go, `Kind.String()` without the `Kind` prefix.
@@ -114,6 +125,6 @@ Observations:
 
 **[DECISION 3, CONFIRMED] Restate kill criterion 1.** The brief says: stop if the AST dump cannot be made identical between tsc 6.0 and typescript-go. Taken literally, it fires today: zero raw matches, 85 residual units. Proposed wording: *"Stop and publish if the comparison of tsc 6.0.3 and typescript-go 7.0.2 shows any difference that is neither removed by a pre-registered normalization rule nor listed in the pre-registered divergence list."* The rule list and the divergence list are frozen with the pre-registration tag; changing either is an amendment.
 
-**[DECISION 4, CONFIRMED] JSDoc content is not in dump v0.** Only the presence of a JSDoc comment (`HasJSDoc`) is compared. Reasons: neither child visitor includes JSDoc; typescript-go parses JSDoc in TS files lazily and turns JSDoc in JS files into synthesized TypeScript nodes. The final in/out decision for v1 belongs to the Phase 1 plan (task 4). If JSDoc is in scope, the C# gate (decision 1) adds a JSDoc section compared against tsc 6.0.3 only, since typescript-go's JSDoc representation is not comparable node for node.
+**[DECISION 4, CONFIRMED] JSDoc content is not compared with typescript-go.** (Originally: "not in dump v0". Since format version 1 the dump contains a JSDoc section, compared with tsc 6.0.3 only; see section 4.) Only the presence of a JSDoc comment (`HasJSDoc`) is compared. Reasons: neither child visitor includes JSDoc; typescript-go parses JSDoc in TS files lazily and turns JSDoc in JS files into synthesized TypeScript nodes. The final in/out decision for v1 belongs to the Phase 1 plan (task 4). If JSDoc is in scope, the C# gate (decision 1) adds a JSDoc section compared against tsc 6.0.3 only, since typescript-go's JSDoc representation is not comparable node for node.
 
 **[DECISION 5, CONFIRMED] `fourslash/` files are parsed as whole files.** Extracting their `////` content would be a second splitting rule of our own. As test scripts they are valid TypeScript and exercise the parser as they are.

@@ -10,7 +10,7 @@
 // but marked protocolCompliant=false; the report labels it as a probe.
 //
 // Usage: node bench.mjs [--repos a,b] [--configs x,y] [--runs 20] [--warmup 3]
-//                       [--mem-runs 5] [--priority high|normal] [--label text]
+//                       [--mem-runs 5] [--priority high|normal] [--corpus benchmark|tuning] [--label text]
 //
 // --priority high (default): every driver raises itself to the high priority
 // class at start (NEVERSHARP_PRIORITY=high) and reports the class in effect;
@@ -50,8 +50,11 @@ const priority = arg("--priority", "high");
 if (priority !== "high" && priority !== "normal") throw new Error("--priority must be high or normal");
 const driverEnv = { ...process.env, NEVERSHARP_PRIORITY: priority };
 
-const fileManifest = JSON.parse(readFileSync(join(benchDir, "filelists", "manifest.json"), "utf8"));
-const repos = pins.benchmarkCorpus.repos.map(r => r.name).filter(r => !repoFilter || repoFilter.includes(r));
+// --corpus benchmark (default): Microsoft's five repositories; --corpus tuning: the tuning corpus (pre-registration §3).
+const corpusName = arg("--corpus", "benchmark");
+if (corpusName !== "benchmark" && corpusName !== "tuning") throw new Error("--corpus must be benchmark or tuning");
+const fileManifest = JSON.parse(readFileSync(join(benchDir, "filelists", corpusName === "tuning" ? "tuning-manifest.json" : "manifest.json"), "utf8"));
+const repos = (corpusName === "tuning" ? ["tuning"] : pins.benchmarkCorpus.repos.map(r => r.name)).filter(r => !repoFilter || repoFilter.includes(r));
 const configs = configurations.filter(c => !configFilter || configFilter.includes(c.id));
 
 // hyperfine --shell=none splits the command line with POSIX shell-word rules, where a
@@ -162,7 +165,7 @@ const run = {
     startedAt: startedAt.toISOString(),
     finishedAt: new Date().toISOString(),
     protocolCompliant: environment.protocolCompliant,
-    suite: "parse",
+    suite: corpusName === "tuning" ? "parse-tuning" : "parse",
     settings: { runs, warmup, memRuns, hyperfineShell: "none", processPriority: priority },
     environment,
     corpus: Object.fromEntries(repos.map(r => [r, { commit: fileManifest.repos[r].commit, files: fileManifest.repos[r].files, bytes: fileManifest.repos[r].bytes, contentSha256: fileManifest.repos[r].contentSha256 }])),

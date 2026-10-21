@@ -82,7 +82,15 @@ Rules 1–5 and sections 5.1–5.3 apply to **Track F**. Track O has its own rul
 
 - `<Nullable>enable</Nullable>`, `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>`, `<AnalysisLevel>10.0-all</AnalysisLevel>`, `<EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>`;
 - `Microsoft.CodeAnalysis.BannedApiAnalyzers` with a banned list derived from the port rules: `System.Linq` in `src/` (no counterpart in Go, allocates), `System.Reflection` and `dynamic`, `System.Text.RegularExpressions` (the TypeScript scanner and parser use no regular expressions), parallelism other than the work-group counterpart of rule 3;
-- a header check for rule 5.
+- a header check for rule 5 (`scripts/check-headers.mjs`).
+
+Committed files ([eng/](../eng/)): `Gate2.Common.props`, `Gate2.Faithful.props`, `BannedSymbols.Faithful.txt`; the analyzer package is pinned in `Directory.Packages.props` (`Microsoft.CodeAnalysis.BannedApiAnalyzers` 4.14.0).
+
+Refinements made while implementing (2026-10-21):
+
+- **Reflection** is banned by its APIs (member infos, `Assembly`, `Activator`, `Reflection.Emit`, `Type.Get*` lookups), not by the whole `System.Reflection` namespace: the SDK-generated assembly attributes live in that namespace, and `AnalysisLevel` all requires one of them (CA1016).
+- **Track F additionally bans** `System.Runtime.Intrinsics`, `System.Numerics.Vector`, `Unsafe` and `MemoryMarshal`: explicit SIMD and unsafe code have no counterpart in typescript-go (rule 3); they belong to Track O, which must evaluate them, so the difference between the tracks shows what they contribute (confirmed by the author 2026-10-21). The BCL's own internal vectorization (e.g. in `string.IndexOf`) is not affected, just as Go's standard library vectorizes internally.
+- Verified with deliberate violations: Track F rejects LINQ and intrinsics (RS0030); Track O rejects heap allocation (NS001) and `lock` (NS003), and accepts SIMD, `SearchValues`, UTF-8 transcoding and `stackalloc` under `[NoAlloc(NoLock | NoBlock)]`.
 
 The ruleset files are committed before Phase 1 starts and pinned by that commit; changing them later is an amendment (section 12). Suppressions are allowed only with a comment citing the typescript-go counterpart.
 
@@ -108,7 +116,7 @@ Source and equivalence as Track F: ported from tsc 6.0.3, Gate 1 byte-identical 
 6. **Tuning corpus ≠ benchmark corpus.** Variants are compared on the tuning corpus only (section 3). The five benchmark repositories are not used for any choice in Track O; they are measured once, for the result. Otherwise the result would be fitted to the corpus it is judged on.
 7. **Selection rule.** The winner is the variant with the lowest module-level median on the tuning corpus; if the 95 % intervals of the best variants overlap, the one with fewer bytes allocated wins, then the simpler one (fewer lines). Every variant, its numbers and the reason it lost are logged and published.
 
-**Track O Gate 2:** the Track F settings of 5.1 (nullable, warnings as errors, `AnalysisLevel` all, code style) plus the NoAlloc analyzer; the banned-API list is reduced to reflection, `dynamic` and `System.Linq` in `src/`. Intrinsics, `Unsafe` and `stackalloc` are allowed.
+**Track O Gate 2:** the Track F settings of 5.1 (nullable, warnings as errors, `AnalysisLevel` all, code style) plus the NoAlloc analyzer; the banned-API list is reduced to reflection, `dynamic` and `System.Linq` in `src/`. Intrinsics, `Unsafe` and `stackalloc` are allowed. Files: `eng/Gate2.Optimized.props`, `eng/BannedSymbols.Optimized.txt`, and `eng/simd.noalloc-allowlist.toml`: the runtime members the mandatory SIMD, span and decoding variants need (Vector128/256, SSE2/SSE4.1/AVX2 intrinsics, `SearchValues<T>` lookups, `IndexOfAny`/`IndexOfAnyExcept` with `SearchValues`, `Utf8.ToUtf16`), each with its reason, because the analyzer's built-in BCL baseline does not list them.
 
 ## 6. Measurement
 
@@ -274,11 +282,11 @@ typescript-go (the reference and the method this project copies); oxc and swc (R
 - [x] Author confirmed every **[DECISION]** in this document (2026-10-21).
 - [ ] **[OPEN]** Multi-model workflow: models and attempts per model (5.2).
 - [x] Phase 1 plan committed ([phase1-plan.md](phase1-plan.md)): module boundaries, JSDoc scope, effort estimate.
-- [ ] JSDoc section of the dump format specified and the tsc 6.0.3 side implemented (4.2).
-- [ ] Analyzer ruleset committed for both tracks (5.1, 5.4).
+- [x] JSDoc section of the dump format specified and the tsc 6.0.3 side implemented (4.2; ast-dump-format.md §4, format version 1).
+- [x] Analyzer ruleset committed for both tracks (5.1, 5.4): `eng/Gate2.*.props`, `eng/BannedSymbols.*.txt`, `eng/simd.noalloc-allowlist.toml`, `scripts/check-headers.mjs`; placeholder projects `src/NeverSharp.Faithful`, `src/NeverSharp.Optimized` build clean.
 - [ ] C# driver contract: `NEVERSHARP_PRIORITY`, JSON output with file count, node count, priority, GC metrics (6.3, 7).
-- [ ] Tuning corpus manifest generated (section 3).
-- [ ] Configuration project files committed (A7).
-- [ ] **A6** feasibility: cross-check of the Go driver's parse time against tsgo's own reported parse time; adopted or dropped with reason.
+- [x] Tuning corpus manifest generated (section 3): `harness/bench/tuning.mjs`, 24,511 files (23,910 tests/cases units, 601 TypeScript sources), 37.5 MiB.
+- [ ] Configuration project files committed (A7): `eng/RuntimeConfiguration.props` committed; a NativeAOT publish of each configuration is verified once the first driver exists (M0).
+- [x] **A6** feasible and adopted: `harness/bench/crosscheck.mjs` runs in the deciding session and is reported with the result: per repository, the Go driver's parse time (median minus fixed cost) against tsgo's own `Parse time` (`--extendedDiagnostics`, resolution and lib files off, median of 5). Feasibility check 2026-10-21 (different sessions, not a measurement): driver/tsgo 0.72–1.05 across the five repositories, i.e. the driver is not slower than tsgo's own parse phase except +5 % on vscode.
 - [ ] Harness support for Linux (rig checks, peak memory) before the replication run (A4); may follow the tag.
 - [ ] Repository published, so the tag date is publicly verifiable.

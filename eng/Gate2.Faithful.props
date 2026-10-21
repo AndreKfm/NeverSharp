@@ -1,0 +1,7 @@
+<Project>
+  <!-- Gate 2 for Track F (faithful port): common settings + the faithful banned-API list. -->
+  <Import Project="Gate2.Common.props" />
+  <ItemGroup>
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.Faithful.txt" />
+  </ItemGroup>
+</Project>

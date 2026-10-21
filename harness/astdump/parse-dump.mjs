@@ -9,6 +9,9 @@ export function parseDump(text) {
     let panic;
     for (const line of text.split("\n")) {
         if (line === "") continue;
+        // JSDoc section (format version 1): compared against tsc 6.0.3 only, never against
+        // typescript-go, whose JSDoc representation is not comparable node for node.
+        if (line.trimStart().startsWith("@")) continue;
         if (line.startsWith("!panic")) { panic = line; continue; }
         if (line.startsWith("!")) {
             const [section, code, start, length] = line.slice(1).split(" ");

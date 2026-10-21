@@ -1,0 +1,19 @@
+N:System.Linq;Allocates; write the loop
+T:System.Reflection.Assembly;No reflection in the compiler
+T:System.Reflection.MemberInfo;No reflection in the compiler
+T:System.Reflection.MethodBase;No reflection in the compiler
+T:System.Reflection.MethodInfo;No reflection in the compiler
+T:System.Reflection.ConstructorInfo;No reflection in the compiler
+T:System.Reflection.PropertyInfo;No reflection in the compiler
+T:System.Reflection.FieldInfo;No reflection in the compiler
+T:System.Reflection.EventInfo;No reflection in the compiler
+T:System.Reflection.ParameterInfo;No reflection in the compiler
+T:System.Reflection.TypeInfo;No reflection in the compiler
+N:System.Reflection.Emit;No reflection in the compiler
+T:System.Activator;No reflection in the compiler
+M:System.Type.GetMethod(System.String);No reflection in the compiler
+M:System.Type.GetProperty(System.String);No reflection in the compiler
+M:System.Type.GetField(System.String);No reflection in the compiler
+M:System.Type.GetMembers;No reflection in the compiler
+M:System.Type.InvokeMember(System.String,System.Reflection.BindingFlags,System.Reflection.Binder,System.Object,System.Object[]);No reflection in the compiler
+N:Microsoft.CSharp.RuntimeBinder;No dynamic

@@ -22,10 +22,11 @@ Configurations (all reported; none is dropped after the fact):
 node scripts/fetch-references.mjs          # TypeScript, typescript-go, five benchmark repos at pinned commits
 node scripts/install-tools.mjs             # Go (Microsoft build), Node, hyperfine into .tools/, SHA-256 verified
 cd harness/bench && npm ci                 # typescript@6.0.3 and typescript@7.0.2 (npm aliases), lockfile-pinned
-node filelists.mjs                         # parse sets per repo + manifest (counts, bytes, content hash)
+node filelists.mjs                         # parse sets per repo + manifest (counts, bytes, content hash), empty list for fixed cost
+node tuning.mjs                            # tuning corpus (after harness/astdump/corpus.mjs): tests/cases units + TypeScript src
 node build-go.mjs                          # Go parse driver, built like Microsoft's tsgo release binary
 dotnet build peakmem -c Release -o ../../artifacts/bin/peakmem
-node bench.mjs [--repos …] [--configs …] [--runs 20] [--warmup 3] [--mem-runs 5] [--label …]
+node bench.mjs [--corpus benchmark|tuning] [--repos …] [--configs …] [--runs 20] [--warmup 3] [--mem-runs 5] [--label …]
 node report.mjs artifacts/bench/results/<runId>/run.json
 ```
 
@@ -198,7 +199,21 @@ What this baseline is and is not:
 - It is the reference for Phase 1: the C# parse-only driver will be measured with the same harness, the same corpus and the same rig checks, and compared to `tsgo7-parse` under the decision rule fixed in the pre-registration.
 - It is **parse-only**. The ratio tsc 6.0.3 / typescript-go of about 12× is not comparable with Microsoft's full-build numbers (7.7–11.9× in the TypeScript 7.0 announcement), which include binding, checking and emit.
 
-## 10. Not covered yet
+## 10. Driver cross-check (A6)
+
+`node crosscheck.mjs <run.json>` compares, per repository, the Go driver's parse time (median of `tsgo7-parse` minus its fixed cost) with the parse time tsgo reports about itself (`Parse time` from `--extendedDiagnostics` on a generated tsconfig with exactly the parse set, `noResolve`, `noLib`; median of 5). tsgo's phase includes program-construction work the driver does not do, so the driver should not be slower; a ratio well above 1 would mean the driver handicaps Go. Writes `crosscheck.json` next to the run.
+
+Feasibility check (2026-10-21; tsgo numbers from this session, driver numbers from the baseline run, so not a measurement):
+
+| Repository | tsgo `Parse time` (median of 5) | driver (baseline median − 21 ms) | driver / tsgo |
+|---|---:|---:|---:|
+| bluesky | 0.108 s | 0.078 s | 0.72 |
+| playwright | 0.130 s | 0.120 s | 0.92 |
+| tldraw | 0.161 s | 0.131 s | 0.81 |
+| sentry | 0.493 s | 0.379 s | 0.77 |
+| vscode | 0.975 s | 1.025 s | 1.05 |
+
+## 11. Not covered yet
 
 - **Full builds** (`tsc -p` / `tsgo -p` per repository, Microsoft's published comparison). Reproducing them would show that the rig reproduces Microsoft's ratio, but it requires installing each repository's npm dependencies (thousands of packages, several GB) and picking a tsconfig per repository. Proposed as a separate, optional step (with `--ignore-scripts`), labeled as a rig sanity check, not as a protocol metric for Phase 1.
 - **C# configurations** and BenchmarkDotNet: with the first ported code.

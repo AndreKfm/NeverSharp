@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Track O: optimized port of the TypeScript 6.0.3 scanner and parser (pre-registration §5.4). -->
+  <Import Project="$(RepoRoot)eng/Gate2.Optimized.props" />
+  <PropertyGroup>
+    <RootNamespace>NeverSharp.Optimized</RootNamespace>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+</Project>

@@ -37,8 +37,10 @@ per upstream file.
   was used as a reference for the translation (it is part of the model inputs
   in the multi-model workflow, so in practice: always for ported modules).
 - The `Modified:` line is the change notice required by Apache 2.0, section 4(b).
-- Files written from scratch (harness, dumpers, tests) carry only the first and
-  third line.
+- Files written from scratch carry only the copyright and SPDX lines. Under `src/`,
+  where everything is expected to be ported, such a file must say so explicitly with
+  `// Original code (not ported): <reason>` as its third line.
+- `node scripts/check-headers.mjs` checks every file under `src/` (part of Gate 2).
 
 ## Reference checkouts
 

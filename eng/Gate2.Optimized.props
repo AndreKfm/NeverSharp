@@ -1,0 +1,18 @@
+<Project>
+  <!--
+    Gate 2 for Track O (optimized port): common settings, the reduced banned-API list,
+    and the NoAlloc analyzer (NS001-NS015 are errors).
+  -->
+  <Import Project="Gate2.Common.props" />
+  <Import Project="$(RepoRoot)analyzers/NeverSharp.NoAlloc/NeverSharp.NoAlloc.Analyzers/build/NeverSharp.NoAlloc.Analyzers.props" />
+  <PropertyGroup>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.Optimized.txt" />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)simd.noalloc-allowlist.toml" />
+    <ProjectReference Include="$(RepoRoot)analyzers/NeverSharp.NoAlloc/NeverSharp.NoAlloc.Analyzers/NeverSharp.NoAlloc.Analyzers.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <Using Include="NeverSharp.NoAlloc" />
+  </ItemGroup>
+</Project>

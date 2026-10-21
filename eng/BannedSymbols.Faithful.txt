@@ -1,0 +1,28 @@
+N:System.Linq;Port rule 3: no counterpart in typescript-go (Go has no LINQ); write the loop as the source does
+T:System.Reflection.Assembly;Port rules: no reflection in the compiler
+T:System.Reflection.MemberInfo;Port rules: no reflection in the compiler
+T:System.Reflection.MethodBase;Port rules: no reflection in the compiler
+T:System.Reflection.MethodInfo;Port rules: no reflection in the compiler
+T:System.Reflection.ConstructorInfo;Port rules: no reflection in the compiler
+T:System.Reflection.PropertyInfo;Port rules: no reflection in the compiler
+T:System.Reflection.FieldInfo;Port rules: no reflection in the compiler
+T:System.Reflection.EventInfo;Port rules: no reflection in the compiler
+T:System.Reflection.ParameterInfo;Port rules: no reflection in the compiler
+T:System.Reflection.TypeInfo;Port rules: no reflection in the compiler
+N:System.Reflection.Emit;Port rules: no reflection in the compiler
+T:System.Activator;Port rules: no reflection in the compiler
+M:System.Type.GetMethod(System.String);Port rules: no reflection in the compiler
+M:System.Type.GetProperty(System.String);Port rules: no reflection in the compiler
+M:System.Type.GetField(System.String);Port rules: no reflection in the compiler
+M:System.Type.GetMembers;Port rules: no reflection in the compiler
+M:System.Type.InvokeMember(System.String,System.Reflection.BindingFlags,System.Reflection.Binder,System.Object,System.Object[]);Port rules: no reflection in the compiler
+N:Microsoft.CSharp.RuntimeBinder;Port rules: no dynamic
+N:System.Text.RegularExpressions;The TypeScript scanner and parser use no regular expressions
+N:System.Runtime.Intrinsics;Port rule 3: explicit SIMD has no counterpart in typescript-go (Track O only)
+T:System.Numerics.Vector`1;Port rule 3: explicit SIMD has no counterpart in typescript-go (Track O only)
+T:System.Numerics.Vector;Port rule 3: explicit SIMD has no counterpart in typescript-go (Track O only)
+T:System.Runtime.CompilerServices.Unsafe;Port rule 3: no unsafe optimizations without a counterpart (Track O only)
+T:System.Runtime.InteropServices.MemoryMarshal;Port rule 3: no unsafe optimizations without a counterpart (Track O only)
+T:System.Threading.Tasks.Parallel;Port rule 3: parallelism only through the work-group counterpart in the driver
+M:System.Threading.Tasks.Task.Run(System.Action);Port rule 3: parallelism only through the work-group counterpart in the driver
+T:System.Threading.Thread;Port rule 3: parallelism only through the work-group counterpart in the driver
