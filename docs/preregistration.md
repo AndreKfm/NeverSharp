@@ -12,6 +12,13 @@ Author: Andre Kaufmann. Repository: NeverSharp. License: Apache-2.0.
 
 This is a question, not a claim. The protocol below fixes, before any C# code exists, what will be measured, how, what counts as an answer, and when the project stops.
 
+**Two tracks** (decided by the author 2026-10-21, before any C# code exists):
+
+- **Track F (faithful)** answers the question above: a faithful port under the port rules of section 5, the way typescript-go is a faithful port. **Only Track F carries the pre-registered verdict.**
+- **Track O (optimized)** answers a second, separately labeled question: *how fast can a performance-optimized C# port of the same compiler be, compared with typescript-go?* It may use optimizations without a typescript-go counterpart (section 5.4). Its results are always reported as "optimized track" and never replace or blur the Track F verdict.
+
+Both tracks port from tsc 6.0.3 and pass the same Gate 1: byte-identical to tsc 6.0.3.
+
 **Scope of the answer per phase.** Phase 1 answers the question for **parsing only** (scanner + parser). A Phase 1 result says nothing about the full compiler. Later phases extend the measured scope (section 10).
 
 ## 2. Ground truth
@@ -49,9 +56,9 @@ Parse set: every git-tracked `.ts .tsx .mts .cts` file at the pinned commit (B1)
 
 Defined in [ast-dump-format.md](ast-dump-format.md): one line per node in pre-order (kind name, UTF-16 `pos`, `end`, sorted NodeFlags names), children as each implementation's own child visitor yields them, then parse diagnostics (code, start, length).
 
-### 4.2 Gate 1 (per module, per model in the multi-model workflow)
+### 4.2 Gate 1 (per module, per variant, both tracks)
 
-The C# dump must be **byte-identical to the tsc 6.0.3 dump on all 50,177 units, raw, without normalization**, in the `!diag` section and, because JSDoc is in Phase 1 scope (section 5.3), in the JSDoc section added to the dump format before Phase 1 starts. One mismatch fails the module. There is no tolerance and no exclusion list for the C# side.
+The C# dump of either track must be **byte-identical to the tsc 6.0.3 dump on all 50,177 units, raw, without normalization**, in the `!diag` section and, because JSDoc is in Phase 1 scope (section 5.3), in the JSDoc section added to the dump format before Phase 1 starts. One mismatch fails the module. There is no tolerance and no exclusion list for the C# side.
 
 ### 4.3 Oracle agreement
 
@@ -59,7 +66,7 @@ tsc 6.0.3 and typescript-go 7.0.2 are compared after the nine normalization rule
 
 ## 5. Port rules
 
-The port mirrors typescript-go's approach (a port, not a rewrite).
+Rules 1–5 and sections 5.1–5.3 apply to **Track F**. Track O has its own rules in section 5.4. The port mirrors typescript-go's approach (a port, not a rewrite).
 
 1. **Functions and data.** No class hierarchies beyond what the TypeScript source has. Node representation as in the source: kind, pos, end, parent, flags.
 2. **Strings and positions are UTF-16**, as in TypeScript. (typescript-go uses UTF-8 because Go strings are bytes; C# strings are UTF-16, so the source's representation is kept.)
@@ -86,6 +93,20 @@ Each module is ported independently by several AI models from the same inputs: t
 ### 5.3 JSDoc
 
 **[DECISION, CONFIRMED 2026-10-21] JSDoc parsing is in Phase 1 scope.** tsc parses JSDoc during parsing (in the benchmark: `JSDocParsingMode.ParseForTypeErrors`, i.e. all JSDoc in JS files, JSDoc with `@see`/`@link` in TS files), and typescript-go does the equivalent work. A C# parser without JSDoc would do less work than both references and get a speed advantage it did not earn. Consequence for Gate 1: the dump format gains a JSDoc section (JSDoc nodes and JSDoc diagnostics), compared against tsc 6.0.3 only, because typescript-go's JSDoc representation is not comparable node for node ([ast-dump-format.md](ast-dump-format.md), decision 4). The detailed scope is in the Phase 1 plan.
+
+### 5.4 Track O: optimized port
+
+Source and equivalence as Track F: ported from tsc 6.0.3, Gate 1 byte-identical to tsc 6.0.3 on all 50,177 units including the JSDoc section. Everything else differs:
+
+1. **Optimizations are allowed without a typescript-go counterpart.** Every module's variant set (rule 5) must include an evaluation of: SIMD (`System.Runtime.Intrinsics`, `Vector128`/`Vector256`), stack allocation and spans (`stackalloc`, `Span<T>`), and allocation-free data layout. A technique that loses is recorded with its numbers, not silently dropped.
+2. **SIMD behind runtime checks only.** NativeAOT is built with the default instruction-set baseline; wider instructions (AVX2 on the reference machine) are used only behind `IsSupported`/`IsHardwareAccelerated` checks with a scalar fallback. Reason: the typescript-go release binary is built for `GOAMD64=v1` and does not assume AVX2 either.
+3. **No GC wherever possible.** Ported code carries `[NoAlloc(Constraints.NoLock | Constraints.NoBlock)]` by default, verified by the repository's NoAlloc analyzer ([analyzers/NeverSharp.NoAlloc/](../analyzers/NeverSharp.NoAlloc/), diagnostics NS001–NS015 as errors). Code that cannot meet it says so with `Allow` + `Reason` or `[NoAllocUnchecked(reason)]`; the number of such members is reported with every Track O result.
+4. **Syntax tree as structs in arenas.** Nodes are structs stored in large pooled arrays and referenced by index; arena growth is the only allocation of the parse phase. (typescript-go uses a slice arena for node lists, but individual nodes are heap objects; Track F keeps the source's node objects.)
+5. **Variant process, before each step continues.** For each step (module or function, as listed in the Phase 1 plan), at most **3 variants** are built: different optimization strategies, implementations by different AI models, or both. Each variant must pass Gate 1 and Gate 2 (Track O ruleset, below). Survivors are measured at two levels: **micro** (BenchmarkDotNet with MemoryDiagnoser, per function) and **module** (the parse-only harness on the tuning corpus). The step continues with the winner only.
+6. **Tuning corpus ≠ benchmark corpus.** Variants are compared on the tuning corpus only: the 23,910 `tests/cases/**` units of the equivalence corpus. The five benchmark repositories are not used for any choice in Track O; they are measured once, for the result. Otherwise the result would be fitted to the corpus it is judged on.
+7. **Selection rule.** The winner is the variant with the lowest module-level median on the tuning corpus; if the 95 % intervals of the best variants overlap, the one with fewer bytes allocated wins, then the simpler one (fewer lines). Every variant, its numbers and the reason it lost are logged and published.
+
+**Track O Gate 2:** the Track F settings of 5.1 (nullable, warnings as errors, `AnalysisLevel` all, code style) plus the NoAlloc analyzer; the banned-API list is reduced to reflection, `dynamic` and `System.Linq` in `src/`. Intrinsics, `Unsafe` and `stackalloc` are allowed.
 
 ## 6. Measurement
 
@@ -124,8 +145,10 @@ Each module is ported independently by several AI models from the same inputs: t
 | `cs-aot-srv` / `cs-aot-srv-single` | C# NativeAOT, Server GC | secondary |
 | `cs-jit-ws` / `cs-jit-ws-single` | C# .NET 10 JIT (TieredPGO default), Workstation GC | secondary |
 | `cs-jit-srv` / `cs-jit-srv-single` | C# .NET 10 JIT, Server GC | secondary |
+| `cs-o-aot-ws` / `cs-o-aot-ws-single` | Track O, NativeAOT, Workstation GC | **primary Track O configuration** (parallel) |
+| `cs-o-aot-srv`, `cs-o-jit-ws`, `cs-o-jit-srv` (each also `-single`) | Track O, other runtime and GC combinations | Track O secondary |
 
-Parallel C# configurations schedule one work item per file (read + parse), the counterpart of typescript-go's `core.WorkGroup`, with the runtime's default degree of parallelism.
+The `cs-*` rows without `-o-` are Track F. Parallel C# configurations schedule one work item per file (read + parse), the counterpart of typescript-go's `core.WorkGroup`, with the runtime's default degree of parallelism.
 
 **[DECISION, CONFIRMED 2026-10-21] The primary C# configuration is NativeAOT with Workstation GC, parallel.** It is fixed now so that it cannot be chosen after the numbers exist. Reasons: typescript-go ships as a natively compiled single binary, so NativeAOT is the like-for-like deployment model for a CLI wall-clock comparison; Workstation GC is the .NET default. The other configurations are always reported; they cannot carry the primary claim (section 8).
 
@@ -160,6 +183,8 @@ A claim that C# is *faster* than typescript-go additionally requires the upper b
 
 **Secondary endpoints.** Per-repository ratios with their intervals; all other C# configurations against `tsgo7-parse`; single-threaded C# against `tsgo7-parse-single`; peak memory ratios. A parity statement about a secondary configuration is allowed only with a Bonferroni-adjusted interval (98.75 % for the four parallel C# configurations) and is labeled secondary. Secondary results never replace the primary verdict.
 
+**Track O endpoint.** The same G, interval and decision rule for `cs-o-aot-ws` against `tsgo7-parse`, from the same run as the Track F verdict if both are ready, otherwise from its own protocol-compliant run with `tsgo7-parse` in it. It is reported as **"optimized track"** next to, never instead of, the Track F verdict. Secondary Track O configurations follow the secondary rule above.
+
 **One final measurement.** The verdict comes from the first protocol-compliant run after Gate 1 and Gate 2 pass for the complete Phase 1 module. Replication runs may be published, each in full and alongside the first; they do not replace it.
 
 **Variance gate (kill criterion 3).** Every single-threaded configuration on every repository has MAD/median < 3 % in the deciding run; otherwise the rig is fixed and the run repeated before any number is published (B11). The parallel configurations' MAD/median is reported next to each median.
@@ -167,7 +192,9 @@ A claim that C# is *faster* than typescript-go additionally requires the upper b
 ## 9. Kill criteria for the project
 
 1. **Oracles disagree.** Stop and publish if the comparison of tsc 6.0.3 and typescript-go 7.0.2 shows any difference that is neither removed by a pre-registered normalization rule (N1–N9) nor listed in the pre-registered divergence list ([ast-dump-format.md](ast-dump-format.md), decision 3).
-2. **Phase 1 not equivalent in time.** Phase 1 (scanner + parser incl. JSDoc) does not pass Gate 1 within **8 calendar weeks from the tag date at about 7 h/week**: publish the gap analysis (the failing units and categories) and stop.
+2. **Phase 1 not equivalent in time.** Common budget for both tracks: **12 calendar weeks from the tag date at about 7 h/week** (decided by the author 2026-10-21).
+   - Track F does not pass Gate 1 within the budget: publish the gap analysis (the failing units and categories) and stop the project; without Track F there is no verdict.
+   - Track O does not pass Gate 1 within the budget: publish its gap analysis and end Track O; the Track F verdict is unaffected.
 3. **Rig variance.** The variance gate fails on the reference machine and cannot be fixed: no port numbers are published.
 
 ## 10. Phases
@@ -205,6 +232,8 @@ For transparency, the decisions that were revised during Phase 0, before this do
 | 2026-10-21 | Idle limit 5 % → 12 % | the machine idles at 7–10 % | B10 |
 | 2026-10-21 | Variance gate on single-threaded configurations; CI-based verdicts | spread of short parallel runs in probe runs; **decided after seeing probe data**; its rationale was later qualified by the quiet baseline run | B11, benchmark-harness.md §9 |
 | 2026-10-21 | Idle check: median of ten 1 s windows instead of one 3 s mean | single short window decided by momentary spikes | B10 amendment |
+| 2026-10-21 | Two tracks: faithful (carries the verdict) and optimized (SIMD, stack allocation, NoAlloc, arenas, ≤ 3 measured variants per step, separately labeled) | author's decision before any C# code | §1, §5.4 |
+| 2026-10-21 | Phase 1 budget 8 weeks → 12 weeks, common to both tracks | two tracks do not fit into 8 weeks at about 7 h/week | §9 |
 
 ## 13. Prior art
 
@@ -216,6 +245,6 @@ typescript-go (the reference and the method this project copies); oxc and swc (R
 - [ ] **[OPEN]** Multi-model workflow: models and attempts per model (5.2).
 - [ ] Phase 1 plan committed (module boundary, JSDoc scope details, effort estimate).
 - [ ] JSDoc section of the dump format specified and the tsc 6.0.3 side implemented (4.2).
-- [ ] Analyzer ruleset committed (5.1).
+- [ ] Analyzer ruleset committed for both tracks (5.1, 5.4).
 - [ ] C# driver contract: `NEVERSHARP_PRIORITY`, JSON output with file count, node count, priority, GC metrics (6.3, 7).
 - [ ] Repository published, so the tag date is publicly verifiable.
