@@ -1,0 +1,19 @@
+# Oracle 3: canonical AST dump via the tsrs v0.18.0 parser (secondary reference, amendment v5).
+# Built against the pinned tsrs checkout (external/tsrs) with tsrs's Cargo.lock.
+
+[package]
+name = "astdump-rs"
+version = "0.0.0"
+edition = "2024"
+publish = false
+license = "Apache-2.0"
+
+[dependencies]
+tsrs_parser = { path = "../../../external/tsrs/crates/tsrs_parser" }
+tsrs_ast = { path = "../../../external/tsrs/crates/tsrs_ast" }
+tsrs_core = { path = "../../../external/tsrs/crates/tsrs_core" }
+serde_json = "1"
+
+[profile.release]
+opt-level = 3
+panic = "unwind"

@@ -56,7 +56,15 @@ mod priority {
     }
 }
 
+// tsrs's thread setup: the command line runs on a thread with a 512 MiB stack (tsrs_cli/src/main.rs),
+// files are parsed on a rayon pool of min(available parallelism, 32) threads with 256 MiB stacks
+// (tsrs_compiler/src/program.rs worker_pool, PARSE_THREAD_CAP).
 fn main() {
+    let status = std::thread::Builder::new().stack_size(512 << 20).spawn(run).unwrap().join();
+    std::process::exit(if status.is_ok() { 0 } else { 1 });
+}
+
+fn run() {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
     let single = args.first().is_some_and(|a| a == "--single");
     if single {
@@ -87,7 +95,13 @@ fn main() {
         nodes.fetch_add(source_file.node_count.get() as i64, Ordering::Relaxed);
         source_file
     };
-    let source_files: Vec<_> = if single { files.iter().map(parse).collect() } else { files.par_iter().map(parse).collect() };
+    let source_files: Vec<_> = if single {
+        files.iter().map(parse).collect()
+    } else {
+        let threads = std::thread::available_parallelism().map_or(1, std::num::NonZero::get).min(32);
+        let pool = rayon::ThreadPoolBuilder::new().num_threads(threads).stack_size(256 << 20).build().unwrap();
+        pool.install(|| files.par_iter().map(parse).collect())
+    };
 
     let mode = if single { "single" } else { "parallel" };
     println!(
