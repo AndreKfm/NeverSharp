@@ -38,7 +38,7 @@ push("## Environment", "",
     row(["Machine", `${env.machine.cpu}, ${env.machine.cores} cores / ${env.machine.logicalProcessors} threads, ${(env.machine.ramBytes / 2 ** 30).toFixed(0)} GiB, ${env.machine.board}, BIOS ${env.machine.bios}`]),
     row(["OS", `${env.machine.os} ${env.machine.osVersion}`]),
     row(["Rig", `power scheme ${env.rig.scheme}, min/max processor state ${env.rig.minProcessorStateAc}/${env.rig.maxProcessorStateAc} %, processor performance under all-core load ${env.rig.processorPerformanceUnderLoadPercent} % of ${env.machine.nominalMHz} MHz, idle before run ${env.rig.idleCpuPercent.toFixed(1)} %${env.rig.idleCpuSamplesPercent ? ` (median of 1 s windows: ${env.rig.idleCpuSamplesPercent.join(", ")})` : ""}`]),
-    row(["Toolchain", `Node ${env.toolchain.node}, typescript ${env.toolchain.typescript6} / ${env.toolchain.typescript7}, Go ${env.toolchain.goToolset}, .NET SDK ${env.toolchain.dotnetSdk}, hyperfine ${env.toolchain.hyperfine.replace(/^hyperfine /, "")}`]),
+    row(["Toolchain", `Node ${env.toolchain.node}, typescript ${env.toolchain.typescript6} / ${env.toolchain.typescript7}, Go ${env.toolchain.goToolset}, .NET SDK ${env.toolchain.dotnetSdk}${env.toolchain.rust ? `, ${env.toolchain.rust}` : ""}, hyperfine ${env.toolchain.hyperfine.replace(/^hyperfine /, "")}`]),
     row(["Harness", `commit ${env.git.commit.slice(0, 10)}${env.git.dirty ? " (dirty)" : ""}, pins.json sha256 ${env.pinsSha256.slice(0, 12)}…`]),
     row(["Settings", `${run.settings.runs} runs after ${run.settings.warmup} warmup runs (hyperfine, --shell=${run.settings.hyperfineShell}); driver priority class: ${run.settings.processPriority ?? "normal"}; memory: ${run.settings.memRuns} separate runs`]),
     "");
@@ -75,6 +75,22 @@ for (const c of configs) {
     push(row([c.id, ...cells, geo]));
 }
 push("");
+
+// Secondary reference (prereg/v5): the same ratios against tsrs-parse, when the run contains it.
+const RUST = "tsrs-parse";
+if (configs.some(c => c.id === RUST)) {
+    push(`## Table 2b. Median wall-clock relative to \`${RUST}\` (secondary reference), with 95 % confidence interval`, "",
+        "Same method as Table 2, against tsrs (Rust port of TypeScript 7 / typescript-go), parallel. Secondary: never replaces the primary endpoint against typescript-go. tsrs parses JSDoc in .ts files lazily (TypeScript 7.1), typescript-go 7.0.2 eagerly, the C# tracks as tsc's host does (ParseForTypeErrors); see docs/references.md.", "",
+        row(["Configuration", ...repos, "Geometric mean"]), row(["---", ...repos.map(() => "---:"), "---:"]));
+    for (const c of configs) {
+        const pairs = repos.map(r => result(r, c.id) && result(r, RUST) ? [result(r, c.id).timing.times, result(r, RUST).timing.times] : undefined);
+        const cells = pairs.map(p => p === undefined ? "n/a" : c.id === RUST ? "1.00" : ci(bootstrapMedianRatio(p[0], p[1])));
+        const valid = pairs.filter(p => p !== undefined);
+        const geo = valid.length === 0 ? "n/a" : c.id === RUST ? "1.00" : ci(bootstrapGeometricMeanRatio(valid));
+        push(row([c.id, ...cells, geo]));
+    }
+    push("");
+}
 
 // Decision B11 as amended by prereg/v4: the rig check binds the configurations that measure the rig
 // (tsc6-parse, tsgo7-parse-single) and the primary single-threaded C# configuration of each track;

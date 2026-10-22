@@ -45,6 +45,21 @@
           "@typescript/typescript-darwin-arm64": "sha512-gowzar9MwS/aRWp6f3a4KUqzRjAZjOsmGNCM6LcTgXum+dBfgsBVMN+AgvOCCbguXyick6LJhpBszxMebJ8syA=="
         }
       }
+    },
+    "tsrs": {
+      "role": "Secondary performance reference (Rust port of TypeScript 7 / typescript-go; prereg/v5)",
+      "repository": "https://github.com/oxc-project/tsrs",
+      "tag": "v0.18.0",
+      "commit": "5f92808bc92bb97b06212153ab73d28d551c0b9b",
+      "commitDate": "2026-10-19T18:37:46+08:00",
+      "license": "Apache-2.0",
+      "rustToolchain": "1.99.1 (rust-toolchain.toml at the pinned commit)",
+      "portedFrom": {
+        "$comment": "Cargo.toml [workspace.metadata.typescript] at the pinned commit: tsrs ports the Go implementation of TypeScript at this commit (docs/COMPATIBILITY.md).",
+        "repository": "https://github.com/microsoft/TypeScript",
+        "commit": "b85298b6a81f772d080b0455de0ca9d744cd6fd6",
+        "version": "7.1.0-dev.20260929"
+      }
     }
   },
   "tools": {
@@ -85,6 +100,11 @@
       "runtime": "10.0.13",
       "released": "2026-10-13",
       "$comment": "Pinned in global.json with rollForward=disable."
+    },
+    "rust": {
+      "version": "1.99.1",
+      "distribution": "official rustup (x86_64-pc-windows-msvc), installed under .tools/rust (RUSTUP_HOME/CARGO_HOME) with --no-modify-path, profile minimal",
+      "purpose": "Building the tsrs parse-only driver and AST dumper (harness/bench/build-rs.mjs) with tsrs's own pinned toolchain, release profile (opt-level 3, lto fat, codegen-units 1, strip symbols, panic unwind), Cargo.lock and allocator (mimalloc)."
     }
   },
   "benchmarkCorpus": {

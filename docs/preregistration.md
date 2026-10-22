@@ -145,6 +145,7 @@ Source and equivalence as Track F: ported from tsc 6.0.3, Gate 1 byte-identical 
 | Node.js | 24.21.0 (runs tsc 6.0.3) |
 | hyperfine | 1.20.0 |
 | tsc | npm `typescript@6.0.3`, integrity-checked |
+| Rust | 1.99.1 via rustup, local under `.tools/rust` (tsrs's pinned toolchain; prereg/v5) |
 
 ### 6.3 Method
 
@@ -164,6 +165,7 @@ Source and equivalence as Track F: ported from tsc 6.0.3, Gate 1 byte-identical 
 |---|---|---|
 | `tsgo7-parse` | typescript-go 7.0.2, parallel (default) | **baseline** |
 | `tsgo7-parse-single` | typescript-go 7.0.2, single-threaded | reference |
+| `tsrs-parse` / `tsrs-parse-single` | tsrs 0.18.0 (Rust port of TypeScript 7 / typescript-go), parallel on rayon as tsrs parses files / single-threaded | **secondary reference** (prereg/v5) |
 | `tsc6-parse` | tsc 6.0.3 on Node 24, single-threaded | reference |
 | `cs-aot-ws` / `cs-aot-ws-single` | C# NativeAOT, Workstation GC, parallel / single-threaded | **primary C# configuration** (parallel) |
 | `cs-aot-srv` / `cs-aot-srv-single` | C# NativeAOT, Server GC | secondary |
@@ -218,6 +220,8 @@ with a 95 % percentile-bootstrap confidence interval: 10,000 resamples, independ
 A claim that C# is *faster* than typescript-go additionally requires the upper bound < 1.00.
 
 **Secondary endpoints.** Per-repository ratios with their intervals; all other C# configurations against `tsgo7-parse`; single-threaded C# against `tsgo7-parse-single`; peak memory ratios. A parity statement about a secondary configuration is allowed only with a Bonferroni-adjusted interval (98.75 % for the four parallel C# configurations) and is labeled secondary. Secondary results never replace the primary verdict.
+
+**Secondary reference: tsrs (amended, prereg/v5, 2026-10-22).** tsrs 0.18.0, the Rust port of TypeScript 7 (it ports typescript-go at TypeScript commit `b85298b6a81f`, 7.1.0-dev), is measured in the same run as `tsrs-parse` / `tsrs-parse-single` (driver `harness/bench/rust/parse-rs`: tsrs's file reading and `parse_source_file_owned` per file, rayon pool as in tsrs's compiler, tsrs's allocator, release profile and Cargo.lock). Every C# configuration is reported against it as well (report Table 2b: the same ratio, interval and seed). A statement against tsrs uses the same thresholds as the primary rule ("within 20 %" needs the upper bound ≤ 1.20, "faster" the upper bound < 1.00), is labeled **secondary**, and never replaces the verdict against typescript-go. Disclosed differences in the work done (docs/references.md §2a): tsrs parses JSDoc in `.ts` files lazily (TypeScript 7.1), typescript-go 7.0.2 eagerly, the C# tracks and tsc as tsc's host does (`ParseForTypeErrors`); tsrs represents `implements` clauses as `TypeReference` (TypeScript 7.1 AST). Decided before any Track O measurement; the Track F verdict (M6 run 3) was measured without tsrs and stands unchanged.
 
 **Track O endpoint.** The same G, interval and decision rule for `cs-o-aot-ws` against `tsgo7-parse`, from the same run as the Track F verdict if both are ready, otherwise from its own protocol-compliant run with `tsgo7-parse` in it. It is reported as **"optimized track"** next to, never instead of, the Track F verdict, together with the list of Track O steps evaluated (each with its winning variant) and not evaluated (A9). Secondary Track O configurations follow the secondary rule above.
 
@@ -300,6 +304,7 @@ For transparency, the decisions that were revised during Phase 0, before this do
 
 | Date | Tag | Change | Reason | Where |
 |---|---|---|---|---|
+| 2026-10-22 | `prereg/v5` | Secondary reference tsrs 0.18.0 (`tsrs-parse`, `tsrs-parse-single`, report Table 2b), pins `references.tsrs` and `tools.rust` (Rust 1.99.1) | a Rust port of TypeScript 7 appeared (Cloudflare/Oxc, 2026-10); the author wants Track O compared with it as well; decided before any Track O measurement | §6.2, §6.4, §8, references.md §2a, pins.json |
 | 2026-10-22 | `prereg/v4` | §8 variance gate: binding for tsc6-parse, tsgo7-parse-single and the primary single-threaded C# configuration of each track; other single-threaded C# configurations reported with a variance note | M6 runs 1 and 2 failed the gate only in JIT/Server-GC "single-threaded" configurations (3.36–5.08 %) while the rig configurations stayed ≤ 1.43 % and cs-aot-ws-single ≤ 1.68 %; **decided after seeing both runs**; the verdict comes from a run after this tag | benchmark-harness.md B11, results/m6/ |
 | 2026-10-21 | `prereg/v3` | §5.2: 2 attempts per Track F module from M5 on (1 × Opus 5.5, 1 × Sonnet 5.5), agents at medium effort, high only for Track O | token cost; M3+M4 attempt 1 was stopped by the author before finishing (logged in phase1-progress.md) | phase1-progress.md, modules/README.md |
 | 2026-10-21 | `prereg/v2` | §6.4 A7 table: property name `ServerGarbageCollector` → `ServerGarbageCollection` | erratum: `ServerGarbageCollector` is not an MSBuild property and is silently ignored, so the `-srv` configurations would have run with Workstation GC; the intent (Server GC for `-srv`) is unchanged. Found by the first publish of the four configurations, before any C# measurement. | eng/RuntimeConfiguration.props, phase1-progress.md |

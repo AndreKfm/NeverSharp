@@ -21,7 +21,7 @@
 // the runner rejects a driver whose reported class differs.
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { benchDir, exe, pins, repoRoot } from "./common.mjs";
 import { captureEnvironment } from "./env.mjs";
@@ -34,6 +34,7 @@ const node = join(tools, `node-${pins.tools.node.version}`, "node" + exe);
 const hyperfine = join(tools, `hyperfine-${pins.tools.hyperfine.version}`, "hyperfine" + exe);
 const peakmem = join(bin, "peakmem", "peakmem" + exe);
 const parseGo = join(bin, "parse-go" + exe);
+const parseRs = join(bin, "parse-rs" + exe);
 const here = import.meta.dirname;
 
 // Configurations of the parse-only suite. Every configuration is reported; none is dropped after the fact.
@@ -42,6 +43,9 @@ const configurations = [
     { id: "tsc6-parse", label: "tsc 6.0.3 (Node 24), single-threaded", threads: "single", command: list => [node, join(here, "parse-ts.mjs"), list] },
     { id: "tsgo7-parse", label: "typescript-go 7.0.2, parallel (default)", threads: "parallel", command: list => [parseGo, list] },
     { id: "tsgo7-parse-single", label: "typescript-go 7.0.2, single-threaded", threads: "single", command: list => [parseGo, "--single", list] },
+    // Secondary reference (prereg/v5): tsrs, the Rust port of TypeScript 7 / typescript-go (build-rs.mjs).
+    { id: "tsrs-parse", label: "tsrs 0.18.0 (Rust), parallel (rayon, as tsrs parses files)", threads: "parallel", command: list => [parseRs, list] },
+    { id: "tsrs-parse-single", label: "tsrs 0.18.0 (Rust), single-threaded", threads: "single", command: list => [parseRs, "--single", list] },
 ];
 // C# configurations of pre-registration §6.4, built by build-cs.mjs. The driver reports the
 // runtime it actually runs with; the runner checks it against the configuration's name.
@@ -93,6 +97,7 @@ const toolchain = {
     hyperfine: version(hyperfine, ["--version"]),
     goToolset: execFileSync(join(tools, `go-${pins.tools.go.version}`, "go", "bin", "go" + exe), ["version", "-m", parseGo], { encoding: "utf8" }).match(/microsoft_toolset_version=(\S+)/)?.[1] ?? "unknown",
     dotnetSdk: version("dotnet", ["--version"]),
+    rust: existsSync(join(tools, "rust", "cargo", "bin", "rustc" + exe)) ? version(join(tools, "rust", "cargo", "bin", "rustc" + exe), ["--version"]) : "not installed",
     typescript6: JSON.parse(readFileSync(join(here, "node_modules", "typescript6", "package.json"), "utf8")).version,
     typescript7: JSON.parse(readFileSync(join(here, "node_modules", "typescript7", "package.json"), "utf8")).version,
 };
