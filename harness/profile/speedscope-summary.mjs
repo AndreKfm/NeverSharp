@@ -5,6 +5,8 @@
 // the GC (stacks containing PollGC) with its nearest caller, and the deepest managed frame of all
 // other samples. Usage: node harness/profile/speedscope-summary.mjs <file.speedscope.json>
 
+import { readFileSync } from "node:fs";
+
 const d = JSON.parse(readFileSync(process.argv[2], "utf8"));
 const frames = d.shared.frames.map(f => f.name.replace(/\(.*$/, "").replace(/^.*?!/, ""));
 const pseudo = n => n === "CPU_TIME" || n === "UNMANAGED_CODE_TIME";
