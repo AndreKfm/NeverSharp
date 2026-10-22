@@ -21,7 +21,7 @@ internal sealed partial class NodeFactory
 
     // @api
     internal Node CreateSourceFile(
-        IReadOnlyList<Node> statements,
+        NodeList statements,
         Node endOfFileToken,
         NodeFlags flags)
     {
@@ -142,7 +142,7 @@ internal sealed partial class NodeFactory
 
     private Node CloneSourceFileWithChanges(
         Node source,
-        IReadOnlyList<Node> statements,
+        NodeList statements,
         bool isDeclarationFile,
         IReadOnlyList<FileReference> referencedFiles,
         IReadOnlyList<FileReference> typeReferences,
@@ -164,7 +164,7 @@ internal sealed partial class NodeFactory
     // @api
     internal Node UpdateSourceFile(
         Node node,
-        IReadOnlyList<Node> statements,
+        NodeList statements,
         bool? isDeclarationFile = null,
         IReadOnlyList<FileReference>? referencedFiles = null,
         IReadOnlyList<FileReference>? typeReferenceDirectives = null,

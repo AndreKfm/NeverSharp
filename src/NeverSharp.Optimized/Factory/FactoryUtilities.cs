@@ -168,7 +168,7 @@ internal static partial class FactoryUtilities
     /// <summary>
     /// Gets the elements of a BindingOrAssignmentPattern
     /// </summary>
-    internal static NodeArray GetElementsOfBindingOrAssignmentPattern(NodeStore store, Node name)
+    internal static NodeList GetElementsOfBindingOrAssignmentPattern(NodeStore store, Node name)
     {
         switch (store.Kind(name))
         {
@@ -186,7 +186,7 @@ internal static partial class FactoryUtilities
                 return store.Properties(name);
         }
         // (TypeScript's switch is exhaustive over BindingOrAssignmentPattern and returns undefined otherwise.)
-        return null!;
+        return default;
     }
 
     internal static Node GetJSDocTypeAliasName(NodeStore store, Node fullName)
@@ -222,7 +222,7 @@ internal static partial class FactoryUtilities
         {
             // check for nested spread assignments, otherwise '{ x: { a, ...b } = foo } = c'
             // will not be correctly interpreted by the ES2018 transformer
-            foreach (var element in GetElementsOfBindingOrAssignmentPattern(store, node))
+            foreach (var element in store.Nodes(GetElementsOfBindingOrAssignmentPattern(store, node)))
             {
                 var target = GetTargetOfBindingOrAssignmentElement(store, element);
                 if (!target.IsNone && UtilitiesPublic.IsAssignmentPattern(store, target))

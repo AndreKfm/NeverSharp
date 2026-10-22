@@ -73,7 +73,7 @@ internal static partial class CommandLineParser
             CommandLineOption? objectOption)
         {
             var result = returnValue ? new Dictionary<string, object?>(StringComparer.Ordinal) : null;
-            foreach (var element in store.Properties(node))
+            foreach (var element in store.Nodes(store.Properties(node)))
             {
                 if (store.Kind(element) != SyntaxKind.PropertyAssignment)
                 {
@@ -115,12 +115,12 @@ internal static partial class CommandLineParser
         }
 
         object? ConvertArrayLiteralExpressionToJson(
-            NodeArray elements,
+            NodeList elements,
             CommandLineOption? elementOption)
         {
             if (!returnValue)
             {
-                foreach (var element in elements)
+                foreach (var element in store.Nodes(elements))
                 {
                     ConvertPropertyValueToJson(element, elementOption);
                 }
@@ -129,7 +129,7 @@ internal static partial class CommandLineParser
 
             // Filter out invalid values
             var values = new List<object?>();
-            foreach (var element in elements)
+            foreach (var element in store.Nodes(elements))
             {
                 values.Add(ConvertPropertyValueToJson(element, elementOption));
             }

@@ -29,4 +29,9 @@ internal static partial class FactoryUtilitiesPublic
     {
         return location != null ? Utilities.SetTextRangePosEnd(store, range, location.Pos, location.End) : range;
     }
+
+    internal static NodeList SetTextRange(NodeStore store, NodeList range, NodeList location)
+    {
+        return !location.IsNone ? Utilities.SetTextRangePosEnd(store, range, store.Pos(location), store.End(location)) : range;
+    }
 }

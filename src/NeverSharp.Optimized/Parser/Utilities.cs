@@ -512,7 +512,7 @@ internal static partial class Utilities
             {
                 var statements = (node is var caseClause && store.IsCaseClause(caseClause)) ? store.Statements(caseClause) : store.Statements(node);
                 var start = Scanner.SkipTrivia(store.Text(sourceFile), store.Pos(node));
-                var end = statements.Count > 0 ? store.Pos(statements[0]) : store.End(node);
+                var end = store.Length(statements) > 0 ? store.Pos(store.Element(statements, 0)) : store.End(node);
                 return UtilitiesPublic.CreateTextSpanFromBounds(start, end);
             }
             case SyntaxKind.ReturnStatement:
@@ -673,13 +673,13 @@ internal static partial class Utilities
 
     internal static bool IsBindableObjectDefinePropertyCall(NodeStore store, Node expr)
     {
-        return Core.Length(store.Arguments(expr)!) == 3 &&
+        return store.Length(store.Arguments(expr)) == 3 &&
             FactoryNodeTests.IsPropertyAccessExpression(store, store.Expression(expr)) &&
             FactoryNodeTests.IsIdentifier(store, store.Expression(store.Expression(expr))) &&
             UtilitiesPublic.IdText(store, store.Expression(store.Expression(expr))) == "Object" &&
             UtilitiesPublic.IdText(store, store.Name(store.Expression(expr))) == "defineProperty" &&
-            IsStringOrNumericLiteralLike(store, store.Arguments(expr)![1]) &&
-            IsBindableStaticNameExpression(store, store.Arguments(expr)![0], /*excludeThisKeyword*/ true);
+            IsStringOrNumericLiteralLike(store, store.Element(store.Arguments(expr), 1)) &&
+            IsBindableStaticNameExpression(store, store.Element(store.Arguments(expr), 0), /*excludeThisKeyword*/ true);
     }
 
     /// <summary>
@@ -724,7 +724,7 @@ internal static partial class Utilities
             {
                 return AssignmentDeclarationKind.None;
             }
-            var entityName = store.Arguments(call)![0];
+            var entityName = store.Element(store.Arguments(call), 0);
             if (IsExportsIdentifier(store, entityName) || IsModuleExportsAccessExpression(store, entityName))
             {
                 return AssignmentDeclarationKind.ObjectDefinePropertyExports;
@@ -874,7 +874,7 @@ internal static partial class Utilities
 
     internal static Node GetSingleVariableOfVariableStatement(NodeStore store, Node node)
     {
-        return FactoryNodeTests.IsVariableStatement(store, node) ? Core.FirstOrUndefined(store.Declarations(store.DeclarationList(node))) : default;
+        return FactoryNodeTests.IsVariableStatement(store, node) ? Core.FirstOrUndefined(store.Nodes(store.Declarations(store.DeclarationList(node)))) : default;
     }
 
     private static Node GetNestedModuleDeclaration(NodeStore store, Node node)
@@ -1021,14 +1021,41 @@ internal static partial class Utilities
         foreach (var jsDoc in comments)
         {
             IReadOnlyList<Node>? mapped;
+            var tags = store.Tags(jsDoc);
             if (jsDoc == lastJsDoc)
             {
-                var ownedTags = Core.Filter((IReadOnlyList<Node>?)store.Tags(jsDoc), tag => OwnsJSDocTag(store, hostNode, tag));
-                mapped = store.Tags(jsDoc) == ownedTags ? [jsDoc] : ownedTags;
+                // `const ownedTags = filter(jsDoc.tags, ...); return jsDoc.tags === ownedTags ? [jsDoc] : ownedTags;`:
+                // filter returns its argument (also undefined) when it keeps every element.
+                var ownedTags = new List<Node>();
+                var keptAll = true;
+                foreach (var tag in store.Nodes(tags))
+                {
+                    if (OwnsJSDocTag(store, hostNode, tag))
+                    {
+                        ownedTags.Add(tag);
+                    }
+                    else
+                    {
+                        keptAll = false;
+                    }
+                }
+                mapped = keptAll ? [jsDoc] : ownedTags;
             }
             else
             {
-                mapped = Core.Filter((IReadOnlyList<Node>?)store.Tags(jsDoc), ((a0) => FactoryNodeTests.IsJSDocOverloadTag(store, a0)));
+                mapped = null;
+                if (!tags.IsNone)
+                {
+                    var overloadTags = new List<Node>();
+                    foreach (var tag in store.Nodes(tags))
+                    {
+                        if (FactoryNodeTests.IsJSDocOverloadTag(store, tag))
+                        {
+                            overloadTags.Add(tag);
+                        }
+                    }
+                    mapped = overloadTags;
+                }
             }
             if (mapped != null)
             {
@@ -1148,7 +1175,7 @@ internal static partial class Utilities
     internal static Associativity GetExpressionAssociativity(NodeStore store, Node expression)
     {
         var @operator = GetOperator(store, expression);
-        var hasArguments = store.Kind(expression) == SyntaxKind.NewExpression && store.Arguments(expression) != null;
+        var hasArguments = store.Kind(expression) == SyntaxKind.NewExpression && !store.Arguments(expression).IsNone;
         return GetOperatorAssociativity(store.Kind(expression), @operator, hasArguments);
     }
 
@@ -1198,7 +1225,7 @@ internal static partial class Utilities
     internal static OperatorPrecedence GetExpressionPrecedence(NodeStore store, Node expression)
     {
         var @operator = GetOperator(store, expression);
-        var hasArguments = store.Kind(expression) == SyntaxKind.NewExpression && store.Arguments(expression) != null;
+        var hasArguments = store.Kind(expression) == SyntaxKind.NewExpression && !store.Arguments(expression).IsNone;
         return GetOperatorPrecedence(store.Kind(expression), @operator, hasArguments);
     }
 
@@ -1393,7 +1420,7 @@ internal static partial class Utilities
     {
         return !template.IsNone && (FactoryNodeTests.IsNoSubstitutionTemplateLiteral(store, template)
             ? ContainsInvalidEscapeFlag(store, template)
-            : (ContainsInvalidEscapeFlag(store, store.Head(template)) || Core.Some(store.TemplateSpans(template), span => ContainsInvalidEscapeFlag(store, store.Literal(span)))));
+            : (ContainsInvalidEscapeFlag(store, store.Head(template)) || Core.Some(store.Nodes(store.TemplateSpans(template)), span => ContainsInvalidEscapeFlag(store, store.Literal(span)))));
     }
 
     internal static bool IsThisIdentifier(NodeStore store, Node node)
@@ -1513,12 +1540,12 @@ internal static partial class Utilities
         return flags;
     }
 
-    internal static ModifierFlags ModifiersToFlags(NodeStore store, IReadOnlyList<Node>? modifiers)
+    internal static ModifierFlags ModifiersToFlags(NodeStore store, NodeList modifiers)
     {
         var flags = ModifierFlags.None;
-        if (modifiers != null)
+        if (!modifiers.IsNone)
         {
-            foreach (var modifier in modifiers)
+            foreach (var modifier in store.Nodes(modifiers))
             {
                 flags |= ModifierToFlag(store.Kind(modifier));
             }

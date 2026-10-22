@@ -64,9 +64,9 @@ internal sealed partial class NodeFactory
         return (flags & NodeFactoryFlags.NoOriginalNode) != 0 ? node : SetOriginalNode(store, node, original);
     }
 
-    private static NodeArray? AsNodeArray(NodeStore store, IReadOnlyList<Node>? array)
+    private static NodeList AsNodeArray(NodeStore store, NodeList array)
     {
-        return array != null ? CreateNodeArray(store, array) : null;
+        return !array.IsNone ? CreateNodeArray(store, array) : default;
     }
 
     /// <summary>`asName(name: string | T)`: a string becomes an Identifier.</summary>

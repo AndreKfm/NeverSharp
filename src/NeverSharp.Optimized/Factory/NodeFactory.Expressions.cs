@@ -20,13 +20,13 @@ internal sealed partial class NodeFactory
     //
 
     // @api
-    internal Node CreateArrayLiteralExpression(IReadOnlyList<Node>? elements = null, bool? multiLine = null)
+    internal Node CreateArrayLiteralExpression(NodeList elements = default, bool? multiLine = null)
     {
         var node = CreateBaseNode(SyntaxKind.ArrayLiteralExpression);
         // Ensure we add a trailing comma for something like `[NumericLiteral(1), NumericLiteral(2), OmittedExpresion]` so that
         // we end up with `[1, 2, ,]` instead of `[1, 2, ]` otherwise the `OmittedExpression` will just end up being treated like
         // a trailing comma.
-        var lastElement = elements != null ? Core.LastOrUndefined(elements) : default;
+        var lastElement = !elements.IsNone ? Core.LastOrUndefined(store.Nodes(elements)) : default;
         var elementsArray = CreateNodeArray(store, elements, !lastElement.IsNone && FactoryNodeTests.IsOmittedExpression(store, lastElement) ? true : null);
         store.SetElements(node, Parenthesizer.ParenthesizeExpressionsOfCommaDelimitedList(elementsArray));
         store.SetMultiLine(node, multiLine == true);
@@ -35,7 +35,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateObjectLiteralExpression(IReadOnlyList<Node>? properties = null, bool? multiLine = null)
+    internal Node CreateObjectLiteralExpression(NodeList properties = default, bool? multiLine = null)
     {
         var node = CreateBaseDeclaration(SyntaxKind.ObjectLiteralExpression);
         store.SetProperties(node, CreateNodeArray(store, properties));
@@ -133,7 +133,7 @@ internal sealed partial class NodeFactory
         return node;
     }
 
-    private Node CreateBaseCallExpression(Node expression, Node questionDotToken, NodeArray? typeArguments, NodeArray argumentsArray)
+    private Node CreateBaseCallExpression(Node expression, Node questionDotToken, NodeList typeArguments, NodeList argumentsArray)
     {
         var node = CreateBaseDeclaration(SyntaxKind.CallExpression);
         store.SetExpression(node, expression);
@@ -143,8 +143,8 @@ internal sealed partial class NodeFactory
         store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.Expression(node)) |
             PropagateChildFlags(store, store.QuestionDotToken(node)) |
             PropagateChildrenFlags(store.TypeArguments(node)) |
-            PropagateChildrenFlags(store.Arguments(node)!)));
-        if (store.TypeArguments(node) != null)
+            PropagateChildrenFlags(store.Arguments(node))));
+        if (!store.TypeArguments(node).IsNone)
         {
             store.SetTransformFlags(node, store.TransformFlags(node) | TransformFlags.ContainsTypeScript);
         }
@@ -156,7 +156,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateCallExpression(Node expression, IReadOnlyList<Node>? typeArguments, IReadOnlyList<Node>? argumentsArray)
+    internal Node CreateCallExpression(Node expression, NodeList typeArguments, NodeList argumentsArray)
     {
         var node = CreateBaseCallExpression(
             Parenthesizer.ParenthesizeLeftSideOfAccess(expression, /*optionalChain*/ false),
@@ -171,7 +171,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node UpdateCallExpression(Node node, Node expression, IReadOnlyList<Node>? typeArguments, IReadOnlyList<Node> argumentsArray)
+    internal Node UpdateCallExpression(Node node, Node expression, NodeList typeArguments, NodeList argumentsArray)
     {
         if (UtilitiesPublic.IsCallChain(store, node))
         {
@@ -179,13 +179,13 @@ internal sealed partial class NodeFactory
         }
         return store.Expression(node) != expression
                 || store.TypeArguments(node) != typeArguments
-                || store.Arguments(node)! != argumentsArray
+                || store.Arguments(node) != argumentsArray
             ? Update(CreateCallExpression(expression, typeArguments, argumentsArray), node)
             : node;
     }
 
     // @api
-    internal Node CreateCallChain(Node expression, Node questionDotToken, IReadOnlyList<Node>? typeArguments, IReadOnlyList<Node>? argumentsArray)
+    internal Node CreateCallChain(Node expression, Node questionDotToken, NodeList typeArguments, NodeList argumentsArray)
     {
         var node = CreateBaseCallExpression(
             Parenthesizer.ParenthesizeLeftSideOfAccess(expression, /*optionalChain*/ true),
@@ -198,29 +198,29 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node UpdateCallChain(Node node, Node expression, Node questionDotToken, IReadOnlyList<Node>? typeArguments, IReadOnlyList<Node> argumentsArray)
+    internal Node UpdateCallChain(Node node, Node expression, Node questionDotToken, NodeList typeArguments, NodeList argumentsArray)
     {
         Debug.Assert((store.Flags(node) & NodeFlags.OptionalChain) != 0, "Cannot update a CallExpression using updateCallChain. Use updateCall instead.");
         return store.Expression(node) != expression
                 || store.QuestionDotToken(node) != questionDotToken
                 || store.TypeArguments(node) != typeArguments
-                || store.Arguments(node)! != argumentsArray
+                || store.Arguments(node) != argumentsArray
             ? Update(CreateCallChain(expression, questionDotToken, typeArguments, argumentsArray), node)
             : node;
     }
 
     // @api
-    internal Node CreateNewExpression(Node expression, IReadOnlyList<Node>? typeArguments, IReadOnlyList<Node>? argumentsArray)
+    internal Node CreateNewExpression(Node expression, NodeList typeArguments, NodeList argumentsArray)
     {
         var node = CreateBaseDeclaration(SyntaxKind.NewExpression);
         store.SetExpression(node, Parenthesizer.ParenthesizeExpressionOfNew(expression));
         store.SetTypeArguments(node, AsNodeArray(store, typeArguments));
-        store.SetArguments(node, argumentsArray != null ? Parenthesizer.ParenthesizeExpressionsOfCommaDelimitedList(argumentsArray) : null);
+        store.SetArguments(node, !argumentsArray.IsNone ? Parenthesizer.ParenthesizeExpressionsOfCommaDelimitedList(argumentsArray) : default);
         store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.Expression(node)) |
             PropagateChildrenFlags(store.TypeArguments(node)) |
             PropagateChildrenFlags(store.Arguments(node)) |
             TransformFlags.ContainsES2020));
-        if (store.TypeArguments(node) != null)
+        if (!store.TypeArguments(node).IsNone)
         {
             store.SetTransformFlags(node, store.TransformFlags(node) | TransformFlags.ContainsTypeScript);
         }
@@ -228,7 +228,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateTaggedTemplateExpression(Node tag, IReadOnlyList<Node>? typeArguments, Node template)
+    internal Node CreateTaggedTemplateExpression(Node tag, NodeList typeArguments, Node template)
     {
         var node = CreateBaseNode(SyntaxKind.TaggedTemplateExpression);
         store.SetTag(node, Parenthesizer.ParenthesizeLeftSideOfAccess(tag, /*optionalChain*/ false));
@@ -238,7 +238,7 @@ internal sealed partial class NodeFactory
             PropagateChildrenFlags(store.TypeArguments(node)) |
             PropagateChildFlags(store, store.Template(node)) |
             TransformFlags.ContainsES2015));
-        if (store.TypeArguments(node) != null)
+        if (!store.TypeArguments(node).IsNone)
         {
             store.SetTransformFlags(node, store.TransformFlags(node) | TransformFlags.ContainsTypeScript);
         }
@@ -290,11 +290,11 @@ internal sealed partial class NodeFactory
 
     // @api
     internal Node CreateFunctionExpression(
-        IReadOnlyList<Node>? modifiers,
+        NodeList modifiers,
         Node asteriskToken,
         object? name,
-        IReadOnlyList<Node>? typeParameters,
-        IReadOnlyList<Node>? parameters,
+        NodeList typeParameters,
+        NodeList parameters,
         Node type,
         Node body)
     {
@@ -320,7 +320,7 @@ internal sealed partial class NodeFactory
                 isAsync ? TransformFlags.ContainsES2017 :
                 isGenerator ? TransformFlags.ContainsGenerator :
                 TransformFlags.None) |
-            (store.TypeParameters(node) != null || !store.Type(node).IsNone ? TransformFlags.ContainsTypeScript : TransformFlags.None) |
+            (!store.TypeParameters(node).IsNone || !store.Type(node).IsNone ? TransformFlags.ContainsTypeScript : TransformFlags.None) |
             TransformFlags.ContainsHoistedDeclarationOrCompletion);
         // node.typeArguments = undefined; // used in quick info
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
@@ -334,9 +334,9 @@ internal sealed partial class NodeFactory
 
     // @api
     internal Node CreateArrowFunction(
-        IReadOnlyList<Node>? modifiers,
-        IReadOnlyList<Node>? typeParameters,
-        IReadOnlyList<Node> parameters,
+        NodeList modifiers,
+        NodeList typeParameters,
+        NodeList parameters,
         Node type,
         Node equalsGreaterThanToken,
         Node body)
@@ -355,7 +355,7 @@ internal sealed partial class NodeFactory
             PropagateChildFlags(store, store.Type(node)) |
             PropagateChildFlags(store, store.EqualsGreaterThanToken(node)) |
             (PropagateChildFlags(store, store.Body(node)) & ~TransformFlags.ContainsPossibleTopLevelAwait) |
-            (store.TypeParameters(node) != null || !store.Type(node).IsNone ? TransformFlags.ContainsTypeScript : TransformFlags.None) |
+            (!store.TypeParameters(node).IsNone || !store.Type(node).IsNone ? TransformFlags.ContainsTypeScript : TransformFlags.None) |
             (isAsync ? TransformFlags.ContainsES2017 | TransformFlags.ContainsLexicalThis : TransformFlags.None) |
             TransformFlags.ContainsES2015);
         // node.typeArguments = undefined; // used in quick info
@@ -520,7 +520,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateTemplateExpression(Node head, IReadOnlyList<Node> templateSpans)
+    internal Node CreateTemplateExpression(Node head, NodeList templateSpans)
     {
         var node = CreateBaseNode(SyntaxKind.TemplateExpression);
         store.SetHead(node, head);
@@ -559,11 +559,11 @@ internal sealed partial class NodeFactory
 
     // @api
     internal Node CreateClassExpression(
-        IReadOnlyList<Node>? modifiers,
+        NodeList modifiers,
         object? name,
-        IReadOnlyList<Node>? typeParameters,
-        IReadOnlyList<Node>? heritageClauses,
-        IReadOnlyList<Node> members)
+        NodeList typeParameters,
+        NodeList heritageClauses,
+        NodeList members)
     {
         var node = CreateBaseDeclaration(SyntaxKind.ClassExpression);
         store.SetModifiers(node, AsNodeArray(store, modifiers));
@@ -575,8 +575,8 @@ internal sealed partial class NodeFactory
             PropagateNameFlags(store, store.Name(node)) |
             PropagateChildrenFlags(store.TypeParameters(node)) |
             PropagateChildrenFlags(store.HeritageClauses(node)) |
-            PropagateChildrenFlags(store.Members(node)!) |
-            (store.TypeParameters(node) != null ? TransformFlags.ContainsTypeScript : TransformFlags.None) |
+            PropagateChildrenFlags(store.Members(node)) |
+            (!store.TypeParameters(node).IsNone ? TransformFlags.ContainsTypeScript : TransformFlags.None) |
             TransformFlags.ContainsES2015));
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         return node;
@@ -589,11 +589,11 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateExpressionWithTypeArguments(Node expression, IReadOnlyList<Node>? typeArguments)
+    internal Node CreateExpressionWithTypeArguments(Node expression, NodeList typeArguments)
     {
         var node = CreateBaseNode(SyntaxKind.ExpressionWithTypeArguments);
         store.SetExpression(node, Parenthesizer.ParenthesizeLeftSideOfAccess(expression, /*optionalChain*/ false));
-        store.SetTypeArguments(node, typeArguments != null ? Parenthesizer.ParenthesizeTypeArguments(typeArguments) : null);
+        store.SetTypeArguments(node, !typeArguments.IsNone ? Parenthesizer.ParenthesizeTypeArguments(typeArguments) : default);
         store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.Expression(node)) |
             PropagateChildrenFlags(store.TypeArguments(node)) |
             TransformFlags.ContainsES2015));
@@ -601,7 +601,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node UpdateExpressionWithTypeArguments(Node node, Node expression, IReadOnlyList<Node>? typeArguments)
+    internal Node UpdateExpressionWithTypeArguments(Node node, Node expression, NodeList typeArguments)
     {
         return store.Expression(node) != expression
                 || store.TypeArguments(node) != typeArguments

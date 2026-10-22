@@ -12,22 +12,14 @@ namespace NeverSharp.Optimized;
 
 /// <summary>
 /// types.ts: TextRange (and ReadonlyTextRange, which differs only in the readonly modifiers that
-/// setTextRangePos and friends bypass). NodeArray implements it below; a node's range is read and written
-/// through its NodeStore (Track O, step O6a).
+/// setTextRangePos and friends bypass). A node's or a node list's range is read and written through its
+/// NodeStore (Track O, steps O6a and O7a).
 /// </summary>
 internal interface TextRange
 {
     int Pos { get; set; }
 
     int End { get; set; }
-}
-
-/// <summary>types.ts: NodeArray extends ReadonlyArray, ReadonlyTextRange.</summary>
-internal sealed partial class NodeArray : TextRange
-{
-    int TextRange.Pos { get => Pos; set => Pos = value; }
-
-    int TextRange.End { get => End; set => End = value; }
 }
 
 /// <summary>types.ts: TextSpan.</summary>

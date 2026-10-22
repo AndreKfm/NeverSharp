@@ -30,7 +30,7 @@ internal sealed partial class Parser
             var children = ParseJsxChildren(opening);
             Node closingElement;
 
-            var lastChild = children.Count > 0 ? children[children.Count - 1] : default;
+            var lastChild = Core.LastOrUndefined(store.Nodes(children));
             if (
                 store.Kind(lastChild) == SyntaxKind.JsxElement
                 && !TagNamesAreEquivalent(store, store.TagName(store.OpeningElement(lastChild)), store.TagName(store.ClosingElement(lastChild)))
@@ -40,7 +40,7 @@ internal sealed partial class Parser
                 // when an unclosed JsxOpeningElement incorrectly parses its parent's JsxClosingElement,
                 // restructure (<div>(...<span>...</div>)) --> (<div>(...<span>...</>)</div>)
                 // (no need to error; the parent will error)
-                var end = store.Children(lastElement).End;
+                var end = store.End(store.Children(lastElement));
                 var newLast = FinishNode(
                     factory.CreateJsxElement(
                         store.OpeningElement(lastElement),
@@ -50,13 +50,14 @@ internal sealed partial class Parser
                     end);
 
                 // `[...children.slice(0, children.length - 1), newLast]`
-                var newChildren = new NodeArray();
-                for (var i = 0; i < children.Count - 1; i++)
+                var newChildren = store.BeginList();
+                var oldChildren = store.Nodes(children);
+                for (var i = 0; i < oldChildren.Length - 1; i++)
                 {
-                    newChildren.Add(children[i]);
+                    store.Push(newChildren, oldChildren[i]);
                 }
-                newChildren.Add(newLast);
-                children = CreateNodeArray(newChildren, children.Pos, end);
+                store.Push(newChildren, newLast);
+                children = CreateNodeArray(newChildren, store.Pos(children), end);
                 closingElement = store.ClosingElement(lastElement);
             }
             else
@@ -158,9 +159,9 @@ internal sealed partial class Parser
         }
     }
 
-    private NodeArray ParseJsxChildren(Node openingTag)
+    private NodeList ParseJsxChildren(Node openingTag)
     {
-        var list = new NodeArray();
+        var list = store.BeginList();
         var listPos = GetNodePos();
         var saveParsingContext = parsingContext;
         parsingContext |= 1 << (int)ParsingContext.JsxChildren;
@@ -172,7 +173,7 @@ internal sealed partial class Parser
             {
                 break;
             }
-            list.Add(child);
+            store.Push(list, child);
             if (
                 FactoryNodeTests.IsJsxOpeningElement(store, openingTag)
                 && store.Kind(child) == SyntaxKind.JsxElement
@@ -207,7 +208,7 @@ internal sealed partial class Parser
             return FinishNode(factory.CreateJsxOpeningFragment(), pos);
         }
         var tagName = ParseJsxElementName();
-        var typeArguments = (contextFlags & NodeFlags.JavaScriptFile) == 0 ? TryParseTypeArguments() : null;
+        var typeArguments = (contextFlags & NodeFlags.JavaScriptFile) == 0 ? TryParseTypeArguments() : default;
         var attributes = ParseJsxAttributes();
 
         Node node;

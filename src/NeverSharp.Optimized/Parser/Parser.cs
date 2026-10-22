@@ -75,7 +75,7 @@ internal sealed partial class Parser
     {
         // Try to use the first top-level import/export when available, then
         // fall back to looking for an 'import.meta' somewhere in the tree if necessary.
-        return (Core.ForEach(store.Statements(sourceFile), (statement, _) => IsAnExternalModuleIndicatorNode(store, statement)) is { IsNone: false } __t1 ? __t1 : GetImportMetaIfNecessary(store, sourceFile));
+        return (Core.ForEach(store.Nodes(store.Statements(sourceFile)), (statement, _) => IsAnExternalModuleIndicatorNode(store, statement)) is { IsNone: false } __t1 ? __t1 : GetImportMetaIfNecessary(store, sourceFile));
     }
 
     private static Node IsAnExternalModuleIndicatorNode(NodeStore store, Node node)
@@ -108,7 +108,7 @@ internal sealed partial class Parser
     /// <summary>Do not use hasModifier inside the parser; it relies on parent pointers. Use this instead.</summary>
     private static bool HasModifierOfKind(NodeStore store, Node node, SyntaxKind kind)
     {
-        return Core.Some(store.Modifiers(node), m => store.Kind(m) == kind);
+        return Core.Some(store.Nodes(store.Modifiers(node)), m => store.Kind(m) == kind);
     }
 
     private static bool IsImportMeta(NodeStore store, Node node)
@@ -120,7 +120,7 @@ internal sealed partial class Parser
     /// Iterates through the children of a node recursively (depth-first, pre-order), as forEachChild does for one
     /// level. A callback that returns the string "skip" prevents the traversal of the current node's children.
     /// </summary>
-    internal static T? ForEachChildRecursively<T>(NodeStore store, Node rootNode, Func<Node, Node, object?> cbNode, Func<NodeArray, Node, object?>? cbNodes = null)
+    internal static T? ForEachChildRecursively<T>(NodeStore store, Node rootNode, Func<Node, Node, object?> cbNode, Func<NodeList, Node, object?>? cbNodes = null)
         where T : class
     {
         var queue = GatherPossibleChildren(store, rootNode);
@@ -135,7 +135,7 @@ internal sealed partial class Parser
             queue.RemoveAt(queue.Count - 1);
             var parent = parents[^1];
             parents.RemoveAt(parents.Count - 1);
-            if (current is NodeArray currentArray)
+            if (current is NodeList currentArray)
             {
                 if (cbNodes != null)
                 {
@@ -149,9 +149,9 @@ internal sealed partial class Parser
                         return (T)res!;
                     }
                 }
-                for (var i = currentArray.Count - 1; i >= 0; --i)
+                for (var i = store.Length(currentArray) - 1; i >= 0; --i)
                 {
-                    queue.Add(currentArray[i]);
+                    queue.Add(store.Element(currentArray, i));
                     parents.Add(parent);
                 }
             }
@@ -296,6 +296,7 @@ internal sealed partial class Parser
             int i => i != 0,
             Tristate t => t != Tristate.False,
             Node n => !n.IsNone,
+            NodeList l => !l.IsNone, // Track O (O7a): a list handle; None is undefined
             _ => true,
         };
     }

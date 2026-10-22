@@ -50,7 +50,7 @@ internal sealed class EmitNode
     public Node TypeNode;                           // VariableDeclaration type
     public Node ClassThis;                    // Identifier that points to a captured static `this` for a class which may be updated after decorators are applied
     public Node AssignedName;                       // Expression used as the assigned name of a class or function
-    public NodeArray? IdentifierTypeArguments;       // Only defined on synthesized identifiers.
+    public NodeList IdentifierTypeArguments;       // Only defined on synthesized identifiers.
     public object? AutoGenerate;                     // Used for auto-generated identifiers and private identifiers (TypeScript: AutoGenerateInfo)
     public Node GeneratedImportReference; // Reference to the generated import specifier this identifier refers to
 }

@@ -39,7 +39,7 @@ internal interface ParenthesizerRules
 
     Node ParenthesizeOperandOfPrefixUnary(Node operand);
 
-    NodeArray ParenthesizeExpressionsOfCommaDelimitedList(IReadOnlyList<Node> elements);
+    NodeList ParenthesizeExpressionsOfCommaDelimitedList(NodeList elements);
 
     Node ParenthesizeExpressionForDisallowedComma(Node expression);
 
@@ -57,7 +57,7 @@ internal interface ParenthesizerRules
 
     Node ParenthesizeNonArrayTypeOfPostfixType(Node type);
 
-    NodeArray ParenthesizeElementTypesOfTupleType(IReadOnlyList<Node> types);
+    NodeList ParenthesizeElementTypesOfTupleType(NodeList types);
 
     Node ParenthesizeElementTypeOfTupleType(Node type);
 
@@ -65,15 +65,15 @@ internal interface ParenthesizerRules
 
     Node ParenthesizeConstituentTypeOfUnionType(Node type);
 
-    NodeArray ParenthesizeConstituentTypesOfUnionType(IReadOnlyList<Node> constituents);
+    NodeList ParenthesizeConstituentTypesOfUnionType(NodeList constituents);
 
     Node ParenthesizeConstituentTypeOfIntersectionType(Node type);
 
-    NodeArray ParenthesizeConstituentTypesOfIntersectionType(IReadOnlyList<Node> constituents);
+    NodeList ParenthesizeConstituentTypesOfIntersectionType(NodeList constituents);
 
     Node ParenthesizeLeadingTypeArgument(Node typeNode);
 
-    NodeArray? ParenthesizeTypeArguments(IReadOnlyList<Node>? typeParameters);
+    NodeList ParenthesizeTypeArguments(NodeList typeParameters);
 }
 
 /// <summary>types.ts: NodeConverters.</summary>
@@ -133,7 +133,7 @@ internal static class FactoryParenthesizerRules
 
         public Node ParenthesizeOperandOfPrefixUnary(Node operand) => operand;
 
-        public NodeArray ParenthesizeExpressionsOfCommaDelimitedList(IReadOnlyList<Node> elements) => CastNodeArray(elements);
+        public NodeList ParenthesizeExpressionsOfCommaDelimitedList(NodeList elements) => CastNodeArray(elements);
 
         public Node ParenthesizeExpressionForDisallowedComma(Node expression) => expression;
 
@@ -151,7 +151,7 @@ internal static class FactoryParenthesizerRules
 
         public Node ParenthesizeNonArrayTypeOfPostfixType(Node type) => type;
 
-        public NodeArray ParenthesizeElementTypesOfTupleType(IReadOnlyList<Node> types) => CastNodeArray(types);
+        public NodeList ParenthesizeElementTypesOfTupleType(NodeList types) => CastNodeArray(types);
 
         public Node ParenthesizeElementTypeOfTupleType(Node type) => type;
 
@@ -159,18 +159,18 @@ internal static class FactoryParenthesizerRules
 
         public Node ParenthesizeConstituentTypeOfUnionType(Node type) => type;
 
-        public NodeArray ParenthesizeConstituentTypesOfUnionType(IReadOnlyList<Node> constituents) => CastNodeArray(constituents);
+        public NodeList ParenthesizeConstituentTypesOfUnionType(NodeList constituents) => CastNodeArray(constituents);
 
         public Node ParenthesizeConstituentTypeOfIntersectionType(Node type) => type;
 
-        public NodeArray ParenthesizeConstituentTypesOfIntersectionType(IReadOnlyList<Node> constituents) => CastNodeArray(constituents);
+        public NodeList ParenthesizeConstituentTypesOfIntersectionType(NodeList constituents) => CastNodeArray(constituents);
 
         public Node ParenthesizeLeadingTypeArgument(Node typeNode) => typeNode;
 
-        public NodeArray? ParenthesizeTypeArguments(IReadOnlyList<Node>? typeParameters) => typeParameters != null ? CastNodeArray(typeParameters) : null;
+        public NodeList ParenthesizeTypeArguments(NodeList typeParameters) => !typeParameters.IsNone ? CastNodeArray(typeParameters) : default;
 
-        /// <summary>`nodes => cast(nodes, isNodeArray)`.</summary>
-        private static NodeArray CastNodeArray(IReadOnlyList<Node> nodes) => Core.Cast<NodeArray, IReadOnlyList<Node>>(nodes, n => UtilitiesPublic.IsNodeArray(n));
+        /// <summary>`nodes => cast(nodes, isNodeArray)`: a NodeList is always a NodeArray (Track O, O7a: plain arrays are list builders), so the cast holds.</summary>
+        private static NodeList CastNodeArray(NodeList nodes) => nodes;
     }
 }
 

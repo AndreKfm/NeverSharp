@@ -1373,6 +1373,7 @@ internal sealed partial class Scanner
             int i => i != 0,
             double d => d != 0 && !double.IsNaN(d),
             Node n => !n.IsNone, // Track O: a node handle; None is undefined
+            NodeList l => !l.IsNone, // Track O (O7a): a list handle; None is undefined
             _ => true,
         };
     }

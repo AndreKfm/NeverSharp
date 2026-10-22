@@ -17,7 +17,7 @@ namespace NeverSharp.Optimized;
 /// is the record's offset. A record holds the kind word (kind in bits 0..15, the node's boolean fields in bits
 /// 16..30, bit 31 set when the node has side table entries), flags, pos, end and transform flags, then, for kinds
 /// with object fields, the index of the node's first object slot, then one int per child handle or scalar field.
-/// Strings, node lists and other objects live in a second array of object slots. The record size and the place of
+/// Strings and other objects live in a second array of object slots; node lists are handles in int slots. The record size and the place of
 /// each field depend on the kind (Generated/NodeStore.g.cs). The record at offset 0 is <see cref="Node.None"/>:
 /// its fields read as undefined.
 /// </para>
@@ -36,8 +36,11 @@ namespace NeverSharp.Optimized;
 /// holds, and the collector neither copies it from generation to generation nor scans it (it holds no references).
 /// </para>
 /// <para>
-/// Speculative parsing discards the nodes it created by truncating the arrays to a <see cref="Mark"/> taken before
-/// (<see cref="GetMark"/>, <see cref="Truncate"/>).
+/// Speculative parsing discards the nodes (and lists) it created by truncating the arrays to a <see cref="Mark"/> taken
+/// before (<see cref="GetMark"/>, <see cref="Truncate"/>).
+/// </para>
+/// <para>
+/// Node lists are handles into the list store of the same parse (NodeList.cs, step O7a); list fields are int slots.
 /// </para>
 /// </summary>
 internal sealed partial class NodeStore
@@ -65,14 +68,22 @@ internal sealed partial class NodeStore
         internal readonly int Refs;
         internal readonly int Nodes;
         internal readonly int SideLog;
+        internal readonly int Lists;
+        internal readonly int ListElements;
+        internal readonly int Frames;
+        internal readonly int ScratchTop;
 
         [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-        internal Mark(int words, int refs, int nodes, int sideLog)
+        internal Mark(int words, int refs, int nodes, int sideLog, int lists, int listElements, int frames, int scratchTop)
         {
             Words = words;
             Refs = refs;
             Nodes = nodes;
             SideLog = sideLog;
+            Lists = lists;
+            ListElements = listElements;
+            Frames = frames;
+            ScratchTop = scratchTop;
         }
     }
 
@@ -100,10 +111,11 @@ internal sealed partial class NodeStore
     /// <summary>A store for a source text of the given length (scratch arrays from the pool; exact arrays when the parse ends).</summary>
     public NodeStore(int textLength)
     {
-        // From the tuning corpus: 0.57 ints and 0.075 object slots per character on average (the pool rounds up to a
-        // power of two; a file that needs more grows its scratch arrays).
+        // From the tuning corpus: 0.56 ints and 0.036 object slots per character on average since node lists are
+        // handles in int slots (O7a) (the pool rounds up to a power of two; a file that needs more grows its scratch
+        // arrays).
         data = Scratch<int>.Rent((textLength / 3 * 2) + 64);
-        refs = Scratch<object?>.Rent((textLength / 10) + 16);
+        refs = Scratch<object?>.Rent((textLength / 20) + 16);
         pooled = true;
         // Record 0 is Node.None.
         data[0] = (int)SyntaxKind.Unknown;
@@ -113,6 +125,7 @@ internal sealed partial class NodeStore
         data[TransformFlagsWord] = 0;
         used = HeaderWords;
         count = 1;
+        InitLists(textLength);
     }
 
     /// <summary>The number of records in use (including <see cref="Node.None"/>'s).</summary>
@@ -168,15 +181,21 @@ internal sealed partial class NodeStore
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal Mark GetMark() => new(used, refCount, count, sideLogCount);
+    internal Mark GetMark() => new(used, refCount, count, sideLogCount, listCount, listElementCount, frameCount, scratchTop);
 
     /// <summary>Discards every node created after <paramref name="mark"/> (speculative parsing that is rolled back).</summary>
     internal void Truncate(Mark mark)
     {
-        Debug.Assert(mark.Words <= used && mark.Refs <= refCount && mark.Nodes <= count && mark.SideLog <= sideLogCount, "Mark is beyond the store's fill level");
+        Debug.Assert(mark.Words <= used && mark.Refs <= refCount && mark.Nodes <= count && mark.SideLog <= sideLogCount && mark.Lists <= listCount, "Mark is beyond the store's fill level");
         used = mark.Words;
         refCount = mark.Refs;
         count = mark.Nodes;
+        // Lists finished or opened since the mark belong to the discarded parse; the frames open at the mark are as
+        // they were (nested lists finish before the enclosing list grows again).
+        listCount = mark.Lists;
+        listElementCount = mark.ListElements;
+        frameCount = mark.Frames;
+        scratchTop = mark.ScratchTop;
         if (sideLogCount > mark.SideLog)
         {
             TruncateSide(mark);
@@ -217,6 +236,7 @@ internal sealed partial class NodeStore
         data = exact;
         refs = exactRefs;
         pooled = false;
+        SealLists();
     }
 
     /// <summary>Gives the scratch arrays back to the pool, without the references this store wrote.</summary>

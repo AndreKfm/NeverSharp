@@ -139,10 +139,10 @@ internal sealed partial class NodeFactory
     internal Node CreateJSDocNamepathType(Node type) => CreateJSDocUnaryTypeWorker(SyntaxKind.JSDocNamepathType, type);
 
     // @api
-    internal Node CreateJSDocFunctionType(IReadOnlyList<Node> parameters, Node type)
+    internal Node CreateJSDocFunctionType(NodeList parameters, Node type)
     {
         var node = CreateBaseDeclaration(SyntaxKind.JSDocFunctionType);
-        store.SetParameters(node, AsNodeArray(store, parameters)!);
+        store.SetParameters(node, AsNodeArray(store, parameters));
         store.SetType(node, type);
         store.SetTransformFlags(node, PropagateChildrenFlags(store.Parameters(node)) |
             (!store.Type(node).IsNone ? TransformFlags.ContainsTypeScript : TransformFlags.None));
@@ -154,13 +154,13 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateJSDocTypeLiteral(IReadOnlyList<Node>? propertyTags = null, bool isArrayType = false)
+    internal Node CreateJSDocTypeLiteral(NodeList propertyTags = default, bool isArrayType = false)
     {
         var node = CreateBaseDeclaration(SyntaxKind.JSDocTypeLiteral);
         // TypeScript assigns `asNodeArray(propertyTags)`; the generated field is an array (Node[]), so the NodeArray's
         // elements are stored.
         var array = AsNodeArray(store, propertyTags);
-        store.SetJsDocPropertyTags(node, array?.ToArray());
+        store.SetJsDocPropertyTags(node, !array.IsNone ? ToArray(array) : null);
         store.SetIsArrayType(node, isArrayType);
         return node;
     }
@@ -174,13 +174,13 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateJSDocSignature(IReadOnlyList<Node>? typeParameters, IReadOnlyList<Node> parameters, Node type = default)
+    internal Node CreateJSDocSignature(NodeList typeParameters, NodeList parameters, Node type = default)
     {
         var node = CreateBaseDeclaration(SyntaxKind.JSDocSignature);
         // TypeScript assigns NodeArrays (asNodeArray / createNodeArray); the generated fields are typed arrays, so the
         // NodeArrays' elements are stored.
         var typeParametersArray = AsNodeArray(store, typeParameters);
-        store.SetJSDocSignatureTypeParameters(node, typeParametersArray != null ? ToArray(typeParametersArray) : null);
+        store.SetJSDocSignatureTypeParameters(node, !typeParametersArray.IsNone ? ToArray(typeParametersArray) : null);
         // (Node[]: besides JSDocParameterTags the parser stores other tags here, e.g. a `@this` tag inside `@callback`.)
         store.SetJSDocSignatureParameters(node, ToArray(CreateNodeArray(store, parameters)));
         store.SetType(node, type);
@@ -190,14 +190,9 @@ internal sealed partial class NodeFactory
         return node;
     }
 
-    private static Node[] ToArray(NodeArray array)
+    private Node[] ToArray(NodeList array)
     {
-        var result = new Node[array.Count];
-        for (var i = 0; i < array.Count; i++)
-        {
-            result[i] = array[i];
-        }
-        return result;
+        return store.Nodes(array).ToArray();
     }
 
     private Node GetDefaultTagName(Node node)
@@ -357,7 +352,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateJSDocTemplateTag(Node tagName, Node constraint, IReadOnlyList<Node> typeParameters, object? comment = null)
+    internal Node CreateJSDocTemplateTag(Node tagName, Node constraint, NodeList typeParameters, object? comment = null)
     {
         var node = CreateBaseJSDocTag(SyntaxKind.JSDocTemplateTag, (tagName.IsNone ? CreateIdentifier("template") : tagName), comment);
         store.SetConstraint(node, constraint);
@@ -621,7 +616,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateJSDocComment(object? comment = null, IReadOnlyList<Node>? tags = null)
+    internal Node CreateJSDocComment(object? comment = null, NodeList tags = default)
     {
         var node = CreateBaseNode(SyntaxKind.JSDoc);
         store.SetComment(node, comment);

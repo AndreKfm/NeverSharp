@@ -24,19 +24,21 @@ internal sealed partial class Parser
         // Prime the scanner.
         NextToken();
         var pos = GetNodePos();
-        NodeArray statements;
+        NodeList statements;
         Node endOfFileToken;
         if (Token() == SyntaxKind.EndOfFileToken)
         {
-            statements = CreateNodeArray(new NodeArray(), pos, pos);
+            statements = CreateNodeArray([], pos, pos);
             endOfFileToken = ParseTokenNode();
         }
         else
         {
             // Loop and synthesize an ArrayLiteralExpression if there are more than
             // one top-level expressions to ensure all input text is consumed.
-            // (TypeScript: `let expressions: Expression[] | Expression | undefined`; the array is `expressionList`.)
-            NodeArray? expressionList = null;
+            // (TypeScript: `let expressions: Expression[] | Expression | undefined`; the array is `expressionList`, a list
+            // under construction once hasExpressionList is set.)
+            ListBuilder expressionList = default;
+            var hasExpressionList = false;
             Node singleExpression = default;
             while (Token() != SyntaxKind.EndOfFileToken)
             {
@@ -77,13 +79,16 @@ internal sealed partial class Parser
                 }
 
                 // Error recovery: collect multiple top-level expressions
-                if (expressionList != null)
+                if (hasExpressionList)
                 {
-                    expressionList.Add(expression);
+                    store.Push(expressionList, expression);
                 }
                 else if (!singleExpression.IsNone)
                 {
-                    expressionList = [singleExpression, expression];
+                    expressionList = store.BeginList();
+                    hasExpressionList = true;
+                    store.Push(expressionList, singleExpression);
+                    store.Push(expressionList, expression);
                 }
                 else
                 {
@@ -95,7 +100,8 @@ internal sealed partial class Parser
                 }
             }
 
-            var expressionNode = expressionList != null ? FinishNode(factory.CreateArrayLiteralExpression(expressionList), pos) : Debug.CheckDefined(singleExpression);
+            // (The plain array becomes a NodeArray with range -1 as createArrayLiteralExpression's createNodeArray makes it.)
+            var expressionNode = hasExpressionList ? FinishNode(factory.CreateArrayLiteralExpression(NodeFactory.CreateNodeArray(store, expressionList)), pos) : Debug.CheckDefined(singleExpression);
             var statement = factory.CreateExpressionStatement(expressionNode);
             FinishNode(statement, pos);
             statements = CreateNodeArray([statement], pos);

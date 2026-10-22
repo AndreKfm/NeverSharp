@@ -12,15 +12,6 @@ using NeverSharp.Generated;
 
 namespace NeverSharp.Optimized;
 
-/// <summary>
-/// parser.ts: `interface MissingList&lt;T&gt; extends NodeArray&lt;T&gt; { isMissingList: true }`. createMissingList assigns
-/// the property to the NodeArray object; a C# object cannot gain properties, so NodeArray declares it.
-/// </summary>
-internal sealed partial class NodeArray
-{
-    internal bool IsMissingList;
-}
-
 /// <summary>parser.ts: `namespace Parser`, list parsing (with node reuse), entity names, templates and literals.</summary>
 internal sealed partial class Parser
 {
@@ -316,18 +307,19 @@ internal sealed partial class Parser
     }
 
     // Parses a list of elements
-    private NodeArray ParseList(ParsingContext kind, Func<Parser, Node> parseElement)
+    private NodeList ParseList(ParsingContext kind, Func<Parser, Node> parseElement)
     {
         var saveParsingContext = parsingContext;
         parsingContext |= 1 << (int)kind;
-        var list = new NodeArray();
+        var list = store.BeginList();
         var listPos = GetNodePos();
 
         while (!IsListTerminator(kind))
         {
             if (IsListElement(kind, /*inErrorRecovery*/ false))
             {
-                list.Add(ParseListElement(kind, parseElement));
+                var element = ParseListElement(kind, parseElement);
+                store.Push(list, element);
 
                 continue;
             }
@@ -754,20 +746,20 @@ internal sealed partial class Parser
     /// <summary>
     /// Parses a comma-delimited list of elements (TypeScript's overload whose elements are never undefined).
     /// </summary>
-    private NodeArray ParseDelimitedList(ParsingContext kind, Func<Parser, Node> parseElement, bool? considerSemicolonAsDelimiter = null)
+    private NodeList ParseDelimitedList(ParsingContext kind, Func<Parser, Node> parseElement, bool? considerSemicolonAsDelimiter = null)
     {
-        return ParseDelimitedListOrUndefined(kind, parseElement, considerSemicolonAsDelimiter)!;
+        return ParseDelimitedListOrUndefined(kind, parseElement, considerSemicolonAsDelimiter);
     }
 
     /// <summary>
     /// Parses a comma-delimited list of elements. TypeScript's overload whose element parser may return undefined
     /// (then the list is undefined); C# cannot overload on the nullability of the callback, so it has its own name.
     /// </summary>
-    private NodeArray? ParseDelimitedListOrUndefined(ParsingContext kind, Func<Parser, Node> parseElement, bool? considerSemicolonAsDelimiter = null)
+    private NodeList ParseDelimitedListOrUndefined(ParsingContext kind, Func<Parser, Node> parseElement, bool? considerSemicolonAsDelimiter = null)
     {
         var saveParsingContext = parsingContext;
         parsingContext |= 1 << (int)kind;
-        var list = new NodeArray();
+        var list = store.BeginList();
         var listPos = GetNodePos();
 
         var commaStart = -1; // Meaning the previous token was not a comma
@@ -780,9 +772,10 @@ internal sealed partial class Parser
                 if (result.IsNone)
                 {
                     parsingContext = saveParsingContext;
-                    return null;
+                    store.DiscardList(list);
+                    return default;
                 }
-                list.Add(result);
+                store.Push(list, result);
                 commaStart = scanner.GetTokenStart();
 
                 if (ParseOptional(SyntaxKind.CommaToken))
@@ -847,19 +840,20 @@ internal sealed partial class Parser
         return kind == ParsingContext.EnumMembers ? Diagnostics.An_enum_member_name_must_be_followed_by_a_or : null;
     }
 
-    private NodeArray CreateMissingList()
+    private NodeList CreateMissingList()
     {
-        var list = CreateNodeArray(new NodeArray(), GetNodePos());
-        list.IsMissingList = true;
+        var list = CreateNodeArray(store.BeginList(), GetNodePos());
+        // TypeScript: `list.isMissingList = true`, a property of the NodeArray object (MissingList<T>).
+        store.SetIsMissingList(list);
         return list;
     }
 
-    private static bool IsMissingList(NodeArray arr)
+    private bool IsMissingList(NodeList arr)
     {
-        return arr.IsMissingList;
+        return store.IsMissingList(arr);
     }
 
-    private NodeArray ParseBracketedList(ParsingContext kind, Func<Parser, Node> parseElement, SyntaxKind open, SyntaxKind close)
+    private NodeList ParseBracketedList(ParsingContext kind, Func<Parser, Node> parseElement, SyntaxKind open, SyntaxKind close)
     {
         if (ParseExpected(open))
         {
@@ -945,15 +939,15 @@ internal sealed partial class Parser
         return ParseIdentifier();
     }
 
-    private NodeArray ParseTemplateSpans(bool isTaggedTemplate)
+    private NodeList ParseTemplateSpans(bool isTaggedTemplate)
     {
         var pos = GetNodePos();
-        var list = new NodeArray();
+        var list = store.BeginList();
         Node node;
         do
         {
             node = ParseTemplateSpan(isTaggedTemplate);
-            list.Add(node);
+            store.Push(list, node);
         }
         while (store.Kind(store.Literal(node)) == SyntaxKind.TemplateMiddle);
         return CreateNodeArray(list, pos);
@@ -979,15 +973,15 @@ internal sealed partial class Parser
             pos);
     }
 
-    private NodeArray ParseTemplateTypeSpans()
+    private NodeList ParseTemplateTypeSpans()
     {
         var pos = GetNodePos();
-        var list = new NodeArray();
+        var list = store.BeginList();
         Node node;
         do
         {
             node = ParseTemplateTypeSpan();
-            list.Add(node);
+            store.Push(list, node);
         }
         while (store.Kind(store.Literal(node)) == SyntaxKind.TemplateMiddle);
         return CreateNodeArray(list, pos);
