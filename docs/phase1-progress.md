@@ -130,3 +130,21 @@ Brief: [modules/O6a.md](modules/O6a.md). One attempt (Opus 5.5, high effort, no 
 - **Measurement (development, not a protocol result):** `M5.ParseTuningCorpus` (ParseForTypeErrors, NativeAOT, BenchmarkDotNet): Track F 2,495 ms [2,485, 2,535], 737.8 MB, GCs 85/71/4; Track O after O6a 1,649 ms [1,635, 1,659], 823.5 MB, GCs 66/34/3. About 34 % faster with half the gen1 collections, although it allocates 12 % more (store over-capacity and growth garbage, delegates for method groups that gained a store parameter): the bytes now die young. Raw reports: `results/track-o/O6a/`.
 - **Harness fix found on the way:** BenchmarkDotNet's NativeAOT build does not pass `-p:NeverSharpTrack` on; a first Track O measurement had silently measured Track F (identical allocation exposed it). The track is now set as an environment variable (documented in the benchmark project).
 - Open for O6b (from the attempt): shrink the 40-byte record (rare fields to side tables), the mostly-null `JsDoc` object slot of 69 container kinds, initial sizing and growth (about 1.9× over-capacity), offset lookup per access, pooling the store.
+
+### O6b: node arena layout (3 variants)
+
+Brief: [modules/O6b.md](modules/O6b.md). Three attempts in parallel (Opus 5.5, high effort, no sub-agents), each changing only the storage layer (`Arena/`, `NodeStore.g.cs`, `emit-optimized.mjs`); every one passed the full Track O gate on the orchestrator's rerun (50,177/50,177 in every comparison). Branches `attempts/O6b/A..C`.
+
+| Variant | Layout (from the reports) | Median, tuning corpus, cs-o-aot-ws (20 runs) | Allocated | GC pause | Peak working set | Rank |
+|---|---|---|---:|---:|---:|---|
+| O6a (reference) | 40-byte record + slot blocks | 1,312 ms | 961 MB | 843 ms | 598 MiB | — |
+| **A: compact records** | variable-length records in one `int[]` (header 5 ints + inline fields), object slots in a second array, rare and never-set fields in a side table, pooled scratch arrays copied to exact size (pinned) at the end of the parse | **1,093 ms** | **695 MB** | 679 ms | **450 MiB** | **1, merged** |
+| B: structure of arrays | dense columns per base field (26 B/node), sparse columns for rare fields, pooled 32K-node segments | 1,137 ms | 848 MB | 667 ms | 487 MiB | 2 |
+| C: header + payload arenas | 20-byte header (pinned) + typed payload structs in 17 shape arenas | 1,256 ms | 740 MB | 982 ms | 467 MiB | 3 |
+
+Ranking as the brief fixes it (parse-only harness on the tuning corpus decides; all four runs rig-compliant, idle 3.5–9.6 %; 95 % percentile bootstrap): A/B 0.961 [0.946, 0.986], A/C 0.870 [0.857, 0.892], A/O6a 0.833 [0.815, 0.854]. The intervals do not overlap, so the median decides and the byte tie-break was not needed; A also allocates the least. Raw runs: `results/track-o/O6b/`.
+
+- **Tie-break measurement failed and was not needed:** BenchmarkDotNet found several projects named NeverSharp.Benchmarks (the copies in the variant worktrees) and returned no result; after merging and removing the worktrees, the merged state measured `M5.ParseTuningCorpus` 1.456 s, 457.6 MB (O6a: 1,649 ms, 823.5 MB) — `results/track-o/O6b/merged-bdn/`.
+- **Harness fix during the step:** the benchmark project compiled Track O without the NoAlloc attribute types (Track O's Gate 2 injects them through the analyzer); variants B and C removed their annotations for that reason, A kept them and was measurable after the fix (39677ae). Annotations do not change speed.
+- A uses `[MethodImpl(AggressiveInlining)]` on generated accessors (allowed in Track O, not in Track F) and the first `[NoAlloc]` annotations: 12 of 2,150 methods (`noalloc-report.mjs`).
+- From the reports: GC pause is about 60 % of the parallel wall time and depends on object count and references outside the store (node lists, strings), which points to O7 (lists) and O5 (text spans) next.
