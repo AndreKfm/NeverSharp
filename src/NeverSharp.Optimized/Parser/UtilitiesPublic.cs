@@ -49,6 +49,7 @@ internal static partial class UtilitiesPublic
     /// Gets a value indicating whether a node originated in the parse tree.
     /// </summary>
     /// <param name="node">The node to test.</param>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsParseTreeNode(NodeStore store, Node node)
     {
         return (store.Flags(node) & NodeFlags.Synthesized) == 0;
@@ -97,6 +98,7 @@ internal static partial class UtilitiesPublic
     }
 
     /// <summary>Track O (O5a): <see cref="EscapeLeadingUnderscores(string)"/> on a text value (an escaped value goes to the character arena).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static TextRef EscapeLeadingUnderscores(TextTable texts, TextRef identifier)
     {
         var span = texts.Span(identifier);
@@ -104,6 +106,7 @@ internal static partial class UtilitiesPublic
     }
 
     /// <summary>Track O (O5a): <see cref="UnescapeLeadingUnderscores(string)"/> on a text value (a slice of it).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static TextRef UnescapeLeadingUnderscores(TextTable texts, TextRef identifier)
     {
         var id = texts.Span(identifier);
@@ -111,12 +114,14 @@ internal static partial class UtilitiesPublic
     }
 
     /// <summary>TypeScript: `idText(identifierOrPrivateName: Identifier | PrivateIdentifier)`.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static TextRef IdText(NodeStore store, Node identifierOrPrivateName)
     {
         var escapedText = (identifierOrPrivateName is var identifier && store.IsIdentifier(identifier)) ? store.EscapedText(identifier) : store.EscapedText(identifierOrPrivateName);
         return UnescapeLeadingUnderscores(store.Texts, escapedText);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsNamedDeclaration(NodeStore store, Node node)
     {
         return !store.Name(node).IsNone; // A 'name' property should always be a DeclarationName.
@@ -133,6 +138,7 @@ internal static partial class UtilitiesPublic
     }
 
     /// <summary>`(param.parent as SignatureDeclaration).parameters`.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static NodeList GetParametersOfParent(NodeStore store, Node parent)
     {
         return parent switch
@@ -151,7 +157,7 @@ internal static partial class UtilitiesPublic
             var n when store.IsMethodDeclaration(n) => store.Parameters(n),
             var n when store.IsMethodSignature(n) => store.Parameters(n),
             var n when store.IsSetAccessorDeclaration(n) => store.Parameters(n),
-            _ => throw new InvalidCastException(store.Kind(parent).ToString()),
+            _ => throw Debug.InvalidCast(store.Kind(parent)),
         };
     }
 
@@ -282,6 +288,7 @@ internal static partial class UtilitiesPublic
         return GetFirstJSDocTag(store, node, ((a0) => FactoryNodeTests.IsJSDocDeprecatedTag(store, a0)), /*noCache*/ true);
     }
 
+    [NoAllocUnchecked("rare path: the JSDoc tags of a node in a JavaScript file are looked up (and cached) through lists")]
     internal static Node GetJSDocTypeTag(NodeStore store, Node node)
     {
         // We should have already issued an error if there were multiple type jsdocs, so just use the first one.
@@ -351,11 +358,13 @@ internal static partial class UtilitiesPublic
         return Core.Find(GetJSDocTagsWorker(store, node, noCache), (tag, _) => predicate(tag));
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsCallChain(NodeStore store, Node node)
     {
         return FactoryNodeTests.IsCallExpression(store, node) && (store.Flags(node) & NodeFlags.OptionalChain) != 0;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsOptionalChain(NodeStore store, Node node)
     {
         var kind = store.Kind(node);
@@ -366,11 +375,13 @@ internal static partial class UtilitiesPublic
                 || kind == SyntaxKind.NonNullExpression);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static Node SkipPartiallyEmittedExpressions(NodeStore store, Node node)
     {
         return FactoryUtilities.SkipOuterExpressions(store, node, OuterExpressionKinds.PartiallyEmittedExpressions);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsNonNullChain(NodeStore store, Node node)
     {
         return FactoryNodeTests.IsNonNullExpression(store, node) && (store.Flags(node) & NodeFlags.OptionalChain) != 0;
@@ -380,6 +391,7 @@ internal static partial class UtilitiesPublic
     /// TypeScript: `hasProperty(array, "pos") && hasProperty(array, "end")`, i.e. whether createNodeArray has turned the
     /// array into a NodeArray (Track O: a list handle; a plain array is a list under construction or a span).
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsNodeArray(object? array)
     {
         return array is NodeList;
@@ -387,6 +399,7 @@ internal static partial class UtilitiesPublic
 
     // Literals
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsLiteralKind(SyntaxKind kind)
     {
         return SyntaxKind.FirstLiteralToken <= kind && kind <= SyntaxKind.LastLiteralToken;
@@ -394,16 +407,19 @@ internal static partial class UtilitiesPublic
 
     // Pseudo-literals
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsTemplateLiteralKind(SyntaxKind kind)
     {
         return SyntaxKind.FirstTemplateToken <= kind && kind <= SyntaxKind.LastTemplateToken;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsGeneratedIdentifier(NodeStore store, Node node)
     {
         return FactoryNodeTests.IsIdentifier(store, node) && ((EmitNode?)store.EmitNode(node))?.AutoGenerate != null;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsModifierKind(SyntaxKind token)
     {
         switch (token)
@@ -428,11 +444,13 @@ internal static partial class UtilitiesPublic
         return false;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsParameterPropertyModifier(SyntaxKind kind)
     {
         return (Utilities.ModifierToFlag(kind) & ModifierFlags.ParameterPropertyModifier) != 0;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsClassMemberModifier(SyntaxKind idToken)
     {
         return IsParameterPropertyModifier(idToken) ||
@@ -441,11 +459,13 @@ internal static partial class UtilitiesPublic
             idToken == SyntaxKind.AccessorKeyword;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsModifier(NodeStore store, Node node)
     {
         return IsModifierKind(store.Kind(node));
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsPropertyName(NodeStore store, Node node)
     {
         var kind = store.Kind(node);
@@ -456,6 +476,7 @@ internal static partial class UtilitiesPublic
             || kind == SyntaxKind.ComputedPropertyName;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsObjectLiteralElementLike(NodeStore store, Node node)
     {
         var kind = store.Kind(node);
@@ -469,6 +490,7 @@ internal static partial class UtilitiesPublic
 
     // Type
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsFunctionOrConstructorTypeNode(NodeStore store, Node node)
     {
         switch (store.Kind(node))
@@ -483,6 +505,7 @@ internal static partial class UtilitiesPublic
 
     // Binding patterns
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsBindingPattern(NodeStore store, Node node)
     {
         if (!node.IsNone)
@@ -495,6 +518,7 @@ internal static partial class UtilitiesPublic
         return false;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsAssignmentPattern(NodeStore store, Node node)
     {
         var kind = store.Kind(node);
@@ -505,6 +529,7 @@ internal static partial class UtilitiesPublic
     /// <summary>
     /// Determines whether the BindingOrAssignmentElement is a BindingElement-like declaration
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsDeclarationBindingElement(NodeStore store, Node bindingElement)
     {
         switch (store.Kind(bindingElement))
@@ -518,11 +543,13 @@ internal static partial class UtilitiesPublic
         return false;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsLeftHandSideExpression(NodeStore store, Node node)
     {
         return IsLeftHandSideExpressionKind(store.Kind(SkipPartiallyEmittedExpressions(store, node)));
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsLeftHandSideExpressionKind(SyntaxKind kind)
     {
         switch (kind)
@@ -564,11 +591,13 @@ internal static partial class UtilitiesPublic
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsUnaryExpression(NodeStore store, Node node)
     {
         return IsUnaryExpressionKind(store.Kind(SkipPartiallyEmittedExpressions(store, node)));
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsUnaryExpressionKind(SyntaxKind kind)
     {
         switch (kind)
@@ -589,11 +618,13 @@ internal static partial class UtilitiesPublic
     /// <summary>
     /// Determines whether a node is an expression based only on its kind.
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsExpression(NodeStore store, Node node)
     {
         return IsExpressionKind(store.Kind(SkipPartiallyEmittedExpressions(store, node)));
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsExpressionKind(SyntaxKind kind)
     {
         switch (kind)
@@ -614,11 +645,13 @@ internal static partial class UtilitiesPublic
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsJSDocNode(NodeStore store, Node node)
     {
         return store.Kind(node) >= SyntaxKind.FirstJSDocNode && store.Kind(node) <= SyntaxKind.LastJSDocNode;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool HasJSDocNodes(NodeStore store, Node node)
     {
         if (!Utilities.CanHaveJSDoc(store, node))
@@ -630,11 +663,13 @@ internal static partial class UtilitiesPublic
         return jsDoc != null && jsDoc.Count > 0;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool HasInitializer(NodeStore store, Node node)
     {
         return !store.Initializer(node).IsNone;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsStringLiteralLike(NodeStore store, Node node)
     {
         return store.Kind(node) == SyntaxKind.StringLiteral || store.Kind(node) == SyntaxKind.NoSubstitutionTemplateLiteral;

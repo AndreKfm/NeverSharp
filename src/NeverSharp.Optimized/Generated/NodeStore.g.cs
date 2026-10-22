@@ -29,6 +29,7 @@ internal sealed partial class NodeStore
     private const int SideOffset = 127;
 
     /// <summary>Record size in ints per kind: header, first object slot (kinds with object slots), int slots.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static ReadOnlySpan<byte> RecordSizes =>
     [
         5,5,5,5,5,5,5,5,5,7,7,7,7,5,7,9,9,9,9,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,
@@ -43,6 +44,7 @@ internal sealed partial class NodeStore
     ];
 
     /// <summary>Object slots (strings, node lists, other objects) per kind.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static ReadOnlySpan<byte> RefCounts =>
     [
         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
@@ -71,6 +73,7 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IReadOnlyList<string>? AmbientModuleNames(Node node)
     {
@@ -80,6 +83,7 @@ internal sealed partial class NodeStore
         return o < 0 ? null : Unsafe.As<IReadOnlyList<string>?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetAmbientModuleNames(Node node, IReadOnlyList<string>? value)
     {
@@ -107,6 +111,7 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IReadOnlyList<AmdDependency> AmdDependencies(Node node)
     {
@@ -116,6 +121,7 @@ internal sealed partial class NodeStore
         return o < 0 ? null! : Unsafe.As<IReadOnlyList<AmdDependency>>(refs[d[h + RefBaseWord] + o])!;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetAmdDependencies(Node node, IReadOnlyList<AmdDependency> value)
     {
@@ -143,6 +149,7 @@ internal sealed partial class NodeStore
     ];
 
     // ImportTypeNode
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Argument(Node node)
     {
@@ -152,6 +159,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetArgument(Node node, Node value)
     {
@@ -179,6 +187,7 @@ internal sealed partial class NodeStore
     ];
 
     // ElementAccessExpression
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ArgumentExpression(Node node)
     {
@@ -188,6 +197,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetArgumentExpression(Node node, Node value)
     {
@@ -215,6 +225,7 @@ internal sealed partial class NodeStore
     ];
 
     // CallExpression, NewExpression
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public NodeList Arguments(Node node)
     {
@@ -224,6 +235,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new NodeList(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetArguments(Node node, NodeList value)
     {
@@ -251,6 +263,7 @@ internal sealed partial class NodeStore
     ];
 
     // ExportDeclaration, ImportDeclaration, ImportTypeAssertionContainer (side table)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node AssertClause(Node node)
     {
@@ -260,6 +273,7 @@ internal sealed partial class NodeStore
         return w >= 0 || AssertClauseOffsets[w & KindMask] < 0 ? default : new Node(GetSideInt(h, 4));
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetAssertClause(Node node, Node value)
     {
@@ -286,6 +300,7 @@ internal sealed partial class NodeStore
     ];
 
     // TypePredicateNode
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node AssertsModifier(Node node)
     {
@@ -295,6 +310,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetAssertsModifier(Node node, Node value)
     {
@@ -322,6 +338,7 @@ internal sealed partial class NodeStore
     ];
 
     // ArrowFunction, ConstructorDeclaration, FunctionDeclaration, FunctionExpression, GetAccessorDeclaration, MethodDeclaration, … (8 classes) (some in the side table)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node AsteriskToken(Node node)
     {
@@ -336,6 +353,7 @@ internal sealed partial class NodeStore
         return o == SideOffset && w < 0 ? new Node(GetSideInt(h, 5)) : default;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetAsteriskToken(Node node, Node value)
     {
@@ -368,6 +386,7 @@ internal sealed partial class NodeStore
     ];
 
     // ExportDeclaration, ImportDeclaration, ImportTypeNode, JSDocImportTag, JsxOpeningElement, JsxSelfClosingElement (some in the side table)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Attributes(Node node)
     {
@@ -382,6 +401,7 @@ internal sealed partial class NodeStore
         return o == SideOffset && w < 0 ? new Node(GetSideInt(h, 6)) : default;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetAttributes(Node node, Node value)
     {
@@ -414,6 +434,7 @@ internal sealed partial class NodeStore
     ];
 
     // ForOfStatement
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node AwaitModifier(Node node)
     {
@@ -423,6 +444,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetAwaitModifier(Node node, Node value)
     {
@@ -450,6 +472,7 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public List<DiagnosticWithLocation>? BindDiagnostics(Node node)
     {
@@ -459,6 +482,7 @@ internal sealed partial class NodeStore
         return o < 0 ? null : Unsafe.As<List<DiagnosticWithLocation>?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetBindDiagnostics(Node node, List<DiagnosticWithLocation>? value)
     {
@@ -486,6 +510,7 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public List<DiagnosticWithLocation>? BindSuggestionDiagnostics(Node node)
     {
@@ -495,6 +520,7 @@ internal sealed partial class NodeStore
         return o < 0 ? null : Unsafe.As<List<DiagnosticWithLocation>?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetBindSuggestionDiagnostics(Node node, List<DiagnosticWithLocation>? value)
     {
@@ -522,6 +548,7 @@ internal sealed partial class NodeStore
     ];
 
     // CatchClause
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Block(Node node)
     {
@@ -531,6 +558,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetBlock(Node node, Node value)
     {
@@ -558,6 +586,7 @@ internal sealed partial class NodeStore
     ];
 
     // ArrowFunction, ClassStaticBlockDeclaration, ConstructorDeclaration, FunctionDeclaration, FunctionExpression, GetAccessorDeclaration, … (9 classes)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Body(Node node)
     {
@@ -567,6 +596,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetBody(Node node, Node value)
     {
@@ -594,6 +624,7 @@ internal sealed partial class NodeStore
     ];
 
     // SwitchStatement
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node CaseBlock(Node node)
     {
@@ -603,6 +634,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetCaseBlock(Node node, Node value)
     {
@@ -630,6 +662,7 @@ internal sealed partial class NodeStore
     ];
 
     // TryStatement
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node CatchClause(Node node)
     {
@@ -639,6 +672,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetCatchClause(Node node, Node value)
     {
@@ -666,6 +700,7 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public CheckJsDirective? CheckJsDirective(Node node)
     {
@@ -675,6 +710,7 @@ internal sealed partial class NodeStore
         return o < 0 ? null : Unsafe.As<CheckJsDirective?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetCheckJsDirective(Node node, CheckJsDirective? value)
     {
@@ -702,6 +738,7 @@ internal sealed partial class NodeStore
     ];
 
     // ConditionalTypeNode
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node CheckType(Node node)
     {
@@ -711,6 +748,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetCheckType(Node node, Node value)
     {
@@ -738,6 +776,7 @@ internal sealed partial class NodeStore
     ];
 
     // JsxElement, JsxFragment
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public NodeList Children(Node node)
     {
@@ -747,6 +786,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new NodeList(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetChildren(Node node, NodeList value)
     {
@@ -774,6 +814,7 @@ internal sealed partial class NodeStore
     ];
 
     // JSDocAugmentsTag, JSDocImplementsTag
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Class(Node node)
     {
@@ -783,6 +824,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetClass(Node node, Node value)
     {
@@ -810,6 +852,7 @@ internal sealed partial class NodeStore
     ];
 
     // CaseBlock
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public NodeList Clauses(Node node)
     {
@@ -819,6 +862,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new NodeList(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetClauses(Node node, NodeList value)
     {
@@ -846,6 +890,7 @@ internal sealed partial class NodeStore
     ];
 
     // JsxElement
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ClosingElement(Node node)
     {
@@ -855,6 +900,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetClosingElement(Node node, Node value)
     {
@@ -882,6 +928,7 @@ internal sealed partial class NodeStore
     ];
 
     // JsxFragment
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ClosingFragment(Node node)
     {
@@ -891,6 +938,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetClosingFragment(Node node, Node value)
     {
@@ -918,6 +966,7 @@ internal sealed partial class NodeStore
     ];
 
     // ConditionalExpression
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ColonToken(Node node)
     {
@@ -927,6 +976,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetColonToken(Node node, Node value)
     {
@@ -954,6 +1004,7 @@ internal sealed partial class NodeStore
     ];
 
     // JSDoc, JSDocAugmentsTag, JSDocAuthorTag, JSDocCallbackTag, JSDocClassTag, JSDocDeprecatedTag, … (26 classes)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public TextOrList Comment(Node node)
     {
@@ -963,6 +1014,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new TextOrList(d[h + o], d[h + o + 1]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetComment(Node node, TextOrList value)
     {
@@ -991,6 +1043,7 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public List<CommentDirective>? CommentDirectives(Node node)
     {
@@ -1000,6 +1053,7 @@ internal sealed partial class NodeStore
         return o < 0 ? null : Unsafe.As<List<CommentDirective>?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetCommentDirectives(Node node, List<CommentDirective>? value)
     {
@@ -1027,6 +1081,7 @@ internal sealed partial class NodeStore
     ];
 
     // ConditionalExpression, ForStatement
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Condition(Node node)
     {
@@ -1036,6 +1091,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetCondition(Node node, Node value)
     {
@@ -1063,6 +1119,7 @@ internal sealed partial class NodeStore
     ];
 
     // JSDocTemplateTag, TypeParameterDeclaration
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Constraint(Node node)
     {
@@ -1072,6 +1129,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetConstraint(Node node, Node value)
     {
@@ -1099,6 +1157,7 @@ internal sealed partial class NodeStore
     ];
 
     // JsxText
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool ContainsOnlyTriviaWhiteSpaces(Node node)
     {
@@ -1107,6 +1166,7 @@ internal sealed partial class NodeStore
         return b >= 0 && (w & (1 << b)) != 0;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetContainsOnlyTriviaWhiteSpaces(Node node, bool value)
     {
@@ -1135,6 +1195,7 @@ internal sealed partial class NodeStore
     ];
 
     // VariableStatement
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node DeclarationList(Node node)
     {
@@ -1144,6 +1205,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetDeclarationList(Node node, Node value)
     {
@@ -1171,6 +1233,7 @@ internal sealed partial class NodeStore
     ];
 
     // VariableDeclarationList
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public NodeList Declarations(Node node)
     {
@@ -1180,6 +1243,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new NodeList(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetDeclarations(Node node, NodeList value)
     {
@@ -1207,6 +1271,7 @@ internal sealed partial class NodeStore
     ];
 
     // TypeParameterDeclaration
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Default(Node node)
     {
@@ -1216,6 +1281,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetDefault(Node node, Node value)
     {
@@ -1243,6 +1309,7 @@ internal sealed partial class NodeStore
     ];
 
     // BindingElement, JsxExpression, NamedTupleMember, ParameterDeclaration (some in the side table)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node DotDotDotToken(Node node)
     {
@@ -1257,6 +1324,7 @@ internal sealed partial class NodeStore
         return o == SideOffset && w < 0 ? new Node(GetSideInt(h, 7)) : default;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetDotDotDotToken(Node node, Node value)
     {
@@ -1289,6 +1357,7 @@ internal sealed partial class NodeStore
     ];
 
     // ArrayTypeNode
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ElementType(Node node)
     {
@@ -1298,6 +1367,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetElementType(Node node, Node value)
     {
@@ -1325,6 +1395,7 @@ internal sealed partial class NodeStore
     ];
 
     // ArrayBindingPattern, ArrayLiteralExpression, CommaListExpression, ImportAttributes, NamedExports, NamedImports, … (8 classes)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public NodeList Elements(Node node)
     {
@@ -1334,6 +1405,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new NodeList(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetElements(Node node, NodeList value)
     {
@@ -1361,6 +1433,7 @@ internal sealed partial class NodeStore
     ];
 
     // IfStatement
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ElseStatement(Node node)
     {
@@ -1370,6 +1443,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetElseStatement(Node node, Node value)
     {
@@ -1397,6 +1471,7 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node EndOfFileToken(Node node)
     {
@@ -1406,6 +1481,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetEndOfFileToken(Node node, Node value)
     {
@@ -1433,6 +1509,7 @@ internal sealed partial class NodeStore
     ];
 
     // ArrowFunction
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node EqualsGreaterThanToken(Node node)
     {
@@ -1442,6 +1519,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetEqualsGreaterThanToken(Node node, Node value)
     {
@@ -1469,6 +1547,7 @@ internal sealed partial class NodeStore
     ];
 
     // ShorthandPropertyAssignment (side table)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node EqualsToken(Node node)
     {
@@ -1478,6 +1557,7 @@ internal sealed partial class NodeStore
         return w >= 0 || EqualsTokenOffsets[w & KindMask] < 0 ? default : new Node(GetSideInt(h, 8));
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetEqualsToken(Node node, Node value)
     {
@@ -1504,6 +1584,7 @@ internal sealed partial class NodeStore
     ];
 
     // Identifier, PrivateIdentifier
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public TextRef EscapedText(Node node)
     {
@@ -1513,6 +1594,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new TextRef(d[h + o], d[h + o + 1]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetEscapedText(Node node, TextRef value)
     {
@@ -1541,6 +1623,7 @@ internal sealed partial class NodeStore
     ];
 
     // ArrowFunction, ConstructorDeclaration, FunctionDeclaration, FunctionExpression, GetAccessorDeclaration, MethodDeclaration, … (11 classes) (side table)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ExclamationToken(Node node)
     {
@@ -1550,6 +1633,7 @@ internal sealed partial class NodeStore
         return w >= 0 || ExclamationTokenOffsets[w & KindMask] < 0 ? default : new Node(GetSideInt(h, 9));
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetExclamationToken(Node node, Node value)
     {
@@ -1576,6 +1660,7 @@ internal sealed partial class NodeStore
     ];
 
     // ExportDeclaration
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ExportClause(Node node)
     {
@@ -1585,6 +1670,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetExportClause(Node node, Node value)
     {
@@ -1612,6 +1698,7 @@ internal sealed partial class NodeStore
     ];
 
     // TypeQueryNode
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ExprName(Node node)
     {
@@ -1621,6 +1708,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetExprName(Node node, Node value)
     {
@@ -1648,6 +1736,7 @@ internal sealed partial class NodeStore
     ];
 
     // AsExpression, AwaitExpression, CallExpression, CaseClause, ComputedPropertyName, Decorator, … (38 classes) (some in the side table)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Expression(Node node)
     {
@@ -1662,6 +1751,7 @@ internal sealed partial class NodeStore
         return o == SideOffset && w < 0 ? new Node(GetSideInt(h, 10)) : default;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetExpression(Node node, Node value)
     {
@@ -1694,6 +1784,7 @@ internal sealed partial class NodeStore
     ];
 
     // ConditionalTypeNode
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ExtendsType(Node node)
     {
@@ -1703,6 +1794,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetExtendsType(Node node, Node value)
     {
@@ -1730,6 +1822,7 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public object? ExternalModuleIndicator(Node node)
     {
@@ -1739,6 +1832,7 @@ internal sealed partial class NodeStore
         return o < 0 ? null : refs[d[h + RefBaseWord] + o];
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetExternalModuleIndicator(Node node, object? value)
     {
@@ -1766,6 +1860,7 @@ internal sealed partial class NodeStore
     ];
 
     // ConditionalTypeNode
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node FalseType(Node node)
     {
@@ -1775,6 +1870,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetFalseType(Node node, Node value)
     {
@@ -1802,6 +1898,7 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public string FileName(Node node)
     {
@@ -1811,6 +1908,7 @@ internal sealed partial class NodeStore
         return o < 0 ? null! : Unsafe.As<string>(refs[d[h + RefBaseWord] + o])!;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetFileName(Node node, string value)
     {
@@ -1838,6 +1936,7 @@ internal sealed partial class NodeStore
     ];
 
     // TryStatement
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node FinallyBlock(Node node)
     {
@@ -1847,6 +1946,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetFinallyBlock(Node node, Node value)
     {
@@ -1874,6 +1974,7 @@ internal sealed partial class NodeStore
     ];
 
     // JSDocCallbackTag, JSDocTypedefTag
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node FullName(Node node)
     {
@@ -1883,6 +1984,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetFullName(Node node, Node value)
     {
@@ -1910,6 +2012,7 @@ internal sealed partial class NodeStore
     ];
 
     // BigIntLiteral, JsxText, NoSubstitutionTemplateLiteral, NumericLiteral, RegularExpressionLiteral, StringLiteral, … (9 classes)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool HasExtendedUnicodeEscape(Node node)
     {
@@ -1918,6 +2021,7 @@ internal sealed partial class NodeStore
         return b >= 0 && (w & (1 << b)) != 0;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetHasExtendedUnicodeEscape(Node node, bool value)
     {
@@ -1946,6 +2050,7 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool HasNoDefaultLib(Node node)
     {
@@ -1954,6 +2059,7 @@ internal sealed partial class NodeStore
         return b >= 0 && (w & (1 << b)) != 0;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetHasNoDefaultLib(Node node, bool value)
     {
@@ -1982,6 +2088,7 @@ internal sealed partial class NodeStore
     ];
 
     // TemplateExpression, TemplateLiteralTypeNode
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Head(Node node)
     {
@@ -1991,6 +2098,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetHead(Node node, Node value)
     {
@@ -2018,6 +2126,7 @@ internal sealed partial class NodeStore
     ];
 
     // ClassDeclaration, ClassExpression, InterfaceDeclaration
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public NodeList HeritageClauses(Node node)
     {
@@ -2027,6 +2136,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new NodeList(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetHeritageClauses(Node node, NodeList value)
     {
@@ -2054,6 +2164,7 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int IdentifierCount(Node node)
     {
@@ -2063,6 +2174,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : d[h + o];
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetIdentifierCount(Node node, int value)
     {
@@ -2090,6 +2202,7 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public TextTable? Identifiers(Node node)
     {
@@ -2099,6 +2212,7 @@ internal sealed partial class NodeStore
         return o < 0 ? null : Unsafe.As<TextTable?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetIdentifiers(Node node, TextTable? value)
     {
@@ -2126,6 +2240,7 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ModuleKind ImpliedNodeFormat(Node node)
     {
@@ -2135,6 +2250,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : (ModuleKind)d[h + o];
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetImpliedNodeFormat(Node node, ModuleKind value)
     {
@@ -2162,6 +2278,7 @@ internal sealed partial class NodeStore
     ];
 
     // ImportDeclaration, JSDocImportTag
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ImportClause(Node node)
     {
@@ -2171,6 +2288,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetImportClause(Node node, Node value)
     {
@@ -2198,6 +2316,7 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node[]? Imports(Node node)
     {
@@ -2207,6 +2326,7 @@ internal sealed partial class NodeStore
         return o < 0 ? null : Unsafe.As<Node[]?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetImports(Node node, Node[]? value)
     {
@@ -2234,6 +2354,7 @@ internal sealed partial class NodeStore
     ];
 
     // ForStatement
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Incrementor(Node node)
     {
@@ -2243,6 +2364,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetIncrementor(Node node, Node value)
     {
@@ -2270,6 +2392,7 @@ internal sealed partial class NodeStore
     ];
 
     // IndexedAccessTypeNode
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node IndexType(Node node)
     {
@@ -2279,6 +2402,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetIndexType(Node node, Node value)
     {
@@ -2306,6 +2430,7 @@ internal sealed partial class NodeStore
     ];
 
     // BindingElement, EnumMember, ForInStatement, ForOfStatement, ForStatement, JsxAttribute, … (11 classes) (some in the side table)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Initializer(Node node)
     {
@@ -2320,6 +2445,7 @@ internal sealed partial class NodeStore
         return o == SideOffset && w < 0 ? new Node(GetSideInt(h, 11)) : default;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetInitializer(Node node, Node value)
     {
@@ -2352,6 +2478,7 @@ internal sealed partial class NodeStore
     ];
 
     // JSDocTypeLiteral
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool IsArrayType(Node node)
     {
@@ -2360,6 +2487,7 @@ internal sealed partial class NodeStore
         return b >= 0 && (w & (1 << b)) != 0;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetIsArrayType(Node node, bool value)
     {
@@ -2388,6 +2516,7 @@ internal sealed partial class NodeStore
     ];
 
     // JSDocParameterTag, JSDocPropertyTag
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool IsBracketed(Node node)
     {
@@ -2396,6 +2525,7 @@ internal sealed partial class NodeStore
         return b >= 0 && (w & (1 << b)) != 0;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetIsBracketed(Node node, bool value)
     {
@@ -2424,6 +2554,7 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool IsDeclarationFile(Node node)
     {
@@ -2432,6 +2563,7 @@ internal sealed partial class NodeStore
         return b >= 0 && (w & (1 << b)) != 0;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetIsDeclarationFile(Node node, bool value)
     {
@@ -2460,6 +2592,7 @@ internal sealed partial class NodeStore
     ];
 
     // ExportAssignment
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool IsExportEquals(Node node)
     {
@@ -2468,6 +2601,7 @@ internal sealed partial class NodeStore
         return b >= 0 && (w & (1 << b)) != 0;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetIsExportEquals(Node node, bool value)
     {
@@ -2496,6 +2630,7 @@ internal sealed partial class NodeStore
     ];
 
     // JSDocParameterTag, JSDocPropertyTag
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool IsNameFirst(Node node)
     {
@@ -2504,6 +2639,7 @@ internal sealed partial class NodeStore
         return b >= 0 && (w & (1 << b)) != 0;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetIsNameFirst(Node node, bool value)
     {
@@ -2532,6 +2668,7 @@ internal sealed partial class NodeStore
     ];
 
     // SyntheticExpression (side table)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool IsSpread(Node node)
     {
@@ -2541,6 +2678,7 @@ internal sealed partial class NodeStore
         return w >= 0 || IsSpreadOffsets[w & KindMask] < 0 ? default : GetSideInt(h, 12) != 0;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetIsSpread(Node node, bool value)
     {
@@ -2567,6 +2705,7 @@ internal sealed partial class NodeStore
     ];
 
     // ImportTypeNode
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool IsTypeOf(Node node)
     {
@@ -2575,6 +2714,7 @@ internal sealed partial class NodeStore
         return b >= 0 && (w & (1 << b)) != 0;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetIsTypeOf(Node node, bool value)
     {
@@ -2603,6 +2743,7 @@ internal sealed partial class NodeStore
     ];
 
     // ExportDeclaration, ExportSpecifier, ImportClause, ImportEqualsDeclaration, ImportSpecifier
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool IsTypeOnly(Node node)
     {
@@ -2611,6 +2752,7 @@ internal sealed partial class NodeStore
         return b >= 0 && (w & (1 << b)) != 0;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetIsTypeOnly(Node node, bool value)
     {
@@ -2639,6 +2781,7 @@ internal sealed partial class NodeStore
     ];
 
     // BigIntLiteral, JsxText, NoSubstitutionTemplateLiteral, NumericLiteral, RegularExpressionLiteral, StringLiteral, … (9 classes)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool IsUnterminated(Node node)
     {
@@ -2647,6 +2790,7 @@ internal sealed partial class NodeStore
         return b >= 0 && (w & (1 << b)) != 0;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetIsUnterminated(Node node, bool value)
     {
@@ -2675,6 +2819,7 @@ internal sealed partial class NodeStore
     ];
 
     // JSDocSignature
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node[]? JSDocSignatureParameters(Node node)
     {
@@ -2684,6 +2829,7 @@ internal sealed partial class NodeStore
         return o < 0 ? null : Unsafe.As<Node[]?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetJSDocSignatureParameters(Node node, Node[]? value)
     {
@@ -2711,6 +2857,7 @@ internal sealed partial class NodeStore
     ];
 
     // JSDocSignature
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node[]? JSDocSignatureTypeParameters(Node node)
     {
@@ -2720,6 +2867,7 @@ internal sealed partial class NodeStore
         return o < 0 ? null : Unsafe.As<Node[]?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetJSDocSignatureTypeParameters(Node node, Node[]? value)
     {
@@ -2747,6 +2895,7 @@ internal sealed partial class NodeStore
     ];
 
     // ArrowFunction, BinaryExpression, Block, BreakStatement, CallSignatureDeclaration, CaseClause, … (69 classes) (side table)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public List<Node>? JsDoc(Node node)
     {
@@ -2756,6 +2905,7 @@ internal sealed partial class NodeStore
         return w >= 0 || JsDocOffsets[w & KindMask] < 0 ? null : Unsafe.As<List<Node>?>(GetSideRef(h, 13));
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetJsDoc(Node node, List<Node>? value)
     {
@@ -2782,6 +2932,7 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public List<DiagnosticWithLocation>? JsDocDiagnostics(Node node)
     {
@@ -2791,6 +2942,7 @@ internal sealed partial class NodeStore
         return o < 0 ? null : Unsafe.As<List<DiagnosticWithLocation>?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetJsDocDiagnostics(Node node, List<DiagnosticWithLocation>? value)
     {
@@ -2818,6 +2970,7 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public JSDocParsingMode JsDocParsingMode(Node node)
     {
@@ -2827,6 +2980,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : (JSDocParsingMode)d[h + o];
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetJsDocParsingMode(Node node, JSDocParsingMode value)
     {
@@ -2854,6 +3008,7 @@ internal sealed partial class NodeStore
     ];
 
     // JSDocTypeLiteral
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node[]? JsDocPropertyTags(Node node)
     {
@@ -2863,6 +3018,7 @@ internal sealed partial class NodeStore
         return o < 0 ? null : Unsafe.As<Node[]?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetJsDocPropertyTags(Node node, Node[]? value)
     {
@@ -2890,6 +3046,7 @@ internal sealed partial class NodeStore
     ];
 
     // MetaProperty
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public SyntaxKind KeywordToken(Node node)
     {
@@ -2899,6 +3056,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : (SyntaxKind)d[h + o];
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetKeywordToken(Node node, SyntaxKind value)
     {
@@ -2926,6 +3084,7 @@ internal sealed partial class NodeStore
     ];
 
     // BreakStatement, ContinueStatement, LabeledStatement
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Label(Node node)
     {
@@ -2935,6 +3094,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetLabel(Node node, Node value)
     {
@@ -2962,6 +3122,7 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public LanguageVariant LanguageVariant(Node node)
     {
@@ -2971,6 +3132,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : (LanguageVariant)d[h + o];
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetLanguageVariant(Node node, LanguageVariant value)
     {
@@ -2998,6 +3160,7 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ScriptTarget LanguageVersion(Node node)
     {
@@ -3007,6 +3170,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : (ScriptTarget)d[h + o];
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetLanguageVersion(Node node, ScriptTarget value)
     {
@@ -3034,6 +3198,7 @@ internal sealed partial class NodeStore
     ];
 
     // BinaryExpression, JSDocMemberName, QualifiedName
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Left(Node node)
     {
@@ -3043,6 +3208,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetLeft(Node node, Node value)
     {
@@ -3070,6 +3236,7 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IReadOnlyList<FileReference> LibReferenceDirectives(Node node)
     {
@@ -3079,6 +3246,7 @@ internal sealed partial class NodeStore
         return o < 0 ? null! : Unsafe.As<IReadOnlyList<FileReference>>(refs[d[h + RefBaseWord] + o])!;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetLibReferenceDirectives(Node node, IReadOnlyList<FileReference> value)
     {
@@ -3106,6 +3274,7 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IReadOnlyList<int>? LineMap(Node node)
     {
@@ -3115,6 +3284,7 @@ internal sealed partial class NodeStore
         return o < 0 ? null : Unsafe.As<IReadOnlyList<int>?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetLineMap(Node node, IReadOnlyList<int>? value)
     {
@@ -3142,6 +3312,7 @@ internal sealed partial class NodeStore
     ];
 
     // LiteralTypeNode, TemplateLiteralTypeSpan, TemplateSpan
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Literal(Node node)
     {
@@ -3151,6 +3322,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetLiteral(Node node, Node value)
     {
@@ -3178,6 +3350,7 @@ internal sealed partial class NodeStore
     ];
 
     // ClassDeclaration, ClassExpression, EnumDeclaration, InterfaceDeclaration, MappedTypeNode, TypeLiteralNode
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public NodeList Members(Node node)
     {
@@ -3187,6 +3360,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new NodeList(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetMembers(Node node, NodeList value)
     {
@@ -3214,6 +3388,7 @@ internal sealed partial class NodeStore
     ];
 
     // ArrowFunction, ClassDeclaration, ClassExpression, ClassStaticBlockDeclaration, ConstructorDeclaration, ConstructorTypeNode, … (31 classes) (some in the side table)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public NodeList Modifiers(Node node)
     {
@@ -3228,6 +3403,7 @@ internal sealed partial class NodeStore
         return o == SideOffset && w < 0 ? new NodeList(GetSideInt(h, 14)) : default;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetModifiers(Node node, NodeList value)
     {
@@ -3260,6 +3436,7 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node[]? ModuleAugmentations(Node node)
     {
@@ -3269,6 +3446,7 @@ internal sealed partial class NodeStore
         return o < 0 ? null : Unsafe.As<Node[]?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetModuleAugmentations(Node node, Node[]? value)
     {
@@ -3296,6 +3474,7 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public string? ModuleName(Node node)
     {
@@ -3305,6 +3484,7 @@ internal sealed partial class NodeStore
         return o < 0 ? null : Unsafe.As<string?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetModuleName(Node node, string? value)
     {
@@ -3332,6 +3512,7 @@ internal sealed partial class NodeStore
     ];
 
     // ImportEqualsDeclaration
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ModuleReference(Node node)
     {
@@ -3341,6 +3522,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetModuleReference(Node node, Node value)
     {
@@ -3368,6 +3550,7 @@ internal sealed partial class NodeStore
     ];
 
     // ExportDeclaration, ImportDeclaration, JSDocImportTag
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ModuleSpecifier(Node node)
     {
@@ -3377,6 +3560,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetModuleSpecifier(Node node, Node value)
     {
@@ -3404,6 +3588,7 @@ internal sealed partial class NodeStore
     ];
 
     // ArrayLiteralExpression, Block, ImportAttributes, ImportTypeAssertionContainer, ObjectLiteralExpression
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool MultiLine(Node node)
     {
@@ -3412,6 +3597,7 @@ internal sealed partial class NodeStore
         return b >= 0 && (w & (1 << b)) != 0;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetMultiLine(Node node, bool value)
     {
@@ -3440,6 +3626,7 @@ internal sealed partial class NodeStore
     ];
 
     // BindingElement, CallSignatureDeclaration, ClassDeclaration, ClassExpression, ClassStaticBlockDeclaration, ConstructSignatureDeclaration, … (58 classes) (some in the side table)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Name(Node node)
     {
@@ -3454,6 +3641,7 @@ internal sealed partial class NodeStore
         return o == SideOffset && w < 0 ? new Node(GetSideInt(h, 15)) : default;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetName(Node node, Node value)
     {
@@ -3486,6 +3674,7 @@ internal sealed partial class NodeStore
     ];
 
     // MappedTypeNode
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node NameType(Node node)
     {
@@ -3495,6 +3684,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetNameType(Node node, Node value)
     {
@@ -3522,6 +3712,7 @@ internal sealed partial class NodeStore
     ];
 
     // ImportClause
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node NamedBindings(Node node)
     {
@@ -3531,6 +3722,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetNamedBindings(Node node, Node value)
     {
@@ -3558,6 +3750,7 @@ internal sealed partial class NodeStore
     ];
 
     // JsxNamespacedName
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Namespace(Node node)
     {
@@ -3567,6 +3760,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetNamespace(Node node, Node value)
     {
@@ -3594,6 +3788,7 @@ internal sealed partial class NodeStore
     ];
 
     // ArrowFunction, Block, CallSignatureDeclaration, CaseBlock, CatchClause, ClassStaticBlockDeclaration, … (30 classes) (side table)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node NextContainer(Node node)
     {
@@ -3603,6 +3798,7 @@ internal sealed partial class NodeStore
         return w >= 0 || NextContainerOffsets[w & KindMask] < 0 ? default : new Node(GetSideInt(h, 16));
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetNextContainer(Node node, Node value)
     {
@@ -3629,6 +3825,7 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int NodeCount(Node node)
     {
@@ -3638,6 +3835,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : d[h + o];
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetNodeCount(Node node, int value)
     {
@@ -3665,6 +3863,7 @@ internal sealed partial class NodeStore
     ];
 
     // NumericLiteral (side table)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public TokenFlags NumericLiteralFlags(Node node)
     {
@@ -3674,6 +3873,7 @@ internal sealed partial class NodeStore
         return w >= 0 || NumericLiteralFlagsOffsets[w & KindMask] < 0 ? default : (TokenFlags)GetSideInt(h, 17);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetNumericLiteralFlags(Node node, TokenFlags value)
     {
@@ -3700,6 +3900,7 @@ internal sealed partial class NodeStore
     ];
 
     // ShorthandPropertyAssignment (side table)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ObjectAssignmentInitializer(Node node)
     {
@@ -3709,6 +3910,7 @@ internal sealed partial class NodeStore
         return w >= 0 || ObjectAssignmentInitializerOffsets[w & KindMask] < 0 ? default : new Node(GetSideInt(h, 18));
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetObjectAssignmentInitializer(Node node, Node value)
     {
@@ -3735,6 +3937,7 @@ internal sealed partial class NodeStore
     ];
 
     // IndexedAccessTypeNode
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ObjectType(Node node)
     {
@@ -3744,6 +3947,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetObjectType(Node node, Node value)
     {
@@ -3771,6 +3975,7 @@ internal sealed partial class NodeStore
     ];
 
     // JsxElement
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node OpeningElement(Node node)
     {
@@ -3780,6 +3985,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetOpeningElement(Node node, Node value)
     {
@@ -3807,6 +4013,7 @@ internal sealed partial class NodeStore
     ];
 
     // JsxFragment
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node OpeningFragment(Node node)
     {
@@ -3816,6 +4023,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetOpeningFragment(Node node, Node value)
     {
@@ -3843,6 +4051,7 @@ internal sealed partial class NodeStore
     ];
 
     // PostfixUnaryExpression, PrefixUnaryExpression
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Operand(Node node)
     {
@@ -3852,6 +4061,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetOperand(Node node, Node value)
     {
@@ -3879,6 +4089,7 @@ internal sealed partial class NodeStore
     ];
 
     // PostfixUnaryExpression, PrefixUnaryExpression, TypeOperatorNode
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public SyntaxKind Operator(Node node)
     {
@@ -3888,6 +4099,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : (SyntaxKind)d[h + o];
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetOperator(Node node, SyntaxKind value)
     {
@@ -3915,6 +4127,7 @@ internal sealed partial class NodeStore
     ];
 
     // BinaryExpression
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node OperatorToken(Node node)
     {
@@ -3924,6 +4137,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetOperatorToken(Node node, Node value)
     {
@@ -3951,6 +4165,7 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public string OriginalFileName(Node node)
     {
@@ -3960,6 +4175,7 @@ internal sealed partial class NodeStore
         return o < 0 ? null! : Unsafe.As<string>(refs[d[h + RefBaseWord] + o])!;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetOriginalFileName(Node node, string value)
     {
@@ -3987,6 +4203,7 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IReadOnlyList<string>? PackageJsonLocations(Node node)
     {
@@ -3996,6 +4213,7 @@ internal sealed partial class NodeStore
         return o < 0 ? null : Unsafe.As<IReadOnlyList<string>?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetPackageJsonLocations(Node node, IReadOnlyList<string>? value)
     {
@@ -4023,6 +4241,7 @@ internal sealed partial class NodeStore
     ];
 
     // TypePredicateNode
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ParameterName(Node node)
     {
@@ -4032,6 +4251,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetParameterName(Node node, Node value)
     {
@@ -4059,6 +4279,7 @@ internal sealed partial class NodeStore
     ];
 
     // ArrowFunction, CallSignatureDeclaration, ConstructSignatureDeclaration, ConstructorDeclaration, ConstructorTypeNode, FunctionDeclaration, … (14 classes)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public NodeList Parameters(Node node)
     {
@@ -4068,6 +4289,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new NodeList(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetParameters(Node node, NodeList value)
     {
@@ -4095,6 +4317,7 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public List<DiagnosticWithLocation> ParseDiagnostics(Node node)
     {
@@ -4104,6 +4327,7 @@ internal sealed partial class NodeStore
         return o < 0 ? null! : Unsafe.As<List<DiagnosticWithLocation>>(refs[d[h + RefBaseWord] + o])!;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetParseDiagnostics(Node node, List<DiagnosticWithLocation> value)
     {
@@ -4131,6 +4355,7 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public string? Path(Node node)
     {
@@ -4140,6 +4365,7 @@ internal sealed partial class NodeStore
         return o < 0 ? null : Unsafe.As<string?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetPath(Node node, string? value)
     {
@@ -4167,6 +4393,7 @@ internal sealed partial class NodeStore
     ];
 
     // ImportClause
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public SyntaxKind PhaseModifier(Node node)
     {
@@ -4176,6 +4403,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : (SyntaxKind)d[h + o];
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetPhaseModifier(Node node, SyntaxKind value)
     {
@@ -4203,6 +4431,7 @@ internal sealed partial class NodeStore
     ];
 
     // SwitchStatement
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool PossiblyExhaustive(Node node)
     {
@@ -4211,6 +4440,7 @@ internal sealed partial class NodeStore
         return b >= 0 && (w & (1 << b)) != 0;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetPossiblyExhaustive(Node node, bool value)
     {
@@ -4239,6 +4469,7 @@ internal sealed partial class NodeStore
     ];
 
     // JSDocNonNullableType, JSDocNullableType
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Postfix(Node node)
     {
@@ -4247,6 +4478,7 @@ internal sealed partial class NodeStore
         return b >= 0 && (w & (1 << b)) != 0;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetPostfix(Node node, bool value)
     {
@@ -4275,6 +4507,7 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public PragmaMap Pragmas(Node node)
     {
@@ -4284,6 +4517,7 @@ internal sealed partial class NodeStore
         return o < 0 ? null! : Unsafe.As<PragmaMap>(refs[d[h + RefBaseWord] + o])!;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetPragmas(Node node, PragmaMap value)
     {
@@ -4311,6 +4545,7 @@ internal sealed partial class NodeStore
     ];
 
     // JsxAttributes, ObjectLiteralExpression
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public NodeList Properties(Node node)
     {
@@ -4320,6 +4555,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new NodeList(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetProperties(Node node, NodeList value)
     {
@@ -4347,6 +4583,7 @@ internal sealed partial class NodeStore
     ];
 
     // BindingElement, ExportSpecifier, ImportSpecifier (some in the side table)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node PropertyName(Node node)
     {
@@ -4361,6 +4598,7 @@ internal sealed partial class NodeStore
         return o == SideOffset && w < 0 ? new Node(GetSideInt(h, 19)) : default;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetPropertyName(Node node, Node value)
     {
@@ -4393,6 +4631,7 @@ internal sealed partial class NodeStore
     ];
 
     // ImportTypeNode
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Qualifier(Node node)
     {
@@ -4402,6 +4641,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetQualifier(Node node, Node value)
     {
@@ -4429,6 +4669,7 @@ internal sealed partial class NodeStore
     ];
 
     // CallExpression, ElementAccessExpression, PropertyAccessExpression, TaggedTemplateExpression (side table)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node QuestionDotToken(Node node)
     {
@@ -4438,6 +4679,7 @@ internal sealed partial class NodeStore
         return w >= 0 || QuestionDotTokenOffsets[w & KindMask] < 0 ? default : new Node(GetSideInt(h, 20));
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetQuestionDotToken(Node node, Node value)
     {
@@ -4464,6 +4706,7 @@ internal sealed partial class NodeStore
     ];
 
     // ArrowFunction, CallSignatureDeclaration, ConditionalExpression, ConstructSignatureDeclaration, ConstructorDeclaration, FunctionDeclaration, … (20 classes) (some in the side table)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node QuestionToken(Node node)
     {
@@ -4478,6 +4721,7 @@ internal sealed partial class NodeStore
         return o == SideOffset && w < 0 ? new Node(GetSideInt(h, 21)) : default;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetQuestionToken(Node node, Node value)
     {
@@ -4510,6 +4754,7 @@ internal sealed partial class NodeStore
     ];
 
     // NoSubstitutionTemplateLiteral, TemplateHead, TemplateMiddle, TemplateTail
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public TextRef RawText(Node node)
     {
@@ -4519,6 +4764,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new TextRef(d[h + o], d[h + o + 1]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetRawText(Node node, TextRef value)
     {
@@ -4547,6 +4793,7 @@ internal sealed partial class NodeStore
     ];
 
     // MappedTypeNode
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ReadonlyToken(Node node)
     {
@@ -4556,6 +4803,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetReadonlyToken(Node node, Node value)
     {
@@ -4583,6 +4831,7 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IReadOnlyList<FileReference> ReferencedFiles(Node node)
     {
@@ -4592,6 +4841,7 @@ internal sealed partial class NodeStore
         return o < 0 ? null! : Unsafe.As<IReadOnlyList<FileReference>>(refs[d[h + RefBaseWord] + o])!;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetReferencedFiles(Node node, IReadOnlyList<FileReference> value)
     {
@@ -4619,6 +4869,7 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public string? ResolvedPath(Node node)
     {
@@ -4628,6 +4879,7 @@ internal sealed partial class NodeStore
         return o < 0 ? null : Unsafe.As<string?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetResolvedPath(Node node, string? value)
     {
@@ -4655,6 +4907,7 @@ internal sealed partial class NodeStore
     ];
 
     // BinaryExpression, JSDocMemberName, QualifiedName
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Right(Node node)
     {
@@ -4664,6 +4917,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetRight(Node node, Node value)
     {
@@ -4691,6 +4945,7 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ScriptKind ScriptKind(Node node)
     {
@@ -4700,6 +4955,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : (ScriptKind)d[h + o];
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetScriptKind(Node node, ScriptKind value)
     {
@@ -4727,6 +4983,7 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Action<Node>? SetExternalModuleIndicator(Node node)
     {
@@ -4736,6 +4993,7 @@ internal sealed partial class NodeStore
         return o < 0 ? null : Unsafe.As<Action<Node>?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetSetExternalModuleIndicator(Node node, Action<Node>? value)
     {
@@ -4763,6 +5021,7 @@ internal sealed partial class NodeStore
     ];
 
     // StringLiteral
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool SingleQuote(Node node)
     {
@@ -4771,6 +5030,7 @@ internal sealed partial class NodeStore
         return b >= 0 && (w & (1 << b)) != 0;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetSingleQuote(Node node, bool value)
     {
@@ -4799,6 +5059,7 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public string SourceFileText(Node node)
     {
@@ -4808,6 +5069,7 @@ internal sealed partial class NodeStore
         return o < 0 ? null! : Unsafe.As<string>(refs[d[h + RefBaseWord] + o])!;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetSourceFileText(Node node, string value)
     {
@@ -4835,6 +5097,7 @@ internal sealed partial class NodeStore
     ];
 
     // Bundle (side table)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node[]? SourceFiles(Node node)
     {
@@ -4844,6 +5107,7 @@ internal sealed partial class NodeStore
         return w >= 0 || SourceFilesOffsets[w & KindMask] < 0 ? null : Unsafe.As<Node[]?>(GetSideRef(h, 22));
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetSourceFiles(Node node, Node[]? value)
     {
@@ -4870,6 +5134,7 @@ internal sealed partial class NodeStore
     ];
 
     // DoStatement, ForInStatement, ForOfStatement, ForStatement, LabeledStatement, WhileStatement, … (7 classes)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Statement(Node node)
     {
@@ -4879,6 +5144,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetStatement(Node node, Node value)
     {
@@ -4906,6 +5172,7 @@ internal sealed partial class NodeStore
     ];
 
     // Block, CaseClause, DefaultClause, ModuleBlock, SourceFile
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public NodeList Statements(Node node)
     {
@@ -4915,6 +5182,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new NodeList(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetStatements(Node node, NodeList value)
     {
@@ -4942,6 +5210,7 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int SymbolCount(Node node)
     {
@@ -4951,6 +5220,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : d[h + o];
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetSymbolCount(Node node, int value)
     {
@@ -4978,6 +5248,7 @@ internal sealed partial class NodeStore
     ];
 
     // TaggedTemplateExpression
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Tag(Node node)
     {
@@ -4987,6 +5258,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetTag(Node node, Node value)
     {
@@ -5014,6 +5286,7 @@ internal sealed partial class NodeStore
     ];
 
     // JSDocAugmentsTag, JSDocAuthorTag, JSDocCallbackTag, JSDocClassTag, JSDocDeprecatedTag, JSDocEnumTag, … (28 classes)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node TagName(Node node)
     {
@@ -5023,6 +5296,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetTagName(Node node, Node value)
     {
@@ -5050,6 +5324,7 @@ internal sealed partial class NodeStore
     ];
 
     // JSDoc
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public NodeList Tags(Node node)
     {
@@ -5059,6 +5334,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new NodeList(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetTags(Node node, NodeList value)
     {
@@ -5086,6 +5362,7 @@ internal sealed partial class NodeStore
     ];
 
     // TaggedTemplateExpression
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Template(Node node)
     {
@@ -5095,6 +5372,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetTemplate(Node node, Node value)
     {
@@ -5122,6 +5400,7 @@ internal sealed partial class NodeStore
     ];
 
     // NoSubstitutionTemplateLiteral, TemplateHead, TemplateMiddle, TemplateTail (side table)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public TokenFlags TemplateFlags(Node node)
     {
@@ -5131,6 +5410,7 @@ internal sealed partial class NodeStore
         return w >= 0 || TemplateFlagsOffsets[w & KindMask] < 0 ? default : (TokenFlags)GetSideInt(h, 23);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetTemplateFlags(Node node, TokenFlags value)
     {
@@ -5157,6 +5437,7 @@ internal sealed partial class NodeStore
     ];
 
     // TemplateExpression, TemplateLiteralTypeNode
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public NodeList TemplateSpans(Node node)
     {
@@ -5166,6 +5447,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new NodeList(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetTemplateSpans(Node node, NodeList value)
     {
@@ -5193,6 +5475,7 @@ internal sealed partial class NodeStore
     ];
 
     // BigIntLiteral, JSDocLink, JSDocLinkCode, JSDocLinkPlain, JSDocText, JsxText, … (13 classes)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public TextRef Text(Node node)
     {
@@ -5202,6 +5485,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new TextRef(d[h + o], d[h + o + 1]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetText(Node node, TextRef value)
     {
@@ -5230,6 +5514,7 @@ internal sealed partial class NodeStore
     ];
 
     // StringLiteral (side table)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node TextSourceNode(Node node)
     {
@@ -5239,6 +5524,7 @@ internal sealed partial class NodeStore
         return w >= 0 || TextSourceNodeOffsets[w & KindMask] < 0 ? default : new Node(GetSideInt(h, 24));
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetTextSourceNode(Node node, Node value)
     {
@@ -5265,6 +5551,7 @@ internal sealed partial class NodeStore
     ];
 
     // IfStatement
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ThenStatement(Node node)
     {
@@ -5274,6 +5561,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetThenStatement(Node node, Node value)
     {
@@ -5301,6 +5589,7 @@ internal sealed partial class NodeStore
     ];
 
     // SyntheticReferenceExpression (side table)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ThisArg(Node node)
     {
@@ -5310,6 +5599,7 @@ internal sealed partial class NodeStore
         return w >= 0 || ThisArgOffsets[w & KindMask] < 0 ? default : new Node(GetSideInt(h, 25));
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetThisArg(Node node, Node value)
     {
@@ -5336,6 +5626,7 @@ internal sealed partial class NodeStore
     ];
 
     // HeritageClause, ImportAttributes
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public SyntaxKind Token(Node node)
     {
@@ -5345,6 +5636,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : (SyntaxKind)d[h + o];
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetToken(Node node, SyntaxKind value)
     {
@@ -5372,6 +5664,7 @@ internal sealed partial class NodeStore
     ];
 
     // ConditionalTypeNode
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node TrueType(Node node)
     {
@@ -5381,6 +5674,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetTrueType(Node node, Node value)
     {
@@ -5408,6 +5702,7 @@ internal sealed partial class NodeStore
     ];
 
     // TryStatement
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node TryBlock(Node node)
     {
@@ -5417,6 +5712,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetTryBlock(Node node, Node value)
     {
@@ -5444,6 +5740,7 @@ internal sealed partial class NodeStore
     ];
 
     // SyntheticExpression (side table)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node TupleNameSource(Node node)
     {
@@ -5453,6 +5750,7 @@ internal sealed partial class NodeStore
         return w >= 0 || TupleNameSourceOffsets[w & KindMask] < 0 ? default : new Node(GetSideInt(h, 26));
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetTupleNameSource(Node node, Node value)
     {
@@ -5479,6 +5777,7 @@ internal sealed partial class NodeStore
     ];
 
     // ArrowFunction, AsExpression, CallSignatureDeclaration, ConstructSignatureDeclaration, ConstructorDeclaration, ConstructorTypeNode, … (37 classes) (some in the side table)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Type(Node node)
     {
@@ -5493,6 +5792,7 @@ internal sealed partial class NodeStore
         return o == SideOffset && w < 0 ? new Node(GetSideInt(h, 27)) : default;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetType(Node node, Node value)
     {
@@ -5525,6 +5825,7 @@ internal sealed partial class NodeStore
     ];
 
     // ArrowFunction, CallExpression, CallSignatureDeclaration, ConstructSignatureDeclaration, ConstructorDeclaration, ConstructorTypeNode, … (23 classes) (some in the side table)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public NodeList TypeArguments(Node node)
     {
@@ -5539,6 +5840,7 @@ internal sealed partial class NodeStore
         return o == SideOffset && w < 0 ? new NodeList(GetSideInt(h, 28)) : default;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetTypeArguments(Node node, NodeList value)
     {
@@ -5571,6 +5873,7 @@ internal sealed partial class NodeStore
     ];
 
     // JSDocCallbackTag, JSDocEnumTag, JSDocOverloadTag, JSDocParameterTag, JSDocPropertyTag, JSDocReturnTag, … (11 classes)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node TypeExpression(Node node)
     {
@@ -5580,6 +5883,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetTypeExpression(Node node, Node value)
     {
@@ -5607,6 +5911,7 @@ internal sealed partial class NodeStore
     ];
 
     // TypeReferenceNode
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node TypeName(Node node)
     {
@@ -5616,6 +5921,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetTypeName(Node node, Node value)
     {
@@ -5643,6 +5949,7 @@ internal sealed partial class NodeStore
     ];
 
     // InferTypeNode, MappedTypeNode
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node TypeParameter(Node node)
     {
@@ -5652,6 +5959,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetTypeParameter(Node node, Node value)
     {
@@ -5679,6 +5987,7 @@ internal sealed partial class NodeStore
     ];
 
     // ArrowFunction, CallSignatureDeclaration, ClassDeclaration, ClassExpression, ConstructSignatureDeclaration, ConstructorDeclaration, … (19 classes) (some in the side table)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public NodeList TypeParameters(Node node)
     {
@@ -5693,6 +6002,7 @@ internal sealed partial class NodeStore
         return o == SideOffset && w < 0 ? new NodeList(GetSideInt(h, 29)) : default;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetTypeParameters(Node node, NodeList value)
     {
@@ -5725,6 +6035,7 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IReadOnlyList<FileReference> TypeReferenceDirectives(Node node)
     {
@@ -5734,6 +6045,7 @@ internal sealed partial class NodeStore
         return o < 0 ? null! : Unsafe.As<IReadOnlyList<FileReference>>(refs[d[h + RefBaseWord] + o])!;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetTypeReferenceDirectives(Node node, IReadOnlyList<FileReference> value)
     {
@@ -5761,6 +6073,7 @@ internal sealed partial class NodeStore
     ];
 
     // HeritageClause, IntersectionTypeNode, UnionTypeNode
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public NodeList Types(Node node)
     {
@@ -5770,6 +6083,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new NodeList(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetTypes(Node node, NodeList value)
     {
@@ -5797,6 +6111,7 @@ internal sealed partial class NodeStore
     ];
 
     // ImportAttribute
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Value(Node node)
     {
@@ -5806,6 +6121,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetValue(Node node, Node value)
     {
@@ -5833,6 +6149,7 @@ internal sealed partial class NodeStore
     ];
 
     // CatchClause
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node VariableDeclaration(Node node)
     {
@@ -5842,6 +6159,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetVariableDeclaration(Node node, Node value)
     {
@@ -5869,6 +6187,7 @@ internal sealed partial class NodeStore
     ];
 
     // ConditionalExpression
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node WhenFalse(Node node)
     {
@@ -5878,6 +6197,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetWhenFalse(Node node, Node value)
     {
@@ -5905,6 +6225,7 @@ internal sealed partial class NodeStore
     ];
 
     // ConditionalExpression
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node WhenTrue(Node node)
     {
@@ -5914,6 +6235,7 @@ internal sealed partial class NodeStore
         return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetWhenTrue(Node node, Node value)
     {
@@ -5941,6 +6263,7 @@ internal sealed partial class NodeStore
     ];
 
     // SyntaxList (side table)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node[]? _children(Node node)
     {
@@ -5950,6 +6273,7 @@ internal sealed partial class NodeStore
         return w >= 0 || _childrenOffsets[w & KindMask] < 0 ? null : Unsafe.As<Node[]?>(GetSideRef(h, 30));
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Set_children(Node node, Node[]? value)
     {
@@ -5976,491 +6300,735 @@ internal sealed partial class NodeStore
     ];
 
     // Node classes of types.ts: whether a node's kind is one of the class's kinds.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsAbstractKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 0;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsAccessorKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 1;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsAmpersandAmpersandEqualsToken(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 2;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsArrayBindingPattern(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 3;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsArrayLiteralExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 4;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsArrayTypeNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 5;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsArrowFunction(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 6;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsAsExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 7;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsAssertKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 8;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsAssertsKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 9;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsAsteriskToken(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 10;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsAsyncKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 11;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsAwaitExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 12;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsAwaitKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 13;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsBarBarEqualsToken(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 14;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsBigIntLiteral(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 15;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsBinaryExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 16;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsBindingElement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 17;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsBlock(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 18;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsBreakStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 19;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsBundle(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 20;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsCallExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 21;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsCallSignatureDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 22;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsCaseBlock(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 23;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsCaseClause(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 24;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsCaseKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 25;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsCatchClause(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 26;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsClassDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 27;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsClassExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 28;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsClassStaticBlockDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 29;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsColonToken(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 30;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsCommaListExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 31;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsComputedPropertyName(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 32;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsConditionalExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 33;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsConditionalTypeNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 34;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsConstKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 35;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsConstructSignatureDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 36;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsConstructorDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 37;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsConstructorTypeNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 38;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsContinueStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 39;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsDebuggerStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 40;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsDeclareKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 41;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsDecorator(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 42;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsDefaultClause(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 43;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsDefaultKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 44;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsDeleteExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 45;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsDoStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 46;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsDotDotDotToken(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 47;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsDotToken(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 48;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsElementAccessExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 49;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsEmptyStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 50;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsEndOfFileToken(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 51;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsEnumDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 52;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsEnumMember(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 53;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsEqualsGreaterThanToken(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 54;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsEqualsToken(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 55;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsExclamationToken(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 56;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsExportAssignment(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 57;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsExportDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 58;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsExportKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 59;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsExportSpecifier(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 60;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsExpressionStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 61;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsExpressionWithTypeArguments(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 62;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsExternalModuleReference(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 63;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsFalseLiteral(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 64;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsForInStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 65;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsForOfStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 66;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsForStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 67;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsFunctionDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 68;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsFunctionExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 69;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsFunctionTypeNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 70;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsGetAccessorDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 71;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsHeritageClause(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 72;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsIdentifier(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 73;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsIfStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 74;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsImportAttribute(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 75;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsImportAttributes(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 76;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsImportClause(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 77;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsImportDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 78;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsImportEqualsDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 79;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsImportExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 80;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsImportSpecifier(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 81;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsImportTypeAssertionContainer(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 82;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsImportTypeNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 83;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsInKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 84;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsIndexSignatureDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 85;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsIndexedAccessTypeNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 86;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsInferTypeNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 87;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsInterfaceDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 88;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsIntersectionTypeNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 89;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDoc(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 90;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocAllType(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 91;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocAugmentsTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 92;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocAuthorTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 93;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocCallbackTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 94;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocClassTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 95;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocDeprecatedTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 96;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocEnumTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 97;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocFunctionType(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 98;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocImplementsTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 99;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocImportTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 100;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocLink(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 101;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocLinkCode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 102;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocLinkPlain(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 103;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocMemberName(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 104;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocNameReference(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 105;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocNamepathType(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 106;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocNonNullableType(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 107;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocNullableType(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 108;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocOptionalType(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 109;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocOverloadTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 110;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocOverrideTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 111;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocParameterTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 112;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocPrivateTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 113;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocPropertyTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 114;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocProtectedTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 115;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocPublicTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 116;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocReadonlyTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 117;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocReturnTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 118;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocSatisfiesTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 119;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocSeeTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 120;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocSignature(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 121;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocTemplateTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 122;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocText(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 123;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocThisTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 124;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocThrowsTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 125;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocTypeExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 126;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocTypeLiteral(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 127;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocTypeTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 128;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocTypedefTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 129;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocUnknownTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 130;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocUnknownType(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 131;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJSDocVariadicType(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 132;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJsxAttribute(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 133;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJsxAttributes(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 134;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJsxClosingElement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 135;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJsxClosingFragment(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 136;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJsxElement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 137;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJsxExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 138;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJsxFragment(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 139;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJsxNamespacedName(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 140;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJsxOpeningElement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 141;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJsxOpeningFragment(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 142;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJsxSelfClosingElement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 143;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJsxSpreadAttribute(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 144;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsJsxText(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 145;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsLabeledStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 146;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsLiteralTypeNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 147;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsMappedTypeNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 148;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsMetaProperty(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 149;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsMethodDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 150;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsMethodSignature(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 151;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsMinusToken(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 152;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsMissingDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 153;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsModuleBlock(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 154;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsModuleDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 155;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsNamedExports(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 156;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsNamedImports(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 157;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsNamedTupleMember(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 158;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsNamespaceExport(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 159;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsNamespaceExportDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 160;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsNamespaceImport(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 161;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsNewExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 162;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsNoSubstitutionTemplateLiteral(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 163;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsNonNullExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 164;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsNotEmittedStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 165;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsNotEmittedTypeElement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 166;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsNullLiteral(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 167;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsNumericLiteral(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 168;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsObjectBindingPattern(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 169;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsObjectLiteralExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 170;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsOmittedExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 171;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsOptionalTypeNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 172;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsOutKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 173;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsOverrideKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 174;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsParameterDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 175;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsParenthesizedExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 176;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsParenthesizedTypeNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 177;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsPartiallyEmittedExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 178;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsPlusToken(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 179;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsPostfixUnaryExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 180;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsPrefixUnaryExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 181;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsPrivateIdentifier(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 182;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsPrivateKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 183;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsPropertyAccessExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 184;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsPropertyAssignment(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 185;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsPropertyDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 186;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsPropertySignature(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 187;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsProtectedKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 188;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsPublicKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 189;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsQualifiedName(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 190;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsQuestionDotToken(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 191;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsQuestionQuestionEqualsToken(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 192;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsQuestionToken(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 193;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsReadonlyKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 194;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsRegularExpressionLiteral(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 195;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsRestTypeNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 196;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsReturnStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 197;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsSatisfiesExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 198;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsSemicolonClassElement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 199;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsSetAccessorDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 200;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsShorthandPropertyAssignment(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 201;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsSourceFile(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 202;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsSpreadAssignment(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 203;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsSpreadElement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 204;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsStaticKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 205;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsStringLiteral(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 206;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsSuperExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 207;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsSwitchStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 208;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsSyntaxList(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 209;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsSyntheticExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 210;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsSyntheticReferenceExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 211;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsTaggedTemplateExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 212;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsTemplateExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 213;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsTemplateHead(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 214;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsTemplateLiteralTypeNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 215;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsTemplateLiteralTypeSpan(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 216;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsTemplateMiddle(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 217;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsTemplateSpan(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 218;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsTemplateTail(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 219;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsThisExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 220;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsThisTypeNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 221;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsThrowStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 222;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsToken(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 223;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsTrueLiteral(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 224;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsTryStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 225;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsTupleTypeNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 226;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsTypeAliasDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 227;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsTypeAssertion(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 228;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsTypeLiteralNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 229;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsTypeOfExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 230;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsTypeOperatorNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 231;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsTypeParameterDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 232;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsTypePredicateNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 233;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsTypeQueryNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 234;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsTypeReferenceNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 235;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsUnionTypeNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 236;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsVariableDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 237;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsVariableDeclarationList(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 238;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsVariableStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 239;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsVoidExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 240;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsWhileStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 241;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsWithStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 242;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsYieldExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 243;
 }

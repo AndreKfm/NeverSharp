@@ -18,21 +18,25 @@ internal static partial class FactoryUtilities
     /// <summary>
     /// Gets whether an identifier should only be referred to by its local name.
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsLocalName(NodeStore store, Node node)
     {
         return (Utilities.GetEmitFlags(store, node) & EmitFlags.LocalName) != 0;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsCommaExpression(NodeStore store, Node node)
     {
         return store.Kind(node) == SyntaxKind.BinaryExpression && store.Kind(store.OperatorToken(node)) == SyntaxKind.CommaToken;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsCommaSequence(NodeStore store, Node node)
     {
         return IsCommaExpression(store, node) || FactoryNodeTests.IsCommaListExpression(store, node);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsJSDocTypeAssertion(NodeStore store, Node node)
     {
         return FactoryNodeTests.IsParenthesizedExpression(store, node)
@@ -40,6 +44,7 @@ internal static partial class FactoryUtilities
             && !UtilitiesPublic.GetJSDocTypeTag(store, node).IsNone;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsOuterExpression(NodeStore store, Node node, OuterExpressionKinds kinds = OuterExpressionKinds.All)
     {
         switch (store.Kind(node))
@@ -65,6 +70,7 @@ internal static partial class FactoryUtilities
         return false;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static Node SkipOuterExpressions(NodeStore store, Node node, OuterExpressionKinds kinds = OuterExpressionKinds.All)
     {
         while (IsOuterExpression(store, node, kinds))
@@ -87,6 +93,7 @@ internal static partial class FactoryUtilities
     /// <summary>
     /// Gets the name of an BindingOrAssignmentElement.
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static Node GetTargetOfBindingOrAssignmentElement(NodeStore store, Node bindingElement)
     {
         if (UtilitiesPublic.IsDeclarationBindingElement(store, bindingElement))
@@ -168,6 +175,7 @@ internal static partial class FactoryUtilities
     /// <summary>
     /// Gets the elements of a BindingOrAssignmentPattern
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static NodeList GetElementsOfBindingOrAssignmentPattern(NodeStore store, Node name)
     {
         switch (store.Kind(name))
@@ -189,6 +197,7 @@ internal static partial class FactoryUtilities
         return default;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static Node GetJSDocTypeAliasName(NodeStore store, Node fullName)
     {
         if (!fullName.IsNone)
@@ -212,6 +221,7 @@ internal static partial class FactoryUtilities
     /// ObjectLiteralExpression and ArrayLiteralExpression since we do not know whether they belong to an
     /// AssignmentPattern at the time the nodes are parsed.
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool ContainsObjectRestOrSpread(NodeStore store, Node node)
     {
         if ((store.TransformFlags(node) & TransformFlags.ContainsObjectRestOrSpread) != 0)

@@ -16,6 +16,7 @@ namespace NeverSharp.Optimized;
 internal sealed partial class Parser
 {
     // EXPRESSIONS
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsStartOfLeftHandSideExpression()
     {
         switch (Token())
@@ -41,12 +42,13 @@ internal sealed partial class Parser
             case SyntaxKind.Identifier:
                 return true;
             case SyntaxKind.ImportKeyword:
-                return LookAhead(static p => p.NextTokenIsOpenParenOrLessThanOrDot());
+                return LookAhead(new F.NextTokenIsOpenParenOrLessThanOrDot());
             default:
                 return IsIdentifier();
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsStartOfExpression()
     {
         if (IsStartOfLeftHandSideExpression())
@@ -88,6 +90,7 @@ internal sealed partial class Parser
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsStartOfExpressionStatement()
     {
         // As per the grammar, none of '{' or 'function' or 'class' can start an expression statement.
@@ -98,6 +101,7 @@ internal sealed partial class Parser
             IsStartOfExpression();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseExpression()
     {
         // Expression[in]:
@@ -126,11 +130,13 @@ internal sealed partial class Parser
         return expr;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseInitializer()
     {
         return ParseOptional(SyntaxKind.EqualsToken) ? ParseAssignmentExpressionOrHigher(/*allowReturnTypeInArrowFunction*/ true) : default;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseAssignmentExpressionOrHigher(bool allowReturnTypeInArrowFunction)
     {
         //  AssignmentExpression[in,yield]:
@@ -203,6 +209,7 @@ internal sealed partial class Parser
         return ParseConditionalExpressionRest(expr, pos, allowReturnTypeInArrowFunction);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsYieldExpression()
     {
         if (Token() == SyntaxKind.YieldKeyword)
@@ -228,18 +235,20 @@ internal sealed partial class Parser
             // for now we just check if the next token is an identifier.  More heuristics
             // can be added here later as necessary.  We just need to make sure that we
             // don't accidentally consume something legal.
-            return LookAhead(static p => p.NextTokenIsIdentifierOrKeywordOrLiteralOnSameLine());
+            return LookAhead(new F.NextTokenIsIdentifierOrKeywordOrLiteralOnSameLine());
         }
 
         return false;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool NextTokenIsIdentifierOnSameLine()
     {
         NextToken();
         return !scanner.HasPrecedingLineBreak() && IsIdentifier();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseYieldExpression()
     {
         var pos = GetNodePos();
@@ -268,6 +277,7 @@ internal sealed partial class Parser
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseSimpleArrowFunctionExpression(int pos, Node identifier, bool allowReturnTypeInArrowFunction, bool hasJSDoc, NodeList asyncModifier)
     {
         Debug.Assert(Token() == SyntaxKind.EqualsGreaterThanToken, "parseSimpleArrowFunctionExpression should only have been called if we had a =>");
@@ -287,6 +297,7 @@ internal sealed partial class Parser
         return WithJSDoc(FinishNode(node, pos), hasJSDoc);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node TryParseParenthesizedArrowFunctionExpression(bool allowReturnTypeInArrowFunction)
     {
         var triState = IsParenthesizedArrowFunctionExpression();
@@ -304,22 +315,45 @@ internal sealed partial class Parser
         {
             return ParseParenthesizedArrowFunctionExpression(/*allowAmbiguity*/ true, /*allowReturnTypeInArrowFunction*/ true);
         }
-        // (C#: the closure captures a copy declared in this block, so it is allocated only when this branch runs.)
+        return TryParse(new F.ParsePossibleParenthesizedArrowFunctionExpression(allowReturnTypeInArrowFunction));
+    }
+
+    // The callback of lookAhead in isParenthesizedArrowFunctionExpressionWorker (JSX overrides).
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private bool IsArrowFunctionInJsx()
+    {
+        ParseOptional(SyntaxKind.ConstKeyword);
+        var third = NextToken();
+        if (third == SyntaxKind.ExtendsKeyword)
         {
-            var allowReturnType = allowReturnTypeInArrowFunction;
-            return TryParse(p => p.ParsePossibleParenthesizedArrowFunctionExpression(allowReturnType));
+            var fourth = NextToken();
+            switch (fourth)
+            {
+                case SyntaxKind.EqualsToken:
+                case SyntaxKind.GreaterThanToken:
+                case SyntaxKind.SlashToken:
+                    return false;
+                default:
+                    return true;
+            }
         }
+        else if (third == SyntaxKind.CommaToken || third == SyntaxKind.EqualsToken)
+        {
+            return true;
+        }
+        return false;
     }
 
     //  True        -> We definitely expect a parenthesized arrow function here.
     //  False       -> There *cannot* be a parenthesized arrow function here.
     //  Unknown     -> There *might* be a parenthesized arrow function here.
     //                 Speculatively look ahead to be sure, and rollback if not.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Tristate IsParenthesizedArrowFunctionExpression()
     {
         if (Token() == SyntaxKind.OpenParenToken || Token() == SyntaxKind.LessThanToken || Token() == SyntaxKind.AsyncKeyword)
         {
-            return LookAhead(static p => p.IsParenthesizedArrowFunctionExpressionWorker());
+            return LookAhead<F.IsParenthesizedArrowFunctionExpressionWorker, Tristate>(new F.IsParenthesizedArrowFunctionExpressionWorker());
         }
 
         if (Token() == SyntaxKind.EqualsGreaterThanToken)
@@ -333,6 +367,7 @@ internal sealed partial class Parser
         return Tristate.False;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Tristate IsParenthesizedArrowFunctionExpressionWorker()
     {
         if (Token() == SyntaxKind.AsyncKeyword)
@@ -392,7 +427,7 @@ internal sealed partial class Parser
             // Check for "(xxx yyy", where xxx is a modifier and yyy is an identifier. This
             // isn't actually allowed, but we want to treat it as a lambda so we can provide
             // a good error message.
-            if (UtilitiesPublic.IsModifierKind(second) && second != SyntaxKind.AsyncKeyword && LookAhead(static p => p.NextTokenIsIdentifier()))
+            if (UtilitiesPublic.IsModifierKind(second) && second != SyntaxKind.AsyncKeyword && LookAhead(new F.NextTokenIsIdentifier()))
             {
                 if (NextToken() == SyntaxKind.AsKeyword)
                 {
@@ -448,29 +483,7 @@ internal sealed partial class Parser
             // JSX overrides
             if (languageVariant == LanguageVariant.JSX)
             {
-                var isArrowFunctionInJsx = LookAhead(p =>
-                {
-                    ParseOptional(SyntaxKind.ConstKeyword);
-                    var third = NextToken();
-                    if (third == SyntaxKind.ExtendsKeyword)
-                    {
-                        var fourth = NextToken();
-                        switch (fourth)
-                        {
-                            case SyntaxKind.EqualsToken:
-                            case SyntaxKind.GreaterThanToken:
-                            case SyntaxKind.SlashToken:
-                                return false;
-                            default:
-                                return true;
-                        }
-                    }
-                    else if (third == SyntaxKind.CommaToken || third == SyntaxKind.EqualsToken)
-                    {
-                        return true;
-                    }
-                    return false;
-                });
+                var isArrowFunctionInJsx = LookAhead(new F.IsArrowFunctionInJsx());
 
                 if (isArrowFunctionInJsx)
                 {
@@ -485,6 +498,7 @@ internal sealed partial class Parser
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParsePossibleParenthesizedArrowFunctionExpression(bool allowReturnTypeInArrowFunction)
     {
         var tokenPos = scanner.GetTokenStart();
@@ -496,18 +510,26 @@ internal sealed partial class Parser
         var result = ParseParenthesizedArrowFunctionExpression(/*allowAmbiguity*/ false, allowReturnTypeInArrowFunction);
         if (result.IsNone)
         {
-            (notParenthesizedArrow ??= []).Add(tokenPos);
+            AddNotParenthesizedArrow(tokenPos);
         }
 
         return result;
     }
 
+    // `(notParenthesizedArrow ||= new Set()).add(tokenPos)`.
+    [NoAllocUnchecked("arena growth: the parse's set of positions that do not start an arrow function")]
+    private void AddNotParenthesizedArrow(int tokenPos)
+    {
+        (notParenthesizedArrow ??= []).Add(tokenPos);
+    }
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node TryParseAsyncSimpleArrowFunctionExpression(bool allowReturnTypeInArrowFunction)
     {
         // We do a check here so that we won't be doing unnecessarily call to "lookAhead"
         if (Token() == SyntaxKind.AsyncKeyword)
         {
-            if (LookAhead(static p => p.IsUnParenthesizedAsyncArrowFunctionWorker()) == Tristate.True)
+            if (LookAhead<F.IsUnParenthesizedAsyncArrowFunctionWorker, Tristate>(new F.IsUnParenthesizedAsyncArrowFunctionWorker()) == Tristate.True)
             {
                 var pos = GetNodePos();
                 var hasJSDoc = HasPrecedingJSDocComment();
@@ -519,6 +541,7 @@ internal sealed partial class Parser
         return default;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Tristate IsUnParenthesizedAsyncArrowFunctionWorker()
     {
         // AsyncArrowFunctionExpression:
@@ -544,12 +567,13 @@ internal sealed partial class Parser
         return Tristate.False;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseParenthesizedArrowFunctionExpression(bool allowAmbiguity, bool allowReturnTypeInArrowFunction)
     {
         var pos = GetNodePos();
         var hasJSDoc = HasPrecedingJSDocComment();
         var modifiers = ParseModifiersForArrowFunction();
-        var isAsync = Core.Some(store.Nodes(modifiers), ((a0) => FactoryNodeTests.IsAsyncModifier(store, a0))) ? SignatureFlags.Await : SignatureFlags.None;
+        var isAsync = ModifiersContain(modifiers, SyntaxKind.AsyncKeyword) ? SignatureFlags.Await : SignatureFlags.None;
         // Arrow functions are never generators.
         //
         // If we're speculatively parsing a signature for a parenthesized arrow function, then
@@ -625,7 +649,7 @@ internal sealed partial class Parser
         var lastToken = Token();
         var equalsGreaterThanToken = ParseExpectedToken(SyntaxKind.EqualsGreaterThanToken);
         var body = (lastToken == SyntaxKind.EqualsGreaterThanToken || lastToken == SyntaxKind.OpenBraceToken)
-            ? ParseArrowFunctionExpressionBody(Core.Some(store.Nodes(modifiers), ((a0) => FactoryNodeTests.IsAsyncModifier(store, a0))), allowReturnTypeInArrowFunction)
+            ? ParseArrowFunctionExpressionBody(ModifiersContain(modifiers, SyntaxKind.AsyncKeyword), allowReturnTypeInArrowFunction)
             : ParseIdentifier();
 
         // Given:
@@ -660,6 +684,7 @@ internal sealed partial class Parser
         return WithJSDoc(FinishNode(node, pos), hasJSDoc);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseArrowFunctionExpressionBody(bool isAsync, bool allowReturnTypeInArrowFunction)
     {
         if (Token() == SyntaxKind.OpenBraceToken)
@@ -696,13 +721,14 @@ internal sealed partial class Parser
         var savedTopLevel = topLevel;
         topLevel = false;
         var node = isAsync
-            ? DoInAwaitContext<Node>(allowReturnTypeInArrowFunction ? static p => p.ParseAssignmentExpressionOrHigher(/*allowReturnTypeInArrowFunction*/ true) : static p => p.ParseAssignmentExpressionOrHigher(/*allowReturnTypeInArrowFunction*/ false))
-            : DoOutsideOfAwaitContext<Node>(allowReturnTypeInArrowFunction ? static p => p.ParseAssignmentExpressionOrHigher(/*allowReturnTypeInArrowFunction*/ true) : static p => p.ParseAssignmentExpressionOrHigher(/*allowReturnTypeInArrowFunction*/ false));
+            ? DoInAwaitContext<F.ParseAssignmentExpressionOrHigher, Node>(new F.ParseAssignmentExpressionOrHigher(allowReturnTypeInArrowFunction))
+            : DoOutsideOfAwaitContext<F.ParseAssignmentExpressionOrHigher, Node>(new F.ParseAssignmentExpressionOrHigher(allowReturnTypeInArrowFunction));
         topLevel = savedTopLevel;
         SetYieldContext(savedYieldContext);
         return node;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseConditionalExpressionRest(Node leftOperand, int pos, bool allowReturnTypeInArrowFunction)
     {
         // Note: we are passed in an expression which was produced from parseBinaryExpressionOrHigher.
@@ -719,7 +745,7 @@ internal sealed partial class Parser
             factory.CreateConditionalExpression(
                 leftOperand,
                 questionToken,
-                DoOutsideOfContext(DisallowInAndDecoratorContext, static p => p.ParseAssignmentExpressionOrHigher(/*allowReturnTypeInArrowFunction*/ false)),
+                DoOutsideOfContext(DisallowInAndDecoratorContext, new F.ParseAssignmentExpressionOrHigher(/*allowReturnTypeInArrowFunction*/ false)),
                 colonToken = ParseExpectedToken(SyntaxKind.ColonToken),
                 Utilities.NodeIsPresent(store, colonToken)
                     ? ParseAssignmentExpressionOrHigher(allowReturnTypeInArrowFunction)
@@ -727,6 +753,7 @@ internal sealed partial class Parser
             pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseBinaryExpressionOrHigher(OperatorPrecedence precedence)
     {
         var pos = GetNodePos();
@@ -734,11 +761,13 @@ internal sealed partial class Parser
         return ParseBinaryExpressionRest(precedence, leftOperand, pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsInOrOfKeyword(SyntaxKind t)
     {
         return t == SyntaxKind.InKeyword || t == SyntaxKind.OfKeyword;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseBinaryExpressionRest(OperatorPrecedence precedence, Node leftOperand, int pos)
     {
         while (true)
@@ -812,6 +841,7 @@ internal sealed partial class Parser
         return leftOperand;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsBinaryOperator()
     {
         if (InDisallowInContext() && Token() == SyntaxKind.InKeyword)
@@ -822,45 +852,53 @@ internal sealed partial class Parser
         return Utilities.GetBinaryOperatorPrecedence(Token()) > 0;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node MakeSatisfiesExpression(Node left, Node right)
     {
         return FinishNode(factory.CreateSatisfiesExpression(left, right), store.Pos(left));
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node MakeBinaryExpression(Node left, Node operatorToken, Node right, int pos)
     {
         return FinishNode(factory.CreateBinaryExpression(left, operatorToken, right), pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node MakeAsExpression(Node left, Node right)
     {
         return FinishNode(factory.CreateAsExpression(left, right), store.Pos(left));
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParsePrefixUnaryExpression()
     {
         var pos = GetNodePos();
-        return FinishNode(factory.CreatePrefixUnaryExpression(Token(), NextTokenAnd(static p => p.ParseSimpleUnaryExpression())), pos);
+        return FinishNode(factory.CreatePrefixUnaryExpression(Token(), NextTokenAnd(new F.ParseSimpleUnaryExpression())), pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseDeleteExpression()
     {
         var pos = GetNodePos();
-        return FinishNode(factory.CreateDeleteExpression(NextTokenAnd(static p => p.ParseSimpleUnaryExpression())), pos);
+        return FinishNode(factory.CreateDeleteExpression(NextTokenAnd(new F.ParseSimpleUnaryExpression())), pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseTypeOfExpression()
     {
         var pos = GetNodePos();
-        return FinishNode(factory.CreateTypeOfExpression(NextTokenAnd(static p => p.ParseSimpleUnaryExpression())), pos);
+        return FinishNode(factory.CreateTypeOfExpression(NextTokenAnd(new F.ParseSimpleUnaryExpression())), pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseVoidExpression()
     {
         var pos = GetNodePos();
-        return FinishNode(factory.CreateVoidExpression(NextTokenAnd(static p => p.ParseSimpleUnaryExpression())), pos);
+        return FinishNode(factory.CreateVoidExpression(NextTokenAnd(new F.ParseSimpleUnaryExpression())), pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsAwaitExpression()
     {
         if (Token() == SyntaxKind.AwaitKeyword)
@@ -871,16 +909,17 @@ internal sealed partial class Parser
             }
 
             // here we are using similar heuristics as 'isYieldExpression'
-            return LookAhead(static p => p.NextTokenIsIdentifierOrKeywordOrLiteralOnSameLine());
+            return LookAhead(new F.NextTokenIsIdentifierOrKeywordOrLiteralOnSameLine());
         }
 
         return false;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseAwaitExpression()
     {
         var pos = GetNodePos();
-        return FinishNode(factory.CreateAwaitExpression(NextTokenAnd(static p => p.ParseSimpleUnaryExpression())), pos);
+        return FinishNode(factory.CreateAwaitExpression(NextTokenAnd(new F.ParseSimpleUnaryExpression())), pos);
     }
 
     /// <summary>
@@ -890,6 +929,7 @@ internal sealed partial class Parser
     ///      1) UnaryExpression[?Yield]
     ///      2) UpdateExpression[?Yield] ** ExponentiationExpression[?Yield]
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseUnaryExpressionOrHigher()
     {
         /*
@@ -953,6 +993,7 @@ internal sealed partial class Parser
     ///      8) ! UnaryExpression[?yield]
     ///      9) [+Await] await UnaryExpression[?yield]
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseSimpleUnaryExpression()
     {
         switch (Token())
@@ -1001,6 +1042,7 @@ internal sealed partial class Parser
     ///      ++LeftHandSideExpression[?Yield]
     ///      --LeftHandSideExpression[?Yield]
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsUpdateExpression()
     {
         // This function is called inside parseUnaryExpression to decide
@@ -1041,14 +1083,15 @@ internal sealed partial class Parser
     ///      5) --LeftHandSideExpression[?yield]
     /// In TypeScript (2), (3) are parsed as PostfixUnaryExpression. (4), (5) are parsed as PrefixUnaryExpression
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseUpdateExpression()
     {
         if (Token() == SyntaxKind.PlusPlusToken || Token() == SyntaxKind.MinusMinusToken)
         {
             var pos = GetNodePos();
-            return FinishNode(factory.CreatePrefixUnaryExpression(Token(), NextTokenAnd(static p => p.ParseLeftHandSideExpressionOrHigher())), pos);
+            return FinishNode(factory.CreatePrefixUnaryExpression(Token(), NextTokenAnd(new F.ParseLeftHandSideExpressionOrHigher())), pos);
         }
-        else if (languageVariant == LanguageVariant.JSX && Token() == SyntaxKind.LessThanToken && LookAhead(static p => p.NextTokenIsIdentifierOrKeywordOrGreaterThan()))
+        else if (languageVariant == LanguageVariant.JSX && Token() == SyntaxKind.LessThanToken && LookAhead(new F.NextTokenIsIdentifierOrKeywordOrGreaterThan()))
         {
             // JSXElement is part of primaryExpression
             return ParseJsxElementOrSelfClosingElementOrFragment(/*inExpressionContext*/ true);
@@ -1067,6 +1110,7 @@ internal sealed partial class Parser
         return expression;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseLeftHandSideExpressionOrHigher()
     {
         // Original Ecma:
@@ -1104,7 +1148,7 @@ internal sealed partial class Parser
         Node expression;
         if (Token() == SyntaxKind.ImportKeyword)
         {
-            if (LookAhead(static p => p.NextTokenIsOpenParenOrLessThan()))
+            if (LookAhead(new F.NextTokenIsOpenParenOrLessThan()))
             {
                 // We don't want to eagerly consume all import keyword as import call expression so we look ahead to find "("
                 // For example:
@@ -1114,7 +1158,7 @@ internal sealed partial class Parser
                 sourceFlags |= NodeFlags.PossiblyContainsDynamicImport;
                 expression = ParseTokenNode();
             }
-            else if (LookAhead(static p => p.NextTokenIsDot()))
+            else if (LookAhead(new F.NextTokenIsDot()))
             {
                 // This is an 'import.*' metaproperty (i.e. 'import.meta')
                 NextToken(); // advance past the 'import'
@@ -1149,6 +1193,7 @@ internal sealed partial class Parser
         return ParseCallExpressionRest(pos, expression);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseMemberExpressionOrHigher()
     {
         // Note: to make our lives simpler, we decompose the NewExpression productions and
@@ -1203,6 +1248,7 @@ internal sealed partial class Parser
         return ParseMemberExpressionRest(pos, expression, /*allowOptionalChain*/ true);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseSuperExpression()
     {
         var pos = GetNodePos();
@@ -1210,7 +1256,7 @@ internal sealed partial class Parser
         if (Token() == SyntaxKind.LessThanToken)
         {
             var startPos = GetNodePos();
-            var typeArguments = TryParse(static p => p.ParseTypeArgumentsInExpression());
+            var typeArguments = TryParse<F.ParseTypeArgumentsInExpression, NodeList>(new F.ParseTypeArgumentsInExpression());
             if (!typeArguments.IsNone)
             {
                 ParseErrorAt(startPos, GetNodePos(), Diagnostics.super_may_not_use_type_arguments);
@@ -1233,6 +1279,7 @@ internal sealed partial class Parser
         return FinishNode(factory.CreatePropertyAccessExpression(expression, ParseRightSideOfDot(/*allowIdentifierNames*/ true, /*allowPrivateIdentifiers*/ true, /*allowUnicodeEscapeSequenceInIdentifierName*/ true)), pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseTypeAssertion()
     {
         Debug.Assert(languageVariant != LanguageVariant.JSX, "Type assertions should never be parsed in JSX; they should be parsed as comparisons or JSX elements/fragments.");
@@ -1244,6 +1291,7 @@ internal sealed partial class Parser
         return FinishNode(factory.CreateTypeAssertion(type, expression), pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool NextTokenIsIdentifierOrKeywordOrOpenBracketOrTemplate()
     {
         NextToken();
@@ -1252,12 +1300,14 @@ internal sealed partial class Parser
             || IsTemplateStartOfTaggedTemplate();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsStartOfOptionalPropertyOrElementAccessChain()
     {
         return Token() == SyntaxKind.QuestionDotToken
-            && LookAhead(static p => p.NextTokenIsIdentifierOrKeywordOrOpenBracketOrTemplate());
+            && LookAhead(new F.NextTokenIsIdentifierOrKeywordOrOpenBracketOrTemplate());
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool TryReparseOptionalChain(NodeStore store, Node node)
     {
         if ((store.Flags(node) & NodeFlags.OptionalChain) != 0)
@@ -1286,6 +1336,7 @@ internal sealed partial class Parser
         return false;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParsePropertyAccessExpressionRest(int pos, Node expression, Node questionDotToken)
     {
         var name = ParseRightSideOfDot(/*allowIdentifierNames*/ true, /*allowPrivateIdentifiers*/ true, /*allowUnicodeEscapeSequenceInIdentifierName*/ true);
@@ -1307,6 +1358,7 @@ internal sealed partial class Parser
         return FinishNode(propertyAccess, pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseElementAccessExpressionRest(int pos, Node expression, Node questionDotToken)
     {
         Node argumentExpression;
@@ -1316,7 +1368,7 @@ internal sealed partial class Parser
         }
         else
         {
-            var argument = AllowInAnd(static p => p.ParseExpression());
+            var argument = AllowInAnd(new F.ParseExpression());
             if (Utilities.IsStringOrNumericLiteralLike(store, argument))
             {
                 switch (argument)
@@ -1343,6 +1395,7 @@ internal sealed partial class Parser
         return FinishNode(indexedAccess, pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseMemberExpressionRest(int pos, Node expression, bool allowOptionalChain)
     {
         while (true)
@@ -1389,7 +1442,7 @@ internal sealed partial class Parser
                     expression = FinishNode(factory.CreateNonNullExpression(expression), pos);
                     continue;
                 }
-                var typeArguments = TryParse(static p => p.ParseTypeArgumentsInExpression());
+                var typeArguments = TryParse<F.ParseTypeArgumentsInExpression, NodeList>(new F.ParseTypeArgumentsInExpression());
                 if (!typeArguments.IsNone)
                 {
                     expression = FinishNode(factory.CreateExpressionWithTypeArguments(expression, typeArguments), pos);
@@ -1401,11 +1454,13 @@ internal sealed partial class Parser
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsTemplateStartOfTaggedTemplate()
     {
         return Token() == SyntaxKind.NoSubstitutionTemplateLiteral || Token() == SyntaxKind.TemplateHead;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseTaggedTemplateRest(int pos, Node tag, Node questionDotToken, NodeList typeArguments)
     {
         Node template;
@@ -1430,6 +1485,7 @@ internal sealed partial class Parser
         return FinishNode(tagExpression, pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseCallExpressionRest(int pos, Node expression)
     {
         while (true)
@@ -1439,7 +1495,7 @@ internal sealed partial class Parser
             var questionDotToken = ParseOptionalToken(SyntaxKind.QuestionDotToken);
             if (!questionDotToken.IsNone)
             {
-                typeArguments = TryParse(static p => p.ParseTypeArgumentsInExpression());
+                typeArguments = TryParse<F.ParseTypeArgumentsInExpression, NodeList>(new F.ParseTypeArgumentsInExpression());
                 if (IsTemplateStartOfTaggedTemplate())
                 {
                     expression = ParseTaggedTemplateRest(pos, expression, questionDotToken, typeArguments);
@@ -1472,14 +1528,16 @@ internal sealed partial class Parser
         return expression;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private NodeList ParseArgumentList()
     {
         ParseExpected(SyntaxKind.OpenParenToken);
-        var result = ParseDelimitedList(ParsingContext.ArgumentExpressions, static p => p.ParseArgumentExpression());
+        var result = ParseDelimitedList(ParsingContext.ArgumentExpressions, new F.ParseArgumentExpression());
         ParseExpected(SyntaxKind.CloseParenToken);
         return result;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private NodeList ParseTypeArgumentsInExpression()
     {
         if ((contextFlags & NodeFlags.JavaScriptFile) != 0)
@@ -1494,7 +1552,7 @@ internal sealed partial class Parser
         }
         NextToken();
 
-        var typeArguments = ParseDelimitedList(ParsingContext.TypeArguments, static p => p.ParseType());
+        var typeArguments = ParseDelimitedList(ParsingContext.TypeArguments, new F.ParseType());
         if (ReScanGreaterToken() != SyntaxKind.GreaterThanToken)
         {
             // If it doesn't have the closing `>` then it's definitely not an type argument list.
@@ -1509,6 +1567,7 @@ internal sealed partial class Parser
         return !typeArguments.IsNone && CanFollowTypeArgumentsInExpression() ? typeArguments : default;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool CanFollowTypeArgumentsInExpression()
     {
         switch (Token())
@@ -1532,6 +1591,7 @@ internal sealed partial class Parser
         return scanner.HasPrecedingLineBreak() || IsBinaryOperator() || !IsStartOfExpression();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParsePrimaryExpression()
     {
         switch (Token())
@@ -1563,7 +1623,7 @@ internal sealed partial class Parser
                 // Async arrow functions are parsed earlier in parseAssignmentExpressionOrHigher.
                 // If we encounter `async [no LineTerminator here] function` then this is an async
                 // function; otherwise, its an identifier.
-                if (!LookAhead(static p => p.NextTokenIsFunctionKeywordOnSameLine()))
+                if (!LookAhead(new F.NextTokenIsFunctionKeywordOnSameLine()))
                 {
                     break;
                 }
@@ -1593,16 +1653,18 @@ internal sealed partial class Parser
         return ParseIdentifier(Diagnostics.Expression_expected);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseParenthesizedExpression()
     {
         var pos = GetNodePos();
         var hasJSDoc = HasPrecedingJSDocComment();
         ParseExpected(SyntaxKind.OpenParenToken);
-        var expression = AllowInAnd(static p => p.ParseExpression());
+        var expression = AllowInAnd(new F.ParseExpression());
         ParseExpected(SyntaxKind.CloseParenToken);
         return WithJSDoc(FinishNode(factory.CreateParenthesizedExpression(expression), pos), hasJSDoc);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseSpreadElement()
     {
         var pos = GetNodePos();
@@ -1611,6 +1673,7 @@ internal sealed partial class Parser
         return FinishNode(factory.CreateSpreadElement(expression), pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseArgumentOrArrayLiteralElement()
     {
         return Token() == SyntaxKind.DotDotDotToken ? ParseSpreadElement() :
@@ -1618,22 +1681,25 @@ internal sealed partial class Parser
             ParseAssignmentExpressionOrHigher(/*allowReturnTypeInArrowFunction*/ true);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseArgumentExpression()
     {
-        return DoOutsideOfContext(DisallowInAndDecoratorContext, static p => p.ParseArgumentOrArrayLiteralElement());
+        return DoOutsideOfContext(DisallowInAndDecoratorContext, new F.ParseArgumentOrArrayLiteralElement());
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseArrayLiteralExpression()
     {
         var pos = GetNodePos();
         var openBracketPosition = scanner.GetTokenStart();
         var openBracketParsed = ParseExpected(SyntaxKind.OpenBracketToken);
         var multiLine = scanner.HasPrecedingLineBreak();
-        var elements = ParseDelimitedList(ParsingContext.ArrayLiteralMembers, static p => p.ParseArgumentOrArrayLiteralElement());
+        var elements = ParseDelimitedList(ParsingContext.ArrayLiteralMembers, new F.ParseArgumentOrArrayLiteralElement());
         ParseExpectedMatchingBrackets(SyntaxKind.OpenBracketToken, SyntaxKind.CloseBracketToken, openBracketParsed, openBracketPosition);
         return FinishNode(factory.CreateArrayLiteralExpression(elements, multiLine), pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseObjectLiteralElement()
     {
         var pos = GetNodePos();
@@ -1678,7 +1744,7 @@ internal sealed partial class Parser
         if (isShorthandPropertyAssignment)
         {
             var equalsToken = ParseOptionalToken(SyntaxKind.EqualsToken);
-            var objectAssignmentInitializer = !equalsToken.IsNone ? AllowInAnd(static p => p.ParseAssignmentExpressionOrHigher(/*allowReturnTypeInArrowFunction*/ true)) : default;
+            var objectAssignmentInitializer = !equalsToken.IsNone ? AllowInAnd(new F.ParseAssignmentExpressionOrHigher(/*allowReturnTypeInArrowFunction*/ true)) : default;
             var shorthand = factory.CreateShorthandPropertyAssignment(name, objectAssignmentInitializer);
             // Save equals token for error reporting.
             // TODO(rbuckton): Consider manufacturing this when we need to report an error as it is otherwise not useful.
@@ -1692,7 +1758,7 @@ internal sealed partial class Parser
         else
         {
             ParseExpected(SyntaxKind.ColonToken);
-            var initializer = AllowInAnd(static p => p.ParseAssignmentExpressionOrHigher(/*allowReturnTypeInArrowFunction*/ true));
+            var initializer = AllowInAnd(new F.ParseAssignmentExpressionOrHigher(/*allowReturnTypeInArrowFunction*/ true));
             var assignment = factory.CreatePropertyAssignment(name, initializer);
             // Decorators, Modifiers, questionToken, and exclamationToken are not supported by property assignments and are reported in the grammar checker
             store.SetModifiers(assignment, modifiers);
@@ -1703,17 +1769,19 @@ internal sealed partial class Parser
         return WithJSDoc(FinishNode(node, pos), hasJSDoc);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseObjectLiteralExpression()
     {
         var pos = GetNodePos();
         var openBracePosition = scanner.GetTokenStart();
         var openBraceParsed = ParseExpected(SyntaxKind.OpenBraceToken);
         var multiLine = scanner.HasPrecedingLineBreak();
-        var properties = ParseDelimitedList(ParsingContext.ObjectLiteralMembers, static p => p.ParseObjectLiteralElement(), /*considerSemicolonAsDelimiter*/ true);
+        var properties = ParseDelimitedList(ParsingContext.ObjectLiteralMembers, new F.ParseObjectLiteralElement(), /*considerSemicolonAsDelimiter*/ true);
         ParseExpectedMatchingBrackets(SyntaxKind.OpenBraceToken, SyntaxKind.CloseBraceToken, openBraceParsed, openBracePosition);
         return FinishNode(factory.CreateObjectLiteralExpression(properties, multiLine), pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseFunctionExpression()
     {
         // GeneratorExpression:
@@ -1730,10 +1798,10 @@ internal sealed partial class Parser
         ParseExpected(SyntaxKind.FunctionKeyword);
         var asteriskToken = ParseOptionalToken(SyntaxKind.AsteriskToken);
         var isGenerator = !asteriskToken.IsNone ? SignatureFlags.Yield : SignatureFlags.None;
-        var isAsync = Core.Some(store.Nodes(modifiers), ((a0) => FactoryNodeTests.IsAsyncModifier(store, a0))) ? SignatureFlags.Await : SignatureFlags.None;
-        var name = isGenerator != 0 && isAsync != 0 ? DoInYieldAndAwaitContext(static p => p.ParseOptionalBindingIdentifier()) :
-            isGenerator != 0 ? DoInYieldContext(static p => p.ParseOptionalBindingIdentifier()) :
-            isAsync != 0 ? DoInAwaitContext(static p => p.ParseOptionalBindingIdentifier()) :
+        var isAsync = ModifiersContain(modifiers, SyntaxKind.AsyncKeyword) ? SignatureFlags.Await : SignatureFlags.None;
+        var name = isGenerator != 0 && isAsync != 0 ? DoInYieldAndAwaitContext(new F.ParseOptionalBindingIdentifier()) :
+            isGenerator != 0 ? DoInYieldContext(new F.ParseOptionalBindingIdentifier()) :
+            isAsync != 0 ? DoInAwaitContext<F.ParseOptionalBindingIdentifier, Node>(new F.ParseOptionalBindingIdentifier()) :
             ParseOptionalBindingIdentifier();
 
         var typeParameters = ParseTypeParameters();
@@ -1747,11 +1815,13 @@ internal sealed partial class Parser
         return WithJSDoc(FinishNode(node, pos), hasJSDoc);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseOptionalBindingIdentifier()
     {
         return IsBindingIdentifier() ? ParseBindingIdentifier() : default;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseNewExpressionOrNewDotTarget()
     {
         var pos = GetNodePos();
@@ -1772,7 +1842,7 @@ internal sealed partial class Parser
         }
         if (Token() == SyntaxKind.QuestionDotToken)
         {
-            ParseErrorAtCurrentToken(Diagnostics.Invalid_optional_chain_from_new_expression_Did_you_mean_to_call_0, Utilities.GetTextOfNodeFromSourceText(store, sourceText, expression));
+            ParseErrorWithTextOfNode(scanner.GetTokenStart(), scanner.GetTokenEnd(), Diagnostics.Invalid_optional_chain_from_new_expression_Did_you_mean_to_call_0, expression);
         }
         var argumentList = Token() == SyntaxKind.OpenParenToken ? ParseArgumentList() : default;
         return FinishNode(factory.CreateNewExpression(expression, typeArguments, argumentList), pos);

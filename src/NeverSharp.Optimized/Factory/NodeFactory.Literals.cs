@@ -16,6 +16,7 @@ namespace NeverSharp.Optimized;
 internal sealed partial class NodeFactory
 {
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateLiteralLikeNode(SyntaxKind kind, TextRef text)
     {
         switch (kind)
@@ -39,6 +40,7 @@ internal sealed partial class NodeFactory
         return default;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static TransformFlags GetTransformFlagsOfTemplateLiteralLike(TokenFlags templateFlags)
     {
         var transformFlags = TransformFlags.ContainsES2015;
@@ -52,6 +54,7 @@ internal sealed partial class NodeFactory
     // NOTE: `createTemplateLiteralLikeToken` and `createTemplateLiteralLikeDeclaration` are identical except for
     //       the underlying nodes they create. To avoid polymorphism due to two different node shapes, these
     //       functions are intentionally duplicated.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node CreateTemplateLiteralLikeToken(SyntaxKind kind, TextRef text, TextRef rawText, TokenFlags? templateFlags)
     {
         var node = CreateBaseToken(kind);
@@ -75,12 +78,13 @@ internal sealed partial class NodeFactory
                 store.SetTemplateFlags(tail, flagsValue);
                 break;
             default:
-                throw new InvalidOperationException($"{store.Kind(node)} is not a template literal token");
+                throw Debug.UnexpectedKind(store.Kind(node), "a template literal token");
         }
         store.SetTransformFlags(node, GetTransformFlagsOfTemplateLiteralLike(flagsValue));
         return node;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node CreateTemplateLiteralLikeDeclaration(SyntaxKind kind, TextRef text, TextRef rawText, TokenFlags? templateFlags)
     {
         var node = CreateBaseDeclaration(kind);
@@ -92,6 +96,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateTemplateLiteralLikeNode(SyntaxKind kind, TextRef text, TextRef rawText, TokenFlags? templateFlags)
     {
         if (kind == SyntaxKind.NoSubstitutionTemplateLiteral)

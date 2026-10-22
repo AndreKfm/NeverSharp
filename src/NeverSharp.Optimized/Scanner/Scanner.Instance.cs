@@ -101,64 +101,86 @@ internal sealed partial class Scanner
 
     //// The members of the returned object (interface Scanner).
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal int GetTokenFullStart() => fullStartPos;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal int GetStartPos() => fullStartPos;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal int GetTokenEnd() => pos;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal int GetTextPos() => pos;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SyntaxKind GetToken() => token;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal int GetTokenStart() => tokenStart;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal int GetTokenPos() => tokenStart;
 
     internal string GetTokenText() => Substring(text, tokenStart, pos);
 
     /// <summary>Track O (O5a): <see cref="GetTokenText"/> as a span of the text.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal TextRef GetTokenTextRef() => texts.Substring(tokenStart, pos);
 
     /// <summary>The token value as a string (materialized from <see cref="GetTokenValueRef"/>; null before any value).</summary>
     internal string GetTokenValue() => texts.GetString(tokenValue)!;
 
     /// <summary>Track O (O5a): the token value as a handle into <see cref="Texts"/>.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal TextRef GetTokenValueRef() => tokenValue;
 
     /// <summary>Track O (O5a): the texts the token values refer to.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal TextTable Texts => texts;
 
     /// <summary>
     /// Track O (O5a): token values from here on go to <paramref name="table"/> (the texts of a parse, whose source text is
     /// this scanner's text) until the next <see cref="SetText"/>.
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal void UseTexts(TextTable table)
     {
         Debug.Assert(ReferenceEquals(table.Source, text) || (table.Source.Length == 0 && text.Length == 0), "The texts of another source text");
         texts = table;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal bool HasUnicodeEscape() => (tokenFlags & TokenFlags.UnicodeEscape) != 0;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal bool HasExtendedUnicodeEscape() => (tokenFlags & TokenFlags.ExtendedUnicodeEscape) != 0;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal bool HasPrecedingLineBreak() => (tokenFlags & TokenFlags.PrecedingLineBreak) != 0;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal bool HasPrecedingJSDocComment() => (tokenFlags & TokenFlags.PrecedingJSDocComment) != 0;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal bool HasPrecedingJSDocLeadingAsterisks() => (tokenFlags & TokenFlags.PrecedingJSDocLeadingAsterisks) != 0;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal bool IsIdentifier() => token == SyntaxKind.Identifier || token > SyntaxKind.LastReservedWord;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal bool IsReservedWord() => token >= SyntaxKind.FirstReservedWord && token <= SyntaxKind.LastReservedWord;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal bool IsUnterminated() => (tokenFlags & TokenFlags.Unterminated) != 0;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal List<CommentDirective>? GetCommentDirectives() => commentDirectives;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal TokenFlags GetNumericLiteralFlags() => tokenFlags & TokenFlags.NumericLiteralFlags;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal TokenFlags GetTokenFlags() => tokenFlags;
 
     //// The inner functions of createScanner.
@@ -168,6 +190,7 @@ internal sealed partial class Scanner
     /// should only be used when pos is guaranteed to be within the bounds of `text` as this
     /// function does not perform bounds checks.
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private int CodePointUnchecked(int pos)
     {
         return CodePointAt(text, pos);
@@ -177,6 +200,7 @@ internal sealed partial class Scanner
     /// Returns the code point for the character at the given position within `text`. If
     /// `pos` is outside the bounds set for `text`, `CharacterCodes.EOF` is returned instead.
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private int CodePointChecked(int pos)
     {
         return pos >= 0 && pos < end ? CodePointUnchecked(pos) : (int)CharacterCodes.EOF;
@@ -188,6 +212,7 @@ internal sealed partial class Scanner
     /// function does not perform bounds checks.
     /// (Outside the string, `text.charCodeAt` returns NaN; see <see cref="NaN"/>.)
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private int CharCodeUnchecked(int pos)
     {
         return (uint)pos < (uint)text.Length ? text[pos] : NaN;
@@ -197,16 +222,19 @@ internal sealed partial class Scanner
     /// Returns the char code for the character at the given position within `text`. If
     /// `pos` is outside the bounds set for `text`, `CharacterCodes.EOF` is returned instead.
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private int CharCodeChecked(int pos)
     {
         return pos >= 0 && pos < end ? CharCodeUnchecked(pos) : (int)CharacterCodes.EOF;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private void Error(DiagnosticMessage message)
     {
         Error(message, pos, 0);
     }
 
+    [NoAllocUnchecked("error path: reports through the error callback (the parser creates a diagnostic)")]
     private void Error(DiagnosticMessage message, int errPos, int length, object? arg0 = null)
     {
         if (onError != null)
@@ -218,6 +246,7 @@ internal sealed partial class Scanner
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private TextRef ScanNumberFragment()
     {
         var start = pos;
@@ -290,6 +319,7 @@ internal sealed partial class Scanner
     //     | NonOctalDecimalIntegerLiteral
     // LegacyOctalIntegerLiteral ::= '0' [0-7]+
     // NonOctalDecimalIntegerLiteral ::= '0' [0-7]* [89] [0-9]*
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private SyntaxKind ScanNumber()
     {
         var start = pos;
@@ -321,17 +351,7 @@ internal sealed partial class Scanner
             else
             {
                 // LegacyOctalIntegerLiteral
-                var octalValue = JsNumber.ToString(JsNumber.ParseInt(texts.GetString(tokenValue)!, 8));
-                tokenValue = texts.Add(octalValue);
-                tokenFlags |= TokenFlags.Octal;
-                var withMinus = token == SyntaxKind.MinusToken;
-                var literal = (withMinus ? "-" : "") + "0o" + JsNumber.ToRadixString(JsNumber.FromString(octalValue), 8);
-                if (withMinus)
-                {
-                    start--;
-                }
-                Error(Diagnostics.Octal_literals_are_not_allowed_Use_the_syntax_0, start, pos - start, literal);
-                return SyntaxKind.NumericLiteral;
+                return ScanLegacyOctalLiteral(start);
             }
         }
         else
@@ -412,6 +432,24 @@ internal sealed partial class Scanner
         }
     }
 
+    // The LegacyOctalIntegerLiteral branch of scanNumber (Track O: a method of its own, as it builds strings).
+    [NoAllocUnchecked("rare numeric form: a legacy octal literal (an error) converts its value through strings")]
+    private SyntaxKind ScanLegacyOctalLiteral(int start)
+    {
+        var octalValue = JsNumber.ToString(JsNumber.ParseInt(texts.GetString(tokenValue)!, 8));
+        tokenValue = texts.Add(octalValue);
+        tokenFlags |= TokenFlags.Octal;
+        var withMinus = token == SyntaxKind.MinusToken;
+        var literal = (withMinus ? "-" : "") + "0o" + JsNumber.ToRadixString(JsNumber.FromString(octalValue), 8);
+        if (withMinus)
+        {
+            start--;
+        }
+        Error(Diagnostics.Octal_literals_are_not_allowed_Use_the_syntax_0, start, pos - start, literal);
+        return SyntaxKind.NumericLiteral;
+    }
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private void CheckForIdentifierStartAfterNumericLiteral(int numericStart, bool isScientific = false)
     {
         if (!IsIdentifierStart(CodePointUnchecked(pos), languageVersion))
@@ -440,6 +478,7 @@ internal sealed partial class Scanner
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool ScanDigits()
     {
         var start = pos;
@@ -460,6 +499,7 @@ internal sealed partial class Scanner
     /// `"" + +value` for the numeric strings the scanner builds (JsNumber.ToStringOfNumericString). Track O: a value that
     /// is already in canonical form stays the handle it is; another goes to the character arena.
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private TextRef NumericStringValue(TextRef value)
     {
         var span = texts.Span(value);
@@ -467,34 +507,69 @@ internal sealed partial class Scanner
         {
             return value;
         }
-        return texts.Add(JsNumber.ToStringOfNumericString(span.ToString()));
+        return NumericStringValueSlow(value);
+    }
+
+    [NoAllocUnchecked("rare numeric form: a literal not in canonical form converts through a double and strings")]
+    private TextRef NumericStringValueSlow(TextRef value)
+    {
+        return texts.Add(JsNumber.ToStringOfNumericString(texts.Span(value).ToString()));
+    }
+
+    /// <summary>
+    /// Track O (O-NA): `"" + value` for an integer value of at most 2^53 (exact in a double) without a string: its decimal
+    /// digits in the character arena.
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private TextRef IntegerStringValue(ulong value)
+    {
+        Span<char> digits = stackalloc char[20];
+        var at = digits.Length;
+        do
+        {
+            digits[--at] = (char)('0' + (int)(value % 10));
+            value /= 10;
+        }
+        while (value != 0);
+        return texts.Add(digits[at..]);
     }
 
     /// <summary>
     /// Scans the given number of hexadecimal digits in the text,
     /// returning -1 if the given number is unavailable.
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private int ScanExactNumberOfHexDigits(int count, bool canHaveSeparators)
     {
-        var valueString = ScanHexDigits(/*minCount*/ count, /*scanAsManyAsPossible*/ false, canHaveSeparators);
-        return valueString.Length != 0 ? ParseHexValue(valueString) : -1;
+        var digitCount = ScanHexDigits(/*minCount*/ count, /*scanAsManyAsPossible*/ false, canHaveSeparators, out var value);
+        return digitCount != 0 ? HexValueToInt(value) : -1;
     }
 
     /// <summary>
     /// Scans as many hexadecimal digits as are available in the text,
     /// returning "" if the given number of digits was unavailable.
+    /// (Track O: `parseInt(scanMinimumNumberOfHexDigits(...), 16)` of the callers, -1 for "".)
     /// </summary>
-    private string ScanMinimumNumberOfHexDigits(int count, bool canHaveSeparators)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private int ScanMinimumNumberOfHexDigitsValue(int count, bool canHaveSeparators)
     {
-        return ScanHexDigits(/*minCount*/ count, /*scanAsManyAsPossible*/ true, canHaveSeparators);
+        var digitCount = ScanHexDigits(/*minCount*/ count, /*scanAsManyAsPossible*/ true, canHaveSeparators, out var value);
+        return digitCount != 0 ? HexValueToInt(value) : -1;
     }
 
-    private string ScanHexDigits(int minCount, bool scanAsManyAsPossible, bool canHaveSeparators)
+    /// <summary>
+    /// scanHexDigits without the string of digits (Track O, O-NA): returns the number of digits (0 where TypeScript
+    /// returns "", i.e. fewer than <paramref name="minCount"/>) and their value, `parseInt(digits, 16)`, which saturates
+    /// at <see cref="ulong.MaxValue"/>.
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private int ScanHexDigits(int minCount, bool scanAsManyAsPossible, bool canHaveSeparators, out ulong value)
     {
-        var valueChars = new StringBuilder();
+        var digitCount = 0;
+        ulong digits = 0;
         var allowSeparator = false;
         var isPreviousTokenSeparator = false;
-        while (valueChars.Length < minCount || scanAsManyAsPossible)
+        while (digitCount < minCount || scanAsManyAsPossible)
         {
             var ch = CharCodeUnchecked(pos);
             if (canHaveSeparators && ch == (int)CharacterCodes._)
@@ -517,32 +592,65 @@ internal sealed partial class Scanner
                 continue;
             }
             allowSeparator = canHaveSeparators;
+            int digit;
             if (ch >= (int)CharacterCodes.A && ch <= (int)CharacterCodes.F)
             {
-                ch += CharacterCodes.a - CharacterCodes.A; // standardize hex literals to lowercase
+                digit = ch - (int)CharacterCodes.A + 10; // (TypeScript standardizes hex literals to lowercase)
             }
-            else if (
-                !((ch >= (int)CharacterCodes._0 && ch <= (int)CharacterCodes._9) ||
-                    (ch >= (int)CharacterCodes.a && ch <= (int)CharacterCodes.f))
-            )
+            else if (ch >= (int)CharacterCodes.a && ch <= (int)CharacterCodes.f)
+            {
+                digit = ch - (int)CharacterCodes.a + 10;
+            }
+            else if (ch >= (int)CharacterCodes._0 && ch <= (int)CharacterCodes._9)
+            {
+                digit = ch - (int)CharacterCodes._0;
+            }
+            else
             {
                 break;
             }
-            valueChars.Append((char)ch);
+            digits = digits > (ulong.MaxValue >> 4) ? ulong.MaxValue : (digits << 4) | (uint)digit;
+            digitCount++;
             pos++;
             isPreviousTokenSeparator = false;
         }
-        if (valueChars.Length < minCount)
+        if (digitCount < minCount)
         {
-            valueChars.Clear();
+            digitCount = 0;
+            digits = 0;
         }
         if (CharCodeUnchecked(pos - 1) == (int)CharacterCodes._)
         {
             Error(Diagnostics.Numeric_separators_are_not_allowed_here, pos - 1, 1);
         }
-        return valueChars.ToString();
+        value = digits;
+        return digitCount;
     }
 
+    /// <summary>
+    /// The value of the hexadecimal digits text[from..to) (valid digits, at most 6 of them: the escapes `\uXXXX` and
+    /// `\xXX`), as `parseInt(text.substring(from, to), 16)`.
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private int HexValueOfRange(int from, int to)
+    {
+        var value = 0;
+        for (var i = from; i < to; i++)
+        {
+            int ch = text[i];
+            value = (value << 4) | (ch <= '9' ? ch - '0' : (ch | 0x20) - 'a' + 10);
+        }
+        return value;
+    }
+
+    /// <summary>
+    /// `parseInt(hexDigits, 16)` for the scanner's escape sequences: values beyond int.MaxValue (only possible in
+    /// `\u{...}` with many digits) are kept above 0x10FFFF, which is all the scanner tests about them.
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private static int HexValueToInt(ulong value) => value > int.MaxValue ? int.MaxValue : (int)value;
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private TextRef ScanString(bool jsxAttributeString = false)
     {
         var quote = CharCodeUnchecked(pos);
@@ -575,7 +683,7 @@ internal sealed partial class Scanner
             if (ch == (int)CharacterCodes.backslash && !jsxAttributeString)
             {
                 result.Append(text, start, pos);
-                result.Append(ScanEscapeSequence(EscapeSequenceScanningFlags.String | EscapeSequenceScanningFlags.ReportErrors));
+                ScanEscapeSequence(EscapeSequenceScanningFlags.String | EscapeSequenceScanningFlags.ReportErrors, ref result);
                 start = pos;
                 continue;
             }
@@ -596,6 +704,7 @@ internal sealed partial class Scanner
     /// Sets the current 'tokenValue' and returns a NoSubstitutionTemplateLiteral or
     /// a literal component of a TemplateExpression.
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private SyntaxKind ScanTemplateAndSetTokenValue(bool shouldEmitInvalidEscapeError)
     {
         var startedWithBacktick = CharCodeUnchecked(pos) == (int)CharacterCodes.backtick;
@@ -648,7 +757,7 @@ internal sealed partial class Scanner
             if (currChar == (int)CharacterCodes.backslash)
             {
                 contents.Append(text, start, pos);
-                contents.Append(ScanEscapeSequence(EscapeSequenceScanningFlags.String | (shouldEmitInvalidEscapeError ? EscapeSequenceScanningFlags.ReportErrors : 0)));
+                ScanEscapeSequence(EscapeSequenceScanningFlags.String | (shouldEmitInvalidEscapeError ? EscapeSequenceScanningFlags.ReportErrors : 0), ref contents);
                 start = pos;
                 continue;
             }
@@ -699,14 +808,18 @@ internal sealed partial class Scanner
     //     | [0-3] [0-7] [0-7]?
     //     | [4-7] [0-7]
     // NonOctalDecimalEscapeSequence ::= [89]
-    private string ScanEscapeSequence(EscapeSequenceScanningFlags flags)
+    // Track O (O-NA): scanEscapeSequence appends the cooked characters to the value the caller builds (TypeScript:
+    // `result += scanEscapeSequence(...)`) instead of returning a string; ScanEscapeSequenceString keeps the string
+    // form for the regular expression checker.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private void ScanEscapeSequence(EscapeSequenceScanningFlags flags, ref TextBuilder result)
     {
         var start = pos;
         pos++;
         if (pos >= end)
         {
             Error(Diagnostics.Unexpected_end_of_text);
-            return "";
+            return;
         }
         var ch = CharCodeUnchecked(pos);
         pos++;
@@ -717,7 +830,8 @@ internal sealed partial class Scanner
                 // '\08' should separately be interpreted as '\0' + '8'.
                 if (pos >= end || !IsDigit(CharCodeUnchecked(pos)))
                 {
-                    return "\0";
+                    result.Append('\0');
+                    return;
                 }
                 // '\01', '\011'
                 goto case (int)CharacterCodes._1;
@@ -744,18 +858,11 @@ internal sealed partial class Scanner
                 tokenFlags |= TokenFlags.ContainsInvalidEscape;
                 if ((flags & EscapeSequenceScanningFlags.ReportInvalidEscapeErrors) != 0)
                 {
-                    var code = (int)JsNumber.ParseInt(Substring(text, start + 1, pos), 8);
-                    if ((flags & EscapeSequenceScanningFlags.RegularExpression) != 0 && (flags & EscapeSequenceScanningFlags.AtomEscape) == 0 && ch != (int)CharacterCodes._0)
-                    {
-                        Error(Diagnostics.Octal_escape_sequences_and_backreferences_are_not_allowed_in_a_character_class_If_this_was_intended_as_an_escape_sequence_use_the_syntax_0_instead, start, pos - start, "\\x" + code.ToString("x", CultureInfo.InvariantCulture).PadLeft(2, '0'));
-                    }
-                    else
-                    {
-                        Error(Diagnostics.Octal_escape_sequences_are_not_allowed_Use_the_syntax_0, start, pos - start, "\\x" + code.ToString("x", CultureInfo.InvariantCulture).PadLeft(2, '0'));
-                    }
-                    return FromCharCode(code);
+                    result.Append((char)(ReportOctalEscape(flags, start, ch) & 0xFFFF));
+                    return;
                 }
-                return Substring(text, start, pos);
+                result.AppendSource(start, pos);
+                return;
             case (int)CharacterCodes._8:
             case (int)CharacterCodes._9:
                 // the invalid '\8' and '\9'
@@ -768,33 +875,43 @@ internal sealed partial class Scanner
                     }
                     else
                     {
-                        Error(Diagnostics.Escape_sequence_0_is_not_allowed, start, pos - start, Substring(text, start, pos));
+                        ReportEscapeNotAllowed(start);
                     }
-                    return FromCharCode(ch);
+                    result.Append((char)ch);
+                    return;
                 }
-                return Substring(text, start, pos);
+                result.AppendSource(start, pos);
+                return;
             case (int)CharacterCodes.b:
-                return "\b";
+                result.Append('\b');
+                return;
             case (int)CharacterCodes.t:
-                return "\t";
+                result.Append('\t');
+                return;
             case (int)CharacterCodes.n:
-                return "\n";
+                result.Append('\n');
+                return;
             case (int)CharacterCodes.v:
-                return "\v";
+                result.Append('\v');
+                return;
             case (int)CharacterCodes.f:
-                return "\f";
+                result.Append('\f');
+                return;
             case (int)CharacterCodes.r:
-                return "\r";
+                result.Append('\r');
+                return;
             case (int)CharacterCodes.singleQuote:
-                return "'";
+                result.Append('\'');
+                return;
             case (int)CharacterCodes.doubleQuote:
-                return "\"";
+                result.Append('"');
+                return;
             case (int)CharacterCodes.u:
                 if (pos < end && CharCodeUnchecked(pos) == (int)CharacterCodes.openBrace)
                 {
                     // '\u{DDDDDD}'
                     pos -= 2;
-                    var result = ScanExtendedUnicodeEscape((flags & EscapeSequenceScanningFlags.ReportInvalidEscapeErrors) != 0);
+                    ScanExtendedUnicodeEscape((flags & EscapeSequenceScanningFlags.ReportInvalidEscapeErrors) != 0, ref result);
                     if ((flags & EscapeSequenceScanningFlags.AllowExtendedUnicodeEscape) == 0)
                     {
                         tokenFlags |= TokenFlags.ContainsInvalidEscape;
@@ -803,7 +920,7 @@ internal sealed partial class Scanner
                             Error(Diagnostics.Unicode_escape_sequences_are_only_available_when_the_Unicode_u_flag_or_the_Unicode_Sets_v_flag_is_set, start, pos - start);
                         }
                     }
-                    return result;
+                    return;
                 }
                 // '\uDDDD'
                 for (; pos < start + 6; pos++)
@@ -815,12 +932,12 @@ internal sealed partial class Scanner
                         {
                             Error(Diagnostics.Hexadecimal_digit_expected);
                         }
-                        return Substring(text, start, pos);
+                        result.AppendSource(start, pos);
+                        return;
                     }
                 }
                 tokenFlags |= TokenFlags.UnicodeEscape;
-                var escapedValue = ParseHexValue(Substring(text, start + 2, pos));
-                var escapedValueString = FromCharCode(escapedValue);
+                var escapedValue = HexValueOfRange(start + 2, pos);
                 if (
                     (flags & EscapeSequenceScanningFlags.AnyUnicodeMode) != 0 && escapedValue >= 0xD800 && escapedValue <= 0xDBFF &&
                     pos + 6 < end && CharCodeUnchecked(pos) == (int)CharacterCodes.backslash && CharCodeUnchecked(pos + 1) == (int)CharacterCodes.u && CharCodeUnchecked(pos + 2) != (int)CharacterCodes.openBrace
@@ -836,17 +953,21 @@ internal sealed partial class Scanner
                         if (!IsHexDigit(CharCodeUnchecked(nextPos)))
                         {
                             // leave the error to the next call
-                            return escapedValueString;
+                            result.Append((char)escapedValue);
+                            return;
                         }
                     }
-                    var nextEscapedValue = ParseHexValue(Substring(text, nextStart + 2, nextPos));
+                    var nextEscapedValue = HexValueOfRange(nextStart + 2, nextPos);
                     if (nextEscapedValue >= 0xDC00 && nextEscapedValue <= 0xDFFF)
                     {
                         pos = nextPos;
-                        return escapedValueString + FromCharCode(nextEscapedValue);
+                        result.Append((char)escapedValue);
+                        result.Append((char)nextEscapedValue);
+                        return;
                     }
                 }
-                return escapedValueString;
+                result.Append((char)escapedValue);
+                return;
 
             case (int)CharacterCodes.x:
                 // '\xDD'
@@ -859,11 +980,13 @@ internal sealed partial class Scanner
                         {
                             Error(Diagnostics.Hexadecimal_digit_expected);
                         }
-                        return Substring(text, start, pos);
+                        result.AppendSource(start, pos);
+                        return;
                     }
                 }
                 tokenFlags |= TokenFlags.HexEscape;
-                return FromCharCode(ParseHexValue(Substring(text, start + 2, pos)));
+                result.Append((char)HexValueOfRange(start + 2, pos));
+                return;
 
             // when encountering a LineContinuation (i.e. a backslash and a line terminator sequence),
             // the line terminator is interpreted to be "the empty code unit sequence".
@@ -876,7 +999,7 @@ internal sealed partial class Scanner
             case (int)CharacterCodes.lineFeed:
             case (int)CharacterCodes.lineSeparator:
             case (int)CharacterCodes.paragraphSeparator:
-                return "";
+                return;
             default:
                 if (
                     (flags & EscapeSequenceScanningFlags.AnyUnicodeMode) != 0
@@ -887,17 +1010,54 @@ internal sealed partial class Scanner
                 {
                     Error(Diagnostics.This_character_cannot_be_escaped_in_a_regular_expression, pos - 2, 2);
                 }
-                return FromCharCode(ch);
+                result.Append((char)ch);
+                return;
         }
     }
 
-    private string ScanExtendedUnicodeEscape(bool shouldEmitInvalidEscapeError)
+    // The octal escape error of scanEscapeSequence: reports it and returns the escape's value.
+    [NoAllocUnchecked("error path: an octal escape sequence is reported with its hexadecimal form as a string")]
+    private int ReportOctalEscape(EscapeSequenceScanningFlags flags, int start, int ch)
+    {
+        var code = (int)JsNumber.ParseInt(Substring(text, start + 1, pos), 8);
+        if ((flags & EscapeSequenceScanningFlags.RegularExpression) != 0 && (flags & EscapeSequenceScanningFlags.AtomEscape) == 0 && ch != (int)CharacterCodes._0)
+        {
+            Error(Diagnostics.Octal_escape_sequences_and_backreferences_are_not_allowed_in_a_character_class_If_this_was_intended_as_an_escape_sequence_use_the_syntax_0_instead, start, pos - start, "\\x" + code.ToString("x", CultureInfo.InvariantCulture).PadLeft(2, '0'));
+        }
+        else
+        {
+            Error(Diagnostics.Octal_escape_sequences_are_not_allowed_Use_the_syntax_0, start, pos - start, "\\x" + code.ToString("x", CultureInfo.InvariantCulture).PadLeft(2, '0'));
+        }
+        return code;
+    }
+
+    [NoAllocUnchecked("error path: the escape sequence is reported as a string")]
+    private void ReportEscapeNotAllowed(int start)
+    {
+        Error(Diagnostics.Escape_sequence_0_is_not_allowed, start, pos - start, Substring(text, start, pos));
+    }
+
+    /// <summary>scanEscapeSequence as TypeScript returns it (the string), for the regular expression checker.</summary>
+    [NoAllocUnchecked("regex checking: the escape's characters as a string")]
+    private string ScanEscapeSequenceString(EscapeSequenceScanningFlags flags)
+    {
+        // The characters are built in the arena and taken out again (nothing else writes to it meanwhile).
+        var mark = texts.CharCount;
+        var builder = new TextBuilder(texts);
+        ScanEscapeSequence(flags, ref builder);
+        var value = texts.GetString(builder.Result())!;
+        texts.SetCharCount(mark);
+        return value;
+    }
+
+    // Track O (O-NA): appends the cooked characters (TypeScript returns them as a string).
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private void ScanExtendedUnicodeEscape(bool shouldEmitInvalidEscapeError, ref TextBuilder result)
     {
         var start = pos;
         pos += 3;
         var escapedStart = pos;
-        var escapedValueString = ScanMinimumNumberOfHexDigits(1, /*canHaveSeparators*/ false);
-        var escapedValue = escapedValueString.Length != 0 ? ParseHexValue(escapedValueString) : -1;
+        var escapedValue = ScanMinimumNumberOfHexDigitsValue(1, /*canHaveSeparators*/ false);
         var isInvalidExtendedEscape = false;
 
         // Validate the value of the digit
@@ -943,15 +1103,17 @@ internal sealed partial class Scanner
         if (isInvalidExtendedEscape)
         {
             tokenFlags |= TokenFlags.ContainsInvalidEscape;
-            return Substring(text, start, pos);
+            result.AppendSource(start, pos);
+            return;
         }
 
         tokenFlags |= TokenFlags.ExtendedUnicodeEscape;
-        return Utf16EncodeAsString(escapedValue);
+        AppendCodePoint(ref result, escapedValue);
     }
 
     // Current character is known to be a backslash. Check for Unicode escape of the form '\uXXXX'
     // and return code point value if valid Unicode escape is found. Otherwise return -1.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private int PeekUnicodeEscape()
     {
         if (pos + 5 < end && CharCodeUnchecked(pos + 1) == (int)CharacterCodes.u)
@@ -965,20 +1127,21 @@ internal sealed partial class Scanner
         return -1;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private int PeekExtendedUnicodeEscape()
     {
         if (CodePointUnchecked(pos + 1) == (int)CharacterCodes.u && CodePointUnchecked(pos + 2) == (int)CharacterCodes.openBrace)
         {
             var start = pos;
             pos += 3;
-            var escapedValueString = ScanMinimumNumberOfHexDigits(1, /*canHaveSeparators*/ false);
-            var escapedValue = escapedValueString.Length != 0 ? ParseHexValue(escapedValueString) : -1;
+            var escapedValue = ScanMinimumNumberOfHexDigitsValue(1, /*canHaveSeparators*/ false);
             pos = start;
             return escapedValue;
         }
         return -1;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private TextRef ScanIdentifierParts()
     {
         var result = new TextBuilder(texts); // TypeScript: `let result = ""`
@@ -987,6 +1150,7 @@ internal sealed partial class Scanner
     }
 
     /// <summary>Track O (O5a): scanIdentifierParts appending to a value built by the caller (`value + scanIdentifierParts()`).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private void ScanIdentifierParts(ref TextBuilder result)
     {
         var start = pos;
@@ -1002,7 +1166,7 @@ internal sealed partial class Scanner
                 ch = PeekExtendedUnicodeEscape();
                 if (ch >= 0 && IsIdentifierPart(ch, languageVersion))
                 {
-                    result.Append(ScanExtendedUnicodeEscape(/*shouldEmitInvalidEscapeError*/ true));
+                    ScanExtendedUnicodeEscape(/*shouldEmitInvalidEscapeError*/ true, ref result);
                     start = pos;
                     continue;
                 }
@@ -1013,7 +1177,7 @@ internal sealed partial class Scanner
                 }
                 tokenFlags |= TokenFlags.UnicodeEscape;
                 result.Append(text, start, pos);
-                result.Append(Utf16EncodeAsString(ch));
+                AppendCodePoint(ref result, ch);
                 // Valid Unicode escape is always six characters
                 pos += 6;
                 start = pos;
@@ -1026,6 +1190,7 @@ internal sealed partial class Scanner
         result.Append(text, start, pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private SyntaxKind GetIdentifierToken()
     {
         // Reserved words are between 2 and 12 characters long and start with a lowercase letter
@@ -1045,6 +1210,7 @@ internal sealed partial class Scanner
         return token = SyntaxKind.Identifier;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private TextRef ScanBinaryOrOctalDigits(int @base)
     {
         var value = new TextBuilder(texts); // TypeScript: `let value = ""`
@@ -1092,6 +1258,7 @@ internal sealed partial class Scanner
         return value.Result();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private SyntaxKind CheckBigIntSuffix()
     {
         if (CharCodeUnchecked(pos) == (int)CharacterCodes.n)
@@ -1101,7 +1268,7 @@ internal sealed partial class Scanner
             // Use base 10 instead of base 2 or base 8 for shorter literals
             if ((tokenFlags & TokenFlags.BinaryOrOctalSpecifier) != 0)
             {
-                tokenValue = texts.Add(Utilities.ParsePseudoBigInt(texts.GetString(tokenValue)!) + "n");
+                tokenValue = BinaryOrOctalBigIntValue();
             }
             pos++;
             return SyntaxKind.BigIntLiteral;
@@ -1115,15 +1282,88 @@ internal sealed partial class Scanner
                 tokenValue = NumericStringValue(tokenValue);
                 return SyntaxKind.NumericLiteral;
             }
-            var digits = texts.GetString(tokenValue.Slice(2))!; // skip "0b" or "0o"
-            var numericValue = (tokenFlags & TokenFlags.BinarySpecifier) != 0
-                ? JsNumber.ParseInt(digits, 2)
-                : JsNumber.ParseInt(digits, 8);
-            tokenValue = texts.Add(JsNumber.ToString(numericValue));
+            var radix = (tokenFlags & TokenFlags.BinarySpecifier) != 0 ? 2 : 8;
+            // Track O (O-NA): values exact in a double are converted without strings.
+            tokenValue = TryParseSafeInteger(texts.Span(tokenValue.Slice(2)), radix, out var value) // skip "0b" or "0o"
+                ? IntegerStringValue(value)
+                : BinaryOrOctalValueSlow(radix);
             return SyntaxKind.NumericLiteral;
         }
     }
 
+    [NoAllocUnchecked("rare numeric form: a binary or octal bigint literal is converted through strings")]
+    private TextRef BinaryOrOctalBigIntValue()
+    {
+        return texts.Add(Utilities.ParsePseudoBigInt(texts.GetString(tokenValue)!) + "n");
+    }
+
+    [NoAllocUnchecked("rare numeric form: a binary or octal literal beyond 2^53 is converted through strings")]
+    private TextRef BinaryOrOctalValueSlow(int radix)
+    {
+        var digits = texts.GetString(tokenValue.Slice(2))!; // skip "0b" or "0o"
+        return texts.Add(JsNumber.ToString(JsNumber.ParseInt(digits, radix)));
+    }
+
+    /// <summary>
+    /// Track O (O-NA): `parseInt(digits, radix)` for digits of the radix whose value is at most 2^53 - 1 (exact in a
+    /// double); false for other values (and for no digits, which parseInt makes NaN).
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private static bool TryParseSafeInteger(ReadOnlySpan<char> digits, int radix, out ulong value)
+    {
+        const ulong MaxSafeInteger = (1UL << 53) - 1;
+        value = 0;
+        if (digits.IsEmpty)
+        {
+            return false;
+        }
+        foreach (var ch in digits)
+        {
+            var digit = (uint)(ch - '0');
+            if (digit >= (uint)radix || value > (MaxSafeInteger - digit) / (uint)radix)
+            {
+                return false;
+            }
+            value = (value * (uint)radix) + digit;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// The value of a hexadecimal literal `0x...` without a bigint suffix: TypeScript builds `"0x" + digits` and converts
+    /// it (`"" + +tokenValue`); Track O converts the value scanned (exact up to 2^53 - 1) and builds the strings only for
+    /// a bigint suffix or a larger value.
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private SyntaxKind ScanHexLiteralValue(int digitsStart, ulong value)
+    {
+        if (CharCodeUnchecked(pos) == (int)CharacterCodes.n || value > (1UL << 53) - 1)
+        {
+            return ScanHexLiteralValueSlow(digitsStart);
+        }
+        tokenValue = IntegerStringValue(value);
+        return SyntaxKind.NumericLiteral;
+    }
+
+    // TypeScript's way: `tokenValue = "0x" + hexDigits` (digits lowercased, separators dropped, "0" if none), then
+    // checkBigIntSuffix.
+    [NoAllocUnchecked("rare numeric form: a hexadecimal bigint literal or a value beyond 2^53 is built as a string")]
+    private SyntaxKind ScanHexLiteralValueSlow(int digitsStart)
+    {
+        var hexDigits = new StringBuilder();
+        for (var i = digitsStart; i < pos; i++)
+        {
+            var ch = text[i];
+            if (ch != '_')
+            {
+                hexDigits.Append(ch >= 'A' && ch <= 'F' ? (char)(ch + ('a' - 'A')) : ch);
+            }
+        }
+        tokenValue = texts.Add("0x" + (hexDigits.Length == 0 ? "0" : hexDigits.ToString()));
+        return CheckBigIntSuffix();
+    }
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SyntaxKind Scan()
     {
         fullStartPos = pos;
@@ -1359,7 +1599,7 @@ internal sealed partial class Scanner
                             commentDirectives,
                             tokenStart,
                             pos,
-                            CommentDirectiveRegExSingleLine,
+                            /*multiLine*/ false,
                             tokenStart);
 
                         if (skipTrivia)
@@ -1404,7 +1644,7 @@ internal sealed partial class Scanner
                             tokenFlags |= TokenFlags.PrecedingJSDocComment;
                         }
 
-                        commentDirectives = AppendIfCommentDirective(commentDirectives, lastLineStart, pos, CommentDirectiveRegExMultiLine, lastLineStart);
+                        commentDirectives = AppendIfCommentDirective(commentDirectives, lastLineStart, pos, /*multiLine*/ true, lastLineStart);
 
                         if (!commentClosed)
                         {
@@ -1438,16 +1678,15 @@ internal sealed partial class Scanner
                     if (pos + 2 < end && (CharCodeUnchecked(pos + 1) == (int)CharacterCodes.X || CharCodeUnchecked(pos + 1) == (int)CharacterCodes.x))
                     {
                         pos += 2;
-                        var hexDigits = ScanMinimumNumberOfHexDigits(1, /*canHaveSeparators*/ true);
-                        if (hexDigits.Length == 0)
+                        var hexDigitsStart = pos;
+                        var hexDigitCount = ScanHexDigits(/*minCount*/ 1, /*scanAsManyAsPossible*/ true, /*canHaveSeparators*/ true, out var hexValue);
+                        if (hexDigitCount == 0)
                         {
                             Error(Diagnostics.Hexadecimal_digit_expected);
-                            hexDigits = "0";
                         }
-                        // (Track O: the digits are lowercased, so the value goes to the character arena.)
-                        tokenValue = texts.Add("0x" + hexDigits);
                         tokenFlags |= TokenFlags.HexSpecifier;
-                        return token = CheckBigIntSuffix();
+                        // (TypeScript: `tokenValue = "0x" + hexDigits; return token = checkBigIntSuffix();`.)
+                        return token = ScanHexLiteralValue(hexDigitsStart, hexValue);
                     }
                     else if (pos + 2 < end && (CharCodeUnchecked(pos + 1) == (int)CharacterCodes.B || CharCodeUnchecked(pos + 1) == (int)CharacterCodes.b))
                     {
@@ -1495,7 +1734,7 @@ internal sealed partial class Scanner
                 case (int)CharacterCodes.lessThan:
                     if (IsConflictMarkerTrivia(text, pos))
                     {
-                        pos = ScanConflictMarkerTrivia(text, pos, (message, errPos, length) => Error(message, errPos, length));
+                        pos = ScanConflictMarkerTrivia(text, pos, this);
                         if (skipTrivia)
                         {
                             continue;
@@ -1535,7 +1774,7 @@ internal sealed partial class Scanner
                 case (int)CharacterCodes.equals:
                     if (IsConflictMarkerTrivia(text, pos))
                     {
-                        pos = ScanConflictMarkerTrivia(text, pos, (message, errPos, length) => Error(message, errPos, length));
+                        pos = ScanConflictMarkerTrivia(text, pos, this);
                         if (skipTrivia)
                         {
                             continue;
@@ -1566,7 +1805,7 @@ internal sealed partial class Scanner
                 case (int)CharacterCodes.greaterThan:
                     if (IsConflictMarkerTrivia(text, pos))
                     {
-                        pos = ScanConflictMarkerTrivia(text, pos, (message, errPos, length) => Error(message, errPos, length));
+                        pos = ScanConflictMarkerTrivia(text, pos, this);
                         if (skipTrivia)
                         {
                             continue;
@@ -1617,7 +1856,7 @@ internal sealed partial class Scanner
                 case (int)CharacterCodes.bar:
                     if (IsConflictMarkerTrivia(text, pos))
                     {
-                        pos = ScanConflictMarkerTrivia(text, pos, (message, errPos, length) => Error(message, errPos, length));
+                        pos = ScanConflictMarkerTrivia(text, pos, this);
                         if (skipTrivia)
                         {
                             continue;
@@ -1659,7 +1898,7 @@ internal sealed partial class Scanner
                         var extendedCookedChar = PeekExtendedUnicodeEscape();
                         if (extendedCookedChar >= 0 && IsIdentifierStart(extendedCookedChar, languageVersion))
                         {
-                            tokenValue = ConcatIdentifierParts(null, ScanExtendedUnicodeEscape(/*shouldEmitInvalidEscapeError*/ true));
+                            tokenValue = ConcatIdentifierParts(/*hashPrefix*/ false, -1);
                             return token = GetIdentifierToken();
                         }
 
@@ -1668,7 +1907,7 @@ internal sealed partial class Scanner
                         {
                             pos += 6;
                             tokenFlags |= TokenFlags.UnicodeEscape;
-                            tokenValue = ConcatIdentifierParts(null, FromCharCode(cookedChar));
+                            tokenValue = ConcatIdentifierParts(/*hashPrefix*/ false, cookedChar);
                             return token = GetIdentifierToken();
                         }
 
@@ -1692,7 +1931,7 @@ internal sealed partial class Scanner
                             var extendedCookedChar = PeekExtendedUnicodeEscape();
                             if (extendedCookedChar >= 0 && IsIdentifierStart(extendedCookedChar, languageVersion))
                             {
-                                tokenValue = ConcatIdentifierParts("#", ScanExtendedUnicodeEscape(/*shouldEmitInvalidEscapeError*/ true));
+                                tokenValue = ConcatIdentifierParts(/*hashPrefix*/ true, -1);
                                 return token = SyntaxKind.PrivateIdentifier;
                             }
 
@@ -1701,7 +1940,7 @@ internal sealed partial class Scanner
                             {
                                 pos += 6;
                                 tokenFlags |= TokenFlags.UnicodeEscape;
-                                tokenValue = ConcatIdentifierParts("#", FromCharCode(cookedChar));
+                                tokenValue = ConcatIdentifierParts(/*hashPrefix*/ true, cookedChar);
                                 return token = SyntaxKind.PrivateIdentifier;
                             }
                             pos--;
@@ -1753,6 +1992,7 @@ internal sealed partial class Scanner
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool ShouldParseJSDoc()
     {
         switch (jsDocParsingMode)
@@ -1780,6 +2020,7 @@ internal sealed partial class Scanner
         return JsDocSeeOrLinkTest(text, fullStartPos, Math.Min(pos, text.Length));
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SyntaxKind ReScanInvalidIdentifier()
     {
         Debug.Assert(token == SyntaxKind.Unknown, "'reScanInvalidIdentifier' should only be called when the current token is 'SyntaxKind.Unknown'.");
@@ -1795,6 +2036,7 @@ internal sealed partial class Scanner
         return token; // Still `SyntaxKind.Unknown`
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private SyntaxKind? ScanIdentifier(int startCharacter, ScriptTarget languageVersion)
     {
         var ch = startCharacter;
@@ -1840,30 +2082,35 @@ internal sealed partial class Scanner
     }
 
     // The characters scanString tests for: the quote, '\', LF, CR.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsStringSpecialCharacter(int ch, int quote)
     {
         return ch == quote || ch == (int)CharacterCodes.backslash || ch == (int)CharacterCodes.lineFeed || ch == (int)CharacterCodes.carriageReturn;
     }
 
     // The characters scanTemplateAndSetTokenValue tests for: '`', '$', '\', CR.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsTemplateSpecialCharacter(int ch)
     {
         return ch == (int)CharacterCodes.backtick || ch == (int)CharacterCodes.Dollar || ch == (int)CharacterCodes.backslash || ch == (int)CharacterCodes.carriageReturn;
     }
 
     // ' ', '\t', '\n', '\v', '\f', '\r' (typescript-go: `b == ' ' || (b >= '\t' && b <= '\r')`).
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsAsciiWhiteSpaceOrLineBreak(int ch)
     {
         return ch == (int)CharacterCodes.space || (ch >= (int)CharacterCodes.tab && ch <= (int)CharacterCodes.carriageReturn);
     }
 
     // isIdentifierPart for an ASCII character (any language version and variant other than JSX): [A-Za-z0-9_$].
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsAsciiIdentifierPart(int ch)
     {
         return IsWordCharacter(ch) || ch == (int)CharacterCodes.Dollar;
     }
 
     // getIdentifierToken for tokenValue = text[start..end), see ScanIdentifier.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private SyntaxKind GetIdentifierTokenOfRange(int start, int end)
     {
         // Reserved words are between 2 and 12 characters long and start with a lowercase letter
@@ -1884,19 +2131,32 @@ internal sealed partial class Scanner
         return token = SyntaxKind.Identifier;
     }
 
-    /// <summary>Track O (O5a): `prefix + escaped + scanIdentifierParts()` for identifiers that start with an escape.</summary>
-    private TextRef ConcatIdentifierParts(string? prefix, string escaped)
+    /// <summary>
+    /// Track O (O5a): `prefix + escaped + scanIdentifierParts()` for identifiers that start with an escape: the extended
+    /// escape at pos (`scanExtendedUnicodeEscape(true)`, scanned here) when <paramref name="cookedChar"/> is -1, else
+    /// `String.fromCharCode(cookedChar)` of the `\uXXXX` escape the caller skipped; the prefix is "#" or nothing.
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private TextRef ConcatIdentifierParts(bool hashPrefix, int cookedChar)
     {
         var value = new TextBuilder(texts);
-        if (prefix != null)
+        if (hashPrefix)
         {
-            value.Append(prefix);
+            value.Append('#');
         }
-        value.Append(escaped);
+        if (cookedChar < 0)
+        {
+            ScanExtendedUnicodeEscape(/*shouldEmitInvalidEscapeError*/ true, ref value);
+        }
+        else
+        {
+            value.Append((char)(cookedChar & 0xFFFF));
+        }
         ScanIdentifierParts(ref value);
         return value.Result();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SyntaxKind ReScanGreaterToken()
     {
         if (token == SyntaxKind.GreaterThanToken)
@@ -1930,6 +2190,7 @@ internal sealed partial class Scanner
         return token;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SyntaxKind ReScanAsteriskEqualsToken()
     {
         Debug.Assert(token == SyntaxKind.AsteriskEqualsToken, "'reScanAsteriskEqualsToken' should only be called on a '*='");
@@ -1937,6 +2198,7 @@ internal sealed partial class Scanner
         return token = SyntaxKind.EqualsToken;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SyntaxKind ReScanSlashToken(bool reportErrors = false)
     {
         if (token == SyntaxKind.SlashToken || token == SyntaxKind.SlashEqualsToken)
@@ -2107,11 +2369,7 @@ internal sealed partial class Scanner
                 }
                 if (reportErrors)
                 {
-                    ScanRange<object?>(startOfRegExpBody, endOfRegExpBody - startOfRegExpBody, () =>
-                    {
-                        ScanRegularExpressionWorker(regExpFlags, /*annexB*/ true, namedCaptureGroups);
-                        return null;
-                    });
+                    CheckRegularExpressionBody(startOfRegExpBody, endOfRegExpBody, regExpFlags, namedCaptureGroups);
                 }
             }
             tokenValue = texts.Substring(tokenStart, pos);
@@ -2120,22 +2378,42 @@ internal sealed partial class Scanner
         return token;
     }
 
+    // `scanRange(startOfRegExpBody, endOfRegExpBody - startOfRegExpBody, () => { scanRegularExpressionWorker(...); })`.
+    [NoAllocUnchecked("regex checking: the regular expression checker builds strings and lists")]
+    private void CheckRegularExpressionBody(int startOfRegExpBody, int endOfRegExpBody, RegularExpressionFlags regExpFlags, bool namedCaptureGroups)
+    {
+        ScanRange<object?>(startOfRegExpBody, endOfRegExpBody - startOfRegExpBody, () =>
+        {
+            ScanRegularExpressionWorker(regExpFlags, /*annexB*/ true, namedCaptureGroups);
+            return null;
+        });
+    }
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private void CheckRegularExpressionFlagAvailability(RegularExpressionFlags flag, int size)
     {
         if (RegExpFlagToFirstAvailableLanguageVersion.TryGetValue(flag, out var availableFrom) && availableFrom != 0 && languageVersion < availableFrom)
         {
-            Error(Diagnostics.This_regular_expression_flag_is_only_available_when_targeting_0_or_later, pos, size, Utilities.GetNameOfScriptTarget(availableFrom));
+            ReportFlagNotAvailable(availableFrom, size);
         }
+    }
+
+    [NoAllocUnchecked("error path: the diagnostic names the script target")]
+    private void ReportFlagNotAvailable(ScriptTarget availableFrom, int size)
+    {
+        Error(Diagnostics.This_regular_expression_flag_is_only_available_when_targeting_0_or_later, pos, size, Utilities.GetNameOfScriptTarget(availableFrom));
     }
 
     // TypeScript passes the comment's text (`text.slice(start, end)`) and a RegExp; this passes the range of
     // the text instead of slicing it, as typescript-go's processCommentDirective (internal/scanner/scanner.go)
     // works on positions, and the hand-written matcher of the RegExp.
+    // (Track O, O-NA: the regex is one of the two matchers, chosen by a flag instead of passed as a delegate.)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private List<CommentDirective>? AppendIfCommentDirective(
         List<CommentDirective>? commentDirectives,
         int textStart,
         int textEnd,
-        Func<string, int, int, string?> commentDirectiveRegEx,
+        bool multiLine,
         int lineStart)
     {
         // `text.trimStart()`
@@ -2144,60 +2422,74 @@ internal sealed partial class Scanner
         {
             textStart++;
         }
-        var type = GetDirectiveFromComment(textStart, textEnd, commentDirectiveRegEx);
-        if (type == null)
+        if (!TryGetDirectiveFromComment(textStart, textEnd, multiLine, out var type))
         {
             return commentDirectives;
         }
 
+        return AppendCommentDirective(commentDirectives, lineStart, type);
+    }
+
+    [NoAllocUnchecked("per-file result: a comment directive of the SourceFile")]
+    private List<CommentDirective> AppendCommentDirective(List<CommentDirective>? commentDirectives, int lineStart, CommentDirectiveType type)
+    {
         return Core.Append(
             commentDirectives,
             new CommentDirective
             {
                 Range = new ObjectTextRange { Pos = lineStart, End = pos },
-                Type = type.Value,
+                Type = type,
             });
     }
 
-    private CommentDirectiveType? GetDirectiveFromComment(int textStart, int textEnd, Func<string, int, int, string?> commentDirectiveRegEx)
+    // getDirectiveFromComment (Track O: false where TypeScript returns undefined).
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private bool TryGetDirectiveFromComment(int textStart, int textEnd, bool multiLine, out CommentDirectiveType type)
     {
-        var match = commentDirectiveRegEx(text, textStart, textEnd);
+        var match = multiLine ? CommentDirectiveRegExMultiLine(text, textStart, textEnd) : CommentDirectiveRegExSingleLine(text, textStart, textEnd);
+        type = default;
         if (match == null)
         {
-            return null;
+            return false;
         }
 
         switch (match)
         {
             case "ts-expect-error":
-                return CommentDirectiveType.ExpectError;
+                type = CommentDirectiveType.ExpectError;
+                return true;
 
             case "ts-ignore":
-                return CommentDirectiveType.Ignore;
+                type = CommentDirectiveType.Ignore;
+                return true;
         }
 
-        return null;
+        return false;
     }
 
     /// <summary>Unconditionally back up and scan a template expression portion.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SyntaxKind ReScanTemplateToken(bool isTaggedTemplate)
     {
         pos = tokenStart;
         return token = ScanTemplateAndSetTokenValue(!isTaggedTemplate);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SyntaxKind ReScanTemplateHeadOrNoSubstitutionTemplate()
     {
         pos = tokenStart;
         return token = ScanTemplateAndSetTokenValue(/*shouldEmitInvalidEscapeError*/ true);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SyntaxKind ReScanJsxToken(bool allowMultilineJsxText = true)
     {
         pos = tokenStart = fullStartPos;
         return token = ScanJsxToken(allowMultilineJsxText);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SyntaxKind ReScanLessThanToken()
     {
         if (token == SyntaxKind.LessThanLessThanToken)
@@ -2208,6 +2500,7 @@ internal sealed partial class Scanner
         return token;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SyntaxKind ReScanHashToken()
     {
         if (token == SyntaxKind.PrivateIdentifier)
@@ -2218,6 +2511,7 @@ internal sealed partial class Scanner
         return token;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SyntaxKind ReScanQuestionToken()
     {
         Debug.Assert(token == SyntaxKind.QuestionQuestionToken, "'reScanQuestionToken' should only be called on a '??'");
@@ -2225,6 +2519,7 @@ internal sealed partial class Scanner
         return token = SyntaxKind.QuestionToken;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SyntaxKind ScanJsxToken(bool allowMultilineJsxText = true)
     {
         fullStartPos = tokenStart = pos;
@@ -2270,7 +2565,7 @@ internal sealed partial class Scanner
             {
                 if (IsConflictMarkerTrivia(text, pos))
                 {
-                    pos = ScanConflictMarkerTrivia(text, pos, (message, errPos, length) => Error(message, errPos, length));
+                    pos = ScanConflictMarkerTrivia(text, pos, this);
                     return token = SyntaxKind.ConflictMarkerTrivia;
                 }
                 break;
@@ -2315,6 +2610,7 @@ internal sealed partial class Scanner
 
     // Scans a JSX identifier; these differ from normal identifiers in that
     // they allow dashes
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SyntaxKind ScanJsxIdentifier()
     {
         if (TokenIsIdentifierOrKeyword(token))
@@ -2348,6 +2644,7 @@ internal sealed partial class Scanner
         return token;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SyntaxKind ScanJsxAttributeValue()
     {
         fullStartPos = pos;
@@ -2364,12 +2661,14 @@ internal sealed partial class Scanner
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SyntaxKind ReScanJsxAttributeValue()
     {
         pos = tokenStart = fullStartPos;
         return ScanJsxAttributeValue();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SyntaxKind ScanJSDocCommentTextToken(bool inBackticks)
     {
         fullStartPos = tokenStart = pos;
@@ -2405,6 +2704,7 @@ internal sealed partial class Scanner
         return token = SyntaxKind.JSDocCommentTextToken;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SyntaxKind ScanJsDocToken()
     {
         fullStartPos = tokenStart = pos;
@@ -2471,7 +2771,7 @@ internal sealed partial class Scanner
                 var extendedCookedChar = PeekExtendedUnicodeEscape();
                 if (extendedCookedChar >= 0 && IsIdentifierStart(extendedCookedChar, languageVersion))
                 {
-                    tokenValue = ConcatIdentifierParts(null, ScanExtendedUnicodeEscape(/*shouldEmitInvalidEscapeError*/ true));
+                    tokenValue = ConcatIdentifierParts(/*hashPrefix*/ false, -1);
                     return token = GetIdentifierToken();
                 }
 
@@ -2480,7 +2780,7 @@ internal sealed partial class Scanner
                 {
                     pos += 6;
                     tokenFlags |= TokenFlags.UnicodeEscape;
-                    tokenValue = ConcatIdentifierParts(null, FromCharCode(cookedChar));
+                    tokenValue = ConcatIdentifierParts(/*hashPrefix*/ false, cookedChar);
                     return token = GetIdentifierToken();
                 }
                 pos++;
@@ -2516,7 +2816,10 @@ internal sealed partial class Scanner
         }
     }
 
-    private T SpeculationHelper<T>(Func<T> callback, bool isLookahead)
+    // Track O (O-NA): the callback is a struct (IScannerCallback), not a delegate.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private T SpeculationHelper<TCallback, T>(TCallback callback, bool isLookahead)
+        where TCallback : struct, IScannerCallback<T>
     {
         var savePos = pos;
         var saveStartPos = fullStartPos;
@@ -2524,11 +2827,11 @@ internal sealed partial class Scanner
         var saveToken = token;
         var saveTokenValue = tokenValue;
         var saveTokenFlags = tokenFlags;
-        var result = callback();
+        var result = callback.Invoke();
 
         // If our callback returned something 'falsy' or we're just looking ahead,
         // then unconditionally restore us to where we were.
-        if (!IsTruthy(result) || isLookahead)
+        if (!Core.IsTruthyValue(result) || isLookahead)
         {
             pos = savePos;
             fullStartPos = saveStartPos;
@@ -2537,6 +2840,37 @@ internal sealed partial class Scanner
             tokenValue = saveTokenValue;
             tokenFlags = saveTokenFlags;
         }
+        return result;
+    }
+
+    /// <summary>scanRange with a callback struct (Track O, O-NA: no delegate); see the overload below.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal T ScanRange<TCallback, T>(int start, int length, TCallback callback)
+        where TCallback : struct, IScannerCallback<T>
+    {
+        var saveEnd = end;
+        var savePos = pos;
+        var saveStartPos = fullStartPos;
+        var saveTokenPos = tokenStart;
+        var saveToken = token;
+        var saveTokenValue = tokenValue;
+        var saveTokenFlags = tokenFlags;
+        var saveErrorExpectations = commentDirectives;
+
+        // (TypeScript: `setText(text, start, length)`; Track O: the same text, so the texts of the parse stay.)
+        end = start + length;
+        ResetTokenState(start);
+        var result = callback.Invoke();
+
+        end = saveEnd;
+        pos = savePos;
+        fullStartPos = saveStartPos;
+        tokenStart = saveTokenPos;
+        token = saveToken;
+        tokenValue = saveTokenValue;
+        tokenFlags = saveTokenFlags;
+        commentDirectives = saveErrorExpectations;
+
         return result;
     }
 
@@ -2568,26 +2902,33 @@ internal sealed partial class Scanner
         return result;
     }
 
-    internal T LookAhead<T>(Func<T> callback)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal T LookAhead<TCallback, T>(TCallback callback)
+        where TCallback : struct, IScannerCallback<T>
     {
-        return SpeculationHelper(callback, /*isLookahead*/ true);
+        return SpeculationHelper<TCallback, T>(callback, /*isLookahead*/ true);
     }
 
-    internal T TryScan<T>(Func<T> callback)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal T TryScan<TCallback, T>(TCallback callback)
+        where TCallback : struct, IScannerCallback<T>
     {
-        return SpeculationHelper(callback, /*isLookahead*/ false);
+        return SpeculationHelper<TCallback, T>(callback, /*isLookahead*/ false);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal string GetText()
     {
         return text;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal void ClearCommentDirectives()
     {
         commentDirectives = null;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal void SetText(string? newText, int? start = null, int? length = null)
     {
         text = !string.IsNullOrEmpty(newText) ? newText : "";
@@ -2598,31 +2939,37 @@ internal sealed partial class Scanner
         ResetTokenState(start ?? 0);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal void SetOnError(ErrorCallback? errorCallback)
     {
         onError = errorCallback;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal void SetScriptTarget(ScriptTarget scriptTarget)
     {
         languageVersion = scriptTarget;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal void SetLanguageVariant(LanguageVariant variant)
     {
         languageVariant = variant;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal void SetScriptKind(ScriptKind kind)
     {
         scriptKind = kind;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal void SetJSDocParsingMode(JSDocParsingMode kind)
     {
         jsDocParsingMode = kind;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal void ResetTokenState(int position)
     {
         Debug.Assert(position >= 0);
@@ -2635,24 +2982,15 @@ internal sealed partial class Scanner
     }
 
     /// <summary>scanner.ts: `setTextPos: resetTokenState` (deprecated alias).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal void SetTextPos(int textPos)
     {
         ResetTokenState(textPos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal void SetSkipJsDocLeadingAsterisks(bool skip)
     {
         skipJsDocLeadingAsterisks += skip ? 1 : -1;
-    }
-
-    /// <summary>
-    /// `parseInt(hexDigits, 16)` for the scanner's escape sequences: the digits are valid hexadecimal digits;
-    /// values beyond int.MaxValue (only possible in `\u{...}` with many digits) are kept above 0x10FFFF, which
-    /// is all the scanner tests about them.
-    /// </summary>
-    private static int ParseHexValue(string hexDigits)
-    {
-        var value = JsNumber.ParseInt(hexDigits, 16);
-        return value > int.MaxValue ? int.MaxValue : (int)value;
     }
 }

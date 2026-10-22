@@ -73,6 +73,7 @@ internal static partial class Utilities
     // and maybeSetLocalizedDiagnosticMessages assign it (tsc's command line, not the parser), so it is undefined here
     // and the expression `localizedDiagnosticMessages && localizedDiagnosticMessages[message.key] || message.message`
     // is `message.message`.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static string GetLocaleSpecificMessage(DiagnosticMessage message)
     {
         return message.Message;
@@ -107,6 +108,7 @@ internal static partial class Utilities
         };
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsDiagnosticWithDetachedLocation(DiagnosticRelatedInformation diagnostic)
     {
         return diagnostic.File.IsNone
@@ -188,6 +190,7 @@ internal static partial class Utilities
         };
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static void AssertDiagnosticLocation(string sourceText, int start, int length)
     {
         Debug.AssertGreaterThanOrEqual(start, 0);

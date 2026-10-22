@@ -16,6 +16,7 @@ namespace NeverSharp.Optimized;
 internal sealed partial class Parser
 {
     // STATEMENTS
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseBlock(bool ignoreMissingOpenBrace, DiagnosticMessage? diagnosticMessage = null)
     {
         var pos = GetNodePos();
@@ -25,7 +26,7 @@ internal sealed partial class Parser
         if (openBraceParsed || ignoreMissingOpenBrace)
         {
             var multiLine = scanner.HasPrecedingLineBreak();
-            var statements = ParseList(ParsingContext.BlockStatements, static p => p.ParseStatement());
+            var statements = ParseList(ParsingContext.BlockStatements, new F.ParseStatement());
             ParseExpectedMatchingBrackets(SyntaxKind.OpenBraceToken, SyntaxKind.CloseBraceToken, openBraceParsed, openBracePosition);
             var result = WithJSDoc(FinishNode(factory.CreateBlock(statements, multiLine), pos), hasJSDoc);
             if (Token() == SyntaxKind.EqualsToken)
@@ -43,6 +44,7 @@ internal sealed partial class Parser
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseFunctionBlock(SignatureFlags flags, DiagnosticMessage? diagnosticMessage = null)
     {
         var savedYieldContext = InYieldContext();
@@ -76,6 +78,7 @@ internal sealed partial class Parser
         return block;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseEmptyStatement()
     {
         var pos = GetNodePos();
@@ -84,6 +87,7 @@ internal sealed partial class Parser
         return WithJSDoc(FinishNode(factory.CreateEmptyStatement(), pos), hasJSDoc);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseIfStatement()
     {
         var pos = GetNodePos();
@@ -91,13 +95,14 @@ internal sealed partial class Parser
         ParseExpected(SyntaxKind.IfKeyword);
         var openParenPosition = scanner.GetTokenStart();
         var openParenParsed = ParseExpected(SyntaxKind.OpenParenToken);
-        var expression = AllowInAnd(static p => p.ParseExpression());
+        var expression = AllowInAnd(new F.ParseExpression());
         ParseExpectedMatchingBrackets(SyntaxKind.OpenParenToken, SyntaxKind.CloseParenToken, openParenParsed, openParenPosition);
         var thenStatement = ParseStatement();
         var elseStatement = ParseOptional(SyntaxKind.ElseKeyword) ? ParseStatement() : default;
         return WithJSDoc(FinishNode(factory.CreateIfStatement(expression, thenStatement, elseStatement), pos), hasJSDoc);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseDoStatement()
     {
         var pos = GetNodePos();
@@ -107,7 +112,7 @@ internal sealed partial class Parser
         ParseExpected(SyntaxKind.WhileKeyword);
         var openParenPosition = scanner.GetTokenStart();
         var openParenParsed = ParseExpected(SyntaxKind.OpenParenToken);
-        var expression = AllowInAnd(static p => p.ParseExpression());
+        var expression = AllowInAnd(new F.ParseExpression());
         ParseExpectedMatchingBrackets(SyntaxKind.OpenParenToken, SyntaxKind.CloseParenToken, openParenParsed, openParenPosition);
 
         // From: https://mail.mozilla.org/pipermail/es-discuss/2011-August/016188.html
@@ -118,6 +123,7 @@ internal sealed partial class Parser
         return WithJSDoc(FinishNode(factory.CreateDoStatement(statement, expression), pos), hasJSDoc);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseWhileStatement()
     {
         var pos = GetNodePos();
@@ -125,12 +131,13 @@ internal sealed partial class Parser
         ParseExpected(SyntaxKind.WhileKeyword);
         var openParenPosition = scanner.GetTokenStart();
         var openParenParsed = ParseExpected(SyntaxKind.OpenParenToken);
-        var expression = AllowInAnd(static p => p.ParseExpression());
+        var expression = AllowInAnd(new F.ParseExpression());
         ParseExpectedMatchingBrackets(SyntaxKind.OpenParenToken, SyntaxKind.CloseParenToken, openParenParsed, openParenPosition);
         var statement = ParseStatement();
         return WithJSDoc(FinishNode(factory.CreateWhileStatement(expression, statement), pos), hasJSDoc);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseForOrForInOrForOfStatement()
     {
         var pos = GetNodePos();
@@ -145,28 +152,28 @@ internal sealed partial class Parser
         {
             if (
                 Token() == SyntaxKind.VarKeyword || Token() == SyntaxKind.LetKeyword || Token() == SyntaxKind.ConstKeyword ||
-                Token() == SyntaxKind.UsingKeyword && LookAhead(static p => p.NextTokenIsBindingIdentifierOrStartOfDestructuringOnSameLineDisallowOf()) ||
+                Token() == SyntaxKind.UsingKeyword && LookAhead(new F.NextTokenIsBindingIdentifierOrStartOfDestructuringOnSameLineDisallowOf()) ||
                 // this one is meant to allow of
-                Token() == SyntaxKind.AwaitKeyword && LookAhead(static p => p.NextTokenIsUsingKeywordThenBindingIdentifierOrStartOfObjectDestructuringOnSameLine()))
+                Token() == SyntaxKind.AwaitKeyword && LookAhead(new F.NextTokenIsUsingKeywordThenBindingIdentifierOrStartOfObjectDestructuringOnSameLine()))
             {
                 initializer = ParseVariableDeclarationList(/*inForStatementInitializer*/ true);
             }
             else
             {
-                initializer = DisallowInAnd(static p => p.ParseExpression());
+                initializer = DisallowInAnd(new F.ParseExpression());
             }
         }
 
         Node node;
         if (!awaitToken.IsNone ? ParseExpected(SyntaxKind.OfKeyword) : ParseOptional(SyntaxKind.OfKeyword))
         {
-            var expression = AllowInAnd(static p => p.ParseAssignmentExpressionOrHigher(/*allowReturnTypeInArrowFunction*/ true));
+            var expression = AllowInAnd(new F.ParseAssignmentExpressionOrHigher(/*allowReturnTypeInArrowFunction*/ true));
             ParseExpected(SyntaxKind.CloseParenToken);
             node = factory.CreateForOfStatement(awaitToken, initializer, expression, ParseStatement());
         }
         else if (ParseOptional(SyntaxKind.InKeyword))
         {
-            var expression = AllowInAnd(static p => p.ParseExpression());
+            var expression = AllowInAnd(new F.ParseExpression());
             ParseExpected(SyntaxKind.CloseParenToken);
             node = factory.CreateForInStatement(initializer, expression, ParseStatement());
         }
@@ -174,11 +181,11 @@ internal sealed partial class Parser
         {
             ParseExpected(SyntaxKind.SemicolonToken);
             var condition = Token() != SyntaxKind.SemicolonToken && Token() != SyntaxKind.CloseParenToken
-                ? AllowInAnd(static p => p.ParseExpression())
+                ? AllowInAnd(new F.ParseExpression())
                 : default;
             ParseExpected(SyntaxKind.SemicolonToken);
             var incrementor = Token() != SyntaxKind.CloseParenToken
-                ? AllowInAnd(static p => p.ParseExpression())
+                ? AllowInAnd(new F.ParseExpression())
                 : default;
             ParseExpected(SyntaxKind.CloseParenToken);
             node = factory.CreateForStatement(initializer, condition, incrementor, ParseStatement());
@@ -187,6 +194,7 @@ internal sealed partial class Parser
         return WithJSDoc(FinishNode(node, pos), hasJSDoc);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseBreakOrContinueStatement(SyntaxKind kind)
     {
         var pos = GetNodePos();
@@ -202,16 +210,18 @@ internal sealed partial class Parser
         return WithJSDoc(FinishNode(node, pos), hasJSDoc);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseReturnStatement()
     {
         var pos = GetNodePos();
         var hasJSDoc = HasPrecedingJSDocComment();
         ParseExpected(SyntaxKind.ReturnKeyword);
-        var expression = CanParseSemicolon() ? default : AllowInAnd(static p => p.ParseExpression());
+        var expression = CanParseSemicolon() ? default : AllowInAnd(new F.ParseExpression());
         ParseSemicolon();
         return WithJSDoc(FinishNode(factory.CreateReturnStatement(expression), pos), hasJSDoc);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseWithStatement()
     {
         var pos = GetNodePos();
@@ -219,58 +229,64 @@ internal sealed partial class Parser
         ParseExpected(SyntaxKind.WithKeyword);
         var openParenPosition = scanner.GetTokenStart();
         var openParenParsed = ParseExpected(SyntaxKind.OpenParenToken);
-        var expression = AllowInAnd(static p => p.ParseExpression());
+        var expression = AllowInAnd(new F.ParseExpression());
         ParseExpectedMatchingBrackets(SyntaxKind.OpenParenToken, SyntaxKind.CloseParenToken, openParenParsed, openParenPosition);
-        var statement = DoInsideOfContext(NodeFlags.InWithStatement, static p => p.ParseStatement());
+        var statement = DoInsideOfContext(NodeFlags.InWithStatement, new F.ParseStatement());
         return WithJSDoc(FinishNode(factory.CreateWithStatement(expression, statement), pos), hasJSDoc);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseCaseClause()
     {
         var pos = GetNodePos();
         var hasJSDoc = HasPrecedingJSDocComment();
         ParseExpected(SyntaxKind.CaseKeyword);
-        var expression = AllowInAnd(static p => p.ParseExpression());
+        var expression = AllowInAnd(new F.ParseExpression());
         ParseExpected(SyntaxKind.ColonToken);
-        var statements = ParseList(ParsingContext.SwitchClauseStatements, static p => p.ParseStatement());
+        var statements = ParseList(ParsingContext.SwitchClauseStatements, new F.ParseStatement());
         return WithJSDoc(FinishNode(factory.CreateCaseClause(expression, statements), pos), hasJSDoc);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseDefaultClause()
     {
         var pos = GetNodePos();
         ParseExpected(SyntaxKind.DefaultKeyword);
         ParseExpected(SyntaxKind.ColonToken);
-        var statements = ParseList(ParsingContext.SwitchClauseStatements, static p => p.ParseStatement());
+        var statements = ParseList(ParsingContext.SwitchClauseStatements, new F.ParseStatement());
         return FinishNode(factory.CreateDefaultClause(statements), pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseCaseOrDefaultClause()
     {
         return Token() == SyntaxKind.CaseKeyword ? ParseCaseClause() : ParseDefaultClause();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseCaseBlock()
     {
         var pos = GetNodePos();
         ParseExpected(SyntaxKind.OpenBraceToken);
-        var clauses = ParseList(ParsingContext.SwitchClauses, static p => p.ParseCaseOrDefaultClause());
+        var clauses = ParseList(ParsingContext.SwitchClauses, new F.ParseCaseOrDefaultClause());
         ParseExpected(SyntaxKind.CloseBraceToken);
         return FinishNode(factory.CreateCaseBlock(clauses), pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseSwitchStatement()
     {
         var pos = GetNodePos();
         var hasJSDoc = HasPrecedingJSDocComment();
         ParseExpected(SyntaxKind.SwitchKeyword);
         ParseExpected(SyntaxKind.OpenParenToken);
-        var expression = AllowInAnd(static p => p.ParseExpression());
+        var expression = AllowInAnd(new F.ParseExpression());
         ParseExpected(SyntaxKind.CloseParenToken);
         var caseBlock = ParseCaseBlock();
         return WithJSDoc(FinishNode(factory.CreateSwitchStatement(expression, caseBlock), pos), hasJSDoc);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseThrowStatement()
     {
         // ThrowStatement[Yield] :
@@ -285,7 +301,7 @@ internal sealed partial class Parser
         // directly as that might consume an expression on the following line.
         // Instead, we create a "missing" identifier, but don't report an error. The actual error
         // will be reported in the grammar walker.
-        var expression = scanner.HasPrecedingLineBreak() ? default : AllowInAnd(static p => p.ParseExpression());
+        var expression = scanner.HasPrecedingLineBreak() ? default : AllowInAnd(new F.ParseExpression());
         if (expression.IsNone)
         {
             identifierCount++;
@@ -299,6 +315,7 @@ internal sealed partial class Parser
     }
 
     // TODO: Review for error recovery
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseTryStatement()
     {
         var pos = GetNodePos();
@@ -320,6 +337,7 @@ internal sealed partial class Parser
         return WithJSDoc(FinishNode(factory.CreateTryStatement(tryBlock, catchClause, finallyBlock), pos), hasJSDoc);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseCatchClause()
     {
         var pos = GetNodePos();
@@ -341,6 +359,7 @@ internal sealed partial class Parser
         return FinishNode(factory.CreateCatchClause(variableDeclaration, block), pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseDebuggerStatement()
     {
         var pos = GetNodePos();
@@ -350,6 +369,7 @@ internal sealed partial class Parser
         return WithJSDoc(FinishNode(factory.CreateDebuggerStatement(), pos), hasJSDoc);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseExpressionOrLabeledStatement()
     {
         // Avoiding having to do the lookahead for a labeled statement by just trying to parse
@@ -359,7 +379,7 @@ internal sealed partial class Parser
         var hasJSDoc = HasPrecedingJSDocComment();
         Node node;
         var hasParen = Token() == SyntaxKind.OpenParenToken;
-        var expression = AllowInAnd(static p => p.ParseExpression());
+        var expression = AllowInAnd(new F.ParseExpression());
         if (FactoryNodeTests.IsIdentifier(store, expression) && ParseOptional(SyntaxKind.ColonToken))
         {
             node = factory.CreateLabeledStatement(expression, ParseStatement());
@@ -380,30 +400,35 @@ internal sealed partial class Parser
         return WithJSDoc(FinishNode(node, pos), hasJSDoc);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool NextTokenIsIdentifierOrKeywordOnSameLine()
     {
         NextToken();
         return Scanner.TokenIsIdentifierOrKeyword(Token()) && !scanner.HasPrecedingLineBreak();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool NextTokenIsClassKeywordOnSameLine()
     {
         NextToken();
         return Token() == SyntaxKind.ClassKeyword && !scanner.HasPrecedingLineBreak();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool NextTokenIsFunctionKeywordOnSameLine()
     {
         NextToken();
         return Token() == SyntaxKind.FunctionKeyword && !scanner.HasPrecedingLineBreak();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool NextTokenIsIdentifierOrKeywordOrLiteralOnSameLine()
     {
         NextToken();
         return (Scanner.TokenIsIdentifierOrKeyword(Token()) || Token() == SyntaxKind.NumericLiteral || Token() == SyntaxKind.BigIntLiteral || Token() == SyntaxKind.StringLiteral) && !scanner.HasPrecedingLineBreak();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsDeclaration()
     {
         while (true)
@@ -489,7 +514,7 @@ internal sealed partial class Parser
                     var currentTokenLocal = NextToken();
                     if (currentTokenLocal == SyntaxKind.TypeKeyword)
                     {
-                        currentTokenLocal = LookAhead(static p => p.NextToken());
+                        currentTokenLocal = LookAhead<F.NextToken, SyntaxKind>(new F.NextToken());
                     }
                     if (
                         currentTokenLocal == SyntaxKind.EqualsToken || currentTokenLocal == SyntaxKind.AsteriskToken ||
@@ -511,11 +536,13 @@ internal sealed partial class Parser
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsStartOfDeclaration()
     {
-        return LookAhead(static p => p.IsDeclaration());
+        return LookAhead(new F.IsDeclaration());
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsStartOfStatement()
     {
         switch (Token())
@@ -549,7 +576,7 @@ internal sealed partial class Parser
                 return true;
 
             case SyntaxKind.ImportKeyword:
-                return IsStartOfDeclaration() || LookAhead(static p => p.NextTokenIsOpenParenOrLessThanOrDot());
+                return IsStartOfDeclaration() || LookAhead(new F.NextTokenIsOpenParenOrLessThanOrDot());
 
             case SyntaxKind.ConstKeyword:
             case SyntaxKind.ExportKeyword:
@@ -574,55 +601,62 @@ internal sealed partial class Parser
             case SyntaxKind.ReadonlyKeyword:
                 // When these don't start a declaration, they may be the start of a class member if an identifier
                 // immediately follows. Otherwise they're an identifier in an expression statement.
-                return IsStartOfDeclaration() || !LookAhead(static p => p.NextTokenIsIdentifierOrKeywordOnSameLine());
+                return IsStartOfDeclaration() || !LookAhead(new F.NextTokenIsIdentifierOrKeywordOnSameLine());
 
             default:
                 return IsStartOfExpression();
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool NextTokenIsBindingIdentifierOrStartOfDestructuring()
     {
         NextToken();
         return IsBindingIdentifier() || Token() == SyntaxKind.OpenBraceToken || Token() == SyntaxKind.OpenBracketToken;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsLetDeclaration()
     {
         // In ES6 'let' always starts a lexical declaration if followed by an identifier or {
         // or [.
-        return LookAhead(static p => p.NextTokenIsBindingIdentifierOrStartOfDestructuring());
+        return LookAhead(new F.NextTokenIsBindingIdentifierOrStartOfDestructuring());
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool NextTokenIsBindingIdentifierOrStartOfDestructuringOnSameLineDisallowOf()
     {
         return NextTokenIsBindingIdentifierOrStartOfDestructuringOnSameLine(/*disallowOf*/ true);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool NextTokenIsEqualsOrSemicolonOrColonToken()
     {
         NextToken();
         return Token() == SyntaxKind.EqualsToken || Token() == SyntaxKind.SemicolonToken || Token() == SyntaxKind.ColonToken;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool NextTokenIsBindingIdentifierOrStartOfDestructuringOnSameLine(bool? disallowOf = null)
     {
         NextToken();
         if (disallowOf == true && Token() == SyntaxKind.OfKeyword)
         {
-            return LookAhead(static p => p.NextTokenIsEqualsOrSemicolonOrColonToken());
+            return LookAhead(new F.NextTokenIsEqualsOrSemicolonOrColonToken());
         }
         return (IsBindingIdentifier() || Token() == SyntaxKind.OpenBraceToken) && !scanner.HasPrecedingLineBreak();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsUsingDeclaration()
     {
         // 'using' always starts a lexical declaration if followed by an identifier. We also eagerly parse
         // |ObjectBindingPattern| so that we can report a grammar error during check. We don't parse out
         // |ArrayBindingPattern| since it potentially conflicts with element access (i.e., `using[x]`).
-        return LookAhead(static p => p.NextTokenIsBindingIdentifierOrStartOfDestructuringOnSameLine());
+        return LookAhead(new F.NextTokenIsBindingIdentifierOrStartOfDestructuringOnSameLine());
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool NextTokenIsUsingKeywordThenBindingIdentifierOrStartOfObjectDestructuringOnSameLine(bool? disallowOf = null)
     {
         if (NextToken() == SyntaxKind.UsingKeyword)
@@ -632,14 +666,16 @@ internal sealed partial class Parser
         return false;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsAwaitUsingDeclaration()
     {
         // 'await using' always starts a lexical declaration if followed by an identifier. We also eagerly parse
         // |ObjectBindingPattern| so that we can report a grammar error during check. We don't parse out
         // |ArrayBindingPattern| since it potentially conflicts with element access (i.e., `await using[x]`).
-        return LookAhead(static p => p.NextTokenIsUsingKeywordThenBindingIdentifierOrStartOfObjectDestructuringOnSameLine());
+        return LookAhead(new F.NextTokenIsUsingKeywordThenBindingIdentifierOrStartOfObjectDestructuringOnSameLine());
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseStatement()
     {
         switch (Token())
@@ -729,11 +765,13 @@ internal sealed partial class Parser
         return ParseExpressionOrLabeledStatement();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsDeclareModifier(NodeStore store, Node modifier)
     {
         return store.Kind(modifier) == SyntaxKind.DeclareKeyword;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseDeclaration()
     {
         // `parseListElement` attempted to get the reused node at this position,
@@ -742,7 +780,7 @@ internal sealed partial class Parser
         var pos = GetNodePos();
         var hasJSDoc = HasPrecedingJSDocComment();
         var modifiers = ParseModifiers(/*allowDecorators*/ true);
-        var isAmbient = Core.Some(store.Nodes(modifiers), ((a0) => IsDeclareModifier(store, a0)));
+        var isAmbient = ModifiersContain(modifiers, SyntaxKind.DeclareKeyword);
         if (isAmbient)
         {
             var node = TryReuseAmbientDeclaration(pos);
@@ -755,13 +793,7 @@ internal sealed partial class Parser
             {
                 store.SetFlags(m, store.Flags(m) | NodeFlags.Ambient);
             }
-            // (C#: the closure captures copies declared in this block, so it is allocated only when this branch runs.)
-            {
-                var ambientPos = pos;
-                var ambientHasJSDoc = hasJSDoc;
-                var ambientModifiers = modifiers;
-                return DoInsideOfContext(NodeFlags.Ambient, p => p.ParseDeclarationWorker(ambientPos, ambientHasJSDoc, ambientModifiers));
-            }
+            return DoInsideOfContext(NodeFlags.Ambient, new F.ParseDeclarationWorker(pos, hasJSDoc, modifiers));
         }
         else
         {
@@ -769,21 +801,27 @@ internal sealed partial class Parser
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node TryReuseAmbientDeclaration(int pos)
     {
-        return DoInsideOfContext(NodeFlags.Ambient, p =>
-        {
-            // TODO(jakebailey): this is totally wrong; `parsingContext` is the result of ORing a bunch of `1 << ParsingContext.XYZ`.
-            // The enum should really be a bunch of flags.
-            var node = CurrentNode((ParsingContext)parsingContext, pos);
-            if (!node.IsNone)
-            {
-                return ConsumeNode(node);
-            }
-            return default;
-        });
+        return DoInsideOfContext(NodeFlags.Ambient, new F.ReuseAmbientDeclaration(pos));
     }
 
+    // The callback of doInsideOfContext in tryReuseAmbientDeclaration.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private Node ReuseAmbientDeclaration(int pos)
+    {
+        // TODO(jakebailey): this is totally wrong; `parsingContext` is the result of ORing a bunch of `1 << ParsingContext.XYZ`.
+        // The enum should really be a bunch of flags.
+        var node = CurrentNode((ParsingContext)parsingContext, pos);
+        if (!node.IsNone)
+        {
+            return ConsumeNode(node);
+        }
+        return default;
+    }
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseDeclarationWorker(int pos, bool hasJSDoc, NodeList modifiersIn)
     {
         switch (Token())
@@ -840,23 +878,27 @@ internal sealed partial class Parser
         return default; // TODO: GH#18217
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool NextTokenIsStringLiteral()
     {
         return NextToken() == SyntaxKind.StringLiteral;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool NextTokenIsFromKeywordOrEqualsToken()
     {
         NextToken();
         return Token() == SyntaxKind.FromKeyword || Token() == SyntaxKind.EqualsToken;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool NextTokenIsIdentifierOrStringLiteralOnSameLine()
     {
         NextToken();
         return !scanner.HasPrecedingLineBreak() && (IsIdentifier() || Token() == SyntaxKind.StringLiteral);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseFunctionBlockOrSemicolon(SignatureFlags flags, DiagnosticMessage? diagnosticMessage = null)
     {
         if (Token() != SyntaxKind.OpenBraceToken)

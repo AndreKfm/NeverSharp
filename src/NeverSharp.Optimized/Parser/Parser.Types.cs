@@ -17,20 +17,23 @@ internal sealed partial class Parser
 {
     // TYPES
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseEntityNameOfTypeReference()
     {
         return ParseEntityName(/*allowReservedWords*/ true, Diagnostics.Type_expected);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private NodeList ParseTypeArgumentsOfTypeReference()
     {
         if (!scanner.HasPrecedingLineBreak() && ReScanLessThanToken() == SyntaxKind.LessThanToken)
         {
-            return ParseBracketedList(ParsingContext.TypeArguments, static p => p.ParseType(), SyntaxKind.LessThanToken, SyntaxKind.GreaterThanToken);
+            return ParseBracketedList(ParsingContext.TypeArguments, new F.ParseType(), SyntaxKind.LessThanToken, SyntaxKind.GreaterThanToken);
         }
         return default;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseTypeReference()
     {
         var pos = GetNodePos();
@@ -42,6 +45,7 @@ internal sealed partial class Parser
     }
 
     // If true, we should abort parsing an error function.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool TypeHasArrowFunctionBlockingParseError(NodeStore store, Node node)
     {
         switch (store.Kind(node))
@@ -65,12 +69,14 @@ internal sealed partial class Parser
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseThisTypePredicate(Node lhs)
     {
         NextToken();
         return FinishNode(factory.CreateTypePredicateNode(/*assertsModifier*/ default, lhs, ParseType()), store.Pos(lhs));
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseThisTypeNode()
     {
         var pos = GetNodePos();
@@ -78,6 +84,7 @@ internal sealed partial class Parser
         return FinishNode(factory.CreateThisTypeNode(), pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseJSDocAllType()
     {
         var pos = GetNodePos();
@@ -85,6 +92,7 @@ internal sealed partial class Parser
         return FinishNode(factory.CreateJSDocAllType(), pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseJSDocNonNullableType()
     {
         var pos = GetNodePos();
@@ -92,6 +100,7 @@ internal sealed partial class Parser
         return FinishNode(factory.CreateJSDocNonNullableType(ParseNonArrayType(), /*postfix*/ false), pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseJSDocUnknownOrNullableType()
     {
         var pos = GetNodePos();
@@ -124,11 +133,12 @@ internal sealed partial class Parser
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseJSDocFunctionType()
     {
         var pos = GetNodePos();
         var hasJSDoc = HasPrecedingJSDocComment();
-        if (TryParse(static p => p.NextTokenIsOpenParen()))
+        if (TryParse<F.NextTokenIsOpenParen, bool>(new F.NextTokenIsOpenParen()))
         {
             var parameters = ParseParameters(SignatureFlags.Type | SignatureFlags.JSDoc);
             var type = ParseReturnType(SyntaxKind.ColonToken, /*isType*/ false);
@@ -137,6 +147,7 @@ internal sealed partial class Parser
         return FinishNode(factory.CreateTypeReferenceNode(ParseIdentifierName(), /*typeArguments*/ default), pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseJSDocParameter()
     {
         var pos = GetNodePos();
@@ -158,6 +169,7 @@ internal sealed partial class Parser
             pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseJSDocType()
     {
         scanner.SetSkipJsDocLeadingAsterisks(true);
@@ -202,6 +214,7 @@ internal sealed partial class Parser
         return type;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseTypeQuery()
     {
         var pos = GetNodePos();
@@ -212,6 +225,7 @@ internal sealed partial class Parser
         return FinishNode(factory.CreateTypeQueryNode(entityName, typeArguments), pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseTypeParameter()
     {
         var pos = GetNodePos();
@@ -248,15 +262,17 @@ internal sealed partial class Parser
         return FinishNode(node, pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private NodeList ParseTypeParameters()
     {
         if (Token() == SyntaxKind.LessThanToken)
         {
-            return ParseBracketedList(ParsingContext.TypeParameters, static p => p.ParseTypeParameter(), SyntaxKind.LessThanToken, SyntaxKind.GreaterThanToken);
+            return ParseBracketedList(ParsingContext.TypeParameters, new F.ParseTypeParameter(), SyntaxKind.LessThanToken, SyntaxKind.GreaterThanToken);
         }
         return default;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsStartOfParameter(bool isJSDocParameter)
     {
         return Token() == SyntaxKind.DotDotDotToken ||
@@ -266,6 +282,7 @@ internal sealed partial class Parser
             IsStartOfType(/*inStartOfParameter*/ !isJSDocParameter);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseNameOfParameter(NodeList modifiers)
     {
         // FormalParameter [Yield,Await]:
@@ -286,6 +303,7 @@ internal sealed partial class Parser
         return name;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsParameterNameStart()
     {
         // Be permissive about await and yield by calling isBindingIdentifier instead of isIdentifier; disallowing
@@ -294,16 +312,19 @@ internal sealed partial class Parser
         return IsBindingIdentifier() || Token() == SyntaxKind.OpenBracketToken || Token() == SyntaxKind.OpenBraceToken;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseParameter(bool inOuterAwaitContext)
     {
         return ParseParameterWorker(inOuterAwaitContext);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseParameterForSpeculation(bool inOuterAwaitContext)
     {
         return ParseParameterWorker(inOuterAwaitContext, /*allowAmbiguity*/ false);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseParameterWorker(bool inOuterAwaitContext, bool allowAmbiguity = true)
     {
         var pos = GetNodePos();
@@ -314,8 +335,8 @@ internal sealed partial class Parser
 
         // Decorators are parsed in the outer [Await] context, the rest of the parameter is parsed in the function's [Await] context.
         var modifiers = inOuterAwaitContext ?
-            DoInAwaitContext(static p => p.ParseModifiers(/*allowDecorators*/ true)) :
-            DoOutsideOfAwaitContext(static p => p.ParseModifiers(/*allowDecorators*/ true));
+            DoInAwaitContext<F.ParseModifiers, NodeList>(new F.ParseModifiers(/*allowDecorators*/ true)) :
+            DoOutsideOfAwaitContext<F.ParseModifiers, NodeList>(new F.ParseModifiers(/*allowDecorators*/ true));
 
         if (Token() == SyntaxKind.ThisKeyword)
         {
@@ -364,15 +385,17 @@ internal sealed partial class Parser
     /// <summary>
     /// TypeScript overloads: with `SyntaxKind.EqualsGreaterThanToken` the result is defined; with `ColonToken` it may be undefined.
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseReturnType(SyntaxKind returnToken, bool isType)
     {
         if (ShouldParseReturnType(returnToken, isType))
         {
-            return AllowConditionalTypesAnd(static p => p.ParseTypeOrTypePredicate());
+            return AllowConditionalTypesAnd(new F.ParseTypeOrTypePredicate());
         }
         return default;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool ShouldParseReturnType(SyntaxKind returnToken, bool isType)
     {
         if (returnToken == SyntaxKind.EqualsGreaterThanToken)
@@ -395,6 +418,7 @@ internal sealed partial class Parser
     }
 
     /// <summary>TypeScript overloads: with allowAmbiguity true the result is defined; with false it may be undefined.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private NodeList ParseParametersWorker(SignatureFlags flags, bool allowAmbiguity)
     {
         // FormalParameters [Yield,Await]: (modified)
@@ -417,10 +441,10 @@ internal sealed partial class Parser
         SetAwaitContext((flags & SignatureFlags.Await) != 0);
 
         var parameters = (flags & SignatureFlags.JSDoc) != 0 ?
-            ParseDelimitedList(ParsingContext.JSDocParameters, static p => p.ParseJSDocParameter()) :
+            ParseDelimitedList(ParsingContext.JSDocParameters, new F.ParseJSDocParameter()) :
             ParseDelimitedListOrUndefined(ParsingContext.Parameters, allowAmbiguity
-                ? savedAwaitContext ? static p => p.ParseParameter(/*inOuterAwaitContext*/ true) : static p => p.ParseParameter(/*inOuterAwaitContext*/ false)
-                : savedAwaitContext ? static p => p.ParseParameterForSpeculation(/*inOuterAwaitContext*/ true) : static p => p.ParseParameterForSpeculation(/*inOuterAwaitContext*/ false));
+                ? new F.ParseParameterOrForSpeculation(savedAwaitContext, /*forSpeculation*/ false)
+                : new F.ParseParameterOrForSpeculation(savedAwaitContext, /*forSpeculation*/ true));
 
         SetYieldContext(savedYieldContext);
         SetAwaitContext(savedAwaitContext);
@@ -428,6 +452,7 @@ internal sealed partial class Parser
         return parameters;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private NodeList ParseParameters(SignatureFlags flags)
     {
         // FormalParameters [Yield,Await]: (modified)
@@ -453,6 +478,7 @@ internal sealed partial class Parser
         return parameters;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private void ParseTypeMemberSemicolon()
     {
         // We allow type members to be separated by commas or (possibly ASI) semicolons.
@@ -466,6 +492,7 @@ internal sealed partial class Parser
         ParseSemicolon();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseSignatureMember(SyntaxKind kind)
     {
         var pos = GetNodePos();
@@ -485,11 +512,13 @@ internal sealed partial class Parser
         return WithJSDoc(FinishNode(node, pos), hasJSDoc);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsIndexSignature()
     {
-        return Token() == SyntaxKind.OpenBracketToken && LookAhead(static p => p.IsUnambiguouslyIndexSignature());
+        return Token() == SyntaxKind.OpenBracketToken && LookAhead(new F.IsUnambiguouslyIndexSignature());
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsUnambiguouslyIndexSignature()
     {
         // The only allowed sequence is:
@@ -553,15 +582,17 @@ internal sealed partial class Parser
         return Token() == SyntaxKind.ColonToken || Token() == SyntaxKind.CommaToken || Token() == SyntaxKind.CloseBracketToken;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseIndexSignatureDeclaration(int pos, bool hasJSDoc, NodeList modifiers)
     {
-        var parameters = ParseBracketedList(ParsingContext.Parameters, static p => p.ParseParameter(/*inOuterAwaitContext*/ false), SyntaxKind.OpenBracketToken, SyntaxKind.CloseBracketToken);
+        var parameters = ParseBracketedList(ParsingContext.Parameters, new F.ParseParameter(/*inOuterAwaitContext*/ false), SyntaxKind.OpenBracketToken, SyntaxKind.CloseBracketToken);
         var type = ParseTypeAnnotation();
         ParseTypeMemberSemicolon();
         var node = factory.CreateIndexSignature(modifiers, parameters, type);
         return WithJSDoc(FinishNode(node, pos), hasJSDoc);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParsePropertyOrMethodSignature(int pos, bool hasJSDoc, NodeList modifiers)
     {
         var name = ParsePropertyName();
@@ -593,6 +624,7 @@ internal sealed partial class Parser
         return WithJSDoc(FinishNode(node, pos), hasJSDoc);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsTypeMemberStart()
     {
         // Return true if we have the start of a signature member
@@ -636,13 +668,14 @@ internal sealed partial class Parser
         return false;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseTypeMember()
     {
         if (Token() == SyntaxKind.OpenParenToken || Token() == SyntaxKind.LessThanToken)
         {
             return ParseSignatureMember(SyntaxKind.CallSignature);
         }
-        if (Token() == SyntaxKind.NewKeyword && LookAhead(static p => p.NextTokenIsOpenParenOrLessThan()))
+        if (Token() == SyntaxKind.NewKeyword && LookAhead(new F.NextTokenIsOpenParenOrLessThan()))
         {
             return ParseSignatureMember(SyntaxKind.ConstructSignature);
         }
@@ -666,17 +699,20 @@ internal sealed partial class Parser
         return ParsePropertyOrMethodSignature(pos, hasJSDoc, modifiers);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool NextTokenIsOpenParenOrLessThan()
     {
         NextToken();
         return Token() == SyntaxKind.OpenParenToken || Token() == SyntaxKind.LessThanToken;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool NextTokenIsDot()
     {
         return NextToken() == SyntaxKind.DotToken;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool NextTokenIsOpenParenOrLessThanOrDot()
     {
         switch (NextToken())
@@ -689,18 +725,20 @@ internal sealed partial class Parser
         return false;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseTypeLiteral()
     {
         var pos = GetNodePos();
         return FinishNode(factory.CreateTypeLiteralNode(ParseObjectTypeMembers()), pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private NodeList ParseObjectTypeMembers()
     {
         NodeList members;
         if (ParseExpected(SyntaxKind.OpenBraceToken))
         {
-            members = ParseList(ParsingContext.TypeMembers, static p => p.ParseTypeMember());
+            members = ParseList(ParsingContext.TypeMembers, new F.ParseTypeMember());
             ParseExpected(SyntaxKind.CloseBraceToken);
         }
         else
@@ -711,6 +749,7 @@ internal sealed partial class Parser
         return members;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsStartOfMappedType()
     {
         NextToken();
@@ -725,6 +764,7 @@ internal sealed partial class Parser
         return Token() == SyntaxKind.OpenBracketToken && NextTokenIsIdentifier() && NextToken() == SyntaxKind.InKeyword;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseMappedTypeParameter()
     {
         var pos = GetNodePos();
@@ -734,6 +774,7 @@ internal sealed partial class Parser
         return FinishNode(factory.CreateTypeParameterDeclaration(/*modifiers*/ default, name, type, /*defaultType*/ default), pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseMappedType()
     {
         var pos = GetNodePos();
@@ -762,11 +803,12 @@ internal sealed partial class Parser
         }
         var type = ParseTypeAnnotation();
         ParseSemicolon();
-        var members = ParseList(ParsingContext.TypeMembers, static p => p.ParseTypeMember());
+        var members = ParseList(ParsingContext.TypeMembers, new F.ParseTypeMember());
         ParseExpected(SyntaxKind.CloseBraceToken);
         return FinishNode(factory.CreateMappedTypeNode(readonlyToken, typeParameter, nameType, questionToken, type, members), pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseTupleElementType()
     {
         var pos = GetNodePos();
@@ -785,11 +827,13 @@ internal sealed partial class Parser
         return type;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsNextTokenColonOrQuestionColon()
     {
         return NextToken() == SyntaxKind.ColonToken || (Token() == SyntaxKind.QuestionToken && NextToken() == SyntaxKind.ColonToken);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsTupleElementName()
     {
         if (Token() == SyntaxKind.DotDotDotToken)
@@ -799,9 +843,10 @@ internal sealed partial class Parser
         return Scanner.TokenIsIdentifierOrKeyword(Token()) && IsNextTokenColonOrQuestionColon();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseTupleElementNameOrTupleElementType()
     {
-        if (LookAhead(static p => p.IsTupleElementName()))
+        if (LookAhead(new F.IsTupleElementName()))
         {
             var pos = GetNodePos();
             var hasJSDoc = HasPrecedingJSDocComment();
@@ -816,15 +861,17 @@ internal sealed partial class Parser
         return ParseTupleElementType();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseTupleType()
     {
         var pos = GetNodePos();
         return FinishNode(
             factory.CreateTupleTypeNode(
-                ParseBracketedList(ParsingContext.TupleElementTypes, static p => p.ParseTupleElementNameOrTupleElementType(), SyntaxKind.OpenBracketToken, SyntaxKind.CloseBracketToken)),
+                ParseBracketedList(ParsingContext.TupleElementTypes, new F.ParseTupleElementNameOrTupleElementType(), SyntaxKind.OpenBracketToken, SyntaxKind.CloseBracketToken)),
             pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseParenthesizedType()
     {
         var pos = GetNodePos();
@@ -834,6 +881,7 @@ internal sealed partial class Parser
         return FinishNode(factory.CreateParenthesizedType(type), pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private NodeList ParseModifiersForConstructorType()
     {
         NodeList modifiers = default;
@@ -847,6 +895,7 @@ internal sealed partial class Parser
         return modifiers;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseFunctionOrConstructorType()
     {
         var pos = GetNodePos();
@@ -863,12 +912,14 @@ internal sealed partial class Parser
         return WithJSDoc(FinishNode(node, pos), hasJSDoc);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseKeywordAndNoDot()
     {
         var node = ParseTokenNode();
         return Token() == SyntaxKind.DotToken ? default : node;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseLiteralTypeNode(bool? negative = null)
     {
         var pos = GetNodePos();
@@ -886,12 +937,14 @@ internal sealed partial class Parser
         return FinishNode(factory.CreateLiteralTypeNode(expression), pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsStartOfTypeOfImportType()
     {
         NextToken();
         return Token() == SyntaxKind.ImportKeyword;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseImportType()
     {
         sourceFlags |= NodeFlags.PossiblyContainsDynamicImport;
@@ -919,13 +972,7 @@ internal sealed partial class Parser
             ParseOptional(SyntaxKind.CommaToken);
             if (!ParseExpected(SyntaxKind.CloseBraceToken))
             {
-                var lastError = Core.LastOrUndefined(parseDiagnostics);
-                if (lastError != null && lastError.Code == Diagnostics._0_expected.Code)
-                {
-                    Utilities.AddRelatedInfo(
-                        lastError,
-                        Utilities.CreateDetachedDiagnostic(fileName, sourceText, openBracePosition, 1, Diagnostics.The_parser_expected_to_find_a_1_to_match_the_0_token_here, "{", "}"));
-                }
+                AddMatchingBraceInfo(openBracePosition);
             }
         }
         ParseExpected(SyntaxKind.CloseParenToken);
@@ -934,12 +981,14 @@ internal sealed partial class Parser
         return FinishNode(factory.CreateImportTypeNode(type, attributes, qualifier, typeArguments, isTypeOf), pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool NextTokenIsNumericOrBigIntLiteral()
     {
         NextToken();
         return Token() == SyntaxKind.NumericLiteral || Token() == SyntaxKind.BigIntLiteral;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseNonArrayType()
     {
         switch (Token())
@@ -955,7 +1004,7 @@ internal sealed partial class Parser
             case SyntaxKind.NeverKeyword:
             case SyntaxKind.ObjectKeyword:
                 // If these are followed by a dot, then parse these out as a dotted type reference instead.
-                return (TryParse(static p => p.ParseKeywordAndNoDot()) is { IsNone: false } __t1 ? __t1 : ParseTypeReference());
+                return (TryParse(new F.ParseKeywordAndNoDot()) is { IsNone: false } __t1 ? __t1 : ParseTypeReference());
             case SyntaxKind.AsteriskEqualsToken:
                 // If there is '*=', treat it as * followed by postfix =
                 scanner.ReScanAsteriskEqualsToken();
@@ -983,7 +1032,7 @@ internal sealed partial class Parser
             case SyntaxKind.NullKeyword:
                 return ParseLiteralTypeNode();
             case SyntaxKind.MinusToken:
-                return LookAhead(static p => p.NextTokenIsNumericOrBigIntLiteral()) ? ParseLiteralTypeNode(/*negative*/ true) : ParseTypeReference();
+                return LookAhead(new F.NextTokenIsNumericOrBigIntLiteral()) ? ParseLiteralTypeNode(/*negative*/ true) : ParseTypeReference();
             case SyntaxKind.VoidKeyword:
                 return ParseTokenNode();
             case SyntaxKind.ThisKeyword:
@@ -999,9 +1048,9 @@ internal sealed partial class Parser
                 }
             }
             case SyntaxKind.TypeOfKeyword:
-                return LookAhead(static p => p.IsStartOfTypeOfImportType()) ? ParseImportType() : ParseTypeQuery();
+                return LookAhead(new F.IsStartOfTypeOfImportType()) ? ParseImportType() : ParseTypeQuery();
             case SyntaxKind.OpenBraceToken:
-                return LookAhead(static p => p.IsStartOfMappedType()) ? ParseMappedType() : ParseTypeLiteral();
+                return LookAhead(new F.IsStartOfMappedType()) ? ParseMappedType() : ParseTypeLiteral();
             case SyntaxKind.OpenBracketToken:
                 return ParseTupleType();
             case SyntaxKind.OpenParenToken:
@@ -1009,7 +1058,7 @@ internal sealed partial class Parser
             case SyntaxKind.ImportKeyword:
                 return ParseImportType();
             case SyntaxKind.AssertsKeyword:
-                return LookAhead(static p => p.NextTokenIsIdentifierOrKeywordOnSameLine()) ? ParseAssertsTypePredicate() : ParseTypeReference();
+                return LookAhead(new F.NextTokenIsIdentifierOrKeywordOnSameLine()) ? ParseAssertsTypePredicate() : ParseTypeReference();
             case SyntaxKind.TemplateHead:
                 return ParseTemplateType();
             default:
@@ -1017,6 +1066,7 @@ internal sealed partial class Parser
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsStartOfType(bool? inStartOfParameter = null)
     {
         switch (Token())
@@ -1061,22 +1111,24 @@ internal sealed partial class Parser
             case SyntaxKind.FunctionKeyword:
                 return inStartOfParameter != true;
             case SyntaxKind.MinusToken:
-                return inStartOfParameter != true && LookAhead(static p => p.NextTokenIsNumericOrBigIntLiteral());
+                return inStartOfParameter != true && LookAhead(new F.NextTokenIsNumericOrBigIntLiteral());
             case SyntaxKind.OpenParenToken:
                 // Only consider '(' the start of a type if followed by ')', '...', an identifier, a modifier,
                 // or something that starts a type. We don't want to consider things like '(1)' a type.
-                return inStartOfParameter != true && LookAhead(static p => p.IsStartOfParenthesizedOrFunctionType());
+                return inStartOfParameter != true && LookAhead(new F.IsStartOfParenthesizedOrFunctionType());
             default:
                 return IsIdentifier();
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsStartOfParenthesizedOrFunctionType()
     {
         NextToken();
         return Token() == SyntaxKind.CloseParenToken || IsStartOfParameter(/*isJSDocParameter*/ false) || IsStartOfType();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParsePostfixTypeOrHigher()
     {
         var pos = GetNodePos();
@@ -1091,7 +1143,7 @@ internal sealed partial class Parser
                     break;
                 case SyntaxKind.QuestionToken:
                     // If next token is start of a type we have a conditional type
-                    if (LookAhead(static p => p.NextTokenIsStartOfType()))
+                    if (LookAhead(new F.NextTokenIsStartOfType()))
                     {
                         return type;
                     }
@@ -1119,6 +1171,7 @@ internal sealed partial class Parser
         return type;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseTypeOperator(SyntaxKind @operator)
     {
         var pos = GetNodePos();
@@ -1126,11 +1179,12 @@ internal sealed partial class Parser
         return FinishNode(factory.CreateTypeOperatorNode(@operator, ParseTypeOperatorOrHigher()), pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node TryParseConstraintOfInferType()
     {
         if (ParseOptional(SyntaxKind.ExtendsKeyword))
         {
-            var constraint = DisallowConditionalTypesAnd(static p => p.ParseType());
+            var constraint = DisallowConditionalTypesAnd(new F.ParseType());
             if (InDisallowConditionalTypesContext() || Token() != SyntaxKind.QuestionToken)
             {
                 return constraint;
@@ -1139,15 +1193,17 @@ internal sealed partial class Parser
         return default;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseTypeParameterOfInferType()
     {
         var pos = GetNodePos();
         var name = ParseIdentifier();
-        var constraint = TryParse(static p => p.TryParseConstraintOfInferType());
+        var constraint = TryParse(new F.TryParseConstraintOfInferType());
         var node = factory.CreateTypeParameterDeclaration(/*modifiers*/ default, name, constraint);
         return FinishNode(node, pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseInferType()
     {
         var pos = GetNodePos();
@@ -1155,6 +1211,7 @@ internal sealed partial class Parser
         return FinishNode(factory.CreateInferTypeNode(ParseTypeParameterOfInferType()), pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseTypeOperatorOrHigher()
     {
         var @operator = Token();
@@ -1167,9 +1224,10 @@ internal sealed partial class Parser
             case SyntaxKind.InferKeyword:
                 return ParseInferType();
         }
-        return AllowConditionalTypesAnd(static p => p.ParsePostfixTypeOrHigher());
+        return AllowConditionalTypesAnd(new F.ParsePostfixTypeOrHigher());
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseFunctionOrConstructorTypeToError(
         bool isInUnionType)
     {
@@ -1198,59 +1256,68 @@ internal sealed partial class Parser
         return default;
     }
 
-    private Node ParseUnionOrIntersectionType(
+    // Track O (O-NA): parseConstituentType is a callback struct; createTypeNode is chosen by the operator (TypeScript
+    // passes `types => factory.createIntersectionTypeNode(types)` with `&` and the union form with `|`).
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private Node ParseUnionOrIntersectionType<TCallback>(
         SyntaxKind @operator,
-        Func<Parser, Node> parseConstituentType,
-        Func<Parser, NodeList, Node> createTypeNode)
+        TCallback parseConstituentType)
+        where TCallback : struct, IParserCallback<Node>
     {
         var pos = GetNodePos();
         var isUnionType = @operator == SyntaxKind.BarToken;
         var hasLeadingOperator = ParseOptional(@operator);
-        var type = ((hasLeadingOperator ? ParseFunctionOrConstructorTypeToError(isUnionType) : default) is { IsNone: false } __t2 ? __t2 : parseConstituentType(this));
+        var type = ((hasLeadingOperator ? ParseFunctionOrConstructorTypeToError(isUnionType) : default) is { IsNone: false } __t2 ? __t2 : parseConstituentType.Invoke(this));
         if (Token() == @operator || hasLeadingOperator)
         {
             var types = store.BeginList();
             store.Push(types, type);
             while (ParseOptional(@operator))
             {
-                var constituent = ParseFunctionOrConstructorTypeToError(isUnionType) is { IsNone: false } __t3 ? __t3 : parseConstituentType(this);
+                var constituent = ParseFunctionOrConstructorTypeToError(isUnionType) is { IsNone: false } __t3 ? __t3 : parseConstituentType.Invoke(this);
                 store.Push(types, constituent);
             }
-            type = FinishNode(createTypeNode(this, CreateNodeArray(types, pos)), pos);
+            var typeList = CreateNodeArray(types, pos);
+            type = FinishNode(isUnionType ? factory.CreateUnionTypeNode(typeList) : factory.CreateIntersectionTypeNode(typeList), pos);
         }
         return type;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseIntersectionTypeOrHigher()
     {
-        return ParseUnionOrIntersectionType(SyntaxKind.AmpersandToken, static p => p.ParseTypeOperatorOrHigher(), static (p, types) => p.factory.CreateIntersectionTypeNode(types));
+        return ParseUnionOrIntersectionType(SyntaxKind.AmpersandToken, new F.ParseTypeOperatorOrHigher());
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseUnionTypeOrHigher()
     {
-        return ParseUnionOrIntersectionType(SyntaxKind.BarToken, static p => p.ParseIntersectionTypeOrHigher(), static (p, types) => p.factory.CreateUnionTypeNode(types));
+        return ParseUnionOrIntersectionType(SyntaxKind.BarToken, new F.ParseIntersectionTypeOrHigher());
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool NextTokenIsNewKeyword()
     {
         NextToken();
         return Token() == SyntaxKind.NewKeyword;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsStartOfFunctionTypeOrConstructorType()
     {
         if (Token() == SyntaxKind.LessThanToken)
         {
             return true;
         }
-        if (Token() == SyntaxKind.OpenParenToken && LookAhead(static p => p.IsUnambiguouslyStartOfFunctionType()))
+        if (Token() == SyntaxKind.OpenParenToken && LookAhead(new F.IsUnambiguouslyStartOfFunctionType()))
         {
             return true;
         }
         return Token() == SyntaxKind.NewKeyword ||
-            Token() == SyntaxKind.AbstractKeyword && LookAhead(static p => p.NextTokenIsNewKeyword());
+            Token() == SyntaxKind.AbstractKeyword && LookAhead(new F.NextTokenIsNewKeyword());
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool SkipParameterStart()
     {
         if (UtilitiesPublic.IsModifierKind(Token()))
@@ -1273,6 +1340,7 @@ internal sealed partial class Parser
         return false;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsUnambiguouslyStartOfFunctionType()
     {
         NextToken();
@@ -1309,10 +1377,11 @@ internal sealed partial class Parser
         return false;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseTypeOrTypePredicate()
     {
         var pos = GetNodePos();
-        var typePredicateVariable = IsIdentifier() ? TryParse(static p => p.ParseTypePredicatePrefix()) : default;
+        var typePredicateVariable = IsIdentifier() ? TryParse(new F.ParseTypePredicatePrefix()) : default;
         var type = ParseType();
         if (!typePredicateVariable.IsNone)
         {
@@ -1324,6 +1393,7 @@ internal sealed partial class Parser
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseTypePredicatePrefix()
     {
         var id = ParseIdentifier();
@@ -1335,6 +1405,7 @@ internal sealed partial class Parser
         return default;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseAssertsTypePredicate()
     {
         var pos = GetNodePos();
@@ -1344,11 +1415,12 @@ internal sealed partial class Parser
         return FinishNode(factory.CreateTypePredicateNode(assertsModifier, parameterName, type), pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseType()
     {
         if ((contextFlags & NodeFlags.TypeExcludesFlags) != 0)
         {
-            return DoOutsideOfContext(NodeFlags.TypeExcludesFlags, static p => p.ParseType());
+            return DoOutsideOfContext(NodeFlags.TypeExcludesFlags, new F.ParseType());
         }
         if (IsStartOfFunctionTypeOrConstructorType())
         {
@@ -1359,16 +1431,17 @@ internal sealed partial class Parser
         if (!InDisallowConditionalTypesContext() && !scanner.HasPrecedingLineBreak() && ParseOptional(SyntaxKind.ExtendsKeyword))
         {
             // The type following 'extends' is not permitted to be another conditional type
-            var extendsType = DisallowConditionalTypesAnd(static p => p.ParseType());
+            var extendsType = DisallowConditionalTypesAnd(new F.ParseType());
             ParseExpected(SyntaxKind.QuestionToken);
-            var trueType = AllowConditionalTypesAnd(static p => p.ParseType());
+            var trueType = AllowConditionalTypesAnd(new F.ParseType());
             ParseExpected(SyntaxKind.ColonToken);
-            var falseType = AllowConditionalTypesAnd(static p => p.ParseType());
+            var falseType = AllowConditionalTypesAnd(new F.ParseType());
             return FinishNode(factory.CreateConditionalTypeNode(type, extendsType, trueType, falseType), pos);
         }
         return type;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseTypeAnnotation()
     {
         return ParseOptional(SyntaxKind.ColonToken) ? ParseType() : default;

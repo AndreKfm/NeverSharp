@@ -10,6 +10,7 @@
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
 // Modified: translated from TypeScript to C#.
 
+using System.Diagnostics.CodeAnalysis;
 using NeverSharp.Generated;
 
 namespace NeverSharp.Optimized;
@@ -36,14 +37,19 @@ internal enum NodeFactoryFlags
 /// <summary>baseNodeFactory.ts: BaseNodeFactory (creates the base Node objects; the parser's counts them).</summary>
 internal interface BaseNodeFactory
 {
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     Node CreateBaseSourceFileNode(SyntaxKind kind);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     Node CreateBaseIdentifierNode(SyntaxKind kind);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     Node CreateBasePrivateIdentifierNode(SyntaxKind kind);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     Node CreateBaseTokenNode(SyntaxKind kind);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     Node CreateBaseNode(SyntaxKind kind);
 }
 
@@ -59,6 +65,7 @@ internal sealed partial class NodeFactory
     // Track O: the node store the base factory creates nodes in (set by the parser for each parse).
     internal NodeStore store = null!;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private NodeFactory(NodeFactoryFlags flags, BaseNodeFactory baseFactory)
     {
         this.flags = flags;
@@ -78,8 +85,10 @@ internal sealed partial class NodeFactory
         return factory;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal BaseNodeFactory BaseFactory => baseFactory;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal NodeFactoryFlags Flags => flags;
 
     // @api
@@ -87,11 +96,13 @@ internal sealed partial class NodeFactory
     // NodeArray is a list handle (NodeList), a plain array of the parser a list under construction (ListBuilder), and
     // any other array a span of node handles; JavaScript turns a plain array into a NodeArray by assigning `pos`,
     // `end`, `hasTrailingComma` and `transformFlags` to it, the list store copies it into its arena.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static NodeList CreateNodeArray(NodeStore store)
     {
         return CreateNodeArray(store, ReadOnlySpan<Node>.Empty);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static NodeList CreateNodeArray(NodeStore store, NodeList elements, bool? hasTrailingComma = null)
     {
         if (elements.IsNone)
@@ -117,6 +128,7 @@ internal sealed partial class NodeFactory
         return copy;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static NodeList CreateNodeArray(NodeStore store, ListBuilder elements, bool? hasTrailingComma = null)
     {
         // Since the element list of a node array is typically created by starting with an empty array and
@@ -128,6 +140,7 @@ internal sealed partial class NodeFactory
         return array;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static NodeList CreateNodeArray(NodeStore store, ReadOnlySpan<Node> elements, bool? hasTrailingComma = null)
     {
         var array = store.NewList(elements, hasTrailingComma == true);
@@ -135,11 +148,13 @@ internal sealed partial class NodeFactory
         return array;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node CreateBaseNode(SyntaxKind kind)
     {
         return baseFactory.CreateBaseNode(kind);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node CreateBaseDeclaration(SyntaxKind kind)
     {
         var node = CreateBaseNode(kind);
@@ -154,6 +169,7 @@ internal sealed partial class NodeFactory
     //
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateNumericLiteral(TextRef value, TokenFlags? numericLiteralFlags = null)
     {
         var flagsValue = numericLiteralFlags ?? TokenFlags.None;
@@ -177,6 +193,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateBigIntLiteral(TextRef value)
     {
         // TypeScript: `value: string | PseudoBigInt`; the parser passes the literal's text.
@@ -186,6 +203,7 @@ internal sealed partial class NodeFactory
         return node;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node CreateBaseStringLiteral(TextRef text, bool? isSingleQuote)
     {
         var node = CreateBaseDeclaration(SyntaxKind.StringLiteral);
@@ -195,6 +213,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateStringLiteral(TextRef text, bool? isSingleQuote = null, bool? hasExtendedUnicodeEscape = null)
     {
         var node = CreateBaseStringLiteral(text, isSingleQuote);
@@ -207,6 +226,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateRegularExpressionLiteral(TextRef text)
     {
         var node = CreateBaseToken(SyntaxKind.RegularExpressionLiteral);
@@ -218,6 +238,7 @@ internal sealed partial class NodeFactory
     // Identifiers
     //
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node CreateBaseIdentifier(TextRef escapedText)
     {
         var node = baseFactory.CreateBaseIdentifierNode(SyntaxKind.Identifier);
@@ -227,6 +248,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateIdentifier(TextRef text, SyntaxKind? originalKeywordKind = null, bool? hasExtendedUnicodeEscape = null)
     {
         // (Track O: originalKeywordKind is computed only to be dropped below; the lookup of stringToToken is left out.)
@@ -253,11 +275,13 @@ internal sealed partial class NodeFactory
     }
 
     /// <summary>Track O (O5a): createIdentifier with a constant text (the factory's default tag names), put in the character arena.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateIdentifier(string text)
     {
         return CreateIdentifier(store.Texts.Add(text));
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node CreateBasePrivateIdentifier(TextRef escapedText)
     {
         var node = baseFactory.CreateBasePrivateIdentifierNode(SyntaxKind.PrivateIdentifier);
@@ -266,12 +290,20 @@ internal sealed partial class NodeFactory
         return node;
     }
 
+    [DoesNotReturn]
+    [NoAllocUnchecked("error path: a failed assertion throws")]
+    private void FailPrivateIdentifier(TextRef text)
+    {
+        Debug.Fail("First character of private identifier must be #: " + store.Texts.GetString(text));
+    }
+
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreatePrivateIdentifier(TextRef text)
     {
         if (!store.Texts.Span(text).StartsWith("#"))
         {
-            Debug.Fail("First character of private identifier must be #: " + store.Texts.GetString(text));
+            FailPrivateIdentifier(text);
         }
         return CreateBasePrivateIdentifier(UtilitiesPublic.EscapeLeadingUnderscores(store.Texts, text));
     }
@@ -280,12 +312,14 @@ internal sealed partial class NodeFactory
     // Punctuation
     //
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node CreateBaseToken(SyntaxKind kind)
     {
         return baseFactory.CreateBaseTokenNode(kind);
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateToken(SyntaxKind token)
     {
         Debug.Assert(token >= SyntaxKind.FirstToken && token <= SyntaxKind.LastToken, "Invalid token");
@@ -352,22 +386,26 @@ internal sealed partial class NodeFactory
 
     //// File-level functions of nodeFactory.ts: propagation of transform flags.
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static TransformFlags PropagateNameFlags(NodeStore store, Node node)
     {
         return !node.IsNone && FactoryNodeTests.IsIdentifier(store, node) ? PropagateIdentifierNameFlags(store, node) : PropagateChildFlags(store, node);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static TransformFlags PropagateIdentifierNameFlags(NodeStore store, Node node)
     {
         // An IdentifierName is allowed to be `await`
         return PropagateChildFlags(store, node) & ~TransformFlags.ContainsPossibleTopLevelAwait;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static TransformFlags PropagatePropertyNameFlagsOfChild(NodeStore store, Node node, TransformFlags transformFlags)
     {
         return transformFlags | (store.TransformFlags(node) & TransformFlags.PropertyNamePropagatingFlags);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static TransformFlags PropagateChildFlags(NodeStore store, Node child)
     {
         if (child.IsNone)
@@ -387,11 +425,13 @@ internal sealed partial class NodeFactory
     }
 
     // (The store of the factory; header 0, an undefined list, has no transform flags.)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal TransformFlags PropagateChildrenFlags(NodeList children)
     {
         return !children.IsNone ? store.TransformFlags(children) : TransformFlags.None;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static void AggregateChildrenFlags(NodeStore store, NodeList children)
     {
         var subtreeFlags = TransformFlags.None;
@@ -405,6 +445,7 @@ internal sealed partial class NodeFactory
     /// <summary>
     /// Gets the transform flags to exclude when unioning the transform flags of a subtree.
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static TransformFlags GetTransformFlagsSubtreeExclusions(SyntaxKind kind)
     {
         if (kind >= SyntaxKind.FirstTypeNode && kind <= SyntaxKind.LastTypeNode)

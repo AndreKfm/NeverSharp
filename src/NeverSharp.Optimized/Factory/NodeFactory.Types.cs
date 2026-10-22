@@ -20,7 +20,8 @@ internal sealed partial class NodeFactory
     //
 
     // @api
-    internal Node CreateTypePredicateNode(Node assertsModifier, object parameterName, Node type)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal Node CreateTypePredicateNode(Node assertsModifier, Node parameterName, Node type)
     {
         var node = CreateBaseNode(SyntaxKind.TypePredicate);
         store.SetAssertsModifier(node, assertsModifier);
@@ -31,7 +32,8 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateTypeReferenceNode(object typeName, NodeList typeArguments)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal Node CreateTypeReferenceNode(Node typeName, NodeList typeArguments)
     {
         var node = CreateBaseNode(SyntaxKind.TypeReference);
         store.SetTypeName(node, AsName(typeName));
@@ -41,6 +43,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateFunctionTypeNode(
         NodeList typeParameters,
         NodeList parameters,
@@ -64,17 +67,20 @@ internal sealed partial class NodeFactory
     /// createConstructorTypeNode1, 3 to createConstructorTypeNode2. The two C# overloads are that dispatch.
     /// </summary>
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateConstructorTypeNode(NodeList modifiers, NodeList typeParameters, NodeList parameters, Node type)
     {
         return CreateConstructorTypeNode1(modifiers, typeParameters, parameters, type);
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateConstructorTypeNode(NodeList typeParameters, NodeList parameters, Node type)
     {
         return CreateConstructorTypeNode2(typeParameters, parameters, type);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node CreateConstructorTypeNode1(
         NodeList modifiers,
         NodeList typeParameters,
@@ -95,6 +101,7 @@ internal sealed partial class NodeFactory
     }
 
     /// <summary>Deprecated.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node CreateConstructorTypeNode2(
         NodeList typeParameters,
         NodeList parameters,
@@ -104,6 +111,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateTypeQueryNode(Node exprName, NodeList typeArguments = default)
     {
         var node = CreateBaseNode(SyntaxKind.TypeQuery);
@@ -114,6 +122,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateTypeLiteralNode(NodeList members)
     {
         var node = CreateBaseDeclaration(SyntaxKind.TypeLiteral);
@@ -123,6 +132,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateArrayTypeNode(Node elementType)
     {
         var node = CreateBaseNode(SyntaxKind.ArrayType);
@@ -132,6 +142,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateTupleTypeNode(NodeList elements)
     {
         var node = CreateBaseNode(SyntaxKind.TupleType);
@@ -141,6 +152,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateNamedTupleMember(Node dotDotDotToken, Node name, Node questionToken, Node type)
     {
         var node = CreateBaseDeclaration(SyntaxKind.NamedTupleMember);
@@ -154,6 +166,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateOptionalTypeNode(Node type)
     {
         var node = CreateBaseNode(SyntaxKind.OptionalType);
@@ -163,6 +176,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateRestTypeNode(Node type)
     {
         var node = CreateBaseNode(SyntaxKind.RestType);
@@ -171,10 +185,13 @@ internal sealed partial class NodeFactory
         return node;
     }
 
-    private Node CreateUnionOrIntersectionTypeNode(SyntaxKind kind, NodeList types, Func<NodeList, NodeList> parenthesize)
+    // Track O (O-NA): `parenthesize` (parenthesizerRules().parenthesizeConstituentTypesOfUnionType or ...OfIntersectionType)
+    // is chosen by the kind instead of passed as a delegate.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private Node CreateUnionOrIntersectionTypeNode(SyntaxKind kind, NodeList types)
     {
         var node = CreateBaseNode(kind);
-        var typesArray = CreateNodeArray(store, parenthesize(types));
+        var typesArray = CreateNodeArray(store, kind == SyntaxKind.UnionType ? Parenthesizer.ParenthesizeConstituentTypesOfUnionType(types) : Parenthesizer.ParenthesizeConstituentTypesOfIntersectionType(types));
         if ((node is var union && store.IsUnionTypeNode(union)))
         {
             store.SetTypes(union, typesArray);
@@ -188,18 +205,21 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateUnionTypeNode(NodeList types)
     {
-        return CreateUnionOrIntersectionTypeNode(SyntaxKind.UnionType, types, Parenthesizer.ParenthesizeConstituentTypesOfUnionType);
+        return CreateUnionOrIntersectionTypeNode(SyntaxKind.UnionType, types);
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateIntersectionTypeNode(NodeList types)
     {
-        return CreateUnionOrIntersectionTypeNode(SyntaxKind.IntersectionType, types, Parenthesizer.ParenthesizeConstituentTypesOfIntersectionType);
+        return CreateUnionOrIntersectionTypeNode(SyntaxKind.IntersectionType, types);
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateConditionalTypeNode(Node checkType, Node extendsType, Node trueType, Node falseType)
     {
         var node = CreateBaseNode(SyntaxKind.ConditionalType);
@@ -214,6 +234,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateInferTypeNode(Node typeParameter)
     {
         var node = CreateBaseNode(SyntaxKind.InferType);
@@ -223,6 +244,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateTemplateLiteralType(Node head, NodeList templateSpans)
     {
         var node = CreateBaseNode(SyntaxKind.TemplateLiteralType);
@@ -233,6 +255,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateImportTypeNode(
         Node argument,
         Node attributes = default,
@@ -253,6 +276,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateParenthesizedType(Node type)
     {
         var node = CreateBaseNode(SyntaxKind.ParenthesizedType);
@@ -262,6 +286,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateThisTypeNode()
     {
         var node = CreateBaseNode(SyntaxKind.ThisType);
@@ -270,6 +295,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateTypeOperatorNode(SyntaxKind @operator, Node type)
     {
         var node = CreateBaseNode(SyntaxKind.TypeOperator);
@@ -282,6 +308,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateIndexedAccessTypeNode(Node objectType, Node indexType)
     {
         var node = CreateBaseNode(SyntaxKind.IndexedAccessType);
@@ -292,6 +319,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateMappedTypeNode(Node readonlyToken, Node typeParameter, Node nameType, Node questionToken, Node type, NodeList members)
     {
         var node = CreateBaseDeclaration(SyntaxKind.MappedType);
@@ -308,6 +336,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateLiteralTypeNode(Node literal)
     {
         var node = CreateBaseNode(SyntaxKind.LiteralType);
@@ -321,6 +350,7 @@ internal sealed partial class NodeFactory
     //
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateObjectBindingPattern(NodeList elements)
     {
         var node = CreateBaseNode(SyntaxKind.ObjectBindingPattern);
@@ -337,6 +367,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateArrayBindingPattern(NodeList elements)
     {
         var node = CreateBaseNode(SyntaxKind.ArrayBindingPattern);
@@ -348,7 +379,8 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateBindingElement(Node dotDotDotToken, object? propertyName, object name, Node initializer = default)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal Node CreateBindingElement(Node dotDotDotToken, Node propertyName, Node name, Node initializer = default)
     {
         var node = CreateBaseDeclaration(SyntaxKind.BindingElement);
         store.SetDotDotDotToken(node, dotDotDotToken);

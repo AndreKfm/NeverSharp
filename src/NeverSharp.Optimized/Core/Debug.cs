@@ -11,6 +11,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using NeverSharp.Generated;
 
 namespace NeverSharp.Optimized;
 
@@ -31,6 +32,7 @@ internal static partial class Debug
     // function would do nothing.
     private static readonly ConcurrentDictionary<string, AssertionLevel> AssertionCache = new(StringComparer.Ordinal);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool ShouldAssert(AssertionLevel level)
     {
         return currentAssertionLevel >= level;
@@ -52,13 +54,32 @@ internal static partial class Debug
         return true;
     }
 
+    /// <summary>
+    /// Track O (O-NA): the exception for a node of an unexpected kind (`$"{kind} is not {what}"`), created here on the
+    /// error path instead of at the throw.
+    /// </summary>
+    [NoAllocUnchecked("error path: the exception for a node of an unexpected kind")]
+    internal static InvalidOperationException UnexpectedKind(SyntaxKind kind, string what)
+    {
+        return new InvalidOperationException($"{kind} is not {what}");
+    }
+
+    /// <summary>Track O (O-NA): the exception of a failed cast (`Debug.cast`), created on the error path.</summary>
+    [NoAllocUnchecked("error path: the exception for a node of an unexpected kind")]
+    internal static InvalidCastException InvalidCast(SyntaxKind kind)
+    {
+        return new InvalidCastException(kind.ToString());
+    }
+
     [DoesNotReturn]
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static void Fail()
     {
         Fail(null);
     }
 
     [DoesNotReturn]
+    [NoAllocUnchecked("error path: a failed assertion throws")]
     internal static void Fail(string? message)
     {
         // TypeScript: `debugger;` (breaks only when a debugger is attached).
@@ -69,11 +90,13 @@ internal static partial class Debug
         throw new InvalidOperationException(!string.IsNullOrEmpty(message) ? $"Debug Failure. {message}" : "Debug Failure.");
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static void Assert([DoesNotReturnIf(false)] bool expression)
     {
         Assert(expression, (string?)null);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static void Assert([DoesNotReturnIf(false)] bool expression, string? message)
     {
         if (!expression)
@@ -82,6 +105,7 @@ internal static partial class Debug
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static void Assert([DoesNotReturnIf(false)] bool expression, string? message, string? verboseDebugInfo)
     {
         if (!expression)
@@ -90,6 +114,7 @@ internal static partial class Debug
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static void Assert([DoesNotReturnIf(false)] bool expression, string? message, Func<string>? verboseDebugInfo)
     {
         if (!expression)
@@ -100,6 +125,7 @@ internal static partial class Debug
 
     // The failing branch of assert; `verboseDebugInfo: string | (() => string)` arrives as one of the two last parameters.
     [DoesNotReturn]
+    [NoAllocUnchecked("error path: a failed assertion throws")]
     private static void AssertFailed(string? message, string? verboseDebugInfoText, Func<string>? verboseDebugInfoFunction)
     {
         message = !string.IsNullOrEmpty(message) ? $"False expression: {message}" : "False expression.";
@@ -119,20 +145,39 @@ internal static partial class Debug
         }
     }
 
+    /// <summary>`assertEqual(a, b)` for numbers (Track O: no comparer, the failure message is built only when it fails).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal static void AssertEqual(int a, int b)
+    {
+        if (a != b)
+        {
+            FailComparison(a, "===", b);
+        }
+    }
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static void AssertLessThanOrEqual(int a, int b)
     {
         if (a > b)
         {
-            Fail($"Expected {Stringify(a)} <= {Stringify(b)}");
+            FailComparison(a, "<=", b);
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static void AssertGreaterThanOrEqual(int a, int b)
     {
         if (a < b)
         {
-            Fail($"Expected {Stringify(a)} >= {Stringify(b)}");
+            FailComparison(a, ">=", b);
         }
+    }
+
+    [DoesNotReturn]
+    [NoAllocUnchecked("error path: a failed assertion throws")]
+    private static void FailComparison(int a, string relation, int b)
+    {
+        Fail(relation == "===" ? $"Expected {Stringify(a)} === {Stringify(b)}. " : $"Expected {Stringify(a)} {relation} {Stringify(b)}");
     }
 
     internal static void AssertIsDefined<T>([NotNull] T value, string? message = null)
@@ -154,6 +199,15 @@ internal static partial class Debug
     {
         AssertIsDefined(value, message);
         return value.Value;
+    }
+
+    /// <summary>`assertNever(member)` for an enum value or a node handle (Track O: boxed only when the assertion fails).</summary>
+    [DoesNotReturn]
+    [NoAllocUnchecked("error path: a failed assertion throws")]
+    internal static void AssertNever<T>(T member, string message = "Illegal value:")
+        where T : struct
+    {
+        AssertNever((object?)member, message);
     }
 
     [DoesNotReturn]

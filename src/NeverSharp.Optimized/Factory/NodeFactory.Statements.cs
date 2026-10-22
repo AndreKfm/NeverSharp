@@ -20,6 +20,7 @@ internal sealed partial class NodeFactory
     //
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateBlock(NodeList statements, bool? multiLine = null)
     {
         var node = CreateBaseNode(SyntaxKind.Block);
@@ -34,11 +35,12 @@ internal sealed partial class NodeFactory
 
     /// <summary>`createVariableStatement(modifiers, declarationList: VariableDeclarationList | readonly VariableDeclaration[])`.</summary>
     // @api
-    internal Node CreateVariableStatement(NodeList modifiers, object declarationList)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal Node CreateVariableStatement(NodeList modifiers, Node declarationList)
     {
         var node = CreateBaseNode(SyntaxKind.VariableStatement);
         store.SetModifiers(node, AsNodeArray(store, modifiers));
-        store.SetDeclarationList(node, declarationList is NodeList list ? CreateVariableDeclarationList(list) : Node.FromObject(declarationList));
+        store.SetDeclarationList(node, declarationList); // (Track O: always a VariableDeclarationList node; no array form is passed)
         store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildrenFlags(store.Modifiers(node)) |
             PropagateChildFlags(store, store.DeclarationList(node))));
         if ((Utilities.ModifiersToFlags(store, store.Modifiers(node)) & ModifierFlags.Ambient) != 0)
@@ -51,6 +53,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateEmptyStatement()
     {
         var node = CreateBaseNode(SyntaxKind.EmptyStatement);
@@ -59,6 +62,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateExpressionStatement(Node expression)
     {
         var node = CreateBaseNode(SyntaxKind.ExpressionStatement);
@@ -70,6 +74,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateIfStatement(Node expression, Node thenStatement, Node elseStatement = default)
     {
         var node = CreateBaseNode(SyntaxKind.IfStatement);
@@ -85,6 +90,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateDoStatement(Node statement, Node expression)
     {
         var node = CreateBaseNode(SyntaxKind.DoStatement);
@@ -98,6 +104,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateWhileStatement(Node expression, Node statement)
     {
         var node = CreateBaseNode(SyntaxKind.WhileStatement);
@@ -111,6 +118,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateForStatement(Node initializer, Node condition, Node incrementor, Node statement)
     {
         var node = CreateBaseNode(SyntaxKind.ForStatement);
@@ -130,6 +138,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateForInStatement(Node initializer, Node expression, Node statement)
     {
         var node = CreateBaseNode(SyntaxKind.ForInStatement);
@@ -147,6 +156,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateForOfStatement(Node awaitModifier, Node initializer, Node expression, Node statement)
     {
         var node = CreateBaseNode(SyntaxKind.ForOfStatement);
@@ -171,7 +181,8 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateContinueStatement(object? label = null)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal Node CreateContinueStatement(Node label = default)
     {
         var node = CreateBaseNode(SyntaxKind.ContinueStatement);
         store.SetLabel(node, AsName(label));
@@ -183,7 +194,8 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateBreakStatement(object? label = null)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal Node CreateBreakStatement(Node label = default)
     {
         var node = CreateBaseNode(SyntaxKind.BreakStatement);
         store.SetLabel(node, AsName(label));
@@ -195,6 +207,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateReturnStatement(Node expression = default)
     {
         var node = CreateBaseNode(SyntaxKind.ReturnStatement);
@@ -209,6 +222,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateWithStatement(Node expression, Node statement)
     {
         var node = CreateBaseNode(SyntaxKind.WithStatement);
@@ -222,6 +236,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateSwitchStatement(Node expression, Node caseBlock)
     {
         var node = CreateBaseNode(SyntaxKind.SwitchStatement);
@@ -236,7 +251,8 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateLabeledStatement(object label, Node statement)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal Node CreateLabeledStatement(Node label, Node statement)
     {
         var node = CreateBaseNode(SyntaxKind.LabeledStatement);
         store.SetLabel(node, AsName(label));
@@ -249,6 +265,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateThrowStatement(Node expression)
     {
         var node = CreateBaseNode(SyntaxKind.ThrowStatement);
@@ -260,6 +277,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateTryStatement(Node tryBlock, Node catchClause, Node finallyBlock)
     {
         var node = CreateBaseNode(SyntaxKind.TryStatement);
@@ -275,6 +293,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateDebuggerStatement()
     {
         var node = CreateBaseNode(SyntaxKind.DebuggerStatement);
@@ -284,7 +303,8 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateVariableDeclaration(object? name, Node exclamationToken, Node type, Node initializer)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal Node CreateVariableDeclaration(Node name, Node exclamationToken, Node type, Node initializer)
     {
         var node = CreateBaseDeclaration(SyntaxKind.VariableDeclaration);
         store.SetName(node, AsName(name));
@@ -299,6 +319,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateVariableDeclarationList(NodeList declarations, NodeFlags flags = NodeFlags.None)
     {
         var node = CreateBaseNode(SyntaxKind.VariableDeclarationList);
@@ -319,10 +340,11 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateFunctionDeclaration(
         NodeList modifiers,
         Node asteriskToken,
-        object? name,
+        Node name,
         NodeList typeParameters,
         NodeList parameters,
         Node type,
@@ -369,9 +391,10 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateClassDeclaration(
         NodeList modifiers,
-        object? name,
+        Node name,
         NodeList typeParameters,
         NodeList heritageClauses,
         NodeList members)
@@ -405,9 +428,10 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateInterfaceDeclaration(
         NodeList modifiers,
-        object name,
+        Node name,
         NodeList typeParameters,
         NodeList heritageClauses,
         NodeList members)
@@ -424,9 +448,10 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateTypeAliasDeclaration(
         NodeList modifiers,
-        object name,
+        Node name,
         NodeList typeParameters,
         Node type)
     {
@@ -443,9 +468,10 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateEnumDeclaration(
         NodeList modifiers,
-        object name,
+        Node name,
         NodeList members)
     {
         var node = CreateBaseDeclaration(SyntaxKind.EnumDeclaration);
@@ -462,6 +488,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateModuleDeclaration(
         NodeList modifiers,
         Node name,
@@ -492,6 +519,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateModuleBlock(NodeList statements)
     {
         var node = CreateBaseNode(SyntaxKind.ModuleBlock);
@@ -502,6 +530,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateCaseBlock(NodeList clauses)
     {
         var node = CreateBaseNode(SyntaxKind.CaseBlock);
@@ -513,7 +542,8 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateNamespaceExportDeclaration(object name)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal Node CreateNamespaceExportDeclaration(Node name)
     {
         var node = CreateBaseDeclaration(SyntaxKind.NamespaceExportDeclaration);
         store.SetName(node, AsName(name));
@@ -525,10 +555,11 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateImportEqualsDeclaration(
         NodeList modifiers,
         bool isTypeOnly,
-        object name,
+        Node name,
         Node moduleReference)
     {
         var node = CreateBaseDeclaration(SyntaxKind.ImportEqualsDeclaration);
@@ -549,6 +580,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateImportDeclaration(
         NodeList modifiers,
         Node importClause,
@@ -570,6 +602,7 @@ internal sealed partial class NodeFactory
 
     /// <summary>`createImportClause(phaseModifier: ImportPhaseModifierSyntaxKind | boolean | undefined, ...)` with a boolean.</summary>
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateImportClause(bool phaseModifier, Node name, Node namedBindings)
     {
         return CreateImportClause(phaseModifier ? (SyntaxKind?)SyntaxKind.TypeKeyword : null, name, namedBindings);
@@ -577,6 +610,7 @@ internal sealed partial class NodeFactory
 
     /// <summary>`createImportClause(phaseModifier: ImportPhaseModifierSyntaxKind | boolean | undefined, ...)` with a kind or undefined.</summary>
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateImportClause(SyntaxKind? phaseModifier, Node name, Node namedBindings)
     {
         var node = CreateBaseDeclaration(SyntaxKind.ImportClause);
@@ -596,6 +630,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateImportAttributes(NodeList elements, bool? multiLine = null, SyntaxKind? token = null)
     {
         var node = CreateBaseNode(SyntaxKind.ImportAttributes);
@@ -607,6 +642,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateImportAttribute(Node name, Node value)
     {
         var node = CreateBaseNode(SyntaxKind.ImportAttribute);
@@ -617,6 +653,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateNamespaceImport(Node name)
     {
         var node = CreateBaseDeclaration(SyntaxKind.NamespaceImport);
@@ -627,6 +664,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateNamespaceExport(Node name)
     {
         var node = CreateBaseDeclaration(SyntaxKind.NamespaceExport);
@@ -638,6 +676,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateNamedImports(NodeList elements)
     {
         var node = CreateBaseNode(SyntaxKind.NamedImports);
@@ -648,6 +687,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateImportSpecifier(bool isTypeOnly, Node propertyName, Node name)
     {
         var node = CreateBaseDeclaration(SyntaxKind.ImportSpecifier);
@@ -661,6 +701,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateExportAssignment(
         NodeList modifiers,
         bool? isExportEquals,
@@ -679,6 +720,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateExportDeclaration(
         NodeList modifiers,
         bool isTypeOnly,
@@ -702,6 +744,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateNamedExports(NodeList elements)
     {
         var node = CreateBaseNode(SyntaxKind.NamedExports);
@@ -712,7 +755,8 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateExportSpecifier(bool isTypeOnly, object? propertyName, object name)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal Node CreateExportSpecifier(bool isTypeOnly, Node propertyName, Node name)
     {
         var node = CreateBaseNode(SyntaxKind.ExportSpecifier);
         store.SetIsTypeOnly(node, isTypeOnly);
@@ -726,6 +770,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateMissingDeclaration()
     {
         var node = CreateBaseDeclaration(SyntaxKind.MissingDeclaration);
@@ -738,6 +783,7 @@ internal sealed partial class NodeFactory
     //
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateExternalModuleReference(Node expression)
     {
         var node = CreateBaseNode(SyntaxKind.ExternalModuleReference);

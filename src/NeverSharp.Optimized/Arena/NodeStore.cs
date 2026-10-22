@@ -143,6 +143,7 @@ internal sealed partial class NodeStore
     internal int Count => count;
 
     /// <summary>A new node of the given kind: pos and end -1, flags none, every field undefined (utilities.ts: function Node).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node Create(SyntaxKind kind)
     {
         var k = (int)kind;
@@ -194,6 +195,7 @@ internal sealed partial class NodeStore
     internal Mark GetMark() => new(used, refCount, count, sideLogCount, listCount, listElementCount, frameCount, scratchTop, Texts.CharCount, Texts.InternedCount);
 
     /// <summary>Discards every node created after <paramref name="mark"/> (speculative parsing that is rolled back).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal void Truncate(Mark mark)
     {
         Debug.Assert(mark.Words <= used && mark.Refs <= refCount && mark.Nodes <= count && mark.SideLog <= sideLogCount && mark.Lists <= listCount, "Mark is beyond the store's fill level");
@@ -218,6 +220,7 @@ internal sealed partial class NodeStore
     /// Removes the side table entries of discarded nodes. Entries added since the mark for nodes that survive (caches
     /// written on older nodes) stay, and move down in the log so that an enclosing truncation still finds them.
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private void TruncateSide(Mark mark)
     {
         var log = sideLog!;
@@ -238,6 +241,7 @@ internal sealed partial class NodeStore
     }
 
     /// <summary>Moves the records into arrays of the exact size (plus the SourceFile record) and returns the scratch arrays.</summary>
+    [NoAllocUnchecked("per-file result: the exact arrays the finished tree keeps")]
     private void Seal(int size, int refSize)
     {
         var exact = GC.AllocateUninitializedArray<int>(used + size, pinned: true);
@@ -252,6 +256,7 @@ internal sealed partial class NodeStore
     }
 
     /// <summary>Gives the scratch arrays back to the pool, without the references this store wrote.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private void ReturnScratch()
     {
         refs.AsSpan(0, refMax).Clear();
@@ -259,6 +264,7 @@ internal sealed partial class NodeStore
         Scratch<int>.Return(data);
     }
 
+    [NoAllocUnchecked("arena growth: the record array doubles")]
     private void GrowData(int needed)
     {
         var length = Math.Max(data.Length * 2, needed);
@@ -271,6 +277,7 @@ internal sealed partial class NodeStore
         data = grown;
     }
 
+    [NoAllocUnchecked("arena growth: the object slot array doubles")]
     private void GrowRefs(int needed)
     {
         var length = Math.Max(refs.Length * 2, needed);
@@ -315,20 +322,28 @@ internal sealed partial class NodeStore
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public void SetTransformFlags(Node node, TransformFlags value) => data[node.Index + TransformFlagsWord] = (int)value;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public Node Parent(Node node) => data[node.Index] >= 0 ? default : new Node(GetSideInt(node.Index, ParentSide));
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public void SetParent(Node node, Node value) => SetSideInt(node.Index, ParentSide, value.Index);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public ModifierFlags ModifierFlagsCache(Node node) => data[node.Index] >= 0 ? default : (ModifierFlags)GetSideInt(node.Index, ModifierFlagsCacheSide);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public void SetModifierFlagsCache(Node node, ModifierFlags value) => SetSideInt(node.Index, ModifierFlagsCacheSide, (int)value);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public Node Original(Node node) => data[node.Index] >= 0 ? default : new Node(GetSideInt(node.Index, OriginalSide));
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public void SetOriginal(Node node, Node value) => SetSideInt(node.Index, OriginalSide, value.Index);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public object? EmitNode(Node node) => data[node.Index] >= 0 ? null : GetSideRef(node.Index, EmitNodeSide);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public void SetEmitNode(Node node, object? value) => SetSideRef(node.Index, EmitNodeSide, value);
 
     //// Side table.
@@ -336,10 +351,13 @@ internal sealed partial class NodeStore
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static long SideKey(int node, int field) => ((long)node << 8) | (uint)field;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private int GetSideInt(int node, int field) => side is not null && side.TryGetValue(SideKey(node, field), out var value) ? value.Int : 0;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private object? GetSideRef(int node, int field) => side is not null && side.TryGetValue(SideKey(node, field), out var value) ? value.Ref : null;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private void SetSideInt(int node, int field, int value)
     {
         if (value == 0)
@@ -357,6 +375,7 @@ internal sealed partial class NodeStore
         AddSide(node, field).Int = value;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private void SetSideRef(int node, int field, object? value)
     {
         if (value is null)
@@ -374,6 +393,7 @@ internal sealed partial class NodeStore
         AddSide(node, field).Ref = value;
     }
 
+    [NoAllocUnchecked("arena growth: a new side table entry (rare fields)")]
     private ref SideValue AddSide(int node, int field)
     {
         side ??= [];
@@ -392,6 +412,7 @@ internal sealed partial class NodeStore
         return ref value;
     }
 
+    [NoAllocUnchecked("error path: reading or writing a field the node's kind does not have throws")]
     private static void ThrowNoField(int kindWord, string field)
     {
         throw new InvalidOperationException($"{(SyntaxKind)(kindWord & KindMask)} has no field {field}");
@@ -429,6 +450,7 @@ internal sealed partial class NodeStore
         }
 
         /// <summary>Keeps an array of <see cref="Rent"/> for later (the caller cleared the references it wrote).</summary>
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         public static void Return(T[] array)
         {
             var c = ClassOf(array.Length);
@@ -445,6 +467,7 @@ internal sealed partial class NodeStore
             }
         }
 
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         private static int ClassOf(int length) => length <= 1 << MinShift ? 0 : 32 - BitOperations.LeadingZeroCount((uint)length - 1) - MinShift;
     }
 }

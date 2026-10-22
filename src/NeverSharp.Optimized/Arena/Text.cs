@@ -35,6 +35,7 @@ internal readonly struct TextRef : IEquatable<TextRef>
     }
 
     /// <summary>No text (TypeScript: undefined).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public static TextRef None => default;
 
     /// <summary>The empty string.</summary>
@@ -100,6 +101,7 @@ internal readonly struct TextRef : IEquatable<TextRef>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool Equals(TextRef other) => this == other;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public override bool Equals(object? obj) => obj is TextRef other && this == other;
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
@@ -127,6 +129,7 @@ internal readonly struct TextOrList : IEquatable<TextOrList>
         B = b;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public static TextOrList None => default;
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
@@ -168,6 +171,7 @@ internal readonly struct TextOrList : IEquatable<TextOrList>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool Equals(TextOrList other) => this == other;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public override bool Equals(object? obj) => obj is TextOrList other && this == other;
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
@@ -251,6 +255,7 @@ internal sealed class TextTable
     internal void UsePool() => pooled = true;
 
     /// <summary>Starts over with another source text (a scanner's own table, reused from text to text).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal void Reset(string newSource)
     {
         source = newSource;
@@ -266,6 +271,7 @@ internal sealed class TextTable
     /// The end of the parse: the arena's characters and the interned handles move into arrays of the exact size, and the
     /// pooled arrays go back to the pool.
     /// </summary>
+    [NoAllocUnchecked("per-file result: the exact arrays of characters and interned texts the finished tree keeps")]
     internal void Seal()
     {
         if (!pooled)
@@ -297,6 +303,7 @@ internal sealed class TextTable
 
     /// <summary>The characters of a text (empty for <see cref="TextRef.None"/>).</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public ReadOnlySpan<char> Span(TextRef text)
     {
         if (text.Size <= 1)
@@ -325,12 +332,15 @@ internal sealed class TextTable
     }
 
     /// <summary>`text === value`.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool Equals(TextRef text, string value) => !text.IsNone && Span(text).SequenceEqual(value);
 
     /// <summary>`a === b` for two texts (undefined equals undefined).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool Equals(TextRef a, TextRef b) => a == b || (!a.IsNone && !b.IsNone && a.Size == b.Size && Span(a).SequenceEqual(Span(b)));
 
     /// <summary>`a === b` for two comments: texts by value, lists by identity.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool Equals(TextOrList a, TextOrList b) => a.IsText && b.IsText ? Equals(a.Text, b.Text) : a == b;
 
     /// <summary>`text.substring(start, end)` of the source text (clamped, reversed bounds swapped), as a span.</summary>
@@ -351,6 +361,7 @@ internal sealed class TextTable
     /// A value with the given characters in the arena (the empty string as <see cref="TextRef.Empty"/>); the characters
     /// must not be a span of the arena (it may move).
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public TextRef Add(ReadOnlySpan<char> value)
     {
         if (value.Length == 0)
@@ -364,6 +375,7 @@ internal sealed class TextTable
     }
 
     /// <summary>`a + b`.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public TextRef Concat(TextRef a, TextRef b)
     {
         var builder = new TextBuilder(this);
@@ -373,6 +385,7 @@ internal sealed class TextTable
     }
 
     /// <summary>`a + b` for a constant <paramref name="a"/>.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public TextRef Concat(string a, TextRef b)
     {
         var builder = new TextBuilder(this);
@@ -382,6 +395,7 @@ internal sealed class TextTable
     }
 
     /// <summary>`a + b` for a constant <paramref name="b"/>.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public TextRef Concat(TextRef a, string b)
     {
         var builder = new TextBuilder(this);
@@ -391,6 +405,7 @@ internal sealed class TextTable
     }
 
     /// <summary>Makes room for <paramref name="count"/> characters at the end of the arena; returns where they go.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal int Reserve(int count)
     {
         var at = charCount;
@@ -401,6 +416,7 @@ internal sealed class TextTable
         return at;
     }
 
+    [NoAllocUnchecked("arena growth: the character arena doubles")]
     private void GrowChars(int needed)
     {
         var length = Math.Max(Math.Max(chars.Length * 2, 256), needed);
@@ -416,9 +432,11 @@ internal sealed class TextTable
     }
 
     /// <summary>The arena's characters from <paramref name="at"/> (after <see cref="Reserve"/>), for writing.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Span<char> ArenaSpan(int at, int count) => chars.AsSpan(at, count);
 
     /// <summary>Copies characters of the arena to a place after them (after <see cref="Reserve"/>).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal void CopyWithin(int from, int to, int count) => Array.Copy(chars, from, chars, to, count);
 
     /// <summary>Sets the arena's fill level (after writing reserved characters).</summary>
@@ -429,6 +447,7 @@ internal sealed class TextTable
     /// parser.ts internIdentifier: the handle of the first text interned with the same characters, or
     /// <paramref name="text"/> itself, which becomes that handle.
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public TextRef Intern(TextRef text)
     {
         var span = Span(text);
@@ -479,6 +498,7 @@ internal sealed class TextTable
 
     // The hash table: pooled for a parse (power-of-two lengths from 4096 on), rebuilt from the sealed handles if
     // something interns after Seal.
+    [NoAllocUnchecked("arena growth: the interning table's first arrays, from the pool")]
     private void CreateHashTable()
     {
         var previous = sealedInterned;
@@ -501,18 +521,13 @@ internal sealed class TextTable
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private void AddEntry(int hash, TextRef text)
     {
         var index = entryCount + 1;
         if (index >= entries!.Length)
         {
-            var grown = pooled ? NodeStore.Scratch<Entry>.Rent(entries.Length * 2) : new Entry[entries.Length * 2];
-            entries.AsSpan(0, index).CopyTo(grown);
-            if (pooled)
-            {
-                NodeStore.Scratch<Entry>.Return(entries);
-            }
-            entries = grown;
+            GrowEntries(index);
         }
         entryCount = index;
         if (index > buckets!.Length - (buckets.Length >> 2))
@@ -527,8 +542,21 @@ internal sealed class TextTable
         bucket = index;
     }
 
+    [NoAllocUnchecked("arena growth: the interning table's entry array doubles")]
+    private void GrowEntries(int index)
+    {
+        var grown = pooled ? NodeStore.Scratch<Entry>.Rent(entries!.Length * 2) : new Entry[entries!.Length * 2];
+        entries.AsSpan(0, index).CopyTo(grown);
+        if (pooled)
+        {
+            NodeStore.Scratch<Entry>.Return(entries);
+        }
+        entries = grown;
+    }
+
     // Rebuilds the chains of the entries before the one being added, oldest first, so each chain still runs from
     // the newest entry to the oldest.
+    [NoAllocUnchecked("arena growth: the interning table's bucket array doubles")]
     private void Rehash(int size)
     {
         var grown = pooled ? NodeStore.Scratch<int>.Rent(size) : new int[size];
@@ -548,6 +576,7 @@ internal sealed class TextTable
     }
 
     /// <summary>Discards the characters and interned texts added after a mark (<see cref="NodeStore.Truncate"/>).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal void Truncate(int markChars, int markInterned)
     {
         charCount = markChars;
@@ -599,15 +628,18 @@ internal struct TextBuilder
     private int start; // source mode: offset in the source text; arena mode: offset in the arena
     private int length;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public TextBuilder(TextTable table)
     {
         this.table = table;
     }
 
     /// <summary>The number of characters so far.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public readonly int Length => length;
 
     /// <summary>`result += text.substring(from, to)` of the source text (clamped, reversed bounds swapped).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public void AppendSource(int from, int to)
     {
         var sourceLength = table.Source.Length;
@@ -638,6 +670,7 @@ internal struct TextBuilder
     }
 
     /// <summary>`result += text.substring(from, to)`, <paramref name="text"/> being the table's source text.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public void Append(string text, int from, int to)
     {
         Debug.Assert(ReferenceEquals(text, table.Source), "A range of another string than the source text");
@@ -645,6 +678,7 @@ internal struct TextBuilder
     }
 
     /// <summary>`result += value`.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public void Append(TextRef value)
     {
         if (value.Size <= 1)
@@ -671,6 +705,7 @@ internal struct TextBuilder
     }
 
     /// <summary>`result += value` for a string.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public void Append(string value)
     {
         if (value.Length != 0)
@@ -680,12 +715,14 @@ internal struct TextBuilder
     }
 
     /// <summary>`result += String.fromCharCode(c)`.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public void Append(char value)
     {
         AppendChars(new ReadOnlySpan<char>(in value));
     }
 
     // Appends characters that are not in the arena (a string or a range of the source text).
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private void AppendChars(ReadOnlySpan<char> value)
     {
         value.CopyTo(table.ArenaSpan(Prepare(value.Length), value.Length));
@@ -696,6 +733,7 @@ internal struct TextBuilder
     /// what there is to the end of the arena if it is not there (a span of the source text, or arena characters another
     /// writer overtook); returns where the characters go.
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private int Prepare(int count)
     {
         if (mode != ArenaMode || start + length != table.CharCount)
@@ -720,6 +758,7 @@ internal struct TextBuilder
     }
 
     /// <summary>The text built (the empty string if nothing was appended).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public readonly TextRef Result() => mode switch
     {
         SourceMode => TextRef.Source(start, length),

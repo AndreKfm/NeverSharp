@@ -25,6 +25,7 @@ internal readonly struct NodeList : IEquatable<NodeList>
     }
 
     /// <summary>No list (TypeScript: undefined).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public static NodeList None => default;
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
@@ -39,6 +40,7 @@ internal readonly struct NodeList : IEquatable<NodeList>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool Equals(NodeList other) => Index == other.Index;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public override bool Equals(object? obj) => obj is NodeList other && Index == other.Index;
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
@@ -179,6 +181,7 @@ internal sealed partial class NodeStore
     public void SetIsMissingList(NodeList list) => lists[list.Index].Bits |= MissingListBit;
 
     /// <summary>A new list with a copy of the given elements, range -1, transform flags none (the factory aggregates them).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public NodeList NewList(ReadOnlySpan<Node> elements, bool hasTrailingComma = false)
     {
         var start = listElementCount;
@@ -192,6 +195,7 @@ internal sealed partial class NodeStore
         return AddHeader(start, elements.Length, hasTrailingComma);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private NodeList AddHeader(int start, int count, bool hasTrailingComma)
     {
         var index = listCount;
@@ -210,6 +214,7 @@ internal sealed partial class NodeStore
         return new NodeList(index);
     }
 
+    [NoAllocUnchecked("arena growth: the list header array doubles")]
     private void GrowLists()
     {
         var length = lists.Length * 2;
@@ -222,6 +227,7 @@ internal sealed partial class NodeStore
         lists = grown;
     }
 
+    [NoAllocUnchecked("arena growth: the list element array doubles")]
     private void GrowListElements(int needed)
     {
         var length = Math.Max(listElements.Length * 2, needed);
@@ -235,6 +241,7 @@ internal sealed partial class NodeStore
     //// Lists under construction.
 
     /// <summary>Opens a list under construction (TypeScript: `const list = [];`).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public ListBuilder BeginList()
     {
         if (frames is null)
@@ -244,7 +251,7 @@ internal sealed partial class NodeStore
         var f = frameCount;
         if (2 * f + 2 > frames!.Length)
         {
-            Array.Resize(ref frames, frames.Length * 2);
+            GrowFrames();
         }
         frames[2 * f] = scratchTop;
         frames[(2 * f) + 1] = 0;
@@ -254,6 +261,7 @@ internal sealed partial class NodeStore
 
     /// <summary>Appends an element to a list under construction (TypeScript: `list.push(node)`).</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public void Push(ListBuilder list, Node node)
     {
         var fr = frames!;
@@ -270,6 +278,7 @@ internal sealed partial class NodeStore
     }
 
     /// <summary>Moves the frame to the top of the scratch stack if it is not there, and makes room for one element.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private int MakeRoom(int i)
     {
         var fr = frames!;
@@ -280,9 +289,7 @@ internal sealed partial class NodeStore
         var needed = top + (atTop ? 0 : count) + 1;
         if (needed > scratch!.Length)
         {
-            var grown = new Node[Math.Max(scratch.Length * 2, needed)];
-            Array.Copy(scratch, grown, top);
-            scratch = grown;
+            GrowScratch(needed, top);
         }
         if (!atTop)
         {
@@ -294,11 +301,26 @@ internal sealed partial class NodeStore
         return top;
     }
 
+    [NoAllocUnchecked("arena growth: the frame array of lists under construction doubles")]
+    private void GrowFrames()
+    {
+        Array.Resize(ref frames, frames!.Length * 2);
+    }
+
+    [NoAllocUnchecked("arena growth: the scratch stack of lists under construction doubles")]
+    private void GrowScratch(int needed, int top)
+    {
+        var grown = new Node[Math.Max(scratch!.Length * 2, needed)];
+        Array.Copy(scratch, grown, top);
+        scratch = grown;
+    }
+
     /// <summary>The number of elements of a list under construction (TypeScript: `list.length`).</summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public int Length(ListBuilder list) => frames![(2 * list.Frame) + 1];
 
     /// <summary>The elements of a list under construction; valid until the next change of the scratch stack.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public ReadOnlySpan<Node> Nodes(ListBuilder list)
     {
         var i = 2 * list.Frame;
@@ -309,6 +331,7 @@ internal sealed partial class NodeStore
     /// Turns a list under construction into a list (the copy into the arena of createNodeArray): range -1, transform
     /// flags none (the factory aggregates them). The builder must not be used afterwards.
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public NodeList FinishList(ListBuilder list, bool hasTrailingComma = false)
     {
         var fr = frames!;
@@ -328,12 +351,14 @@ internal sealed partial class NodeStore
     }
 
     /// <summary>Closes a list under construction without creating a list (TypeScript: the plain array is dropped).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public void DiscardList(ListBuilder list)
     {
         var i = 2 * list.Frame;
         PopFrame(list.Frame, frames![i], frames[i + 1]);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private void PopFrame(int frame, int start, int count)
     {
         var fr = frames!;
@@ -355,6 +380,7 @@ internal sealed partial class NodeStore
         }
     }
 
+    [NoAllocUnchecked("arena growth: the scratch arrays of lists under construction, from the pool")]
     private void RentScratch()
     {
         if (listsPooled)
@@ -372,6 +398,7 @@ internal sealed partial class NodeStore
     }
 
     /// <summary>Moves the lists into arrays of the exact size and returns the scratch arrays (with <see cref="Seal"/>).</summary>
+    [NoAllocUnchecked("per-file result: the exact list arrays the finished tree keeps")]
     private void SealLists()
     {
         var exact = GC.AllocateUninitializedArray<ListHeader>(listCount, pinned: true);

@@ -12,8 +12,11 @@ using NeverSharp.Generated;
 
 namespace NeverSharp.Optimized;
 
-/// <summary>types.ts: CommentRange (kind is a CommentKind: SingleLineCommentTrivia or MultiLineCommentTrivia).</summary>
-internal sealed class CommentRange : TextRange
+/// <summary>
+/// types.ts: CommentRange (kind is a CommentKind: SingleLineCommentTrivia or MultiLineCommentTrivia). Track O (O-NA): a
+/// struct, so iterating comment ranges allocates nothing.
+/// </summary>
+internal struct CommentRange
 {
     public int Pos { get; set; }
 

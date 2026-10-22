@@ -8,6 +8,7 @@
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
 // Modified: translated from TypeScript to C#.
 
+using System.Diagnostics.CodeAnalysis;
 using NeverSharp.Generated;
 
 namespace NeverSharp.Optimized;
@@ -21,6 +22,7 @@ internal sealed partial class NodeFactory
     private NodeConverters? convertersValue;
 
     /// <summary>The factory's `parenthesizer` getter (TypeScript's memoized `parenthesizerRules()`).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal ParenthesizerRules Parenthesizer
     {
         get
@@ -40,6 +42,7 @@ internal sealed partial class NodeFactory
     }
 
     /// <summary>The factory's `converters` getter (TypeScript's memoized `converters()`).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal NodeConverters Converters
     {
         get
@@ -59,58 +62,44 @@ internal sealed partial class NodeFactory
     }
 
     /// <summary>`const setOriginal = flags & NodeFactoryFlags.NoOriginalNode ? identity : setOriginalNode;`</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node SetOriginal(Node node, Node original)
     {
         return (flags & NodeFactoryFlags.NoOriginalNode) != 0 ? node : SetOriginalNode(store, node, original);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static NodeList AsNodeArray(NodeStore store, NodeList array)
     {
         return !array.IsNone ? CreateNodeArray(store, array) : default;
     }
 
-    /// <summary>`asName(name: string | T)`: a string becomes an Identifier.</summary>
-    private Node AsName(object? name)
+    /// <summary>`asName(name: string | T)` for a node (Track O, O-NA: the factory's callers pass nodes, unboxed).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private static Node AsName(Node name)
     {
-        return name is string s ? CreateIdentifier(s) :
-            Node.FromObject(name);
+        return name;
     }
 
-    /// <summary>`asExpression(value: string | number | boolean | T)`.</summary>
-    private Node AsExpression(object? value)
+    /// <summary>`asExpression(value: string | number | boolean | T)` for a node.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private static Node AsExpression(Node value)
     {
-        return value switch
-        {
-            string s => CreateStringLiteral(store.Texts.Add(s)),
-            int i => CreateNumericLiteral(i),
-            double d => CreateNumericLiteral(d),
-            bool b => b ? CreateToken(SyntaxKind.TrueKeyword) : CreateToken(SyntaxKind.FalseKeyword),
-            _ => Node.FromObject(value),
-        };
+        return value;
     }
 
-    private Node AsInitializer(Node node)
+    /// <summary>`asToken(value: TKind | Token&lt;TKind&gt;)` for a token node.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private static Node AsToken(Node value)
     {
-        return !node.IsNone ? Parenthesizer.ParenthesizeExpressionForDisallowedComma(node) : default;
+        return value;
     }
 
-    /// <summary>`asToken(value: TKind | Token&lt;TKind&gt;)`: a kind becomes a token.</summary>
-    private Node AsToken(object value)
+    /// <summary>`asVariableDeclaration(variableDeclaration)` for a node (None: undefined).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private Node AsVariableDeclaration(Node variableDeclaration)
     {
-        return value is SyntaxKind kind ? CreateToken(kind) : Node.FromObject(value);
-    }
-
-    private Node AsEmbeddedStatement(Node statement)
-    {
-        return !statement.IsNone && FactoryNodeTests.IsNotEmittedStatement(store, statement) ? FactoryUtilitiesPublic.SetTextRange(store, SetOriginal(CreateEmptyStatement(), statement), statement) : statement;
-    }
-
-    /// <summary>`asVariableDeclaration(variableDeclaration: string | BindingName | VariableDeclaration | undefined)`.</summary>
-    private Node AsVariableDeclaration(object? variableDeclaration)
-    {
-        // Track O: a node handle passed as an object; None is undefined.
-        variableDeclaration = variableDeclaration is Node { IsNone: true } ? null : variableDeclaration;
-        if (variableDeclaration is string || variableDeclaration != null && !FactoryNodeTests.IsVariableDeclaration(store, Node.FromObject(variableDeclaration)))
+        if (!variableDeclaration.IsNone && !FactoryNodeTests.IsVariableDeclaration(store, variableDeclaration))
         {
             return CreateVariableDeclaration(
                 variableDeclaration,
@@ -118,9 +107,29 @@ internal sealed partial class NodeFactory
                 /*type*/ default,
                 /*initializer*/ default);
         }
-        return Node.FromObject(variableDeclaration);
+        return variableDeclaration;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private Node AsInitializer(Node node)
+    {
+        return !node.IsNone ? Parenthesizer.ParenthesizeExpressionForDisallowedComma(node) : default;
+    }
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private Node AsEmbeddedStatement(Node statement)
+    {
+        return !statement.IsNone && FactoryNodeTests.IsNotEmittedStatement(store, statement) ? FactoryUtilitiesPublic.SetTextRange(store, SetOriginal(CreateEmptyStatement(), statement), statement) : statement;
+    }
+
+    [DoesNotReturn]
+    [NoAllocUnchecked("error path: a failed assertion throws")]
+    private static void FailUnsupportedKind(SyntaxKind kind)
+    {
+        Debug.Fail($"Unsupported kind: {kind}");
+    }
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node Update(Node updated, Node original)
     {
         if (updated != original)
@@ -131,6 +140,7 @@ internal sealed partial class NodeFactory
         return updated;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node UpdateOuterExpression(Node outerExpression, Node expression)
     {
         switch (store.Kind(outerExpression))
@@ -190,6 +200,7 @@ internal sealed partial class NodeFactory
     }
 
     /// <summary>`outerExpression.expression` for the kinds of OuterExpression.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static Node GetOuterExpressionExpression(NodeStore store, Node outerExpression)
     {
         return store.Kind(outerExpression) switch
@@ -201,12 +212,13 @@ internal sealed partial class NodeFactory
             SyntaxKind.NonNullExpression => store.Expression(outerExpression),
             SyntaxKind.ExpressionWithTypeArguments => store.Expression(outerExpression),
             SyntaxKind.PartiallyEmittedExpression => store.Expression(outerExpression),
-            _ => throw new InvalidOperationException($"{store.Kind(outerExpression)} is not an outer expression"),
+            _ => throw Debug.UnexpectedKind(store.Kind(outerExpression), "an outer expression"),
         };
     }
 
     //// File-level functions of nodeFactory.ts.
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static string GetDefaultTagNameForKind(SyntaxKind kind)
     {
         switch (kind)
@@ -253,11 +265,12 @@ internal sealed partial class NodeFactory
                 return "import";
             default:
                 // TypeScript: Debug.formatSyntaxKind(kind) (the enum member's name).
-                Debug.Fail($"Unsupported kind: {kind}");
+                FailUnsupportedKind(kind);
                 return null!;
         }
     }
 
+    [NoAllocUnchecked("rare path: not reached by the parser's factory, which sets no original nodes (NoOriginalNode)")]
     internal static Node SetOriginalNode(NodeStore store, Node node, Node original)
     {
         if (store.Original(node) != original)

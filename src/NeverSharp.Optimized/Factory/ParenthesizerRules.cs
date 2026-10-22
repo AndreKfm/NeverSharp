@@ -19,60 +19,88 @@ internal interface ParenthesizerRules
 
     Func<Node, Node> GetParenthesizeRightSideOfBinaryForOperator(SyntaxKind binaryOperator);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     Node ParenthesizeLeftSideOfBinary(SyntaxKind binaryOperator, Node leftSide);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     Node ParenthesizeRightSideOfBinary(SyntaxKind binaryOperator, Node leftSide, Node rightSide);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     Node ParenthesizeExpressionOfComputedPropertyName(Node expression);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     Node ParenthesizeConditionOfConditionalExpression(Node condition);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     Node ParenthesizeBranchOfConditionalExpression(Node branch);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     Node ParenthesizeExpressionOfExportDefault(Node expression);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     Node ParenthesizeExpressionOfNew(Node expression);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     Node ParenthesizeLeftSideOfAccess(Node expression, bool? optionalChain = null);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     Node ParenthesizeOperandOfPostfixUnary(Node operand);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     Node ParenthesizeOperandOfPrefixUnary(Node operand);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     NodeList ParenthesizeExpressionsOfCommaDelimitedList(NodeList elements);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     Node ParenthesizeExpressionForDisallowedComma(Node expression);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     Node ParenthesizeExpressionOfExpressionStatement(Node expression);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     Node ParenthesizeConciseBodyOfArrowFunction(Node body);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     Node ParenthesizeCheckTypeOfConditionalType(Node type);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     Node ParenthesizeExtendsTypeOfConditionalType(Node type);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     Node ParenthesizeOperandOfTypeOperator(Node type);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     Node ParenthesizeOperandOfReadonlyTypeOperator(Node type);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     Node ParenthesizeNonArrayTypeOfPostfixType(Node type);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     NodeList ParenthesizeElementTypesOfTupleType(NodeList types);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     Node ParenthesizeElementTypeOfTupleType(Node type);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     Node ParenthesizeTypeOfOptionalType(Node type);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     Node ParenthesizeConstituentTypeOfUnionType(Node type);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     NodeList ParenthesizeConstituentTypesOfUnionType(NodeList constituents);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     Node ParenthesizeConstituentTypeOfIntersectionType(Node type);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     NodeList ParenthesizeConstituentTypesOfIntersectionType(NodeList constituents);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     Node ParenthesizeLeadingTypeArgument(Node typeNode);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     NodeList ParenthesizeTypeArguments(NodeList typeParameters);
 }
 
@@ -110,66 +138,95 @@ internal static class FactoryParenthesizerRules
 
         public Func<Node, Node> GetParenthesizeRightSideOfBinaryForOperator(SyntaxKind binaryOperator) => Core.Identity;
 
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         public Node ParenthesizeLeftSideOfBinary(SyntaxKind binaryOperator, Node leftSide) => leftSide;
 
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         public Node ParenthesizeRightSideOfBinary(SyntaxKind binaryOperator, Node leftSide, Node rightSide) => rightSide;
 
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         public Node ParenthesizeExpressionOfComputedPropertyName(Node expression) => expression;
 
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         public Node ParenthesizeConditionOfConditionalExpression(Node condition) => condition;
 
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         public Node ParenthesizeBranchOfConditionalExpression(Node branch) => branch;
 
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         public Node ParenthesizeExpressionOfExportDefault(Node expression) => expression;
 
         // `cast(expression, isLeftHandSideExpression)` and friends: the assertion of the cast needs the node store, which
 
         // these interface members do not get (Track O, O6a); the value is returned as cast returns it when the test holds.
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         public Node ParenthesizeExpressionOfNew(Node expression) => expression;
 
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         public Node ParenthesizeLeftSideOfAccess(Node expression, bool? optionalChain = null) => expression;
 
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         public Node ParenthesizeOperandOfPostfixUnary(Node operand) => operand;
 
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         public Node ParenthesizeOperandOfPrefixUnary(Node operand) => operand;
 
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         public NodeList ParenthesizeExpressionsOfCommaDelimitedList(NodeList elements) => CastNodeArray(elements);
 
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         public Node ParenthesizeExpressionForDisallowedComma(Node expression) => expression;
 
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         public Node ParenthesizeExpressionOfExpressionStatement(Node expression) => expression;
 
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         public Node ParenthesizeConciseBodyOfArrowFunction(Node body) => body;
 
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         public Node ParenthesizeCheckTypeOfConditionalType(Node type) => type;
 
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         public Node ParenthesizeExtendsTypeOfConditionalType(Node type) => type;
 
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         public Node ParenthesizeOperandOfTypeOperator(Node type) => type;
 
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         public Node ParenthesizeOperandOfReadonlyTypeOperator(Node type) => type;
 
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         public Node ParenthesizeNonArrayTypeOfPostfixType(Node type) => type;
 
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         public NodeList ParenthesizeElementTypesOfTupleType(NodeList types) => CastNodeArray(types);
 
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         public Node ParenthesizeElementTypeOfTupleType(Node type) => type;
 
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         public Node ParenthesizeTypeOfOptionalType(Node type) => type;
 
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         public Node ParenthesizeConstituentTypeOfUnionType(Node type) => type;
 
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         public NodeList ParenthesizeConstituentTypesOfUnionType(NodeList constituents) => CastNodeArray(constituents);
 
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         public Node ParenthesizeConstituentTypeOfIntersectionType(Node type) => type;
 
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         public NodeList ParenthesizeConstituentTypesOfIntersectionType(NodeList constituents) => CastNodeArray(constituents);
 
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         public Node ParenthesizeLeadingTypeArgument(Node typeNode) => typeNode;
 
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         public NodeList ParenthesizeTypeArguments(NodeList typeParameters) => !typeParameters.IsNone ? CastNodeArray(typeParameters) : default;
 
         /// <summary>`nodes => cast(nodes, isNodeArray)`: a NodeList is always a NodeArray (Track O, O7a: plain arrays are list builders), so the cast holds.</summary>
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         private static NodeList CastNodeArray(NodeList nodes) => nodes;
     }
 }

@@ -16,6 +16,7 @@ namespace NeverSharp.Optimized;
 internal sealed partial class Parser
 {
     // True if positioned at the start of a list element
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsListElement(ParsingContext parsingContext, bool inErrorRecovery)
     {
         var node = CurrentNode(parsingContext);
@@ -39,13 +40,13 @@ internal sealed partial class Parser
             case ParsingContext.SwitchClauses:
                 return Token() == SyntaxKind.CaseKeyword || Token() == SyntaxKind.DefaultKeyword;
             case ParsingContext.TypeMembers:
-                return LookAhead(static p => p.IsTypeMemberStart());
+                return LookAhead(new F.IsTypeMemberStart());
             case ParsingContext.ClassMembers:
                 // We allow semicolons as class elements (as specified by ES6) as long as we're
                 // not in error recovery.  If we're in error recovery, we don't want an errant
                 // semicolon to be treated as a class member (since they're almost always used
                 // for statements.
-                return LookAhead(static p => p.IsClassMemberStart()) || (Token() == SyntaxKind.SemicolonToken && !inErrorRecovery);
+                return LookAhead(new F.IsClassMemberStart()) || (Token() == SyntaxKind.SemicolonToken && !inErrorRecovery);
             case ParsingContext.EnumMembers:
                 // Include open bracket computed properties. This technically also lets in indexers,
                 // which would be a candidate for improved error reporting.
@@ -72,7 +73,7 @@ internal sealed partial class Parser
                 // That way we won't consume the body of a class in its heritage clause.
                 if (Token() == SyntaxKind.OpenBraceToken)
                 {
-                    return LookAhead(static p => p.IsValidHeritageClauseObjectLiteral());
+                    return LookAhead(new F.IsValidHeritageClauseObjectLiteral());
                 }
 
                 if (!inErrorRecovery)
@@ -115,7 +116,7 @@ internal sealed partial class Parser
             case ParsingContext.ImportOrExportSpecifiers:
                 // bail out if the next token is [FromKeyword StringLiteral].
                 // That means we're in something like `import { from "mod"`. Stop here can give better error message.
-                if (Token() == SyntaxKind.FromKeyword && LookAhead(static p => p.NextTokenIsStringLiteral()))
+                if (Token() == SyntaxKind.FromKeyword && LookAhead(new F.NextTokenIsStringLiteral()))
                 {
                     return false;
                 }
@@ -139,6 +140,7 @@ internal sealed partial class Parser
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsValidHeritageClauseObjectLiteral()
     {
         Debug.Assert(Token() == SyntaxKind.OpenBraceToken);
@@ -159,42 +161,48 @@ internal sealed partial class Parser
         return true;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool NextTokenIsIdentifier()
     {
         NextToken();
         return IsIdentifier();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool NextTokenIsIdentifierOrKeyword()
     {
         NextToken();
         return Scanner.TokenIsIdentifierOrKeyword(Token());
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool NextTokenIsIdentifierOrKeywordOrGreaterThan()
     {
         NextToken();
         return Scanner.TokenIsIdentifierOrKeywordOrGreaterThan(Token());
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsHeritageClauseExtendsOrImplementsKeyword()
     {
         if (
             Token() == SyntaxKind.ImplementsKeyword ||
             Token() == SyntaxKind.ExtendsKeyword)
         {
-            return LookAhead(static p => p.NextTokenIsStartOfExpression());
+            return LookAhead(new F.NextTokenIsStartOfExpression());
         }
 
         return false;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool NextTokenIsStartOfExpression()
     {
         NextToken();
         return IsStartOfExpression();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool NextTokenIsStartOfType()
     {
         NextToken();
@@ -202,6 +210,7 @@ internal sealed partial class Parser
     }
 
     // True if positioned at a list terminator
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsListTerminator(ParsingContext kind)
     {
         if (Token() == SyntaxKind.EndOfFileToken)
@@ -251,12 +260,13 @@ internal sealed partial class Parser
             case ParsingContext.JsxAttributes:
                 return Token() == SyntaxKind.GreaterThanToken || Token() == SyntaxKind.SlashToken;
             case ParsingContext.JsxChildren:
-                return Token() == SyntaxKind.LessThanToken && LookAhead(static p => p.NextTokenIsSlash());
+                return Token() == SyntaxKind.LessThanToken && LookAhead(new F.NextTokenIsSlash());
             default:
                 return false;
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsVariableDeclaratorListTerminator()
     {
         // If we can consume a semicolon (either explicitly, or with ASI), then consider us done
@@ -287,6 +297,7 @@ internal sealed partial class Parser
     }
 
     // True if positioned at element or terminator of the current list or any enclosing list
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsInSomeParsingContext()
     {
         // We should be in at least one parsing context, be it SourceElements while parsing
@@ -307,7 +318,9 @@ internal sealed partial class Parser
     }
 
     // Parses a list of elements
-    private NodeList ParseList(ParsingContext kind, Func<Parser, Node> parseElement)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private NodeList ParseList<TCallback>(ParsingContext kind, TCallback parseElement)
+        where TCallback : struct, IParserCallback<Node>
     {
         var saveParsingContext = parsingContext;
         parsingContext |= 1 << (int)kind;
@@ -334,7 +347,9 @@ internal sealed partial class Parser
         return CreateNodeArray(list, listPos);
     }
 
-    private Node ParseListElement(ParsingContext parsingContext, Func<Parser, Node> parseElement)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private Node ParseListElement<TCallback>(ParsingContext parsingContext, TCallback parseElement)
+        where TCallback : struct, IParserCallback<Node>
     {
         var node = CurrentNode(parsingContext);
         if (!node.IsNone)
@@ -342,9 +357,10 @@ internal sealed partial class Parser
             return ConsumeNode(node);
         }
 
-        return parseElement(this);
+        return parseElement.Invoke(this);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node CurrentNode(ParsingContext parsingContext, int? pos = null)
     {
         // If we don't have a cursor or the parsing context isn't reusable, there's nothing to reuse.
@@ -361,7 +377,14 @@ internal sealed partial class Parser
             return default;
         }
 
-        var node = syntaxCursor.CurrentNode(pos ?? scanner.GetTokenFullStart());
+        return CurrentNodeOfSyntaxCursor(parsingContext, pos);
+    }
+
+    // The rest of currentNode, with a syntax cursor (Track O: a method of its own; the cursor is a delegate).
+    [NoAllocUnchecked("rare path: nodes are reused through the syntax cursor only while top-level await is reparsed")]
+    private Node CurrentNodeOfSyntaxCursor(ParsingContext parsingContext, int? pos)
+    {
+        var node = syntaxCursor!.CurrentNode(pos ?? scanner.GetTokenFullStart());
 
         // Can't reuse a missing node.
         // Can't reuse a node that intersected the change range.
@@ -404,6 +427,7 @@ internal sealed partial class Parser
         return node;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ConsumeNode(Node node)
     {
         // Move the scanner so it is after the node we just consumed.
@@ -412,6 +436,7 @@ internal sealed partial class Parser
         return node;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsReusableParsingContext(ParsingContext parsingContext)
     {
         switch (parsingContext)
@@ -431,6 +456,7 @@ internal sealed partial class Parser
         return false;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool CanReuseNode(NodeStore store, Node node, ParsingContext parsingContext)
     {
         switch (parsingContext)
@@ -511,6 +537,7 @@ internal sealed partial class Parser
         return false;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsReusableClassMember(NodeStore store, Node node)
     {
         if (!node.IsNone)
@@ -539,6 +566,7 @@ internal sealed partial class Parser
         return false;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsReusableSwitchClause(NodeStore store, Node node)
     {
         if (!node.IsNone)
@@ -554,6 +582,7 @@ internal sealed partial class Parser
         return false;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsReusableStatement(NodeStore store, Node node)
     {
         if (!node.IsNone)
@@ -596,11 +625,13 @@ internal sealed partial class Parser
         return false;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsReusableEnumMember(NodeStore store, Node node)
     {
         return store.Kind(node) == SyntaxKind.EnumMember;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsReusableTypeMember(NodeStore store, Node node)
     {
         if (!node.IsNone)
@@ -619,6 +650,7 @@ internal sealed partial class Parser
         return false;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsReusableVariableDeclaration(NodeStore store, Node node)
     {
         if (store.Kind(node) != SyntaxKind.VariableDeclaration)
@@ -644,6 +676,7 @@ internal sealed partial class Parser
         return store.Initializer(variableDeclarator).IsNone;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsReusableParameter(NodeStore store, Node node)
     {
         if (store.Kind(node) != SyntaxKind.Parameter)
@@ -657,6 +690,7 @@ internal sealed partial class Parser
     }
 
     // Returns true if we should abort parsing.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool AbortParsingListOrMoveToNextToken(ParsingContext kind)
     {
         ParsingContextErrors(kind);
@@ -669,6 +703,7 @@ internal sealed partial class Parser
         return false;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private DiagnosticWithDetachedLocation? ParsingContextErrors(ParsingContext context)
     {
         switch (context)
@@ -746,7 +781,9 @@ internal sealed partial class Parser
     /// <summary>
     /// Parses a comma-delimited list of elements (TypeScript's overload whose elements are never undefined).
     /// </summary>
-    private NodeList ParseDelimitedList(ParsingContext kind, Func<Parser, Node> parseElement, bool? considerSemicolonAsDelimiter = null)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private NodeList ParseDelimitedList<TCallback>(ParsingContext kind, TCallback parseElement, bool? considerSemicolonAsDelimiter = null)
+        where TCallback : struct, IParserCallback<Node>
     {
         return ParseDelimitedListOrUndefined(kind, parseElement, considerSemicolonAsDelimiter);
     }
@@ -755,7 +792,9 @@ internal sealed partial class Parser
     /// Parses a comma-delimited list of elements. TypeScript's overload whose element parser may return undefined
     /// (then the list is undefined); C# cannot overload on the nullability of the callback, so it has its own name.
     /// </summary>
-    private NodeList ParseDelimitedListOrUndefined(ParsingContext kind, Func<Parser, Node> parseElement, bool? considerSemicolonAsDelimiter = null)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private NodeList ParseDelimitedListOrUndefined<TCallback>(ParsingContext kind, TCallback parseElement, bool? considerSemicolonAsDelimiter = null)
+        where TCallback : struct, IParserCallback<Node>
     {
         var saveParsingContext = parsingContext;
         parsingContext |= 1 << (int)kind;
@@ -835,11 +874,13 @@ internal sealed partial class Parser
         return CreateNodeArray(list, listPos, /*end*/ null, commaStart >= 0);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static DiagnosticMessage? GetExpectedCommaDiagnostic(ParsingContext kind)
     {
         return kind == ParsingContext.EnumMembers ? Diagnostics.An_enum_member_name_must_be_followed_by_a_or : null;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private NodeList CreateMissingList()
     {
         var list = CreateNodeArray(store.BeginList(), GetNodePos());
@@ -848,12 +889,15 @@ internal sealed partial class Parser
         return list;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsMissingList(NodeList arr)
     {
         return store.IsMissingList(arr);
     }
 
-    private NodeList ParseBracketedList(ParsingContext kind, Func<Parser, Node> parseElement, SyntaxKind open, SyntaxKind close)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private NodeList ParseBracketedList<TCallback>(ParsingContext kind, TCallback parseElement, SyntaxKind open, SyntaxKind close)
+        where TCallback : struct, IParserCallback<Node>
     {
         if (ParseExpected(open))
         {
@@ -865,6 +909,7 @@ internal sealed partial class Parser
         return CreateMissingList();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseEntityName(bool allowReservedWords, DiagnosticMessage? diagnosticMessage = null)
     {
         var pos = GetNodePos();
@@ -886,11 +931,13 @@ internal sealed partial class Parser
         return entity;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node CreateQualifiedName(Node entity, Node name)
     {
         return FinishNode(factory.CreateQualifiedName(entity, name), store.Pos(entity));
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseRightSideOfDot(bool allowIdentifierNames, bool allowPrivateIdentifiers, bool allowUnicodeEscapeSequenceInIdentifierName)
     {
         // Technically a keyword is valid here as all identifiers and keywords are identifier names.
@@ -914,7 +961,7 @@ internal sealed partial class Parser
         // line terminator after the identifier or keyword.
         if (scanner.HasPrecedingLineBreak() && Scanner.TokenIsIdentifierOrKeyword(Token()))
         {
-            var matchesPattern = LookAhead(static p => p.NextTokenIsIdentifierOrKeywordOnSameLine());
+            var matchesPattern = LookAhead(new F.NextTokenIsIdentifierOrKeywordOnSameLine());
 
             if (matchesPattern)
             {
@@ -939,6 +986,7 @@ internal sealed partial class Parser
         return ParseIdentifier();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private NodeList ParseTemplateSpans(bool isTaggedTemplate)
     {
         var pos = GetNodePos();
@@ -953,6 +1001,7 @@ internal sealed partial class Parser
         return CreateNodeArray(list, pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseTemplateExpression(bool isTaggedTemplate)
     {
         var pos = GetNodePos();
@@ -963,6 +1012,7 @@ internal sealed partial class Parser
             pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseTemplateType()
     {
         var pos = GetNodePos();
@@ -973,6 +1023,7 @@ internal sealed partial class Parser
             pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private NodeList ParseTemplateTypeSpans()
     {
         var pos = GetNodePos();
@@ -987,6 +1038,7 @@ internal sealed partial class Parser
         return CreateNodeArray(list, pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseTemplateTypeSpan()
     {
         var pos = GetNodePos();
@@ -997,6 +1049,7 @@ internal sealed partial class Parser
             pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseLiteralOfTemplateSpan(bool isTaggedTemplate)
     {
         if (Token() == SyntaxKind.CloseBraceToken)
@@ -1011,21 +1064,24 @@ internal sealed partial class Parser
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseTemplateSpan(bool isTaggedTemplate)
     {
         var pos = GetNodePos();
         return FinishNode(
             factory.CreateTemplateSpan(
-                AllowInAnd(static p => p.ParseExpression()),
+                AllowInAnd(new F.ParseExpression()),
                 ParseLiteralOfTemplateSpan(isTaggedTemplate)),
             pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseLiteralNode()
     {
         return ParseLiteralLikeNode(Token());
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseTemplateHead(bool isTaggedTemplate)
     {
         if (!isTaggedTemplate && (scanner.GetTokenFlags() & TokenFlags.IsInvalid) != 0)
@@ -1037,6 +1093,7 @@ internal sealed partial class Parser
         return fragment;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseTemplateMiddleOrTemplateTail()
     {
         var fragment = ParseLiteralLikeNode(Token());
@@ -1044,6 +1101,7 @@ internal sealed partial class Parser
         return fragment;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private TextRef GetTemplateLiteralRawText(SyntaxKind kind)
     {
         var isLast = kind == SyntaxKind.NoSubstitutionTemplateLiteral || kind == SyntaxKind.TemplateTail;
@@ -1051,6 +1109,7 @@ internal sealed partial class Parser
         return tokenText.Substring(1, tokenText.Length - (scanner.IsUnterminated() ? 0 : isLast ? 1 : 2));
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseLiteralLikeNode(SyntaxKind kind)
     {
         var pos = GetNodePos();
@@ -1097,6 +1156,7 @@ internal sealed partial class Parser
     }
 
     /// <summary>`node.hasExtendedUnicodeEscape = true` on a LiteralLikeNode (the classes declare the field one by one).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static void SetLiteralLikeHasExtendedUnicodeEscape(NodeStore store, Node node)
     {
         switch (node)
@@ -1132,6 +1192,7 @@ internal sealed partial class Parser
     }
 
     /// <summary>`node.isUnterminated = true` on a LiteralLikeNode (the classes declare the field one by one).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static void SetLiteralLikeIsUnterminated(NodeStore store, Node node)
     {
         switch (node)

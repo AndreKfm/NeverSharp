@@ -20,6 +20,7 @@ internal static partial class FactoryUtilitiesPublic
     }
 
     // Track O: the same for nodes, whose ranges are read and written through the store.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static Node SetTextRange(NodeStore store, Node range, Node location)
     {
         return !location.IsNone ? Utilities.SetTextRangePosEnd(store, range, store.Pos(location), store.End(location)) : range;
@@ -30,6 +31,7 @@ internal static partial class FactoryUtilitiesPublic
         return location != null ? Utilities.SetTextRangePosEnd(store, range, location.Pos, location.End) : range;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static NodeList SetTextRange(NodeStore store, NodeList range, NodeList location)
     {
         return !location.IsNone ? Utilities.SetTextRangePosEnd(store, range, store.Pos(location), store.End(location)) : range;

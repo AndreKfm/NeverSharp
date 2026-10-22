@@ -38,12 +38,14 @@ internal class Diagnostic : DiagnosticRelatedInformation
 /// <summary>types.ts: DiagnosticWithLocation (start and length are defined).</summary>
 internal sealed class DiagnosticWithLocation : Diagnostic
 {
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public int Start
     {
         get => StartOrUndefined!.Value;
         set => StartOrUndefined = value;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public int Length
     {
         get => LengthOrUndefined!.Value;
@@ -56,12 +58,14 @@ internal sealed class DiagnosticWithDetachedLocation : Diagnostic
 {
     public string FileName = null!;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public int Start
     {
         get => StartOrUndefined!.Value;
         set => StartOrUndefined = value;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public int Length
     {
         get => LengthOrUndefined!.Value;
@@ -109,6 +113,7 @@ internal sealed class AmdDependency
 /// </summary>
 internal sealed class SourceFile
 {
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SourceFile(NodeStore store, Node root)
     {
         Store = store;
@@ -120,10 +125,13 @@ internal sealed class SourceFile
     /// <summary>The SourceFile node.</summary>
     internal Node Root { get; }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal int NodeCount => Store.NodeCount(Root);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal List<DiagnosticWithLocation> ParseDiagnostics => Store.ParseDiagnostics(Root);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal List<DiagnosticWithLocation>? JsDocDiagnostics => Store.JsDocDiagnostics(Root);
 }
 
@@ -133,14 +141,17 @@ internal sealed class SourceFileNodeLike : ISourceFileLike
     private readonly NodeStore store;
     private readonly Node sourceFile;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SourceFileNodeLike(NodeStore store, Node sourceFile)
     {
         this.store = store;
         this.sourceFile = sourceFile;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public string Text => store.SourceFileText(sourceFile);
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public IReadOnlyList<int>? LineMap
     {
         get => store.LineMap(sourceFile);

@@ -15,6 +15,7 @@ namespace NeverSharp.Optimized;
 /// <summary>factory/utilitiesPublic.ts (canHaveModifiers; setTextRange is in Core/).</summary>
 internal static partial class FactoryUtilitiesPublic
 {
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool CanHaveModifiers(NodeStore store, Node node)
     {
         var kind = store.Kind(node);

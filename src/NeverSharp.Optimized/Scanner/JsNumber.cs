@@ -303,6 +303,10 @@ internal static class JsNumber
 
     private static double ParseIntBig(string digits, int radix)
     {
+        if (BitOperations.IsPow2(radix))
+        {
+            return ParseIntPowerOfTwo(digits, BitOperations.Log2((uint)radix));
+        }
         var big = BigInteger.Zero;
         foreach (var ch in digits)
         {
@@ -315,6 +319,51 @@ internal static class JsNumber
         }
         // The decimal string of the exact integer parses with correct rounding (round half to even).
         return double.Parse(big.ToString(CultureInfo.InvariantCulture), NumberStyles.None, CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// Track O (O-NA): ParseIntBig for a radix 2^<paramref name="bitsPerDigit"/> (2, 8, 16: every radix the scanner
+    /// passes) without BigInteger: the digits are bits, so the double is the leading 64 bits rounded to 53, half to
+    /// even, with the bits below as a sticky bit, scaled by the number of bits left out (the decimal round trip of the
+    /// BigInteger form gives the same correctly rounded value).
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private static double ParseIntPowerOfTwo(string digits, int bitsPerDigit)
+    {
+        ulong mantissa = 0;
+        var shift = 0; // bits left out below mantissa
+        var sticky = false;
+        foreach (var ch in digits)
+        {
+            var d = DigitValue(ch);
+            if (d < 0 || d >= 1 << bitsPerDigit)
+            {
+                break;
+            }
+            if (BitOperations.LeadingZeroCount(mantissa) >= bitsPerDigit)
+            {
+                mantissa = (mantissa << bitsPerDigit) | (uint)d;
+            }
+            else
+            {
+                shift += bitsPerDigit;
+                sticky |= d != 0;
+            }
+        }
+        var length = 64 - BitOperations.LeadingZeroCount(mantissa);
+        var excess = length - 53;
+        if (excess > 0)
+        {
+            var roundBit = (mantissa >> (excess - 1)) & 1;
+            var below = (mantissa & ((1UL << (excess - 1)) - 1)) != 0 || sticky;
+            mantissa >>= excess;
+            if (roundBit != 0 && (below || (mantissa & 1) != 0))
+            {
+                mantissa++;
+            }
+            shift += excess;
+        }
+        return Math.ScaleB(mantissa, shift);
     }
 
     /// <summary>`number.toString(radix)` for an integral number (the only kind the scanner formats with a radix).</summary>
@@ -347,6 +396,7 @@ internal static class JsNumber
         return sb.ToString();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static int DigitValue(char ch)
     {
         if (ch >= '0' && ch <= '9')
@@ -364,6 +414,7 @@ internal static class JsNumber
         return -1;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsAllDigits(string s)
     {
         foreach (var ch in s)

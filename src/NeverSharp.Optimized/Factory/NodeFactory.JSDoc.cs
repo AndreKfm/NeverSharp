@@ -25,6 +25,7 @@ internal sealed partial class NodeFactory
 
     // createJSDocAllType
     // createJSDocUnknownType
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node CreateJSDocPrimaryTypeWorker(SyntaxKind kind)
     {
         return CreateBaseNode(kind);
@@ -32,6 +33,7 @@ internal sealed partial class NodeFactory
 
     // createJSDocNullableType
     // createJSDocNonNullableType
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node CreateJSDocPrePostfixUnaryTypeWorker(SyntaxKind kind, Node type, bool postfix = false)
     {
         var node = CreateJSDocUnaryTypeWorker(
@@ -52,6 +54,7 @@ internal sealed partial class NodeFactory
     // createJSDocOptionalType
     // createJSDocVariadicType
     // createJSDocNamepathType
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node CreateJSDocUnaryTypeWorker(SyntaxKind kind, Node type)
     {
         var node = CreateBaseNode(kind);
@@ -61,6 +64,7 @@ internal sealed partial class NodeFactory
 
     // updateJSDocNonNullableType
     // updateJSDocNullableType
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node UpdateJSDocPrePostfixUnaryTypeWorker(SyntaxKind kind, Node node, Node type)
     {
         return GetJSDocUnaryType(store, node) != type
@@ -71,6 +75,7 @@ internal sealed partial class NodeFactory
     // updateJSDocOptionalType
     // updateJSDocVariadicType
     // updateJSDocNamepathType
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node UpdateJSDocUnaryTypeWorker(SyntaxKind kind, Node node, Node type)
     {
         return GetJSDocUnaryType(store, node) != type
@@ -79,6 +84,7 @@ internal sealed partial class NodeFactory
     }
 
     /// <summary>`node.type = type` on the JSDoc unary type nodes.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static void SetJSDocUnaryType(NodeStore store, Node node, Node type)
     {
         switch (node)
@@ -99,11 +105,12 @@ internal sealed partial class NodeFactory
                 store.SetType(n, type);
                 break;
             default:
-                throw new InvalidOperationException($"{store.Kind(node)} is not a JSDoc unary type");
+                throw Debug.UnexpectedKind(store.Kind(node), "a JSDoc unary type");
         }
     }
 
     /// <summary>`node.type` on the JSDoc unary type nodes.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static Node GetJSDocUnaryType(NodeStore store, Node node)
     {
         return node switch
@@ -113,32 +120,40 @@ internal sealed partial class NodeFactory
             var n when store.IsJSDocOptionalType(n) => store.Type(n),
             var n when store.IsJSDocVariadicType(n) => store.Type(n),
             var n when store.IsJSDocNamepathType(n) => store.Type(n),
-            _ => throw new InvalidOperationException($"{store.Kind(node)} is not a JSDoc unary type"),
+            _ => throw Debug.UnexpectedKind(store.Kind(node), "a JSDoc unary type"),
         };
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocAllType() => CreateJSDocPrimaryTypeWorker(SyntaxKind.JSDocAllType);
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocUnknownType() => CreateJSDocPrimaryTypeWorker(SyntaxKind.JSDocUnknownType);
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocNonNullableType(Node type, bool postfix = false) => CreateJSDocPrePostfixUnaryTypeWorker(SyntaxKind.JSDocNonNullableType, type, postfix);
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocNullableType(Node type, bool postfix = false) => CreateJSDocPrePostfixUnaryTypeWorker(SyntaxKind.JSDocNullableType, type, postfix);
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocOptionalType(Node type) => CreateJSDocUnaryTypeWorker(SyntaxKind.JSDocOptionalType, type);
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocVariadicType(Node type) => CreateJSDocUnaryTypeWorker(SyntaxKind.JSDocVariadicType, type);
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocNamepathType(Node type) => CreateJSDocUnaryTypeWorker(SyntaxKind.JSDocNamepathType, type);
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocFunctionType(NodeList parameters, Node type)
     {
         var node = CreateBaseDeclaration(SyntaxKind.JSDocFunctionType);
@@ -154,6 +169,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocTypeLiteral(NodeList propertyTags = default, bool isArrayType = false)
     {
         var node = CreateBaseDeclaration(SyntaxKind.JSDocTypeLiteral);
@@ -166,6 +182,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocTypeExpression(Node type)
     {
         var node = CreateBaseNode(SyntaxKind.JSDocTypeExpression);
@@ -174,6 +191,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocSignature(NodeList typeParameters, NodeList parameters, Node type = default)
     {
         var node = CreateBaseDeclaration(SyntaxKind.JSDocSignature);
@@ -190,6 +208,7 @@ internal sealed partial class NodeFactory
         return node;
     }
 
+    [NoAllocUnchecked("per-file result: the array of a JSDoc type literal's property tags")]
     private Node[] ToArray(NodeList array)
     {
         return store.Nodes(array).ToArray();
@@ -205,6 +224,7 @@ internal sealed partial class NodeFactory
     }
 
     /// <summary>`createBaseJSDocTag(kind, tagName, comment: string | NodeArray&lt;JSDocComment&gt; | undefined)`.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node CreateBaseJSDocTag(SyntaxKind kind, Node tagName, TextOrList comment)
     {
         var node = CreateBaseNode(kind);
@@ -212,6 +232,7 @@ internal sealed partial class NodeFactory
         return node;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node CreateBaseJSDocTagDeclaration(SyntaxKind kind, Node tagName, TextOrList comment)
     {
         var node = CreateBaseDeclaration(kind);
@@ -220,6 +241,7 @@ internal sealed partial class NodeFactory
     }
 
     /// <summary>`node.tagName = tagName; node.comment = comment;` on the JSDoc tag nodes.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static void SetJSDocTagNameAndComment(NodeStore store, Node node, Node tagName, TextOrList comment)
     {
         switch (node)
@@ -249,11 +271,12 @@ internal sealed partial class NodeFactory
             case var n when store.IsJSDocTypeTag(n): store.SetTagName(n, tagName); store.SetComment(n, comment); break;
             case var n when store.IsJSDocTypedefTag(n): store.SetTagName(n, tagName); store.SetComment(n, comment); break;
             case var n when store.IsJSDocUnknownTag(n): store.SetTagName(n, tagName); store.SetComment(n, comment); break;
-            default: throw new InvalidOperationException($"{store.Kind(node)} is not a JSDoc tag");
+            default: throw Debug.UnexpectedKind(store.Kind(node), "a JSDoc tag");
         }
     }
 
     /// <summary>`node.tagName` on the JSDoc tag nodes.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static Node GetJSDocTagName(NodeStore store, Node node)
     {
         return node switch
@@ -283,11 +306,12 @@ internal sealed partial class NodeFactory
             var n when store.IsJSDocTypeTag(n) => store.TagName(n),
             var n when store.IsJSDocTypedefTag(n) => store.TagName(n),
             var n when store.IsJSDocUnknownTag(n) => store.TagName(n),
-            _ => throw new InvalidOperationException($"{store.Kind(node)} is not a JSDoc tag"),
+            _ => throw Debug.UnexpectedKind(store.Kind(node), "a JSDoc tag"),
         };
     }
 
     /// <summary>`node.comment` on the JSDoc tag nodes.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static TextOrList GetJSDocTagComment(NodeStore store, Node node)
     {
         return node switch
@@ -317,11 +341,12 @@ internal sealed partial class NodeFactory
             var n when store.IsJSDocTypeTag(n) => store.Comment(n),
             var n when store.IsJSDocTypedefTag(n) => store.Comment(n),
             var n when store.IsJSDocUnknownTag(n) => store.Comment(n),
-            _ => throw new InvalidOperationException($"{store.Kind(node)} is not a JSDoc tag"),
+            _ => throw Debug.UnexpectedKind(store.Kind(node), "a JSDoc tag"),
         };
     }
 
     /// <summary>`node.typeExpression = typeExpression` on the type-like JSDoc tags.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static void SetJSDocTypeLikeTagTypeExpression(NodeStore store, Node node, Node typeExpression)
     {
         switch (node)
@@ -332,11 +357,12 @@ internal sealed partial class NodeFactory
             case var n when store.IsJSDocThrowsTag(n): store.SetTypeExpression(n, typeExpression); break;
             case var n when store.IsJSDocSatisfiesTag(n): store.SetTypeExpression(n, typeExpression); break;
             case var n when store.IsJSDocEnumTag(n): store.SetTypeExpression(n, typeExpression); break;
-            default: throw new InvalidOperationException($"{store.Kind(node)} is not a type-like JSDoc tag");
+            default: throw Debug.UnexpectedKind(store.Kind(node), "a type-like JSDoc tag");
         }
     }
 
     /// <summary>`node.typeExpression` on the type-like JSDoc tags.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static Node GetJSDocTypeLikeTagTypeExpression(NodeStore store, Node node)
     {
         return node switch
@@ -347,11 +373,12 @@ internal sealed partial class NodeFactory
             var n when store.IsJSDocThrowsTag(n) => store.TypeExpression(n),
             var n when store.IsJSDocSatisfiesTag(n) => store.TypeExpression(n),
             var n when store.IsJSDocEnumTag(n) => store.TypeExpression(n),
-            _ => throw new InvalidOperationException($"{store.Kind(node)} is not a type-like JSDoc tag"),
+            _ => throw Debug.UnexpectedKind(store.Kind(node), "a type-like JSDoc tag"),
         };
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocTemplateTag(Node tagName, Node constraint, NodeList typeParameters, TextOrList comment = default)
     {
         var node = CreateBaseJSDocTag(SyntaxKind.JSDocTemplateTag, (tagName.IsNone ? CreateIdentifier("template") : tagName), comment);
@@ -361,6 +388,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocTypedefTag(Node tagName, Node typeExpression = default, Node fullName = default, TextOrList comment = default)
     {
         var node = CreateBaseJSDocTagDeclaration(SyntaxKind.JSDocTypedefTag, (tagName.IsNone ? CreateIdentifier("typedef") : tagName), comment);
@@ -373,6 +401,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocParameterTag(Node tagName, Node name, bool isBracketed, Node typeExpression = default, bool? isNameFirst = null, TextOrList comment = default)
     {
         var node = CreateBaseJSDocTagDeclaration(SyntaxKind.JSDocParameterTag, (tagName.IsNone ? CreateIdentifier("param") : tagName), comment);
@@ -384,6 +413,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocPropertyTag(Node tagName, Node name, bool isBracketed, Node typeExpression = default, bool? isNameFirst = null, TextOrList comment = default)
     {
         var node = CreateBaseJSDocTagDeclaration(SyntaxKind.JSDocPropertyTag, (tagName.IsNone ? CreateIdentifier("prop") : tagName), comment);
@@ -395,6 +425,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocCallbackTag(Node tagName, Node typeExpression, Node fullName = default, TextOrList comment = default)
     {
         var node = CreateBaseJSDocTagDeclaration(SyntaxKind.JSDocCallbackTag, (tagName.IsNone ? CreateIdentifier("callback") : tagName), comment);
@@ -407,6 +438,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocOverloadTag(Node tagName, Node typeExpression, TextOrList comment = default)
     {
         var node = CreateBaseJSDocTag(SyntaxKind.JSDocOverloadTag, (tagName.IsNone ? CreateIdentifier("overload") : tagName), comment);
@@ -415,6 +447,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocAugmentsTag(Node tagName, Node className, TextOrList comment = default)
     {
         var node = CreateBaseJSDocTag(SyntaxKind.JSDocAugmentsTag, (tagName.IsNone ? CreateIdentifier("augments") : tagName), comment);
@@ -423,6 +456,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocImplementsTag(Node tagName, Node className, TextOrList comment = default)
     {
         var node = CreateBaseJSDocTag(SyntaxKind.JSDocImplementsTag, (tagName.IsNone ? CreateIdentifier("implements") : tagName), comment);
@@ -431,6 +465,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocSeeTag(Node tagName, Node name, TextOrList comment = default)
     {
         var node = CreateBaseJSDocTag(SyntaxKind.JSDocSeeTag, (tagName.IsNone ? CreateIdentifier("see") : tagName), comment);
@@ -439,6 +474,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocNameReference(Node name)
     {
         var node = CreateBaseNode(SyntaxKind.JSDocNameReference);
@@ -447,6 +483,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocMemberName(Node left, Node right)
     {
         var node = CreateBaseNode(SyntaxKind.JSDocMemberName);
@@ -458,6 +495,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocLink(Node name, TextRef text)
     {
         var node = CreateBaseNode(SyntaxKind.JSDocLink);
@@ -467,6 +505,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocLinkCode(Node name, TextRef text)
     {
         var node = CreateBaseNode(SyntaxKind.JSDocLinkCode);
@@ -476,6 +515,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocLinkPlain(Node name, TextRef text)
     {
         var node = CreateBaseNode(SyntaxKind.JSDocLinkPlain);
@@ -491,6 +531,7 @@ internal sealed partial class NodeFactory
     // createJSDocProtectedTag
     // createJSDocReadonlyTag
     // createJSDocDeprecatedTag
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node CreateJSDocSimpleTagWorker(SyntaxKind kind, Node tagName, TextOrList comment = default)
     {
         var node = CreateBaseJSDocTag(kind, (tagName.IsNone ? CreateIdentifier(GetDefaultTagNameForKind(kind)) : tagName), comment);
@@ -518,6 +559,7 @@ internal sealed partial class NodeFactory
     // createJSDocThisTag
     // createJSDocEnumTag
     // createJSDocSatisfiesTag
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node CreateJSDocTypeLikeTagWorker(SyntaxKind kind, Node tagName, Node typeExpression = default, TextOrList comment = default)
     {
         var node = CreateBaseJSDocTag(kind, (tagName.IsNone ? CreateIdentifier(GetDefaultTagNameForKind(kind)) : tagName), comment);
@@ -541,45 +583,59 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocTypeTag(Node tagName, Node typeExpression = default, TextOrList comment = default) => CreateJSDocTypeLikeTagWorker(SyntaxKind.JSDocTypeTag, tagName, typeExpression, comment);
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocReturnTag(Node tagName, Node typeExpression = default, TextOrList comment = default) => CreateJSDocTypeLikeTagWorker(SyntaxKind.JSDocReturnTag, tagName, typeExpression, comment);
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocThisTag(Node tagName, Node typeExpression = default, TextOrList comment = default) => CreateJSDocTypeLikeTagWorker(SyntaxKind.JSDocThisTag, tagName, typeExpression, comment);
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocThrowsTag(Node tagName, Node typeExpression = default, TextOrList comment = default) => CreateJSDocTypeLikeTagWorker(SyntaxKind.JSDocThrowsTag, tagName, typeExpression, comment);
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocSatisfiesTag(Node tagName, Node typeExpression = default, TextOrList comment = default) => CreateJSDocTypeLikeTagWorker(SyntaxKind.JSDocSatisfiesTag, tagName, typeExpression, comment);
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocAuthorTag(Node tagName, TextOrList comment = default) => CreateJSDocSimpleTagWorker(SyntaxKind.JSDocAuthorTag, tagName, comment);
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocClassTag(Node tagName, TextOrList comment = default) => CreateJSDocSimpleTagWorker(SyntaxKind.JSDocClassTag, tagName, comment);
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocPublicTag(Node tagName, TextOrList comment = default) => CreateJSDocSimpleTagWorker(SyntaxKind.JSDocPublicTag, tagName, comment);
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocPrivateTag(Node tagName, TextOrList comment = default) => CreateJSDocSimpleTagWorker(SyntaxKind.JSDocPrivateTag, tagName, comment);
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocProtectedTag(Node tagName, TextOrList comment = default) => CreateJSDocSimpleTagWorker(SyntaxKind.JSDocProtectedTag, tagName, comment);
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocReadonlyTag(Node tagName, TextOrList comment = default) => CreateJSDocSimpleTagWorker(SyntaxKind.JSDocReadonlyTag, tagName, comment);
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocOverrideTag(Node tagName, TextOrList comment = default) => CreateJSDocSimpleTagWorker(SyntaxKind.JSDocOverrideTag, tagName, comment);
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocDeprecatedTag(Node tagName, TextOrList comment = default) => CreateJSDocSimpleTagWorker(SyntaxKind.JSDocDeprecatedTag, tagName, comment);
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocUnknownTag(Node tagName, TextOrList comment = default)
     {
         var node = CreateBaseJSDocTag(SyntaxKind.JSDocTag, tagName, comment);
@@ -587,6 +643,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocEnumTag(Node tagName, Node typeExpression, TextOrList comment = default)
     {
         var node = CreateBaseJSDocTagDeclaration(SyntaxKind.JSDocEnumTag, (tagName.IsNone ? CreateIdentifier(GetDefaultTagNameForKind(SyntaxKind.JSDocEnumTag)) : tagName), comment);
@@ -597,6 +654,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocImportTag(Node tagName, Node importClause, Node moduleSpecifier, Node attributes = default, TextOrList comment = default)
     {
         var node = CreateBaseJSDocTag(SyntaxKind.JSDocImportTag, (tagName.IsNone ? CreateIdentifier("import") : tagName), comment);
@@ -608,6 +666,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocText(TextRef text)
     {
         var node = CreateBaseNode(SyntaxKind.JSDocText);
@@ -616,6 +675,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJSDocComment(TextOrList comment = default, NodeList tags = default)
     {
         var node = CreateBaseNode(SyntaxKind.JSDoc);
