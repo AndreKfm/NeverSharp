@@ -31,7 +31,7 @@ internal sealed class CreateSourceFileOptions
     /// `getSetExternalModuleIndicator` on a valid `CompilerOptions` object. If not present, the default
     /// check specified by `isFileProbablyExternalModule` will be used to set the field.
     /// </summary>
-    public Action<SourceFile>? SetExternalModuleIndicator { get; set; }
+    public Action<Node>? SetExternalModuleIndicator { get; set; }
 
     public IReadOnlyList<string>? PackageJsonLocations { get; set; }
 
@@ -71,54 +71,59 @@ internal sealed partial class Parser
             CharCodeAt(text, start + 3) != (int)CharacterCodes.slash;
     }
 
-    internal static Node? IsFileProbablyExternalModule(SourceFile sourceFile)
+    internal static Node IsFileProbablyExternalModule(NodeStore store, Node sourceFile)
     {
         // Try to use the first top-level import/export when available, then
         // fall back to looking for an 'import.meta' somewhere in the tree if necessary.
-        return Core.ForEach(sourceFile.Statements, (statement, _) => IsAnExternalModuleIndicatorNode(statement)) ??
-            GetImportMetaIfNecessary(sourceFile);
+        return (Core.ForEach(store.Statements(sourceFile), (statement, _) => IsAnExternalModuleIndicatorNode(store, statement)) is { IsNone: false } __t1 ? __t1 : GetImportMetaIfNecessary(store, sourceFile));
     }
 
-    private static Node? IsAnExternalModuleIndicatorNode(Node node)
+    private static Node IsAnExternalModuleIndicatorNode(NodeStore store, Node node)
     {
-        return FactoryUtilitiesPublic.CanHaveModifiers(node) && HasModifierOfKind(node, SyntaxKind.ExportKeyword)
-                || FactoryNodeTests.IsImportEqualsDeclaration(node) && FactoryNodeTests.IsExternalModuleReference(((ImportEqualsDeclaration)node).ModuleReference)
-                || FactoryNodeTests.IsImportDeclaration(node)
-                || FactoryNodeTests.IsExportAssignment(node)
-                || FactoryNodeTests.IsExportDeclaration(node) ? node : null;
+        return FactoryUtilitiesPublic.CanHaveModifiers(store, node) && HasModifierOfKind(store, node, SyntaxKind.ExportKeyword)
+                || FactoryNodeTests.IsImportEqualsDeclaration(store, node) && FactoryNodeTests.IsExternalModuleReference(store, store.ModuleReference(node))
+                || FactoryNodeTests.IsImportDeclaration(store, node)
+                || FactoryNodeTests.IsExportAssignment(store, node)
+                || FactoryNodeTests.IsExportDeclaration(store, node) ? node : default;
     }
 
-    private static Node? GetImportMetaIfNecessary(SourceFile sourceFile)
+    private static Node GetImportMetaIfNecessary(NodeStore store, Node sourceFile)
     {
-        return (sourceFile.Flags & NodeFlags.PossiblyContainsImportMeta) != 0 ?
-            WalkTreeForImportMeta(sourceFile) :
-            null;
+        return (store.Flags(sourceFile) & NodeFlags.PossiblyContainsImportMeta) != 0 ?
+            WalkTreeForImportMeta(store, sourceFile) :
+            default;
     }
 
-    private static Node? WalkTreeForImportMeta(Node node)
+    private static Node WalkTreeForImportMeta(NodeStore store, Node node)
     {
-        return IsImportMeta(node) ? node : NodeVisitor.ForEachChild<Node>(node, WalkTreeForImportMeta);
+        if (IsImportMeta(store, node))
+        {
+            return node;
+        }
+        // (ForEachChild's callbacks return a reference or null: the node found is returned boxed.)
+        var found = NodeVisitor.ForEachChild<object>(store, node, child => WalkTreeForImportMeta(store, child) is { IsNone: false } meta ? meta : null);
+        return found is Node n ? n : default;
     }
 
     /// <summary>Do not use hasModifier inside the parser; it relies on parent pointers. Use this instead.</summary>
-    private static bool HasModifierOfKind(Node node, SyntaxKind kind)
+    private static bool HasModifierOfKind(NodeStore store, Node node, SyntaxKind kind)
     {
-        return Core.Some(NodeAccessors.GetModifiers(node), m => m.Kind == kind);
+        return Core.Some(store.Modifiers(node), m => store.Kind(m) == kind);
     }
 
-    private static bool IsImportMeta(Node node)
+    private static bool IsImportMeta(NodeStore store, Node node)
     {
-        return FactoryNodeTests.IsMetaProperty(node) && ((MetaProperty)node).KeywordToken == SyntaxKind.ImportKeyword && (string)((MetaProperty)node).Name.EscapedText! == "meta";
+        return FactoryNodeTests.IsMetaProperty(store, node) && store.KeywordToken(node) == SyntaxKind.ImportKeyword && (string)store.EscapedText(store.Name(node))! == "meta";
     }
 
     /// <summary>
     /// Iterates through the children of a node recursively (depth-first, pre-order), as forEachChild does for one
     /// level. A callback that returns the string "skip" prevents the traversal of the current node's children.
     /// </summary>
-    internal static T? ForEachChildRecursively<T>(Node rootNode, Func<Node, Node, object?> cbNode, Func<NodeArray, Node, object?>? cbNodes = null)
+    internal static T? ForEachChildRecursively<T>(NodeStore store, Node rootNode, Func<Node, Node, object?> cbNode, Func<NodeArray, Node, object?>? cbNodes = null)
         where T : class
     {
-        var queue = GatherPossibleChildren(rootNode);
+        var queue = GatherPossibleChildren(store, rootNode);
         var parents = new List<Node>(); // tracks parent references for elements in queue
         while (parents.Count < queue.Count)
         {
@@ -152,7 +157,7 @@ internal sealed partial class Parser
             }
             else
             {
-                var currentNode = (Node)current;
+                var currentNode = Node.FromObject(current);
                 var res = cbNode(currentNode, parent);
                 if (IsTruthy(res))
                 {
@@ -162,10 +167,10 @@ internal sealed partial class Parser
                     }
                     return (T)res!;
                 }
-                if (currentNode.Kind >= SyntaxKind.FirstNode)
+                if (store.Kind(currentNode) >= SyntaxKind.FirstNode)
                 {
                     // add children in reverse order to the queue, so popping gives the first child
-                    foreach (var child in GatherPossibleChildren(currentNode))
+                    foreach (var child in GatherPossibleChildren(store, currentNode))
                     {
                         queue.Add(child);
                         parents.Add(currentNode);
@@ -176,11 +181,11 @@ internal sealed partial class Parser
         return null;
     }
 
-    private static List<object> GatherPossibleChildren(Node node)
+    private static List<object> GatherPossibleChildren(NodeStore store, Node node)
     {
         var children = new List<object>();
         // By using a stack above and `unshift` here, we emulate a depth-first preorder traversal
-        NodeVisitor.ForEachChild<object>(node, n =>
+        NodeVisitor.ForEachChild<object>(store, node, n =>
         {
             children.Insert(0, n);
             return null;
@@ -192,9 +197,11 @@ internal sealed partial class Parser
         return children;
     }
 
-    private static void SetExternalModuleIndicator(SourceFile sourceFile)
+    private static void SetExternalModuleIndicator(NodeStore store, Node sourceFile)
     {
-        sourceFile.ExternalModuleIndicator = IsFileProbablyExternalModule(sourceFile);
+        // TypeScript: `true | Node`; undefined when the file is not a module (a boxed handle only for a module).
+        var indicator = IsFileProbablyExternalModule(store, sourceFile);
+        store.SetExternalModuleIndicator(sourceFile, indicator.IsNone ? null : indicator);
     }
 
     internal static SourceFile CreateSourceFile(string fileName, string sourceText, ScriptTarget languageVersion, bool setParentNodes = false, ScriptKind? scriptKind = null)
@@ -205,8 +212,10 @@ internal sealed partial class Parser
     internal static SourceFile CreateSourceFile(string fileName, string sourceText, CreateSourceFileOptions languageVersionOrOptions, bool setParentNodes = false, ScriptKind? scriptKind = null)
     {
         // (tracing and performance marks are instrumentation and left out.)
-        SourceFile result;
+        Node result;
 
+        // Track O: the nodes of this parse live in their own store, which the result keeps.
+        var store = new NodeStore(sourceText.Length);
         var languageVersion = languageVersionOrOptions.LanguageVersion;
         var overrideSetExternalModuleIndicator = languageVersionOrOptions.SetExternalModuleIndicator;
         var format = languageVersionOrOptions.ImpliedNodeFormat;
@@ -216,24 +225,32 @@ internal sealed partial class Parser
         {
             if (languageVersion == ScriptTarget.JSON)
             {
-                result = parser.ParseSourceFile(fileName, sourceText, languageVersion, /*syntaxCursor*/ null, setParentNodes, ScriptKind.JSON, _ => { }, jsDocParsingMode ?? JSDocParsingMode.ParseAll);
+                result = parser.ParseSourceFile(store, fileName, sourceText, languageVersion, /*syntaxCursor*/ null, setParentNodes, ScriptKind.JSON, _ => { }, jsDocParsingMode ?? JSDocParsingMode.ParseAll);
             }
             else
             {
-                Action<SourceFile>? setIndicator = format == null ? overrideSetExternalModuleIndicator : file =>
+                Action<Node>? setIndicator = format == null ? overrideSetExternalModuleIndicator : file =>
                 {
-                    file.ImpliedNodeFormat = format.Value;
-                    (overrideSetExternalModuleIndicator ?? SetExternalModuleIndicator)(file);
+                    store.SetImpliedNodeFormat(file, format.Value);
+                    if (overrideSetExternalModuleIndicator != null)
+                    {
+                        overrideSetExternalModuleIndicator(file);
+                    }
+                    else
+                    {
+                        SetExternalModuleIndicator(store, file);
+                    }
                 };
-                result = parser.ParseSourceFile(fileName, sourceText, languageVersion, /*syntaxCursor*/ null, setParentNodes, scriptKind, setIndicator, jsDocParsingMode ?? JSDocParsingMode.ParseAll);
+                result = parser.ParseSourceFile(store, fileName, sourceText, languageVersion, /*syntaxCursor*/ null, setParentNodes, scriptKind, setIndicator, jsDocParsingMode ?? JSDocParsingMode.ParseAll);
             }
         }
         finally
         {
+            parser.UseStore(null!); // the result keeps the store, the pooled parser does not
             PutParser(parser);
         }
 
-        return result;
+        return new SourceFile(store, result);
     }
 
     /// <summary>
@@ -241,21 +258,23 @@ internal sealed partial class Parser
     /// </summary>
     internal static SourceFile ParseJsonText(string fileName, string sourceText)
     {
+        var store = new NodeStore(sourceText.Length);
         var parser = GetParser();
         try
         {
-            return parser.ParseJsonText(fileName, sourceText, ScriptTarget.ES2015, null, false);
+            return new SourceFile(store, parser.ParseJsonText(store, fileName, sourceText, ScriptTarget.ES2015, null, false));
         }
         finally
         {
+            parser.UseStore(null!);
             PutParser(parser);
         }
     }
 
     // See also `isExternalOrCommonJsModule` in utilities.ts
-    internal static bool IsExternalModule(SourceFile file)
+    internal static bool IsExternalModule(NodeStore store, Node file)
     {
-        return file.ExternalModuleIndicator != null;
+        return store.ExternalModuleIndicator(file) != null;
     }
 
     //// JavaScript semantics the ported functions rely on.
@@ -276,6 +295,7 @@ internal sealed partial class Parser
             string s => s.Length != 0,
             int i => i != 0,
             Tristate t => t != Tristate.False,
+            Node n => !n.IsNone,
             _ => true,
         };
     }

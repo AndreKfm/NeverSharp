@@ -20,502 +20,502 @@ internal static partial class FactoryNodeTests
 {
     // Literals
 
-    internal static bool IsNumericLiteral(Node node) => node.Kind == SyntaxKind.NumericLiteral;
+    internal static bool IsNumericLiteral(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.NumericLiteral;
 
-    internal static bool IsBigIntLiteral(Node node) => node.Kind == SyntaxKind.BigIntLiteral;
+    internal static bool IsBigIntLiteral(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.BigIntLiteral;
 
-    internal static bool IsStringLiteral(Node node) => node.Kind == SyntaxKind.StringLiteral;
+    internal static bool IsStringLiteral(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.StringLiteral;
 
-    internal static bool IsJsxText(Node node) => node.Kind == SyntaxKind.JsxText;
+    internal static bool IsJsxText(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JsxText;
 
-    internal static bool IsRegularExpressionLiteral(Node node) => node.Kind == SyntaxKind.RegularExpressionLiteral;
+    internal static bool IsRegularExpressionLiteral(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.RegularExpressionLiteral;
 
-    internal static bool IsNoSubstitutionTemplateLiteral(Node node) => node.Kind == SyntaxKind.NoSubstitutionTemplateLiteral;
+    internal static bool IsNoSubstitutionTemplateLiteral(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.NoSubstitutionTemplateLiteral;
 
     // Pseudo-literals
 
-    internal static bool IsTemplateHead(Node node) => node.Kind == SyntaxKind.TemplateHead;
+    internal static bool IsTemplateHead(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.TemplateHead;
 
-    internal static bool IsTemplateMiddle(Node node) => node.Kind == SyntaxKind.TemplateMiddle;
+    internal static bool IsTemplateMiddle(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.TemplateMiddle;
 
-    internal static bool IsTemplateTail(Node node) => node.Kind == SyntaxKind.TemplateTail;
+    internal static bool IsTemplateTail(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.TemplateTail;
 
     // Punctuation
 
-    internal static bool IsDotDotDotToken(Node node) => node.Kind == SyntaxKind.DotDotDotToken;
+    internal static bool IsDotDotDotToken(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.DotDotDotToken;
 
-    internal static bool IsCommaToken(Node node) => node.Kind == SyntaxKind.CommaToken;
+    internal static bool IsCommaToken(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.CommaToken;
 
-    internal static bool IsPlusToken(Node node) => node.Kind == SyntaxKind.PlusToken;
+    internal static bool IsPlusToken(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.PlusToken;
 
-    internal static bool IsMinusToken(Node node) => node.Kind == SyntaxKind.MinusToken;
+    internal static bool IsMinusToken(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.MinusToken;
 
-    internal static bool IsAsteriskToken(Node node) => node.Kind == SyntaxKind.AsteriskToken;
+    internal static bool IsAsteriskToken(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.AsteriskToken;
 
-    internal static bool IsExclamationToken(Node node) => node.Kind == SyntaxKind.ExclamationToken;
+    internal static bool IsExclamationToken(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ExclamationToken;
 
-    internal static bool IsQuestionToken(Node node) => node.Kind == SyntaxKind.QuestionToken;
+    internal static bool IsQuestionToken(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.QuestionToken;
 
-    internal static bool IsColonToken(Node node) => node.Kind == SyntaxKind.ColonToken;
+    internal static bool IsColonToken(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ColonToken;
 
-    internal static bool IsQuestionDotToken(Node node) => node.Kind == SyntaxKind.QuestionDotToken;
+    internal static bool IsQuestionDotToken(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.QuestionDotToken;
 
-    internal static bool IsEqualsGreaterThanToken(Node node) => node.Kind == SyntaxKind.EqualsGreaterThanToken;
+    internal static bool IsEqualsGreaterThanToken(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.EqualsGreaterThanToken;
 
     // Identifiers
 
-    internal static bool IsIdentifier(Node node) => node.Kind == SyntaxKind.Identifier;
+    internal static bool IsIdentifier(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.Identifier;
 
-    internal static bool IsPrivateIdentifier(Node node) => node.Kind == SyntaxKind.PrivateIdentifier;
+    internal static bool IsPrivateIdentifier(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.PrivateIdentifier;
 
     // Reserved Words
 
-    internal static bool IsExportModifier(Node node) => node.Kind == SyntaxKind.ExportKeyword;
+    internal static bool IsExportModifier(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ExportKeyword;
 
-    internal static bool IsDefaultModifier(Node node) => node.Kind == SyntaxKind.DefaultKeyword;
+    internal static bool IsDefaultModifier(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.DefaultKeyword;
 
-    internal static bool IsAsyncModifier(Node node) => node.Kind == SyntaxKind.AsyncKeyword;
+    internal static bool IsAsyncModifier(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.AsyncKeyword;
 
-    internal static bool IsAssertsKeyword(Node node) => node.Kind == SyntaxKind.AssertsKeyword;
+    internal static bool IsAssertsKeyword(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.AssertsKeyword;
 
-    internal static bool IsAwaitKeyword(Node node) => node.Kind == SyntaxKind.AwaitKeyword;
+    internal static bool IsAwaitKeyword(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.AwaitKeyword;
 
-    internal static bool IsReadonlyKeyword(Node node) => node.Kind == SyntaxKind.ReadonlyKeyword;
+    internal static bool IsReadonlyKeyword(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ReadonlyKeyword;
 
-    internal static bool IsStaticModifier(Node node) => node.Kind == SyntaxKind.StaticKeyword;
+    internal static bool IsStaticModifier(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.StaticKeyword;
 
-    internal static bool IsAbstractModifier(Node node) => node.Kind == SyntaxKind.AbstractKeyword;
+    internal static bool IsAbstractModifier(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.AbstractKeyword;
 
-    internal static bool IsOverrideModifier(Node node) => node.Kind == SyntaxKind.OverrideKeyword;
+    internal static bool IsOverrideModifier(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.OverrideKeyword;
 
-    internal static bool IsAccessorModifier(Node node) => node.Kind == SyntaxKind.AccessorKeyword;
+    internal static bool IsAccessorModifier(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.AccessorKeyword;
 
-    internal static bool IsSuperKeyword(Node node) => node.Kind == SyntaxKind.SuperKeyword;
+    internal static bool IsSuperKeyword(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.SuperKeyword;
 
-    internal static bool IsImportKeyword(Node node) => node.Kind == SyntaxKind.ImportKeyword;
+    internal static bool IsImportKeyword(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ImportKeyword;
 
-    internal static bool IsCaseKeyword(Node node) => node.Kind == SyntaxKind.CaseKeyword;
+    internal static bool IsCaseKeyword(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.CaseKeyword;
 
     // Names
 
-    internal static bool IsQualifiedName(Node node) => node.Kind == SyntaxKind.QualifiedName;
+    internal static bool IsQualifiedName(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.QualifiedName;
 
-    internal static bool IsComputedPropertyName(Node node) => node.Kind == SyntaxKind.ComputedPropertyName;
+    internal static bool IsComputedPropertyName(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ComputedPropertyName;
 
     // Signature elements
 
-    internal static bool IsTypeParameterDeclaration(Node node) => node.Kind == SyntaxKind.TypeParameter;
+    internal static bool IsTypeParameterDeclaration(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.TypeParameter;
 
     // TODO(rbuckton): Rename to 'isParameterDeclaration'
-    internal static bool IsParameter(Node node) => node.Kind == SyntaxKind.Parameter;
+    internal static bool IsParameter(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.Parameter;
 
-    internal static bool IsDecorator(Node node) => node.Kind == SyntaxKind.Decorator;
+    internal static bool IsDecorator(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.Decorator;
 
     // TypeMember
 
-    internal static bool IsPropertySignature(Node node) => node.Kind == SyntaxKind.PropertySignature;
+    internal static bool IsPropertySignature(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.PropertySignature;
 
-    internal static bool IsPropertyDeclaration(Node node) => node.Kind == SyntaxKind.PropertyDeclaration;
+    internal static bool IsPropertyDeclaration(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.PropertyDeclaration;
 
-    internal static bool IsMethodSignature(Node node) => node.Kind == SyntaxKind.MethodSignature;
+    internal static bool IsMethodSignature(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.MethodSignature;
 
-    internal static bool IsMethodDeclaration(Node node) => node.Kind == SyntaxKind.MethodDeclaration;
+    internal static bool IsMethodDeclaration(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.MethodDeclaration;
 
-    internal static bool IsClassStaticBlockDeclaration(Node node) => node.Kind == SyntaxKind.ClassStaticBlockDeclaration;
+    internal static bool IsClassStaticBlockDeclaration(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ClassStaticBlockDeclaration;
 
-    internal static bool IsConstructorDeclaration(Node node) => node.Kind == SyntaxKind.Constructor;
+    internal static bool IsConstructorDeclaration(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.Constructor;
 
-    internal static bool IsGetAccessorDeclaration(Node node) => node.Kind == SyntaxKind.GetAccessor;
+    internal static bool IsGetAccessorDeclaration(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.GetAccessor;
 
-    internal static bool IsSetAccessorDeclaration(Node node) => node.Kind == SyntaxKind.SetAccessor;
+    internal static bool IsSetAccessorDeclaration(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.SetAccessor;
 
-    internal static bool IsCallSignatureDeclaration(Node node) => node.Kind == SyntaxKind.CallSignature;
+    internal static bool IsCallSignatureDeclaration(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.CallSignature;
 
-    internal static bool IsConstructSignatureDeclaration(Node node) => node.Kind == SyntaxKind.ConstructSignature;
+    internal static bool IsConstructSignatureDeclaration(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ConstructSignature;
 
-    internal static bool IsIndexSignatureDeclaration(Node node) => node.Kind == SyntaxKind.IndexSignature;
+    internal static bool IsIndexSignatureDeclaration(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.IndexSignature;
 
     // Type
 
-    internal static bool IsTypePredicateNode(Node node) => node.Kind == SyntaxKind.TypePredicate;
+    internal static bool IsTypePredicateNode(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.TypePredicate;
 
-    internal static bool IsTypeReferenceNode(Node node) => node.Kind == SyntaxKind.TypeReference;
+    internal static bool IsTypeReferenceNode(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.TypeReference;
 
-    internal static bool IsFunctionTypeNode(Node node) => node.Kind == SyntaxKind.FunctionType;
+    internal static bool IsFunctionTypeNode(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.FunctionType;
 
-    internal static bool IsConstructorTypeNode(Node node) => node.Kind == SyntaxKind.ConstructorType;
+    internal static bool IsConstructorTypeNode(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ConstructorType;
 
-    internal static bool IsTypeQueryNode(Node node) => node.Kind == SyntaxKind.TypeQuery;
+    internal static bool IsTypeQueryNode(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.TypeQuery;
 
-    internal static bool IsTypeLiteralNode(Node node) => node.Kind == SyntaxKind.TypeLiteral;
+    internal static bool IsTypeLiteralNode(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.TypeLiteral;
 
-    internal static bool IsArrayTypeNode(Node node) => node.Kind == SyntaxKind.ArrayType;
+    internal static bool IsArrayTypeNode(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ArrayType;
 
-    internal static bool IsTupleTypeNode(Node node) => node.Kind == SyntaxKind.TupleType;
+    internal static bool IsTupleTypeNode(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.TupleType;
 
-    internal static bool IsNamedTupleMember(Node node) => node.Kind == SyntaxKind.NamedTupleMember;
+    internal static bool IsNamedTupleMember(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.NamedTupleMember;
 
-    internal static bool IsOptionalTypeNode(Node node) => node.Kind == SyntaxKind.OptionalType;
+    internal static bool IsOptionalTypeNode(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.OptionalType;
 
-    internal static bool IsRestTypeNode(Node node) => node.Kind == SyntaxKind.RestType;
+    internal static bool IsRestTypeNode(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.RestType;
 
-    internal static bool IsUnionTypeNode(Node node) => node.Kind == SyntaxKind.UnionType;
+    internal static bool IsUnionTypeNode(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.UnionType;
 
-    internal static bool IsIntersectionTypeNode(Node node) => node.Kind == SyntaxKind.IntersectionType;
+    internal static bool IsIntersectionTypeNode(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.IntersectionType;
 
-    internal static bool IsConditionalTypeNode(Node node) => node.Kind == SyntaxKind.ConditionalType;
+    internal static bool IsConditionalTypeNode(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ConditionalType;
 
-    internal static bool IsInferTypeNode(Node node) => node.Kind == SyntaxKind.InferType;
+    internal static bool IsInferTypeNode(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.InferType;
 
-    internal static bool IsParenthesizedTypeNode(Node node) => node.Kind == SyntaxKind.ParenthesizedType;
+    internal static bool IsParenthesizedTypeNode(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ParenthesizedType;
 
-    internal static bool IsThisTypeNode(Node node) => node.Kind == SyntaxKind.ThisType;
+    internal static bool IsThisTypeNode(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ThisType;
 
-    internal static bool IsTypeOperatorNode(Node node) => node.Kind == SyntaxKind.TypeOperator;
+    internal static bool IsTypeOperatorNode(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.TypeOperator;
 
-    internal static bool IsIndexedAccessTypeNode(Node node) => node.Kind == SyntaxKind.IndexedAccessType;
+    internal static bool IsIndexedAccessTypeNode(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.IndexedAccessType;
 
-    internal static bool IsMappedTypeNode(Node node) => node.Kind == SyntaxKind.MappedType;
+    internal static bool IsMappedTypeNode(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.MappedType;
 
-    internal static bool IsLiteralTypeNode(Node node) => node.Kind == SyntaxKind.LiteralType;
+    internal static bool IsLiteralTypeNode(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.LiteralType;
 
-    internal static bool IsImportTypeNode(Node node) => node.Kind == SyntaxKind.ImportType;
+    internal static bool IsImportTypeNode(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ImportType;
 
-    internal static bool IsTemplateLiteralTypeSpan(Node node) => node.Kind == SyntaxKind.TemplateLiteralTypeSpan;
+    internal static bool IsTemplateLiteralTypeSpan(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.TemplateLiteralTypeSpan;
 
-    internal static bool IsTemplateLiteralTypeNode(Node node) => node.Kind == SyntaxKind.TemplateLiteralType;
+    internal static bool IsTemplateLiteralTypeNode(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.TemplateLiteralType;
 
     // Binding patterns
 
-    internal static bool IsObjectBindingPattern(Node node) => node.Kind == SyntaxKind.ObjectBindingPattern;
+    internal static bool IsObjectBindingPattern(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ObjectBindingPattern;
 
-    internal static bool IsArrayBindingPattern(Node node) => node.Kind == SyntaxKind.ArrayBindingPattern;
+    internal static bool IsArrayBindingPattern(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ArrayBindingPattern;
 
-    internal static bool IsBindingElement(Node node) => node.Kind == SyntaxKind.BindingElement;
+    internal static bool IsBindingElement(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.BindingElement;
 
     // Expression
 
-    internal static bool IsArrayLiteralExpression(Node node) => node.Kind == SyntaxKind.ArrayLiteralExpression;
+    internal static bool IsArrayLiteralExpression(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ArrayLiteralExpression;
 
-    internal static bool IsObjectLiteralExpression(Node node) => node.Kind == SyntaxKind.ObjectLiteralExpression;
+    internal static bool IsObjectLiteralExpression(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ObjectLiteralExpression;
 
-    internal static bool IsPropertyAccessExpression(Node node) => node.Kind == SyntaxKind.PropertyAccessExpression;
+    internal static bool IsPropertyAccessExpression(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.PropertyAccessExpression;
 
-    internal static bool IsElementAccessExpression(Node node) => node.Kind == SyntaxKind.ElementAccessExpression;
+    internal static bool IsElementAccessExpression(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ElementAccessExpression;
 
-    internal static bool IsCallExpression(Node node) => node.Kind == SyntaxKind.CallExpression;
+    internal static bool IsCallExpression(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.CallExpression;
 
-    internal static bool IsNewExpression(Node node) => node.Kind == SyntaxKind.NewExpression;
+    internal static bool IsNewExpression(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.NewExpression;
 
-    internal static bool IsTaggedTemplateExpression(Node node) => node.Kind == SyntaxKind.TaggedTemplateExpression;
+    internal static bool IsTaggedTemplateExpression(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.TaggedTemplateExpression;
 
-    internal static bool IsTypeAssertionExpression(Node node) => node.Kind == SyntaxKind.TypeAssertionExpression;
+    internal static bool IsTypeAssertionExpression(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.TypeAssertionExpression;
 
-    internal static bool IsParenthesizedExpression(Node node) => node.Kind == SyntaxKind.ParenthesizedExpression;
+    internal static bool IsParenthesizedExpression(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ParenthesizedExpression;
 
-    internal static bool IsFunctionExpression(Node node) => node.Kind == SyntaxKind.FunctionExpression;
+    internal static bool IsFunctionExpression(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.FunctionExpression;
 
-    internal static bool IsArrowFunction(Node node) => node.Kind == SyntaxKind.ArrowFunction;
+    internal static bool IsArrowFunction(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ArrowFunction;
 
-    internal static bool IsDeleteExpression(Node node) => node.Kind == SyntaxKind.DeleteExpression;
+    internal static bool IsDeleteExpression(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.DeleteExpression;
 
-    internal static bool IsTypeOfExpression(Node node) => node.Kind == SyntaxKind.TypeOfExpression;
+    internal static bool IsTypeOfExpression(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.TypeOfExpression;
 
-    internal static bool IsVoidExpression(Node node) => node.Kind == SyntaxKind.VoidExpression;
+    internal static bool IsVoidExpression(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.VoidExpression;
 
-    internal static bool IsAwaitExpression(Node node) => node.Kind == SyntaxKind.AwaitExpression;
+    internal static bool IsAwaitExpression(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.AwaitExpression;
 
-    internal static bool IsPrefixUnaryExpression(Node node) => node.Kind == SyntaxKind.PrefixUnaryExpression;
+    internal static bool IsPrefixUnaryExpression(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.PrefixUnaryExpression;
 
-    internal static bool IsPostfixUnaryExpression(Node node) => node.Kind == SyntaxKind.PostfixUnaryExpression;
+    internal static bool IsPostfixUnaryExpression(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.PostfixUnaryExpression;
 
-    internal static bool IsBinaryExpression(Node node) => node.Kind == SyntaxKind.BinaryExpression;
+    internal static bool IsBinaryExpression(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.BinaryExpression;
 
-    internal static bool IsConditionalExpression(Node node) => node.Kind == SyntaxKind.ConditionalExpression;
+    internal static bool IsConditionalExpression(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ConditionalExpression;
 
-    internal static bool IsTemplateExpression(Node node) => node.Kind == SyntaxKind.TemplateExpression;
+    internal static bool IsTemplateExpression(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.TemplateExpression;
 
-    internal static bool IsYieldExpression(Node node) => node.Kind == SyntaxKind.YieldExpression;
+    internal static bool IsYieldExpression(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.YieldExpression;
 
-    internal static bool IsSpreadElement(Node node) => node.Kind == SyntaxKind.SpreadElement;
+    internal static bool IsSpreadElement(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.SpreadElement;
 
-    internal static bool IsClassExpression(Node node) => node.Kind == SyntaxKind.ClassExpression;
+    internal static bool IsClassExpression(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ClassExpression;
 
-    internal static bool IsOmittedExpression(Node node) => node.Kind == SyntaxKind.OmittedExpression;
+    internal static bool IsOmittedExpression(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.OmittedExpression;
 
-    internal static bool IsExpressionWithTypeArguments(Node node) => node.Kind == SyntaxKind.ExpressionWithTypeArguments;
+    internal static bool IsExpressionWithTypeArguments(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ExpressionWithTypeArguments;
 
-    internal static bool IsAsExpression(Node node) => node.Kind == SyntaxKind.AsExpression;
+    internal static bool IsAsExpression(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.AsExpression;
 
-    internal static bool IsSatisfiesExpression(Node node) => node.Kind == SyntaxKind.SatisfiesExpression;
+    internal static bool IsSatisfiesExpression(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.SatisfiesExpression;
 
-    internal static bool IsNonNullExpression(Node node) => node.Kind == SyntaxKind.NonNullExpression;
+    internal static bool IsNonNullExpression(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.NonNullExpression;
 
-    internal static bool IsMetaProperty(Node node) => node.Kind == SyntaxKind.MetaProperty;
+    internal static bool IsMetaProperty(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.MetaProperty;
 
-    internal static bool IsSyntheticExpression(Node node) => node.Kind == SyntaxKind.SyntheticExpression;
+    internal static bool IsSyntheticExpression(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.SyntheticExpression;
 
-    internal static bool IsPartiallyEmittedExpression(Node node) => node.Kind == SyntaxKind.PartiallyEmittedExpression;
+    internal static bool IsPartiallyEmittedExpression(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.PartiallyEmittedExpression;
 
-    internal static bool IsCommaListExpression(Node node) => node.Kind == SyntaxKind.CommaListExpression;
+    internal static bool IsCommaListExpression(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.CommaListExpression;
 
     // Misc
 
-    internal static bool IsTemplateSpan(Node node) => node.Kind == SyntaxKind.TemplateSpan;
+    internal static bool IsTemplateSpan(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.TemplateSpan;
 
-    internal static bool IsSemicolonClassElement(Node node) => node.Kind == SyntaxKind.SemicolonClassElement;
+    internal static bool IsSemicolonClassElement(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.SemicolonClassElement;
 
     // Elements
 
-    internal static bool IsBlock(Node node) => node.Kind == SyntaxKind.Block;
+    internal static bool IsBlock(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.Block;
 
-    internal static bool IsVariableStatement(Node node) => node.Kind == SyntaxKind.VariableStatement;
+    internal static bool IsVariableStatement(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.VariableStatement;
 
-    internal static bool IsEmptyStatement(Node node) => node.Kind == SyntaxKind.EmptyStatement;
+    internal static bool IsEmptyStatement(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.EmptyStatement;
 
-    internal static bool IsExpressionStatement(Node node) => node.Kind == SyntaxKind.ExpressionStatement;
+    internal static bool IsExpressionStatement(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ExpressionStatement;
 
-    internal static bool IsIfStatement(Node node) => node.Kind == SyntaxKind.IfStatement;
+    internal static bool IsIfStatement(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.IfStatement;
 
-    internal static bool IsDoStatement(Node node) => node.Kind == SyntaxKind.DoStatement;
+    internal static bool IsDoStatement(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.DoStatement;
 
-    internal static bool IsWhileStatement(Node node) => node.Kind == SyntaxKind.WhileStatement;
+    internal static bool IsWhileStatement(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.WhileStatement;
 
-    internal static bool IsForStatement(Node node) => node.Kind == SyntaxKind.ForStatement;
+    internal static bool IsForStatement(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ForStatement;
 
-    internal static bool IsForInStatement(Node node) => node.Kind == SyntaxKind.ForInStatement;
+    internal static bool IsForInStatement(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ForInStatement;
 
-    internal static bool IsForOfStatement(Node node) => node.Kind == SyntaxKind.ForOfStatement;
+    internal static bool IsForOfStatement(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ForOfStatement;
 
-    internal static bool IsContinueStatement(Node node) => node.Kind == SyntaxKind.ContinueStatement;
+    internal static bool IsContinueStatement(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ContinueStatement;
 
-    internal static bool IsBreakStatement(Node node) => node.Kind == SyntaxKind.BreakStatement;
+    internal static bool IsBreakStatement(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.BreakStatement;
 
-    internal static bool IsReturnStatement(Node node) => node.Kind == SyntaxKind.ReturnStatement;
+    internal static bool IsReturnStatement(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ReturnStatement;
 
-    internal static bool IsWithStatement(Node node) => node.Kind == SyntaxKind.WithStatement;
+    internal static bool IsWithStatement(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.WithStatement;
 
-    internal static bool IsSwitchStatement(Node node) => node.Kind == SyntaxKind.SwitchStatement;
+    internal static bool IsSwitchStatement(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.SwitchStatement;
 
-    internal static bool IsLabeledStatement(Node node) => node.Kind == SyntaxKind.LabeledStatement;
+    internal static bool IsLabeledStatement(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.LabeledStatement;
 
-    internal static bool IsThrowStatement(Node node) => node.Kind == SyntaxKind.ThrowStatement;
+    internal static bool IsThrowStatement(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ThrowStatement;
 
-    internal static bool IsTryStatement(Node node) => node.Kind == SyntaxKind.TryStatement;
+    internal static bool IsTryStatement(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.TryStatement;
 
-    internal static bool IsDebuggerStatement(Node node) => node.Kind == SyntaxKind.DebuggerStatement;
+    internal static bool IsDebuggerStatement(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.DebuggerStatement;
 
-    internal static bool IsVariableDeclaration(Node node) => node.Kind == SyntaxKind.VariableDeclaration;
+    internal static bool IsVariableDeclaration(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.VariableDeclaration;
 
-    internal static bool IsVariableDeclarationList(Node node) => node.Kind == SyntaxKind.VariableDeclarationList;
+    internal static bool IsVariableDeclarationList(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.VariableDeclarationList;
 
-    internal static bool IsFunctionDeclaration(Node node) => node.Kind == SyntaxKind.FunctionDeclaration;
+    internal static bool IsFunctionDeclaration(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.FunctionDeclaration;
 
-    internal static bool IsClassDeclaration(Node node) => node.Kind == SyntaxKind.ClassDeclaration;
+    internal static bool IsClassDeclaration(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ClassDeclaration;
 
-    internal static bool IsInterfaceDeclaration(Node node) => node.Kind == SyntaxKind.InterfaceDeclaration;
+    internal static bool IsInterfaceDeclaration(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.InterfaceDeclaration;
 
-    internal static bool IsTypeAliasDeclaration(Node node) => node.Kind == SyntaxKind.TypeAliasDeclaration;
+    internal static bool IsTypeAliasDeclaration(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.TypeAliasDeclaration;
 
-    internal static bool IsEnumDeclaration(Node node) => node.Kind == SyntaxKind.EnumDeclaration;
+    internal static bool IsEnumDeclaration(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.EnumDeclaration;
 
-    internal static bool IsModuleDeclaration(Node node) => node.Kind == SyntaxKind.ModuleDeclaration;
+    internal static bool IsModuleDeclaration(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ModuleDeclaration;
 
-    internal static bool IsModuleBlock(Node node) => node.Kind == SyntaxKind.ModuleBlock;
+    internal static bool IsModuleBlock(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ModuleBlock;
 
-    internal static bool IsCaseBlock(Node node) => node.Kind == SyntaxKind.CaseBlock;
+    internal static bool IsCaseBlock(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.CaseBlock;
 
-    internal static bool IsNamespaceExportDeclaration(Node node) => node.Kind == SyntaxKind.NamespaceExportDeclaration;
+    internal static bool IsNamespaceExportDeclaration(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.NamespaceExportDeclaration;
 
-    internal static bool IsImportEqualsDeclaration(Node node) => node.Kind == SyntaxKind.ImportEqualsDeclaration;
+    internal static bool IsImportEqualsDeclaration(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ImportEqualsDeclaration;
 
-    internal static bool IsImportDeclaration(Node node) => node.Kind == SyntaxKind.ImportDeclaration;
+    internal static bool IsImportDeclaration(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ImportDeclaration;
 
-    internal static bool IsImportClause(Node node) => node.Kind == SyntaxKind.ImportClause;
+    internal static bool IsImportClause(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ImportClause;
 
-    internal static bool IsImportTypeAssertionContainer(Node node) => node.Kind == SyntaxKind.ImportTypeAssertionContainer;
-
-    /// <summary>Deprecated.</summary>
-    internal static bool IsAssertClause(Node node) => node.Kind == SyntaxKind.AssertClause;
+    internal static bool IsImportTypeAssertionContainer(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ImportTypeAssertionContainer;
 
     /// <summary>Deprecated.</summary>
-    internal static bool IsAssertEntry(Node node) => node.Kind == SyntaxKind.AssertEntry;
+    internal static bool IsAssertClause(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.AssertClause;
 
-    internal static bool IsImportAttributes(Node node) => node.Kind == SyntaxKind.ImportAttributes;
+    /// <summary>Deprecated.</summary>
+    internal static bool IsAssertEntry(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.AssertEntry;
 
-    internal static bool IsImportAttribute(Node node) => node.Kind == SyntaxKind.ImportAttribute;
+    internal static bool IsImportAttributes(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ImportAttributes;
 
-    internal static bool IsNamespaceImport(Node node) => node.Kind == SyntaxKind.NamespaceImport;
+    internal static bool IsImportAttribute(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ImportAttribute;
 
-    internal static bool IsNamespaceExport(Node node) => node.Kind == SyntaxKind.NamespaceExport;
+    internal static bool IsNamespaceImport(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.NamespaceImport;
 
-    internal static bool IsNamedImports(Node node) => node.Kind == SyntaxKind.NamedImports;
+    internal static bool IsNamespaceExport(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.NamespaceExport;
 
-    internal static bool IsImportSpecifier(Node node) => node.Kind == SyntaxKind.ImportSpecifier;
+    internal static bool IsNamedImports(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.NamedImports;
 
-    internal static bool IsExportAssignment(Node node) => node.Kind == SyntaxKind.ExportAssignment;
+    internal static bool IsImportSpecifier(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ImportSpecifier;
 
-    internal static bool IsExportDeclaration(Node node) => node.Kind == SyntaxKind.ExportDeclaration;
+    internal static bool IsExportAssignment(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ExportAssignment;
 
-    internal static bool IsNamedExports(Node node) => node.Kind == SyntaxKind.NamedExports;
+    internal static bool IsExportDeclaration(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ExportDeclaration;
 
-    internal static bool IsExportSpecifier(Node node) => node.Kind == SyntaxKind.ExportSpecifier;
+    internal static bool IsNamedExports(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.NamedExports;
 
-    internal static bool IsModuleExportName(Node node) => node.Kind == SyntaxKind.Identifier || node.Kind == SyntaxKind.StringLiteral;
+    internal static bool IsExportSpecifier(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ExportSpecifier;
 
-    internal static bool IsMissingDeclaration(Node node) => node.Kind == SyntaxKind.MissingDeclaration;
+    internal static bool IsModuleExportName(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.Identifier || store.Kind(node) == SyntaxKind.StringLiteral;
 
-    internal static bool IsNotEmittedStatement(Node node) => node.Kind == SyntaxKind.NotEmittedStatement;
+    internal static bool IsMissingDeclaration(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.MissingDeclaration;
 
-    internal static bool IsSyntheticReference(Node node) => node.Kind == SyntaxKind.SyntheticReferenceExpression;
+    internal static bool IsNotEmittedStatement(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.NotEmittedStatement;
+
+    internal static bool IsSyntheticReference(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.SyntheticReferenceExpression;
 
     // Module References
 
-    internal static bool IsExternalModuleReference(Node node) => node.Kind == SyntaxKind.ExternalModuleReference;
+    internal static bool IsExternalModuleReference(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ExternalModuleReference;
 
     // JSX
 
-    internal static bool IsJsxElement(Node node) => node.Kind == SyntaxKind.JsxElement;
+    internal static bool IsJsxElement(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JsxElement;
 
-    internal static bool IsJsxSelfClosingElement(Node node) => node.Kind == SyntaxKind.JsxSelfClosingElement;
+    internal static bool IsJsxSelfClosingElement(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JsxSelfClosingElement;
 
-    internal static bool IsJsxOpeningElement(Node node) => node.Kind == SyntaxKind.JsxOpeningElement;
+    internal static bool IsJsxOpeningElement(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JsxOpeningElement;
 
-    internal static bool IsJsxClosingElement(Node node) => node.Kind == SyntaxKind.JsxClosingElement;
+    internal static bool IsJsxClosingElement(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JsxClosingElement;
 
-    internal static bool IsJsxFragment(Node node) => node.Kind == SyntaxKind.JsxFragment;
+    internal static bool IsJsxFragment(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JsxFragment;
 
-    internal static bool IsJsxOpeningFragment(Node node) => node.Kind == SyntaxKind.JsxOpeningFragment;
+    internal static bool IsJsxOpeningFragment(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JsxOpeningFragment;
 
-    internal static bool IsJsxClosingFragment(Node node) => node.Kind == SyntaxKind.JsxClosingFragment;
+    internal static bool IsJsxClosingFragment(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JsxClosingFragment;
 
-    internal static bool IsJsxAttribute(Node node) => node.Kind == SyntaxKind.JsxAttribute;
+    internal static bool IsJsxAttribute(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JsxAttribute;
 
-    internal static bool IsJsxAttributes(Node node) => node.Kind == SyntaxKind.JsxAttributes;
+    internal static bool IsJsxAttributes(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JsxAttributes;
 
-    internal static bool IsJsxSpreadAttribute(Node node) => node.Kind == SyntaxKind.JsxSpreadAttribute;
+    internal static bool IsJsxSpreadAttribute(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JsxSpreadAttribute;
 
-    internal static bool IsJsxExpression(Node node) => node.Kind == SyntaxKind.JsxExpression;
+    internal static bool IsJsxExpression(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JsxExpression;
 
-    internal static bool IsJsxNamespacedName(Node node) => node.Kind == SyntaxKind.JsxNamespacedName;
+    internal static bool IsJsxNamespacedName(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JsxNamespacedName;
 
     // Clauses
 
-    internal static bool IsCaseClause(Node node) => node.Kind == SyntaxKind.CaseClause;
+    internal static bool IsCaseClause(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.CaseClause;
 
-    internal static bool IsDefaultClause(Node node) => node.Kind == SyntaxKind.DefaultClause;
+    internal static bool IsDefaultClause(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.DefaultClause;
 
-    internal static bool IsHeritageClause(Node node) => node.Kind == SyntaxKind.HeritageClause;
+    internal static bool IsHeritageClause(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.HeritageClause;
 
-    internal static bool IsCatchClause(Node node) => node.Kind == SyntaxKind.CatchClause;
+    internal static bool IsCatchClause(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.CatchClause;
 
     // Property assignments
 
-    internal static bool IsPropertyAssignment(Node node) => node.Kind == SyntaxKind.PropertyAssignment;
+    internal static bool IsPropertyAssignment(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.PropertyAssignment;
 
-    internal static bool IsShorthandPropertyAssignment(Node node) => node.Kind == SyntaxKind.ShorthandPropertyAssignment;
+    internal static bool IsShorthandPropertyAssignment(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.ShorthandPropertyAssignment;
 
-    internal static bool IsSpreadAssignment(Node node) => node.Kind == SyntaxKind.SpreadAssignment;
+    internal static bool IsSpreadAssignment(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.SpreadAssignment;
 
     // Enum
 
-    internal static bool IsEnumMember(Node node) => node.Kind == SyntaxKind.EnumMember;
+    internal static bool IsEnumMember(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.EnumMember;
 
     // Top-level nodes
 
-    internal static bool IsSourceFile(Node node) => node.Kind == SyntaxKind.SourceFile;
+    internal static bool IsSourceFile(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.SourceFile;
 
-    internal static bool IsBundle(Node node) => node.Kind == SyntaxKind.Bundle;
+    internal static bool IsBundle(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.Bundle;
 
     // JSDoc Elements
 
-    internal static bool IsJSDocTypeExpression(Node node) => node.Kind == SyntaxKind.JSDocTypeExpression;
+    internal static bool IsJSDocTypeExpression(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocTypeExpression;
 
-    internal static bool IsJSDocNameReference(Node node) => node.Kind == SyntaxKind.JSDocNameReference;
+    internal static bool IsJSDocNameReference(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocNameReference;
 
-    internal static bool IsJSDocMemberName(Node node) => node.Kind == SyntaxKind.JSDocMemberName;
+    internal static bool IsJSDocMemberName(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocMemberName;
 
-    internal static bool IsJSDocLink(Node node) => node.Kind == SyntaxKind.JSDocLink;
+    internal static bool IsJSDocLink(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocLink;
 
-    internal static bool IsJSDocLinkCode(Node node) => node.Kind == SyntaxKind.JSDocLinkCode;
+    internal static bool IsJSDocLinkCode(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocLinkCode;
 
-    internal static bool IsJSDocLinkPlain(Node node) => node.Kind == SyntaxKind.JSDocLinkPlain;
+    internal static bool IsJSDocLinkPlain(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocLinkPlain;
 
-    internal static bool IsJSDocAllType(Node node) => node.Kind == SyntaxKind.JSDocAllType;
+    internal static bool IsJSDocAllType(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocAllType;
 
-    internal static bool IsJSDocUnknownType(Node node) => node.Kind == SyntaxKind.JSDocUnknownType;
+    internal static bool IsJSDocUnknownType(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocUnknownType;
 
-    internal static bool IsJSDocNullableType(Node node) => node.Kind == SyntaxKind.JSDocNullableType;
+    internal static bool IsJSDocNullableType(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocNullableType;
 
-    internal static bool IsJSDocNonNullableType(Node node) => node.Kind == SyntaxKind.JSDocNonNullableType;
+    internal static bool IsJSDocNonNullableType(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocNonNullableType;
 
-    internal static bool IsJSDocOptionalType(Node node) => node.Kind == SyntaxKind.JSDocOptionalType;
+    internal static bool IsJSDocOptionalType(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocOptionalType;
 
-    internal static bool IsJSDocFunctionType(Node node) => node.Kind == SyntaxKind.JSDocFunctionType;
+    internal static bool IsJSDocFunctionType(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocFunctionType;
 
-    internal static bool IsJSDocVariadicType(Node node) => node.Kind == SyntaxKind.JSDocVariadicType;
+    internal static bool IsJSDocVariadicType(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocVariadicType;
 
-    internal static bool IsJSDocNamepathType(Node node) => node.Kind == SyntaxKind.JSDocNamepathType;
+    internal static bool IsJSDocNamepathType(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocNamepathType;
 
-    internal static bool IsJSDoc(Node node) => node.Kind == SyntaxKind.JSDoc;
+    internal static bool IsJSDoc(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDoc;
 
-    internal static bool IsJSDocTypeLiteral(Node node) => node.Kind == SyntaxKind.JSDocTypeLiteral;
+    internal static bool IsJSDocTypeLiteral(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocTypeLiteral;
 
-    internal static bool IsJSDocSignature(Node node) => node.Kind == SyntaxKind.JSDocSignature;
+    internal static bool IsJSDocSignature(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocSignature;
 
     // JSDoc Tags
 
-    internal static bool IsJSDocAugmentsTag(Node node) => node.Kind == SyntaxKind.JSDocAugmentsTag;
+    internal static bool IsJSDocAugmentsTag(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocAugmentsTag;
 
-    internal static bool IsJSDocAuthorTag(Node node) => node.Kind == SyntaxKind.JSDocAuthorTag;
+    internal static bool IsJSDocAuthorTag(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocAuthorTag;
 
-    internal static bool IsJSDocClassTag(Node node) => node.Kind == SyntaxKind.JSDocClassTag;
+    internal static bool IsJSDocClassTag(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocClassTag;
 
-    internal static bool IsJSDocCallbackTag(Node node) => node.Kind == SyntaxKind.JSDocCallbackTag;
+    internal static bool IsJSDocCallbackTag(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocCallbackTag;
 
-    internal static bool IsJSDocPublicTag(Node node) => node.Kind == SyntaxKind.JSDocPublicTag;
+    internal static bool IsJSDocPublicTag(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocPublicTag;
 
-    internal static bool IsJSDocPrivateTag(Node node) => node.Kind == SyntaxKind.JSDocPrivateTag;
+    internal static bool IsJSDocPrivateTag(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocPrivateTag;
 
-    internal static bool IsJSDocProtectedTag(Node node) => node.Kind == SyntaxKind.JSDocProtectedTag;
+    internal static bool IsJSDocProtectedTag(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocProtectedTag;
 
-    internal static bool IsJSDocReadonlyTag(Node node) => node.Kind == SyntaxKind.JSDocReadonlyTag;
+    internal static bool IsJSDocReadonlyTag(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocReadonlyTag;
 
-    internal static bool IsJSDocOverrideTag(Node node) => node.Kind == SyntaxKind.JSDocOverrideTag;
+    internal static bool IsJSDocOverrideTag(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocOverrideTag;
 
-    internal static bool IsJSDocOverloadTag(Node node) => node.Kind == SyntaxKind.JSDocOverloadTag;
+    internal static bool IsJSDocOverloadTag(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocOverloadTag;
 
-    internal static bool IsJSDocDeprecatedTag(Node node) => node.Kind == SyntaxKind.JSDocDeprecatedTag;
+    internal static bool IsJSDocDeprecatedTag(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocDeprecatedTag;
 
-    internal static bool IsJSDocSeeTag(Node node) => node.Kind == SyntaxKind.JSDocSeeTag;
+    internal static bool IsJSDocSeeTag(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocSeeTag;
 
-    internal static bool IsJSDocEnumTag(Node node) => node.Kind == SyntaxKind.JSDocEnumTag;
+    internal static bool IsJSDocEnumTag(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocEnumTag;
 
-    internal static bool IsJSDocParameterTag(Node node) => node.Kind == SyntaxKind.JSDocParameterTag;
+    internal static bool IsJSDocParameterTag(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocParameterTag;
 
-    internal static bool IsJSDocReturnTag(Node node) => node.Kind == SyntaxKind.JSDocReturnTag;
+    internal static bool IsJSDocReturnTag(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocReturnTag;
 
-    internal static bool IsJSDocThisTag(Node node) => node.Kind == SyntaxKind.JSDocThisTag;
+    internal static bool IsJSDocThisTag(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocThisTag;
 
-    internal static bool IsJSDocTypeTag(Node node) => node.Kind == SyntaxKind.JSDocTypeTag;
+    internal static bool IsJSDocTypeTag(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocTypeTag;
 
-    internal static bool IsJSDocTemplateTag(Node node) => node.Kind == SyntaxKind.JSDocTemplateTag;
+    internal static bool IsJSDocTemplateTag(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocTemplateTag;
 
-    internal static bool IsJSDocTypedefTag(Node node) => node.Kind == SyntaxKind.JSDocTypedefTag;
+    internal static bool IsJSDocTypedefTag(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocTypedefTag;
 
-    internal static bool IsJSDocUnknownTag(Node node) => node.Kind == SyntaxKind.JSDocTag;
+    internal static bool IsJSDocUnknownTag(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocTag;
 
-    internal static bool IsJSDocPropertyTag(Node node) => node.Kind == SyntaxKind.JSDocPropertyTag;
+    internal static bool IsJSDocPropertyTag(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocPropertyTag;
 
-    internal static bool IsJSDocImplementsTag(Node node) => node.Kind == SyntaxKind.JSDocImplementsTag;
+    internal static bool IsJSDocImplementsTag(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocImplementsTag;
 
-    internal static bool IsJSDocSatisfiesTag(Node node) => node.Kind == SyntaxKind.JSDocSatisfiesTag;
+    internal static bool IsJSDocSatisfiesTag(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocSatisfiesTag;
 
-    internal static bool IsJSDocThrowsTag(Node node) => node.Kind == SyntaxKind.JSDocThrowsTag;
+    internal static bool IsJSDocThrowsTag(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocThrowsTag;
 
-    internal static bool IsJSDocImportTag(Node node) => node.Kind == SyntaxKind.JSDocImportTag;
+    internal static bool IsJSDocImportTag(NodeStore store, Node node) => store.Kind(node) == SyntaxKind.JSDocImportTag;
 
     // Synthesized list
 
-    internal static bool IsSyntaxList(Node n) => n.Kind == SyntaxKind.SyntaxList;
+    internal static bool IsSyntaxList(NodeStore store, Node n) => store.Kind(n) == SyntaxKind.SyntaxList;
 }

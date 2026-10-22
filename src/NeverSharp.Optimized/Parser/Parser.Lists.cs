@@ -16,7 +16,7 @@ namespace NeverSharp.Optimized;
 /// parser.ts: `interface MissingList&lt;T&gt; extends NodeArray&lt;T&gt; { isMissingList: true }`. createMissingList assigns
 /// the property to the NodeArray object; a C# object cannot gain properties, so NodeArray declares it.
 /// </summary>
-public sealed partial class NodeArray
+internal sealed partial class NodeArray
 {
     internal bool IsMissingList;
 }
@@ -28,7 +28,7 @@ internal sealed partial class Parser
     private bool IsListElement(ParsingContext parsingContext, bool inErrorRecovery)
     {
         var node = CurrentNode(parsingContext);
-        if (node != null)
+        if (!node.IsNone)
         {
             return true;
         }
@@ -342,19 +342,18 @@ internal sealed partial class Parser
         return CreateNodeArray(list, listPos);
     }
 
-    private T ParseListElement<T>(ParsingContext parsingContext, Func<Parser, T> parseElement)
-        where T : Node?
+    private Node ParseListElement(ParsingContext parsingContext, Func<Parser, Node> parseElement)
     {
         var node = CurrentNode(parsingContext);
-        if (node != null)
+        if (!node.IsNone)
         {
-            return (T)ConsumeNode(node);
+            return ConsumeNode(node);
         }
 
         return parseElement(this);
     }
 
-    private Node? CurrentNode(ParsingContext parsingContext, int? pos = null)
+    private Node CurrentNode(ParsingContext parsingContext, int? pos = null)
     {
         // If we don't have a cursor or the parsing context isn't reusable, there's nothing to reuse.
         //
@@ -367,7 +366,7 @@ internal sealed partial class Parser
         // is nice and likely won't ever affect perf.
         if (syntaxCursor == null || !IsReusableParsingContext(parsingContext) || parseErrorBeforeNextFinishedNode)
         {
-            return null;
+            return default;
         }
 
         var node = syntaxCursor.CurrentNode(pos ?? scanner.GetTokenFullStart());
@@ -376,9 +375,9 @@ internal sealed partial class Parser
         // Can't reuse a node that intersected the change range.
         // Can't reuse a node that contains a parse error.  This is necessary so that we
         // produce the same set of errors again.
-        if (Utilities.NodeIsMissing(node) || IntersectsIncrementalChange(node!) || Utilities.ContainsParseError(node!))
+        if (Utilities.NodeIsMissing(store, node) || IntersectsIncrementalChange(node) || Utilities.ContainsParseError(store, node))
         {
-            return null;
+            return default;
         }
 
         // We can only reuse a node if it was parsed under the same strict mode that we're
@@ -392,17 +391,17 @@ internal sealed partial class Parser
         // differently depending on what mode it is in.
         //
         // This also applies to all our other context flags as well.
-        var nodeContextFlags = node!.Flags & NodeFlags.ContextFlags;
+        var nodeContextFlags = store.Flags(node) & NodeFlags.ContextFlags;
         if (nodeContextFlags != contextFlags)
         {
-            return null;
+            return default;
         }
 
         // Ok, we have a node that looks like it could be reused.  Now verify that it is valid
         // in the current list parsing context that we're currently at.
-        if (!CanReuseNode(node, parsingContext))
+        if (!CanReuseNode(store, node, parsingContext))
         {
-            return null;
+            return default;
         }
 
         // TypeScript: `if (canHaveJSDoc(node) && node.jsDoc?.jsDocCache) { node.jsDoc.jsDocCache = undefined; }`
@@ -416,7 +415,7 @@ internal sealed partial class Parser
     private Node ConsumeNode(Node node)
     {
         // Move the scanner so it is after the node we just consumed.
-        scanner.ResetTokenState(node.End);
+        scanner.ResetTokenState(store.End(node));
         NextToken();
         return node;
     }
@@ -440,33 +439,33 @@ internal sealed partial class Parser
         return false;
     }
 
-    private static bool CanReuseNode(Node node, ParsingContext parsingContext)
+    private static bool CanReuseNode(NodeStore store, Node node, ParsingContext parsingContext)
     {
         switch (parsingContext)
         {
             case ParsingContext.ClassMembers:
-                return IsReusableClassMember(node);
+                return IsReusableClassMember(store, node);
 
             case ParsingContext.SwitchClauses:
-                return IsReusableSwitchClause(node);
+                return IsReusableSwitchClause(store, node);
 
             case ParsingContext.SourceElements:
             case ParsingContext.BlockStatements:
             case ParsingContext.SwitchClauseStatements:
-                return IsReusableStatement(node);
+                return IsReusableStatement(store, node);
 
             case ParsingContext.EnumMembers:
-                return IsReusableEnumMember(node);
+                return IsReusableEnumMember(store, node);
 
             case ParsingContext.TypeMembers:
-                return IsReusableTypeMember(node);
+                return IsReusableTypeMember(store, node);
 
             case ParsingContext.VariableDeclarations:
-                return IsReusableVariableDeclaration(node);
+                return IsReusableVariableDeclaration(store, node);
 
             case ParsingContext.JSDocParameters:
             case ParsingContext.Parameters:
-                return IsReusableParameter(node);
+                return IsReusableParameter(store, node);
 
                 // Any other lists we do not care about reusing nodes in.  But feel free to add if
                 // you can do so safely.  Danger areas involve nodes that may involve speculative
@@ -520,11 +519,11 @@ internal sealed partial class Parser
         return false;
     }
 
-    private static bool IsReusableClassMember(Node node)
+    private static bool IsReusableClassMember(NodeStore store, Node node)
     {
-        if (node != null)
+        if (!node.IsNone)
         {
-            switch (node.Kind)
+            switch (store.Kind(node))
             {
                 case SyntaxKind.Constructor:
                 case SyntaxKind.IndexSignature:
@@ -537,9 +536,9 @@ internal sealed partial class Parser
                     // Method declarations are not necessarily reusable.  An object-literal
                     // may have a method calls "constructor(...)" and we must reparse that
                     // into an actual .ConstructorDeclaration.
-                    var methodDeclaration = (MethodDeclaration)node;
-                    var nameIsConstructor = methodDeclaration.Name.Kind == SyntaxKind.Identifier &&
-                        (string)((Identifier)methodDeclaration.Name).EscapedText! == "constructor";
+                    var methodDeclaration = node;
+                    var nameIsConstructor = store.Kind(store.Name(methodDeclaration)) == SyntaxKind.Identifier &&
+                        (string)store.EscapedText(store.Name(methodDeclaration))! == "constructor";
 
                     return !nameIsConstructor;
             }
@@ -548,11 +547,11 @@ internal sealed partial class Parser
         return false;
     }
 
-    private static bool IsReusableSwitchClause(Node node)
+    private static bool IsReusableSwitchClause(NodeStore store, Node node)
     {
-        if (node != null)
+        if (!node.IsNone)
         {
-            switch (node.Kind)
+            switch (store.Kind(node))
             {
                 case SyntaxKind.CaseClause:
                 case SyntaxKind.DefaultClause:
@@ -563,11 +562,11 @@ internal sealed partial class Parser
         return false;
     }
 
-    private static bool IsReusableStatement(Node node)
+    private static bool IsReusableStatement(NodeStore store, Node node)
     {
-        if (node != null)
+        if (!node.IsNone)
         {
-            switch (node.Kind)
+            switch (store.Kind(node))
             {
                 case SyntaxKind.FunctionDeclaration:
                 case SyntaxKind.VariableStatement:
@@ -605,16 +604,16 @@ internal sealed partial class Parser
         return false;
     }
 
-    private static bool IsReusableEnumMember(Node node)
+    private static bool IsReusableEnumMember(NodeStore store, Node node)
     {
-        return node.Kind == SyntaxKind.EnumMember;
+        return store.Kind(node) == SyntaxKind.EnumMember;
     }
 
-    private static bool IsReusableTypeMember(Node node)
+    private static bool IsReusableTypeMember(NodeStore store, Node node)
     {
-        if (node != null)
+        if (!node.IsNone)
         {
-            switch (node.Kind)
+            switch (store.Kind(node))
             {
                 case SyntaxKind.ConstructSignature:
                 case SyntaxKind.MethodSignature:
@@ -628,9 +627,9 @@ internal sealed partial class Parser
         return false;
     }
 
-    private static bool IsReusableVariableDeclaration(Node node)
+    private static bool IsReusableVariableDeclaration(NodeStore store, Node node)
     {
-        if (node.Kind != SyntaxKind.VariableDeclaration)
+        if (store.Kind(node) != SyntaxKind.VariableDeclaration)
         {
             return false;
         }
@@ -649,20 +648,20 @@ internal sealed partial class Parser
         //
         // In order to prevent this, we do not allow a variable declarator to be reused if it
         // has an initializer.
-        var variableDeclarator = (VariableDeclaration)node;
-        return variableDeclarator.Initializer == null;
+        var variableDeclarator = node;
+        return store.Initializer(variableDeclarator).IsNone;
     }
 
-    private static bool IsReusableParameter(Node node)
+    private static bool IsReusableParameter(NodeStore store, Node node)
     {
-        if (node.Kind != SyntaxKind.Parameter)
+        if (store.Kind(node) != SyntaxKind.Parameter)
         {
             return false;
         }
 
         // See the comment in isReusableVariableDeclaration for why we do this.
-        var parameter = (ParameterDeclaration)node;
-        return parameter.Initializer == null;
+        var parameter = node;
+        return store.Initializer(parameter).IsNone;
     }
 
     // Returns true if we should abort parsing.
@@ -764,7 +763,7 @@ internal sealed partial class Parser
     /// Parses a comma-delimited list of elements. TypeScript's overload whose element parser may return undefined
     /// (then the list is undefined); C# cannot overload on the nullability of the callback, so it has its own name.
     /// </summary>
-    private NodeArray? ParseDelimitedListOrUndefined(ParsingContext kind, Func<Parser, Node?> parseElement, bool? considerSemicolonAsDelimiter = null)
+    private NodeArray? ParseDelimitedListOrUndefined(ParsingContext kind, Func<Parser, Node> parseElement, bool? considerSemicolonAsDelimiter = null)
     {
         var saveParsingContext = parsingContext;
         parsingContext |= 1 << (int)kind;
@@ -778,7 +777,7 @@ internal sealed partial class Parser
             {
                 var startPos = scanner.GetTokenFullStart();
                 var result = ParseListElement(kind, parseElement);
-                if (result == null)
+                if (result.IsNone)
                 {
                     parsingContext = saveParsingContext;
                     return null;
@@ -887,15 +886,15 @@ internal sealed partial class Parser
             entity = FinishNode(
                 factory.CreateQualifiedName(
                     entity,
-                    (Identifier)ParseRightSideOfDot(allowReservedWords, /*allowPrivateIdentifiers*/ false, /*allowUnicodeEscapeSequenceInIdentifierName*/ true)),
+                    ParseRightSideOfDot(allowReservedWords, /*allowPrivateIdentifiers*/ false, /*allowUnicodeEscapeSequenceInIdentifierName*/ true)),
                 pos);
         }
         return entity;
     }
 
-    private QualifiedName CreateQualifiedName(Node entity, Identifier name)
+    private Node CreateQualifiedName(Node entity, Node name)
     {
-        return FinishNode(factory.CreateQualifiedName(entity, name), entity.Pos);
+        return FinishNode(factory.CreateQualifiedName(entity, name), store.Pos(entity));
     }
 
     private Node ParseRightSideOfDot(bool allowIdentifierNames, bool allowPrivateIdentifiers, bool allowUnicodeEscapeSequenceInIdentifierName)
@@ -928,14 +927,14 @@ internal sealed partial class Parser
                 // Report that we need an identifier.  However, report it right after the dot,
                 // and not on the next token.  This is because the next token might actually
                 // be an identifier and the error would be quite confusing.
-                return CreateMissingNode<Identifier>(SyntaxKind.Identifier, /*reportAtCurrentPosition*/ true, Diagnostics.Identifier_expected);
+                return CreateMissingNode(SyntaxKind.Identifier, /*reportAtCurrentPosition*/ true, Diagnostics.Identifier_expected);
             }
         }
 
         if (Token() == SyntaxKind.PrivateIdentifier)
         {
             var node = ParsePrivateIdentifier();
-            return allowPrivateIdentifiers ? node : CreateMissingNode<Identifier>(SyntaxKind.Identifier, /*reportAtCurrentPosition*/ true, Diagnostics.Identifier_expected);
+            return allowPrivateIdentifiers ? node : CreateMissingNode(SyntaxKind.Identifier, /*reportAtCurrentPosition*/ true, Diagnostics.Identifier_expected);
         }
 
         if (allowIdentifierNames)
@@ -950,17 +949,17 @@ internal sealed partial class Parser
     {
         var pos = GetNodePos();
         var list = new NodeArray();
-        TemplateSpan node;
+        Node node;
         do
         {
             node = ParseTemplateSpan(isTaggedTemplate);
             list.Add(node);
         }
-        while (node.Literal.Kind == SyntaxKind.TemplateMiddle);
+        while (store.Kind(store.Literal(node)) == SyntaxKind.TemplateMiddle);
         return CreateNodeArray(list, pos);
     }
 
-    private TemplateExpression ParseTemplateExpression(bool isTaggedTemplate)
+    private Node ParseTemplateExpression(bool isTaggedTemplate)
     {
         var pos = GetNodePos();
         return FinishNode(
@@ -970,7 +969,7 @@ internal sealed partial class Parser
             pos);
     }
 
-    private TemplateLiteralTypeNode ParseTemplateType()
+    private Node ParseTemplateType()
     {
         var pos = GetNodePos();
         return FinishNode(
@@ -984,17 +983,17 @@ internal sealed partial class Parser
     {
         var pos = GetNodePos();
         var list = new NodeArray();
-        TemplateLiteralTypeSpan node;
+        Node node;
         do
         {
             node = ParseTemplateTypeSpan();
             list.Add(node);
         }
-        while (node.Literal.Kind == SyntaxKind.TemplateMiddle);
+        while (store.Kind(store.Literal(node)) == SyntaxKind.TemplateMiddle);
         return CreateNodeArray(list, pos);
     }
 
-    private TemplateLiteralTypeSpan ParseTemplateTypeSpan()
+    private Node ParseTemplateTypeSpan()
     {
         var pos = GetNodePos();
         return FinishNode(
@@ -1014,11 +1013,11 @@ internal sealed partial class Parser
         else
         {
             // TODO(rbuckton): Do we need to call `parseExpectedToken` or can we just call `createMissingNode` directly?
-            return ParseExpectedToken<TemplateTail>(SyntaxKind.TemplateTail, Diagnostics._0_expected, Scanner.TokenToString(SyntaxKind.CloseBraceToken));
+            return ParseExpectedToken(SyntaxKind.TemplateTail, Diagnostics._0_expected, Scanner.TokenToString(SyntaxKind.CloseBraceToken));
         }
     }
 
-    private TemplateSpan ParseTemplateSpan(bool isTaggedTemplate)
+    private Node ParseTemplateSpan(bool isTaggedTemplate)
     {
         var pos = GetNodePos();
         return FinishNode(
@@ -1033,21 +1032,21 @@ internal sealed partial class Parser
         return ParseLiteralLikeNode(Token());
     }
 
-    private TemplateHead ParseTemplateHead(bool isTaggedTemplate)
+    private Node ParseTemplateHead(bool isTaggedTemplate)
     {
         if (!isTaggedTemplate && (scanner.GetTokenFlags() & TokenFlags.IsInvalid) != 0)
         {
             ReScanTemplateToken(/*isTaggedTemplate*/ false);
         }
         var fragment = ParseLiteralLikeNode(Token());
-        Debug.Assert(fragment.Kind == SyntaxKind.TemplateHead, "Template head has wrong token kind");
-        return (TemplateHead)fragment;
+        Debug.Assert(store.Kind(fragment) == SyntaxKind.TemplateHead, "Template head has wrong token kind");
+        return fragment;
     }
 
     private Node ParseTemplateMiddleOrTemplateTail()
     {
         var fragment = ParseLiteralLikeNode(Token());
-        Debug.Assert(fragment.Kind == SyntaxKind.TemplateMiddle || fragment.Kind == SyntaxKind.TemplateTail, "Template fragment has wrong token kind");
+        Debug.Assert(store.Kind(fragment) == SyntaxKind.TemplateMiddle || store.Kind(fragment) == SyntaxKind.TemplateTail, "Template fragment has wrong token kind");
         return fragment;
     }
 
@@ -1086,17 +1085,17 @@ internal sealed partial class Parser
         else
         {
             Debug.Fail();
-            node = null!;
+            node = default;
         }
 
         if (scanner.HasExtendedUnicodeEscape())
         {
-            SetLiteralLikeHasExtendedUnicodeEscape(node);
+            SetLiteralLikeHasExtendedUnicodeEscape(store, node);
         }
 
         if (scanner.IsUnterminated())
         {
-            SetLiteralLikeIsUnterminated(node);
+            SetLiteralLikeIsUnterminated(store, node);
         }
 
         NextToken();
@@ -1104,71 +1103,71 @@ internal sealed partial class Parser
     }
 
     /// <summary>`node.hasExtendedUnicodeEscape = true` on a LiteralLikeNode (the classes declare the field one by one).</summary>
-    private static void SetLiteralLikeHasExtendedUnicodeEscape(Node node)
+    private static void SetLiteralLikeHasExtendedUnicodeEscape(NodeStore store, Node node)
     {
         switch (node)
         {
-            case NumericLiteral n:
-                n.HasExtendedUnicodeEscape = true;
+            case var n when store.IsNumericLiteral(n):
+                store.SetHasExtendedUnicodeEscape(n, true);
                 break;
-            case BigIntLiteral n:
-                n.HasExtendedUnicodeEscape = true;
+            case var n when store.IsBigIntLiteral(n):
+                store.SetHasExtendedUnicodeEscape(n, true);
                 break;
-            case StringLiteral n:
-                n.HasExtendedUnicodeEscape = true;
+            case var n when store.IsStringLiteral(n):
+                store.SetHasExtendedUnicodeEscape(n, true);
                 break;
-            case JsxText n:
-                n.HasExtendedUnicodeEscape = true;
+            case var n when store.IsJsxText(n):
+                store.SetHasExtendedUnicodeEscape(n, true);
                 break;
-            case RegularExpressionLiteral n:
-                n.HasExtendedUnicodeEscape = true;
+            case var n when store.IsRegularExpressionLiteral(n):
+                store.SetHasExtendedUnicodeEscape(n, true);
                 break;
-            case NoSubstitutionTemplateLiteral n:
-                n.HasExtendedUnicodeEscape = true;
+            case var n when store.IsNoSubstitutionTemplateLiteral(n):
+                store.SetHasExtendedUnicodeEscape(n, true);
                 break;
-            case TemplateHead n:
-                n.HasExtendedUnicodeEscape = true;
+            case var n when store.IsTemplateHead(n):
+                store.SetHasExtendedUnicodeEscape(n, true);
                 break;
-            case TemplateMiddle n:
-                n.HasExtendedUnicodeEscape = true;
+            case var n when store.IsTemplateMiddle(n):
+                store.SetHasExtendedUnicodeEscape(n, true);
                 break;
-            case TemplateTail n:
-                n.HasExtendedUnicodeEscape = true;
+            case var n when store.IsTemplateTail(n):
+                store.SetHasExtendedUnicodeEscape(n, true);
                 break;
         }
     }
 
     /// <summary>`node.isUnterminated = true` on a LiteralLikeNode (the classes declare the field one by one).</summary>
-    private static void SetLiteralLikeIsUnterminated(Node node)
+    private static void SetLiteralLikeIsUnterminated(NodeStore store, Node node)
     {
         switch (node)
         {
-            case NumericLiteral n:
-                n.IsUnterminated = true;
+            case var n when store.IsNumericLiteral(n):
+                store.SetIsUnterminated(n, true);
                 break;
-            case BigIntLiteral n:
-                n.IsUnterminated = true;
+            case var n when store.IsBigIntLiteral(n):
+                store.SetIsUnterminated(n, true);
                 break;
-            case StringLiteral n:
-                n.IsUnterminated = true;
+            case var n when store.IsStringLiteral(n):
+                store.SetIsUnterminated(n, true);
                 break;
-            case JsxText n:
-                n.IsUnterminated = true;
+            case var n when store.IsJsxText(n):
+                store.SetIsUnterminated(n, true);
                 break;
-            case RegularExpressionLiteral n:
-                n.IsUnterminated = true;
+            case var n when store.IsRegularExpressionLiteral(n):
+                store.SetIsUnterminated(n, true);
                 break;
-            case NoSubstitutionTemplateLiteral n:
-                n.IsUnterminated = true;
+            case var n when store.IsNoSubstitutionTemplateLiteral(n):
+                store.SetIsUnterminated(n, true);
                 break;
-            case TemplateHead n:
-                n.IsUnterminated = true;
+            case var n when store.IsTemplateHead(n):
+                store.SetIsUnterminated(n, true);
                 break;
-            case TemplateMiddle n:
-                n.IsUnterminated = true;
+            case var n when store.IsTemplateMiddle(n):
+                store.SetIsUnterminated(n, true);
                 break;
-            case TemplateTail n:
-                n.IsUnterminated = true;
+            case var n when store.IsTemplateTail(n):
+                store.SetIsUnterminated(n, true);
                 break;
         }
     }

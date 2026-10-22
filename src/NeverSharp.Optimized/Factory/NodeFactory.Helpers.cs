@@ -59,26 +59,25 @@ internal sealed partial class NodeFactory
     }
 
     /// <summary>`const setOriginal = flags & NodeFactoryFlags.NoOriginalNode ? identity : setOriginalNode;`</summary>
-    private T SetOriginal<T>(T node, Node? original)
-        where T : Node
+    private Node SetOriginal(Node node, Node original)
     {
-        return (flags & NodeFactoryFlags.NoOriginalNode) != 0 ? node : SetOriginalNode(node, original);
+        return (flags & NodeFactoryFlags.NoOriginalNode) != 0 ? node : SetOriginalNode(store, node, original);
     }
 
-    private static NodeArray? AsNodeArray(IReadOnlyList<Node>? array)
+    private static NodeArray? AsNodeArray(NodeStore store, IReadOnlyList<Node>? array)
     {
-        return array != null ? CreateNodeArray(array) : null;
+        return array != null ? CreateNodeArray(store, array) : null;
     }
 
     /// <summary>`asName(name: string | T)`: a string becomes an Identifier.</summary>
-    private Node? AsName(object? name)
+    private Node AsName(object? name)
     {
         return name is string s ? CreateIdentifier(s) :
-            (Node?)name;
+            Node.FromObject(name);
     }
 
     /// <summary>`asExpression(value: string | number | boolean | T)`.</summary>
-    private Node? AsExpression(object? value)
+    private Node AsExpression(object? value)
     {
         return value switch
         {
@@ -86,71 +85,72 @@ internal sealed partial class NodeFactory
             int i => CreateNumericLiteral(i),
             double d => CreateNumericLiteral(d),
             bool b => b ? CreateToken(SyntaxKind.TrueKeyword) : CreateToken(SyntaxKind.FalseKeyword),
-            _ => (Node?)value,
+            _ => Node.FromObject(value),
         };
     }
 
-    private Node? AsInitializer(Node? node)
+    private Node AsInitializer(Node node)
     {
-        return node != null ? Parenthesizer.ParenthesizeExpressionForDisallowedComma(node) : null;
+        return !node.IsNone ? Parenthesizer.ParenthesizeExpressionForDisallowedComma(node) : default;
     }
 
     /// <summary>`asToken(value: TKind | Token&lt;TKind&gt;)`: a kind becomes a token.</summary>
     private Node AsToken(object value)
     {
-        return value is SyntaxKind kind ? CreateToken(kind) : (Node)value;
+        return value is SyntaxKind kind ? CreateToken(kind) : Node.FromObject(value);
     }
 
-    private Node? AsEmbeddedStatement(Node? statement)
+    private Node AsEmbeddedStatement(Node statement)
     {
-        return statement != null && FactoryNodeTests.IsNotEmittedStatement(statement) ? FactoryUtilitiesPublic.SetTextRange(SetOriginal(CreateEmptyStatement(), statement), statement) : statement;
+        return !statement.IsNone && FactoryNodeTests.IsNotEmittedStatement(store, statement) ? FactoryUtilitiesPublic.SetTextRange(store, SetOriginal(CreateEmptyStatement(), statement), statement) : statement;
     }
 
     /// <summary>`asVariableDeclaration(variableDeclaration: string | BindingName | VariableDeclaration | undefined)`.</summary>
-    private VariableDeclaration? AsVariableDeclaration(object? variableDeclaration)
+    private Node AsVariableDeclaration(object? variableDeclaration)
     {
-        if (variableDeclaration is string || variableDeclaration != null && !FactoryNodeTests.IsVariableDeclaration((Node)variableDeclaration))
+        // Track O: a node handle passed as an object; None is undefined.
+        variableDeclaration = variableDeclaration is Node { IsNone: true } ? null : variableDeclaration;
+        if (variableDeclaration is string || variableDeclaration != null && !FactoryNodeTests.IsVariableDeclaration(store, Node.FromObject(variableDeclaration)))
         {
             return CreateVariableDeclaration(
                 variableDeclaration,
-                /*exclamationToken*/ null,
-                /*type*/ null,
-                /*initializer*/ null);
+                /*exclamationToken*/ default,
+                /*type*/ default,
+                /*initializer*/ default);
         }
-        return (VariableDeclaration?)variableDeclaration;
+        return Node.FromObject(variableDeclaration);
     }
 
-    private T Update<T>(T updated, T original)
-        where T : Node
+    private Node Update(Node updated, Node original)
     {
         if (updated != original)
         {
             SetOriginal(updated, original);
-            FactoryUtilitiesPublic.SetTextRange(updated, original);
+            FactoryUtilitiesPublic.SetTextRange(store, updated, original);
         }
         return updated;
     }
 
-    private Node? UpdateOuterExpression(Node outerExpression, Node expression)
+    private Node UpdateOuterExpression(Node outerExpression, Node expression)
     {
-        switch (outerExpression.Kind)
+        switch (store.Kind(outerExpression))
         {
             case SyntaxKind.ParenthesizedExpression:
-                return UpdateParenthesizedExpression((ParenthesizedExpression)outerExpression, expression);
+                return UpdateParenthesizedExpression(outerExpression, expression);
             case SyntaxKind.TypeAssertionExpression:
-                return UpdateTypeAssertion((TypeAssertion)outerExpression, ((TypeAssertion)outerExpression).Type, expression);
+                return UpdateTypeAssertion(outerExpression, store.Type(outerExpression), expression);
             case SyntaxKind.AsExpression:
-                return UpdateAsExpression((AsExpression)outerExpression, expression, ((AsExpression)outerExpression).Type);
+                return UpdateAsExpression(outerExpression, expression, store.Type(outerExpression));
             case SyntaxKind.SatisfiesExpression:
-                return UpdateSatisfiesExpression((SatisfiesExpression)outerExpression, expression, ((SatisfiesExpression)outerExpression).Type);
+                return UpdateSatisfiesExpression(outerExpression, expression, store.Type(outerExpression));
             case SyntaxKind.NonNullExpression:
-                return UpdateNonNullExpression((NonNullExpression)outerExpression, expression);
+                return UpdateNonNullExpression(outerExpression, expression);
             case SyntaxKind.ExpressionWithTypeArguments:
-                return UpdateExpressionWithTypeArguments((ExpressionWithTypeArguments)outerExpression, expression, ((ExpressionWithTypeArguments)outerExpression).TypeArguments);
+                return UpdateExpressionWithTypeArguments(outerExpression, expression, store.TypeArguments(outerExpression));
             case SyntaxKind.PartiallyEmittedExpression:
-                return UpdatePartiallyEmittedExpression((PartiallyEmittedExpression)outerExpression, expression);
+                return UpdatePartiallyEmittedExpression(outerExpression, expression);
         }
-        return null;
+        return default;
     }
 
     /// <summary>
@@ -167,41 +167,41 @@ internal sealed partial class NodeFactory
     /// the expression to maintain precedence, a new parenthesized expression should be created automatically when
     /// the containing expression is created/updated.
     /// </summary>
-    private static bool IsIgnorableParen(Node node)
+    private static bool IsIgnorableParen(NodeStore store, Node node)
     {
-        return FactoryNodeTests.IsParenthesizedExpression(node)
-            && Utilities.NodeIsSynthesized(node)
-            && Utilities.NodeIsSynthesized(FactoryEmitNode.GetSourceMapRange(node))
-            && Utilities.NodeIsSynthesized(FactoryEmitNode.GetCommentRange(node))
-            && !Core.Some(FactoryEmitNode.GetSyntheticLeadingComments(node))
-            && !Core.Some(FactoryEmitNode.GetSyntheticTrailingComments(node));
+        return FactoryNodeTests.IsParenthesizedExpression(store, node)
+            && Utilities.NodeIsSynthesized(store, node)
+            && Utilities.NodeIsSynthesized(FactoryEmitNode.GetSourceMapRange(store, node))
+            && Utilities.NodeIsSynthesized(FactoryEmitNode.GetCommentRange(store, node))
+            && !Core.Some(FactoryEmitNode.GetSyntheticLeadingComments(store, node))
+            && !Core.Some(FactoryEmitNode.GetSyntheticTrailingComments(store, node));
     }
 
-    internal Node RestoreOuterExpressions(Node? outerExpression, Node innerExpression, OuterExpressionKinds kinds = OuterExpressionKinds.All)
+    internal Node RestoreOuterExpressions(Node outerExpression, Node innerExpression, OuterExpressionKinds kinds = OuterExpressionKinds.All)
     {
-        if (outerExpression != null && FactoryUtilities.IsOuterExpression(outerExpression, kinds) && !IsIgnorableParen(outerExpression))
+        if (!outerExpression.IsNone && FactoryUtilities.IsOuterExpression(store, outerExpression, kinds) && !IsIgnorableParen(store, outerExpression))
         {
             // (Every outer expression kind has an `expression`; NodeAccessors has no getter for it, so it is read per kind.)
             return UpdateOuterExpression(
                 outerExpression,
-                RestoreOuterExpressions(GetOuterExpressionExpression(outerExpression), innerExpression))!;
+                RestoreOuterExpressions(GetOuterExpressionExpression(store, outerExpression), innerExpression));
         }
         return innerExpression;
     }
 
     /// <summary>`outerExpression.expression` for the kinds of OuterExpression.</summary>
-    private static Node GetOuterExpressionExpression(Node outerExpression)
+    private static Node GetOuterExpressionExpression(NodeStore store, Node outerExpression)
     {
-        return outerExpression.Kind switch
+        return store.Kind(outerExpression) switch
         {
-            SyntaxKind.ParenthesizedExpression => ((ParenthesizedExpression)outerExpression).Expression,
-            SyntaxKind.TypeAssertionExpression => ((TypeAssertion)outerExpression).Expression,
-            SyntaxKind.AsExpression => ((AsExpression)outerExpression).Expression,
-            SyntaxKind.SatisfiesExpression => ((SatisfiesExpression)outerExpression).Expression,
-            SyntaxKind.NonNullExpression => ((NonNullExpression)outerExpression).Expression,
-            SyntaxKind.ExpressionWithTypeArguments => ((ExpressionWithTypeArguments)outerExpression).Expression,
-            SyntaxKind.PartiallyEmittedExpression => ((PartiallyEmittedExpression)outerExpression).Expression,
-            _ => throw new InvalidOperationException($"{outerExpression.Kind} is not an outer expression"),
+            SyntaxKind.ParenthesizedExpression => store.Expression(outerExpression),
+            SyntaxKind.TypeAssertionExpression => store.Expression(outerExpression),
+            SyntaxKind.AsExpression => store.Expression(outerExpression),
+            SyntaxKind.SatisfiesExpression => store.Expression(outerExpression),
+            SyntaxKind.NonNullExpression => store.Expression(outerExpression),
+            SyntaxKind.ExpressionWithTypeArguments => store.Expression(outerExpression),
+            SyntaxKind.PartiallyEmittedExpression => store.Expression(outerExpression),
+            _ => throw new InvalidOperationException($"{store.Kind(outerExpression)} is not an outer expression"),
         };
     }
 
@@ -258,25 +258,24 @@ internal sealed partial class NodeFactory
         }
     }
 
-    internal static T SetOriginalNode<T>(T node, Node? original)
-        where T : Node
+    internal static Node SetOriginalNode(NodeStore store, Node node, Node original)
     {
-        if (node.Original != original)
+        if (store.Original(node) != original)
         {
-            node.Original = original;
-            if (original != null)
+            store.SetOriginal(node, original);
+            if (!original.IsNone)
             {
-                var emitNode = (EmitNode?)original.EmitNode;
+                var emitNode = (EmitNode?)store.EmitNode(original);
                 if (emitNode != null)
                 {
-                    node.EmitNode = MergeEmitNode(emitNode, (EmitNode?)node.EmitNode);
+                    store.SetEmitNode(node, MergeEmitNode(store, emitNode, (EmitNode?)store.EmitNode(node)));
                 }
             }
         }
         return node;
     }
 
-    private static EmitNode MergeEmitNode(EmitNode sourceEmitNode, EmitNode? destEmitNode)
+    private static EmitNode MergeEmitNode(NodeStore store, EmitNode sourceEmitNode, EmitNode? destEmitNode)
     {
         var flags = sourceEmitNode.Flags;
         var internalFlags = sourceEmitNode.InternalFlags;
@@ -376,13 +375,13 @@ internal sealed partial class NodeFactory
         // TODO: `typeNode` should overwrite the destination
 
         // `classThis` overwrites the destination
-        if (classThis != null)
+        if (!classThis.IsNone)
         {
             destEmitNode.ClassThis = classThis;
         }
 
         // `assignedName` overwrites the destination
-        if (assignedName != null)
+        if (!assignedName.IsNone)
         {
             destEmitNode.AssignedName = assignedName;
         }

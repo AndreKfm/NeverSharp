@@ -160,18 +160,19 @@ internal static partial class Debug
     internal static void AssertNever(object? member, string message = "Illegal value:")
     {
         // formatSyntaxKind and JSON.stringify are replaced by plain formatting (see Stringify).
-        var detail = member is Node node ? "SyntaxKind: " + node.Kind.ToString() : JsonStringify(member);
+        // (Track O: a node handle carries no kind without its store; the handle is formatted.)
+        var detail = member is Node node ? "Node: " + node.ToString() : JsonStringify(member);
         Fail($"{message} {detail}");
     }
 
-    internal static void AssertNode(Node? node, Func<Node, bool>? test, string? message = null)
+    internal static void AssertNode(Node node, Func<Node, bool>? test, string? message = null)
     {
         if (ShouldAssertFunction(AssertionLevel.Normal, "assertNode"))
         {
             Assert(
-                node != null && (test == null || test(node)),
+                !node.IsNone && (test == null || test(node)),
                 !string.IsNullOrEmpty(message) ? message : "Unexpected node.",
-                () => $"Node {node?.Kind.ToString() ?? "undefined"} did not pass test ''.");
+                () => $"Node {node} did not pass test ''.");
         }
     }
 

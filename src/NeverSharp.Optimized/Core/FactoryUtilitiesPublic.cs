@@ -18,4 +18,15 @@ internal static partial class FactoryUtilitiesPublic
     {
         return location != null ? Utilities.SetTextRangePosEnd(range, location.Pos, location.End) : range;
     }
+
+    // Track O: the same for nodes, whose ranges are read and written through the store.
+    internal static Node SetTextRange(NodeStore store, Node range, Node location)
+    {
+        return !location.IsNone ? Utilities.SetTextRangePosEnd(store, range, store.Pos(location), store.End(location)) : range;
+    }
+
+    internal static Node SetTextRange(NodeStore store, Node range, TextRange? location)
+    {
+        return location != null ? Utilities.SetTextRangePosEnd(store, range, location.Pos, location.End) : range;
+    }
 }

@@ -38,7 +38,7 @@ internal interface JsonConversionNotifier
 {
     CommandLineOption RootOptions { get; }
 
-    void OnPropertySet(string keyText, object? value, PropertyAssignment propertyAssignment, CommandLineOption? parentOption, CommandLineOption? option);
+    void OnPropertySet(string keyText, object? value, Node propertyAssignment, CommandLineOption? parentOption, CommandLineOption? option);
 }
 
 /// <summary>commandLineParser.ts: convertToJson and getCompilerOptionValueTypeString.</summary>
@@ -55,14 +55,13 @@ internal static partial class CommandLineParser
     /// This returns the json value (apart from checking errors) only if returnValue provided is true.
     /// Otherwise it just checks the errors and returns undefined
     /// </summary>
-    internal static object? ConvertToJson(
-        SourceFile sourceFile,
-        Node? rootExpression,
+    internal static object? ConvertToJson(NodeStore store,         Node sourceFile,
+        Node rootExpression,
         List<DiagnosticWithLocation> errors,
         bool returnValue,
         JsonConversionNotifier? jsonConversionNotifier)
     {
-        if (rootExpression == null)
+        if (rootExpression.IsNone)
         {
             return returnValue ? new Dictionary<string, object?>(StringComparer.Ordinal) : null;
         }
@@ -70,29 +69,29 @@ internal static partial class CommandLineParser
         return ConvertPropertyValueToJson(rootExpression, jsonConversionNotifier?.RootOptions);
 
         object? ConvertObjectLiteralExpressionToJson(
-            ObjectLiteralExpression node,
+            Node node,
             CommandLineOption? objectOption)
         {
             var result = returnValue ? new Dictionary<string, object?>(StringComparer.Ordinal) : null;
-            foreach (var element in node.Properties)
+            foreach (var element in store.Properties(node))
             {
-                if (element.Kind != SyntaxKind.PropertyAssignment)
+                if (store.Kind(element) != SyntaxKind.PropertyAssignment)
                 {
-                    errors.Add(Utilities.CreateDiagnosticForNodeInSourceFile(sourceFile, element, Diagnostics.Property_assignment_expected));
+                    errors.Add(Utilities.CreateDiagnosticForNodeInSourceFile(store, sourceFile, element, Diagnostics.Property_assignment_expected));
                     continue;
                 }
 
-                var propertyAssignment = (PropertyAssignment)element;
-                if (propertyAssignment.QuestionToken != null)
+                var propertyAssignment = element;
+                if (!store.QuestionToken(propertyAssignment).IsNone)
                 {
-                    errors.Add(Utilities.CreateDiagnosticForNodeInSourceFile(sourceFile, propertyAssignment.QuestionToken, Diagnostics.The_0_modifier_can_only_be_used_in_TypeScript_files, "?"));
+                    errors.Add(Utilities.CreateDiagnosticForNodeInSourceFile(store, sourceFile, store.QuestionToken(propertyAssignment), Diagnostics.The_0_modifier_can_only_be_used_in_TypeScript_files, "?"));
                 }
-                if (!IsDoubleQuotedString(propertyAssignment.Name))
+                if (!IsDoubleQuotedString(store.Name(propertyAssignment)))
                 {
-                    errors.Add(Utilities.CreateDiagnosticForNodeInSourceFile(sourceFile, propertyAssignment.Name, Diagnostics.String_literal_with_double_quotes_expected));
+                    errors.Add(Utilities.CreateDiagnosticForNodeInSourceFile(store, sourceFile, store.Name(propertyAssignment), Diagnostics.String_literal_with_double_quotes_expected));
                 }
 
-                var textOfKey = Utilities.IsComputedNonLiteralName(propertyAssignment.Name) ? null : Utilities.GetTextOfPropertyName(propertyAssignment.Name);
+                var textOfKey = Utilities.IsComputedNonLiteralName(store, store.Name(propertyAssignment)) ? null : Utilities.GetTextOfPropertyName(store, store.Name(propertyAssignment));
                 // `textOfKey && unescapeLeadingUnderscores(textOfKey)`: the empty string stays "".
                 var keyText = !string.IsNullOrEmpty(textOfKey) ? UtilitiesPublic.UnescapeLeadingUnderscores(textOfKey) : textOfKey;
                 CommandLineOption? option = null;
@@ -100,7 +99,7 @@ internal static partial class CommandLineParser
                 {
                     option = elementOption;
                 }
-                var value = ConvertPropertyValueToJson(propertyAssignment.Initializer, option);
+                var value = ConvertPropertyValueToJson(store.Initializer(propertyAssignment), option);
                 if (keyText != null)
                 {
                     if (returnValue)
@@ -139,7 +138,7 @@ internal static partial class CommandLineParser
 
         object? ConvertPropertyValueToJson(Node valueExpression, CommandLineOption? option)
         {
-            switch (valueExpression.Kind)
+            switch (store.Kind(valueExpression))
             {
                 case SyntaxKind.TrueKeyword:
                     return true;
@@ -153,22 +152,22 @@ internal static partial class CommandLineParser
                 case SyntaxKind.StringLiteral:
                     if (!IsDoubleQuotedString(valueExpression))
                     {
-                        errors.Add(Utilities.CreateDiagnosticForNodeInSourceFile(sourceFile, valueExpression, Diagnostics.String_literal_with_double_quotes_expected));
+                        errors.Add(Utilities.CreateDiagnosticForNodeInSourceFile(store, sourceFile, valueExpression, Diagnostics.String_literal_with_double_quotes_expected));
                     }
-                    return ((StringLiteral)valueExpression).Text;
+                    return store.Text(valueExpression);
 
                 case SyntaxKind.NumericLiteral:
-                    return JsNumber.FromString(((NumericLiteral)valueExpression).Text);
+                    return JsNumber.FromString(store.Text(valueExpression));
 
                 case SyntaxKind.PrefixUnaryExpression:
-                    if (((PrefixUnaryExpression)valueExpression).Operator != SyntaxKind.MinusToken || ((PrefixUnaryExpression)valueExpression).Operand.Kind != SyntaxKind.NumericLiteral)
+                    if (store.Operator(valueExpression) != SyntaxKind.MinusToken || store.Kind(store.Operand(valueExpression)) != SyntaxKind.NumericLiteral)
                     {
                         break; // not valid JSON syntax
                     }
-                    return -JsNumber.FromString(((NumericLiteral)((PrefixUnaryExpression)valueExpression).Operand).Text);
+                    return -JsNumber.FromString(store.Text(store.Operand(valueExpression)));
 
                 case SyntaxKind.ObjectLiteralExpression:
-                    var objectLiteralExpression = (ObjectLiteralExpression)valueExpression;
+                    var objectLiteralExpression = valueExpression;
 
                     // Currently having element option declaration in the tsconfig with type "object"
                     // determines if it needs onSetValidOptionKeyValueInParent callback or not
@@ -180,18 +179,18 @@ internal static partial class CommandLineParser
 
                 case SyntaxKind.ArrayLiteralExpression:
                     return ConvertArrayLiteralExpressionToJson(
-                        ((ArrayLiteralExpression)valueExpression).Elements,
+                        store.Elements(valueExpression),
                         option?.Element);
             }
 
             // Not in expected format
             if (option != null)
             {
-                errors.Add(Utilities.CreateDiagnosticForNodeInSourceFile(sourceFile, valueExpression, Diagnostics.Compiler_option_0_requires_a_value_of_type_1, option.Name, GetCompilerOptionValueTypeString(option)));
+                errors.Add(Utilities.CreateDiagnosticForNodeInSourceFile(store, sourceFile, valueExpression, Diagnostics.Compiler_option_0_requires_a_value_of_type_1, option.Name, GetCompilerOptionValueTypeString(option)));
             }
             else
             {
-                errors.Add(Utilities.CreateDiagnosticForNodeInSourceFile(sourceFile, valueExpression, Diagnostics.Property_value_can_only_be_string_literal_numeric_literal_true_false_null_object_literal_or_array_literal));
+                errors.Add(Utilities.CreateDiagnosticForNodeInSourceFile(store, sourceFile, valueExpression, Diagnostics.Property_value_can_only_be_string_literal_numeric_literal_true_false_null_object_literal_or_array_literal));
             }
 
             return null;
@@ -199,7 +198,7 @@ internal static partial class CommandLineParser
 
         bool IsDoubleQuotedString(Node node)
         {
-            return FactoryNodeTests.IsStringLiteral(node) && Utilities.IsStringDoubleQuoted(node, sourceFile);
+            return FactoryNodeTests.IsStringLiteral(store, node) && Utilities.IsStringDoubleQuoted(store, node, sourceFile);
         }
     }
 

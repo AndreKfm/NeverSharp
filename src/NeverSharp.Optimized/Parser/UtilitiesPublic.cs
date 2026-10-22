@@ -18,7 +18,7 @@ namespace NeverSharp.Optimized;
 /// in this subclass, and getJSDocTagsWorker replaces a node's plain list by a JSDocArray with the same elements when it
 /// first caches tags on it.
 /// </summary>
-internal sealed class JSDocArray : List<JSDoc>
+internal sealed class JSDocArray : List<Node>
 {
     public IReadOnlyList<Node>? JsDocCache;
 }
@@ -31,27 +31,27 @@ internal static partial class UtilitiesPublic
     /// returns a truthy value, then returns that value. (TypeScript's callback may also return "quit", which ends
     /// the search with undefined; no caller in the parser's units passes such a callback.)
     /// </summary>
-    internal static Node? FindAncestor(Node? node, Func<Node, bool> callback)
+    internal static Node FindAncestor(NodeStore store, Node node, Func<Node, bool> callback)
     {
-        while (node != null)
+        while (!node.IsNone)
         {
             var result = callback(node);
             if (result)
             {
                 return node;
             }
-            node = node.Parent;
+            node = store.Parent(node);
         }
-        return null;
+        return default;
     }
 
     /// <summary>
     /// Gets a value indicating whether a node originated in the parse tree.
     /// </summary>
     /// <param name="node">The node to test.</param>
-    internal static bool IsParseTreeNode(Node node)
+    internal static bool IsParseTreeNode(NodeStore store, Node node)
     {
-        return (node.Flags & NodeFlags.Synthesized) == 0;
+        return (store.Flags(node) & NodeFlags.Synthesized) == 0;
     }
 
     /// <summary>
@@ -60,23 +60,23 @@ internal static partial class UtilitiesPublic
     /// <param name="node">The original node.</param>
     /// <param name="nodeTest">A callback used to ensure the correct type of parse tree node is returned.</param>
     /// <returns>The original parse tree node if found; otherwise, undefined.</returns>
-    internal static Node? GetParseTreeNode(Node? node, Func<Node, bool>? nodeTest = null)
+    internal static Node GetParseTreeNode(NodeStore store, Node node, Func<Node, bool>? nodeTest = null)
     {
-        if (node == null || IsParseTreeNode(node))
+        if (node.IsNone || IsParseTreeNode(store, node))
         {
             return node;
         }
 
-        node = node.Original;
-        while (node != null)
+        node = store.Original(node);
+        while (!node.IsNone)
         {
-            if (IsParseTreeNode(node))
+            if (IsParseTreeNode(store, node))
             {
-                return nodeTest == null || nodeTest(node) ? node : null;
+                return nodeTest == null || nodeTest(node) ? node : default;
             }
-            node = node.Original;
+            node = store.Original(node);
         }
-        return null;
+        return default;
     }
 
     /// <summary>Add an extra underscore to identifiers that start with two underscores to avoid issues with magic names like '__proto__'</summary>
@@ -97,60 +97,60 @@ internal static partial class UtilitiesPublic
     }
 
     /// <summary>TypeScript: `idText(identifierOrPrivateName: Identifier | PrivateIdentifier)`.</summary>
-    internal static string IdText(Node identifierOrPrivateName)
+    internal static string IdText(NodeStore store, Node identifierOrPrivateName)
     {
-        var escapedText = identifierOrPrivateName is Identifier identifier ? identifier.EscapedText : ((PrivateIdentifier)identifierOrPrivateName).EscapedText;
+        var escapedText = (identifierOrPrivateName is var identifier && store.IsIdentifier(identifier)) ? store.EscapedText(identifier) : store.EscapedText(identifierOrPrivateName);
         return UnescapeLeadingUnderscores((string)escapedText!);
     }
 
-    internal static bool IsNamedDeclaration(Node node)
+    internal static bool IsNamedDeclaration(NodeStore store, Node node)
     {
-        return NodeAccessors.GetName(node) != null; // A 'name' property should always be a DeclarationName.
+        return !store.Name(node).IsNone; // A 'name' property should always be a DeclarationName.
     }
 
-    internal static IReadOnlyList<Node>? GetModifiers(Node node)
+    internal static IReadOnlyList<Node>? GetModifiers(NodeStore store, Node node)
     {
-        if (Utilities.HasSyntacticModifier(node, ModifierFlags.Modifier))
+        if (Utilities.HasSyntacticModifier(store, node, ModifierFlags.Modifier))
         {
-            return Core.Filter((IReadOnlyList<Node>?)NodeAccessors.GetModifiers(node), IsModifier);
+            return Core.Filter((IReadOnlyList<Node>?)store.Modifiers(node), ((a0) => IsModifier(store, a0)));
         }
         return null;
     }
 
     /// <summary>`(param.parent as SignatureDeclaration).parameters`.</summary>
-    private static NodeArray GetParametersOfParent(Node parent)
+    private static NodeArray GetParametersOfParent(NodeStore store, Node parent)
     {
         return parent switch
         {
-            ArrowFunction n => n.Parameters,
-            CallSignatureDeclaration n => n.Parameters,
-            ConstructSignatureDeclaration n => n.Parameters,
-            ConstructorDeclaration n => n.Parameters,
-            ConstructorTypeNode n => n.Parameters,
-            FunctionDeclaration n => n.Parameters,
-            FunctionExpression n => n.Parameters,
-            FunctionTypeNode n => n.Parameters,
-            GetAccessorDeclaration n => n.Parameters,
-            IndexSignatureDeclaration n => n.Parameters,
-            JSDocFunctionType n => n.Parameters,
-            MethodDeclaration n => n.Parameters,
-            MethodSignature n => n.Parameters,
-            SetAccessorDeclaration n => n.Parameters,
-            _ => throw new InvalidCastException(parent.Kind.ToString()),
+            var n when store.IsArrowFunction(n) => store.Parameters(n),
+            var n when store.IsCallSignatureDeclaration(n) => store.Parameters(n),
+            var n when store.IsConstructSignatureDeclaration(n) => store.Parameters(n),
+            var n when store.IsConstructorDeclaration(n) => store.Parameters(n),
+            var n when store.IsConstructorTypeNode(n) => store.Parameters(n),
+            var n when store.IsFunctionDeclaration(n) => store.Parameters(n),
+            var n when store.IsFunctionExpression(n) => store.Parameters(n),
+            var n when store.IsFunctionTypeNode(n) => store.Parameters(n),
+            var n when store.IsGetAccessorDeclaration(n) => store.Parameters(n),
+            var n when store.IsIndexSignatureDeclaration(n) => store.Parameters(n),
+            var n when store.IsJSDocFunctionType(n) => store.Parameters(n),
+            var n when store.IsMethodDeclaration(n) => store.Parameters(n),
+            var n when store.IsMethodSignature(n) => store.Parameters(n),
+            var n when store.IsSetAccessorDeclaration(n) => store.Parameters(n),
+            _ => throw new InvalidCastException(store.Kind(parent).ToString()),
         };
     }
 
-    private static IReadOnlyList<Node> GetJSDocParameterTagsWorker(ParameterDeclaration param, bool? noCache = null)
+    private static IReadOnlyList<Node> GetJSDocParameterTagsWorker(NodeStore store, Node param, bool? noCache = null)
     {
-        if (param.Name != null)
+        if (!store.Name(param).IsNone)
         {
-            if (FactoryNodeTests.IsIdentifier(param.Name))
+            if (FactoryNodeTests.IsIdentifier(store, store.Name(param)))
             {
-                var name = (string)((Identifier)param.Name).EscapedText!;
+                var name = (string)store.EscapedText(store.Name(param))!;
                 var result = new List<Node>();
-                foreach (var tag in GetJSDocTagsWorker(param.Parent, noCache))
+                foreach (var tag in GetJSDocTagsWorker(store, store.Parent(param), noCache))
                 {
-                    if (FactoryNodeTests.IsJSDocParameterTag(tag) && FactoryNodeTests.IsIdentifier(((JSDocParameterTag)tag).Name) && (string)((Identifier)((JSDocParameterTag)tag).Name).EscapedText! == name)
+                    if (FactoryNodeTests.IsJSDocParameterTag(store, tag) && FactoryNodeTests.IsIdentifier(store, store.Name(tag)) && (string)store.EscapedText(store.Name(tag))! == name)
                     {
                         result.Add(tag);
                     }
@@ -159,12 +159,12 @@ internal static partial class UtilitiesPublic
             }
             else
             {
-                var i = GetParametersOfParent(param.Parent).IndexOf(param);
+                var i = GetParametersOfParent(store, store.Parent(param)).IndexOf(param);
                 Debug.Assert(i > -1, "Parameters should always be in their parents' parameter list");
                 var paramTags = new List<Node>();
-                foreach (var tag in GetJSDocTagsWorker(param.Parent, noCache))
+                foreach (var tag in GetJSDocTagsWorker(store, store.Parent(param), noCache))
                 {
-                    if (FactoryNodeTests.IsJSDocParameterTag(tag))
+                    if (FactoryNodeTests.IsJSDocParameterTag(store, tag))
                     {
                         paramTags.Add(tag);
                     }
@@ -192,23 +192,23 @@ internal static partial class UtilitiesPublic
     ///
     /// For binding patterns, parameter tags are matched by position.
     /// </remarks>
-    internal static IReadOnlyList<Node> GetJSDocParameterTags(ParameterDeclaration param)
+    internal static IReadOnlyList<Node> GetJSDocParameterTags(NodeStore store, Node param)
     {
-        return GetJSDocParameterTagsWorker(param, /*noCache*/ false);
+        return GetJSDocParameterTagsWorker(store, param, /*noCache*/ false);
     }
 
-    internal static IReadOnlyList<Node> GetJSDocParameterTagsNoCache(ParameterDeclaration param)
+    internal static IReadOnlyList<Node> GetJSDocParameterTagsNoCache(NodeStore store, Node param)
     {
-        return GetJSDocParameterTagsWorker(param, /*noCache*/ true);
+        return GetJSDocParameterTagsWorker(store, param, /*noCache*/ true);
     }
 
-    private static List<Node> GetJSDocTypeParameterTagsWorker(TypeParameterDeclaration param, bool? noCache = null)
+    private static List<Node> GetJSDocTypeParameterTagsWorker(NodeStore store, Node param, bool? noCache = null)
     {
-        var name = (string)param.Name.EscapedText!;
+        var name = (string)store.EscapedText(store.Name(param))!;
         var result = new List<Node>();
-        foreach (var tag in GetJSDocTagsWorker(param.Parent, noCache))
+        foreach (var tag in GetJSDocTagsWorker(store, store.Parent(param), noCache))
         {
-            if (FactoryNodeTests.IsJSDocTemplateTag(tag) && Core.Some(((JSDocTemplateTag)tag).TypeParameters, tp => (string)((TypeParameterDeclaration)tp).Name.EscapedText! == name))
+            if (FactoryNodeTests.IsJSDocTemplateTag(store, tag) && Core.Some(store.TypeParameters(tag)!, tp => (string)store.EscapedText(store.Name(tp))! == name))
             {
                 result.Add(tag);
             }
@@ -227,77 +227,77 @@ internal static partial class UtilitiesPublic
     /// node are returned first, so in the previous example, the template
     /// tag on the containing function expression would be first.
     /// </remarks>
-    internal static IReadOnlyList<Node> GetJSDocTypeParameterTags(TypeParameterDeclaration param)
+    internal static IReadOnlyList<Node> GetJSDocTypeParameterTags(NodeStore store, Node param)
     {
-        return GetJSDocTypeParameterTagsWorker(param, /*noCache*/ false);
+        return GetJSDocTypeParameterTagsWorker(store, param, /*noCache*/ false);
     }
 
-    internal static IReadOnlyList<Node> GetJSDocTypeParameterTagsNoCache(TypeParameterDeclaration param)
+    internal static IReadOnlyList<Node> GetJSDocTypeParameterTagsNoCache(NodeStore store, Node param)
     {
-        return GetJSDocTypeParameterTagsWorker(param, /*noCache*/ true);
+        return GetJSDocTypeParameterTagsWorker(store, param, /*noCache*/ true);
     }
 
-    internal static JSDocPublicTag? GetJSDocPublicTagNoCache(Node node)
+    internal static Node GetJSDocPublicTagNoCache(NodeStore store, Node node)
     {
-        return (JSDocPublicTag?)GetFirstJSDocTag(node, FactoryNodeTests.IsJSDocPublicTag, /*noCache*/ true);
+        return GetFirstJSDocTag(store, node, ((a0) => FactoryNodeTests.IsJSDocPublicTag(store, a0)), /*noCache*/ true);
     }
 
-    internal static JSDocPrivateTag? GetJSDocPrivateTagNoCache(Node node)
+    internal static Node GetJSDocPrivateTagNoCache(NodeStore store, Node node)
     {
-        return (JSDocPrivateTag?)GetFirstJSDocTag(node, FactoryNodeTests.IsJSDocPrivateTag, /*noCache*/ true);
+        return GetFirstJSDocTag(store, node, ((a0) => FactoryNodeTests.IsJSDocPrivateTag(store, a0)), /*noCache*/ true);
     }
 
-    internal static JSDocProtectedTag? GetJSDocProtectedTagNoCache(Node node)
+    internal static Node GetJSDocProtectedTagNoCache(NodeStore store, Node node)
     {
-        return (JSDocProtectedTag?)GetFirstJSDocTag(node, FactoryNodeTests.IsJSDocProtectedTag, /*noCache*/ true);
+        return GetFirstJSDocTag(store, node, ((a0) => FactoryNodeTests.IsJSDocProtectedTag(store, a0)), /*noCache*/ true);
     }
 
-    internal static JSDocReadonlyTag? GetJSDocReadonlyTagNoCache(Node node)
+    internal static Node GetJSDocReadonlyTagNoCache(NodeStore store, Node node)
     {
-        return (JSDocReadonlyTag?)GetFirstJSDocTag(node, FactoryNodeTests.IsJSDocReadonlyTag, /*noCache*/ true);
+        return GetFirstJSDocTag(store, node, ((a0) => FactoryNodeTests.IsJSDocReadonlyTag(store, a0)), /*noCache*/ true);
     }
 
-    internal static JSDocOverrideTag? GetJSDocOverrideTagNoCache(Node node)
+    internal static Node GetJSDocOverrideTagNoCache(NodeStore store, Node node)
     {
-        return (JSDocOverrideTag?)GetFirstJSDocTag(node, FactoryNodeTests.IsJSDocOverrideTag, /*noCache*/ true);
+        return GetFirstJSDocTag(store, node, ((a0) => FactoryNodeTests.IsJSDocOverrideTag(store, a0)), /*noCache*/ true);
     }
 
-    internal static JSDocDeprecatedTag? GetJSDocDeprecatedTagNoCache(Node node)
+    internal static Node GetJSDocDeprecatedTagNoCache(NodeStore store, Node node)
     {
-        return (JSDocDeprecatedTag?)GetFirstJSDocTag(node, FactoryNodeTests.IsJSDocDeprecatedTag, /*noCache*/ true);
+        return GetFirstJSDocTag(store, node, ((a0) => FactoryNodeTests.IsJSDocDeprecatedTag(store, a0)), /*noCache*/ true);
     }
 
-    internal static JSDocTypeTag? GetJSDocTypeTag(Node node)
+    internal static Node GetJSDocTypeTag(NodeStore store, Node node)
     {
         // We should have already issued an error if there were multiple type jsdocs, so just use the first one.
-        var tag = (JSDocTypeTag?)GetFirstJSDocTag(node, FactoryNodeTests.IsJSDocTypeTag);
-        if (tag != null && tag.TypeExpression != null && tag.TypeExpression.Type != null)
+        var tag = GetFirstJSDocTag(store, node, ((a0) => FactoryNodeTests.IsJSDocTypeTag(store, a0)));
+        if (!tag.IsNone && !store.TypeExpression(tag).IsNone && !store.Type(store.TypeExpression(tag)).IsNone)
         {
             return tag;
         }
-        return null;
+        return default;
     }
 
-    private static IReadOnlyList<Node> GetJSDocTagsWorker(Node node, bool? noCache = null)
+    private static IReadOnlyList<Node> GetJSDocTagsWorker(NodeStore store, Node node, bool? noCache = null)
     {
-        if (!Utilities.CanHaveJSDoc(node))
+        if (!Utilities.CanHaveJSDoc(store, node))
         {
             return Core.EmptyArray<Node>();
         }
-        var jsDoc = JSDocContainers.GetJsDoc(node);
+        var jsDoc = store.JsDoc(node);
         var tags = (jsDoc as JSDocArray)?.JsDocCache;
         // If cache is 'null', that means we did the work of searching for JSDoc tags and came up with nothing.
         if (tags == null || noCache == true)
         {
-            var comments = Utilities.GetJSDocCommentsAndTags(node, noCache);
+            var comments = Utilities.GetJSDocCommentsAndTags(store, node, noCache);
             Debug.Assert(comments.Count < 2 || comments[0] != comments[1]);
             // flatMap(comments, j => isJSDoc(j) ? j.tags : j)
             List<Node>? flat = null;
             foreach (var j in comments)
             {
-                if (FactoryNodeTests.IsJSDoc(j))
+                if (FactoryNodeTests.IsJSDoc(store, j))
                 {
-                    var jTags = ((JSDoc)j).Tags;
+                    var jTags = store.Tags(j);
                     if (jTags != null)
                     {
                         flat ??= [];
@@ -322,7 +322,7 @@ internal static partial class UtilitiesPublic
                     {
                         array.AddRange(jsDoc);
                     }
-                    JSDocContainers.SetJsDoc(node, array);
+                    store.SetJsDoc(node, array);
                 }
                 array.JsDocCache = tags;
             }
@@ -331,34 +331,34 @@ internal static partial class UtilitiesPublic
     }
 
     /// <summary>Get the first JSDoc tag of a specified kind, or undefined if not present.</summary>
-    private static Node? GetFirstJSDocTag(Node node, Func<Node, bool> predicate, bool? noCache = null)
+    private static Node GetFirstJSDocTag(NodeStore store, Node node, Func<Node, bool> predicate, bool? noCache = null)
     {
-        return Core.Find(GetJSDocTagsWorker(node, noCache), (tag, _) => predicate(tag));
+        return Core.Find(GetJSDocTagsWorker(store, node, noCache), (tag, _) => predicate(tag));
     }
 
-    internal static bool IsCallChain(Node node)
+    internal static bool IsCallChain(NodeStore store, Node node)
     {
-        return FactoryNodeTests.IsCallExpression(node) && (node.Flags & NodeFlags.OptionalChain) != 0;
+        return FactoryNodeTests.IsCallExpression(store, node) && (store.Flags(node) & NodeFlags.OptionalChain) != 0;
     }
 
-    internal static bool IsOptionalChain(Node node)
+    internal static bool IsOptionalChain(NodeStore store, Node node)
     {
-        var kind = node.Kind;
-        return (node.Flags & NodeFlags.OptionalChain) != 0 &&
+        var kind = store.Kind(node);
+        return (store.Flags(node) & NodeFlags.OptionalChain) != 0 &&
             (kind == SyntaxKind.PropertyAccessExpression
                 || kind == SyntaxKind.ElementAccessExpression
                 || kind == SyntaxKind.CallExpression
                 || kind == SyntaxKind.NonNullExpression);
     }
 
-    internal static Node SkipPartiallyEmittedExpressions(Node node)
+    internal static Node SkipPartiallyEmittedExpressions(NodeStore store, Node node)
     {
-        return FactoryUtilities.SkipOuterExpressions(node, OuterExpressionKinds.PartiallyEmittedExpressions);
+        return FactoryUtilities.SkipOuterExpressions(store, node, OuterExpressionKinds.PartiallyEmittedExpressions);
     }
 
-    internal static bool IsNonNullChain(Node node)
+    internal static bool IsNonNullChain(NodeStore store, Node node)
     {
-        return FactoryNodeTests.IsNonNullExpression(node) && (node.Flags & NodeFlags.OptionalChain) != 0;
+        return FactoryNodeTests.IsNonNullExpression(store, node) && (store.Flags(node) & NodeFlags.OptionalChain) != 0;
     }
 
     /// <summary>
@@ -384,9 +384,9 @@ internal static partial class UtilitiesPublic
         return SyntaxKind.FirstTemplateToken <= kind && kind <= SyntaxKind.LastTemplateToken;
     }
 
-    internal static bool IsGeneratedIdentifier(Node node)
+    internal static bool IsGeneratedIdentifier(NodeStore store, Node node)
     {
-        return FactoryNodeTests.IsIdentifier(node) && ((EmitNode?)node.EmitNode)?.AutoGenerate != null;
+        return FactoryNodeTests.IsIdentifier(store, node) && ((EmitNode?)store.EmitNode(node))?.AutoGenerate != null;
     }
 
     internal static bool IsModifierKind(SyntaxKind token)
@@ -426,14 +426,14 @@ internal static partial class UtilitiesPublic
             idToken == SyntaxKind.AccessorKeyword;
     }
 
-    internal static bool IsModifier(Node node)
+    internal static bool IsModifier(NodeStore store, Node node)
     {
-        return IsModifierKind(node.Kind);
+        return IsModifierKind(store.Kind(node));
     }
 
-    internal static bool IsPropertyName(Node node)
+    internal static bool IsPropertyName(NodeStore store, Node node)
     {
-        var kind = node.Kind;
+        var kind = store.Kind(node);
         return kind == SyntaxKind.Identifier
             || kind == SyntaxKind.PrivateIdentifier
             || kind == SyntaxKind.StringLiteral
@@ -441,9 +441,9 @@ internal static partial class UtilitiesPublic
             || kind == SyntaxKind.ComputedPropertyName;
     }
 
-    internal static bool IsObjectLiteralElementLike(Node node)
+    internal static bool IsObjectLiteralElementLike(NodeStore store, Node node)
     {
-        var kind = node.Kind;
+        var kind = store.Kind(node);
         return kind == SyntaxKind.PropertyAssignment
             || kind == SyntaxKind.ShorthandPropertyAssignment
             || kind == SyntaxKind.SpreadAssignment
@@ -454,9 +454,9 @@ internal static partial class UtilitiesPublic
 
     // Type
 
-    internal static bool IsFunctionOrConstructorTypeNode(Node node)
+    internal static bool IsFunctionOrConstructorTypeNode(NodeStore store, Node node)
     {
-        switch (node.Kind)
+        switch (store.Kind(node))
         {
             case SyntaxKind.FunctionType:
             case SyntaxKind.ConstructorType:
@@ -468,11 +468,11 @@ internal static partial class UtilitiesPublic
 
     // Binding patterns
 
-    internal static bool IsBindingPattern(Node? node)
+    internal static bool IsBindingPattern(NodeStore store, Node node)
     {
-        if (node != null)
+        if (!node.IsNone)
         {
-            var kind = node.Kind;
+            var kind = store.Kind(node);
             return kind == SyntaxKind.ArrayBindingPattern
                 || kind == SyntaxKind.ObjectBindingPattern;
         }
@@ -480,9 +480,9 @@ internal static partial class UtilitiesPublic
         return false;
     }
 
-    internal static bool IsAssignmentPattern(Node node)
+    internal static bool IsAssignmentPattern(NodeStore store, Node node)
     {
-        var kind = node.Kind;
+        var kind = store.Kind(node);
         return kind == SyntaxKind.ArrayLiteralExpression
             || kind == SyntaxKind.ObjectLiteralExpression;
     }
@@ -490,9 +490,9 @@ internal static partial class UtilitiesPublic
     /// <summary>
     /// Determines whether the BindingOrAssignmentElement is a BindingElement-like declaration
     /// </summary>
-    internal static bool IsDeclarationBindingElement(Node bindingElement)
+    internal static bool IsDeclarationBindingElement(NodeStore store, Node bindingElement)
     {
-        switch (bindingElement.Kind)
+        switch (store.Kind(bindingElement))
         {
             case SyntaxKind.VariableDeclaration:
             case SyntaxKind.Parameter:
@@ -503,9 +503,9 @@ internal static partial class UtilitiesPublic
         return false;
     }
 
-    internal static bool IsLeftHandSideExpression(Node node)
+    internal static bool IsLeftHandSideExpression(NodeStore store, Node node)
     {
-        return IsLeftHandSideExpressionKind(SkipPartiallyEmittedExpressions(node).Kind);
+        return IsLeftHandSideExpressionKind(store.Kind(SkipPartiallyEmittedExpressions(store, node)));
     }
 
     private static bool IsLeftHandSideExpressionKind(SyntaxKind kind)
@@ -549,9 +549,9 @@ internal static partial class UtilitiesPublic
         }
     }
 
-    internal static bool IsUnaryExpression(Node node)
+    internal static bool IsUnaryExpression(NodeStore store, Node node)
     {
-        return IsUnaryExpressionKind(SkipPartiallyEmittedExpressions(node).Kind);
+        return IsUnaryExpressionKind(store.Kind(SkipPartiallyEmittedExpressions(store, node)));
     }
 
     private static bool IsUnaryExpressionKind(SyntaxKind kind)
@@ -574,9 +574,9 @@ internal static partial class UtilitiesPublic
     /// <summary>
     /// Determines whether a node is an expression based only on its kind.
     /// </summary>
-    internal static bool IsExpression(Node node)
+    internal static bool IsExpression(NodeStore store, Node node)
     {
-        return IsExpressionKind(SkipPartiallyEmittedExpressions(node).Kind);
+        return IsExpressionKind(store.Kind(SkipPartiallyEmittedExpressions(store, node)));
     }
 
     private static bool IsExpressionKind(SyntaxKind kind)
@@ -599,29 +599,29 @@ internal static partial class UtilitiesPublic
         }
     }
 
-    internal static bool IsJSDocNode(Node node)
+    internal static bool IsJSDocNode(NodeStore store, Node node)
     {
-        return node.Kind >= SyntaxKind.FirstJSDocNode && node.Kind <= SyntaxKind.LastJSDocNode;
+        return store.Kind(node) >= SyntaxKind.FirstJSDocNode && store.Kind(node) <= SyntaxKind.LastJSDocNode;
     }
 
-    internal static bool HasJSDocNodes(Node node)
+    internal static bool HasJSDocNodes(NodeStore store, Node node)
     {
-        if (!Utilities.CanHaveJSDoc(node))
+        if (!Utilities.CanHaveJSDoc(store, node))
         {
             return false;
         }
 
-        var jsDoc = JSDocContainers.GetJsDoc(node);
+        var jsDoc = store.JsDoc(node);
         return jsDoc != null && jsDoc.Count > 0;
     }
 
-    internal static bool HasInitializer(Node node)
+    internal static bool HasInitializer(NodeStore store, Node node)
     {
-        return NodeAccessors.GetInitializer(node) != null;
+        return !store.Initializer(node).IsNone;
     }
 
-    internal static bool IsStringLiteralLike(Node node)
+    internal static bool IsStringLiteralLike(NodeStore store, Node node)
     {
-        return node.Kind == SyntaxKind.StringLiteral || node.Kind == SyntaxKind.NoSubstitutionTemplateLiteral;
+        return store.Kind(node) == SyntaxKind.StringLiteral || store.Kind(node) == SyntaxKind.NoSubstitutionTemplateLiteral;
     }
 }

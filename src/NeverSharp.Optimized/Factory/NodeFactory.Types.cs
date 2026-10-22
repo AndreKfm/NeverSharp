@@ -20,38 +20,38 @@ internal sealed partial class NodeFactory
     //
 
     // @api
-    internal TypePredicateNode CreateTypePredicateNode(AssertsKeyword? assertsModifier, object parameterName, Node? type)
+    internal Node CreateTypePredicateNode(Node assertsModifier, object parameterName, Node type)
     {
-        var node = CreateBaseNode<TypePredicateNode>(SyntaxKind.TypePredicate);
-        node.AssertsModifier = assertsModifier;
-        node.ParameterName = AsName(parameterName)!;
-        node.Type = type;
-        node.TransformFlags = TransformFlags.ContainsTypeScript;
+        var node = CreateBaseNode(SyntaxKind.TypePredicate);
+        store.SetAssertsModifier(node, assertsModifier);
+        store.SetParameterName(node, AsName(parameterName));
+        store.SetType(node, type);
+        store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
         return node;
     }
 
     // @api
-    internal TypeReferenceNode CreateTypeReferenceNode(object typeName, IReadOnlyList<Node>? typeArguments)
+    internal Node CreateTypeReferenceNode(object typeName, IReadOnlyList<Node>? typeArguments)
     {
-        var node = CreateBaseNode<TypeReferenceNode>(SyntaxKind.TypeReference);
-        node.TypeName = AsName(typeName)!;
-        node.TypeArguments = typeArguments != null ? Parenthesizer.ParenthesizeTypeArguments(CreateNodeArray(typeArguments)) : null;
-        node.TransformFlags = TransformFlags.ContainsTypeScript;
+        var node = CreateBaseNode(SyntaxKind.TypeReference);
+        store.SetTypeName(node, AsName(typeName));
+        store.SetTypeArguments(node, typeArguments != null ? Parenthesizer.ParenthesizeTypeArguments(CreateNodeArray(store, typeArguments)) : null);
+        store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
         return node;
     }
 
     // @api
-    internal FunctionTypeNode CreateFunctionTypeNode(
+    internal Node CreateFunctionTypeNode(
         IReadOnlyList<Node>? typeParameters,
         IReadOnlyList<Node> parameters,
         Node type)
     {
-        var node = CreateBaseDeclaration<FunctionTypeNode>(SyntaxKind.FunctionType);
-        node.TypeParameters = AsNodeArray(typeParameters);
-        node.Parameters = AsNodeArray(parameters)!;
-        node.Type = type;
-        node.TransformFlags = TransformFlags.ContainsTypeScript;
-        node.Modifiers = null; // initialized by parser for grammar errors
+        var node = CreateBaseDeclaration(SyntaxKind.FunctionType);
+        store.SetTypeParameters(node, AsNodeArray(store, typeParameters));
+        store.SetParameters(node, AsNodeArray(store, parameters)!);
+        store.SetType(node, type);
+        store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
+        store.SetModifiers(node, null); // initialized by parser for grammar errors
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         // node.locals = undefined; // initialized by binder (LocalsContainer)
         // node.nextContainer = undefined; // initialized by binder (LocalsContainer)
@@ -64,29 +64,29 @@ internal sealed partial class NodeFactory
     /// createConstructorTypeNode1, 3 to createConstructorTypeNode2. The two C# overloads are that dispatch.
     /// </summary>
     // @api
-    internal ConstructorTypeNode CreateConstructorTypeNode(IReadOnlyList<Node>? modifiers, IReadOnlyList<Node>? typeParameters, IReadOnlyList<Node> parameters, Node type)
+    internal Node CreateConstructorTypeNode(IReadOnlyList<Node>? modifiers, IReadOnlyList<Node>? typeParameters, IReadOnlyList<Node> parameters, Node type)
     {
         return CreateConstructorTypeNode1(modifiers, typeParameters, parameters, type);
     }
 
     // @api
-    internal ConstructorTypeNode CreateConstructorTypeNode(IReadOnlyList<Node>? typeParameters, IReadOnlyList<Node> parameters, Node type)
+    internal Node CreateConstructorTypeNode(IReadOnlyList<Node>? typeParameters, IReadOnlyList<Node> parameters, Node type)
     {
         return CreateConstructorTypeNode2(typeParameters, parameters, type);
     }
 
-    private ConstructorTypeNode CreateConstructorTypeNode1(
+    private Node CreateConstructorTypeNode1(
         IReadOnlyList<Node>? modifiers,
         IReadOnlyList<Node>? typeParameters,
         IReadOnlyList<Node> parameters,
         Node type)
     {
-        var node = CreateBaseDeclaration<ConstructorTypeNode>(SyntaxKind.ConstructorType);
-        node.Modifiers = AsNodeArray(modifiers);
-        node.TypeParameters = AsNodeArray(typeParameters);
-        node.Parameters = AsNodeArray(parameters)!;
-        node.Type = type;
-        node.TransformFlags = TransformFlags.ContainsTypeScript;
+        var node = CreateBaseDeclaration(SyntaxKind.ConstructorType);
+        store.SetModifiers(node, AsNodeArray(store, modifiers));
+        store.SetTypeParameters(node, AsNodeArray(store, typeParameters));
+        store.SetParameters(node, AsNodeArray(store, parameters)!);
+        store.SetType(node, type);
+        store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         // node.locals = undefined; // initialized by binder (LocalsContainer)
         // node.nextContainer = undefined; // initialized by binder (LocalsContainer)
@@ -95,7 +95,7 @@ internal sealed partial class NodeFactory
     }
 
     /// <summary>Deprecated.</summary>
-    private ConstructorTypeNode CreateConstructorTypeNode2(
+    private Node CreateConstructorTypeNode2(
         IReadOnlyList<Node>? typeParameters,
         IReadOnlyList<Node> parameters,
         Node type)
@@ -104,215 +104,215 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal TypeQueryNode CreateTypeQueryNode(Node exprName, IReadOnlyList<Node>? typeArguments = null)
+    internal Node CreateTypeQueryNode(Node exprName, IReadOnlyList<Node>? typeArguments = null)
     {
-        var node = CreateBaseNode<TypeQueryNode>(SyntaxKind.TypeQuery);
-        node.ExprName = exprName;
-        node.TypeArguments = typeArguments != null ? Parenthesizer.ParenthesizeTypeArguments(typeArguments) : null;
-        node.TransformFlags = TransformFlags.ContainsTypeScript;
+        var node = CreateBaseNode(SyntaxKind.TypeQuery);
+        store.SetExprName(node, exprName);
+        store.SetTypeArguments(node, typeArguments != null ? Parenthesizer.ParenthesizeTypeArguments(typeArguments) : null);
+        store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
         return node;
     }
 
     // @api
-    internal TypeLiteralNode CreateTypeLiteralNode(IReadOnlyList<Node>? members)
+    internal Node CreateTypeLiteralNode(IReadOnlyList<Node>? members)
     {
-        var node = CreateBaseDeclaration<TypeLiteralNode>(SyntaxKind.TypeLiteral);
-        node.Members = CreateNodeArray(members);
-        node.TransformFlags = TransformFlags.ContainsTypeScript;
+        var node = CreateBaseDeclaration(SyntaxKind.TypeLiteral);
+        store.SetMembers(node, CreateNodeArray(store, members));
+        store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
         return node;
     }
 
     // @api
-    internal ArrayTypeNode CreateArrayTypeNode(Node elementType)
+    internal Node CreateArrayTypeNode(Node elementType)
     {
-        var node = CreateBaseNode<ArrayTypeNode>(SyntaxKind.ArrayType);
-        node.ElementType = Parenthesizer.ParenthesizeNonArrayTypeOfPostfixType(elementType);
-        node.TransformFlags = TransformFlags.ContainsTypeScript;
+        var node = CreateBaseNode(SyntaxKind.ArrayType);
+        store.SetElementType(node, Parenthesizer.ParenthesizeNonArrayTypeOfPostfixType(elementType));
+        store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
         return node;
     }
 
     // @api
-    internal TupleTypeNode CreateTupleTypeNode(IReadOnlyList<Node> elements)
+    internal Node CreateTupleTypeNode(IReadOnlyList<Node> elements)
     {
-        var node = CreateBaseNode<TupleTypeNode>(SyntaxKind.TupleType);
-        node.Elements = CreateNodeArray(Parenthesizer.ParenthesizeElementTypesOfTupleType(elements));
-        node.TransformFlags = TransformFlags.ContainsTypeScript;
+        var node = CreateBaseNode(SyntaxKind.TupleType);
+        store.SetElements(node, CreateNodeArray(store, Parenthesizer.ParenthesizeElementTypesOfTupleType(elements)));
+        store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
         return node;
     }
 
     // @api
-    internal NamedTupleMember CreateNamedTupleMember(DotDotDotToken? dotDotDotToken, Identifier name, QuestionToken? questionToken, Node type)
+    internal Node CreateNamedTupleMember(Node dotDotDotToken, Node name, Node questionToken, Node type)
     {
-        var node = CreateBaseDeclaration<NamedTupleMember>(SyntaxKind.NamedTupleMember);
-        node.DotDotDotToken = dotDotDotToken;
-        node.Name = name;
-        node.QuestionToken = questionToken;
-        node.Type = type;
-        node.TransformFlags = TransformFlags.ContainsTypeScript;
+        var node = CreateBaseDeclaration(SyntaxKind.NamedTupleMember);
+        store.SetDotDotDotToken(node, dotDotDotToken);
+        store.SetName(node, name);
+        store.SetQuestionToken(node, questionToken);
+        store.SetType(node, type);
+        store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         return node;
     }
 
     // @api
-    internal OptionalTypeNode CreateOptionalTypeNode(Node type)
+    internal Node CreateOptionalTypeNode(Node type)
     {
-        var node = CreateBaseNode<OptionalTypeNode>(SyntaxKind.OptionalType);
-        node.Type = Parenthesizer.ParenthesizeTypeOfOptionalType(type);
-        node.TransformFlags = TransformFlags.ContainsTypeScript;
+        var node = CreateBaseNode(SyntaxKind.OptionalType);
+        store.SetType(node, Parenthesizer.ParenthesizeTypeOfOptionalType(type));
+        store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
         return node;
     }
 
     // @api
-    internal RestTypeNode CreateRestTypeNode(Node type)
+    internal Node CreateRestTypeNode(Node type)
     {
-        var node = CreateBaseNode<RestTypeNode>(SyntaxKind.RestType);
-        node.Type = type;
-        node.TransformFlags = TransformFlags.ContainsTypeScript;
+        var node = CreateBaseNode(SyntaxKind.RestType);
+        store.SetType(node, type);
+        store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
         return node;
     }
 
     private Node CreateUnionOrIntersectionTypeNode(SyntaxKind kind, IReadOnlyList<Node> types, Func<IReadOnlyList<Node>, IReadOnlyList<Node>> parenthesize)
     {
-        var node = CreateBaseNode<Node>(kind);
-        var typesArray = CreateNodeArray(parenthesize(types));
-        if (node is UnionTypeNode union)
+        var node = CreateBaseNode(kind);
+        var typesArray = CreateNodeArray(store, parenthesize(types));
+        if ((node is var union && store.IsUnionTypeNode(union)))
         {
-            union.Types = typesArray;
+            store.SetTypes(union, typesArray);
         }
         else
         {
-            ((IntersectionTypeNode)node).Types = typesArray;
+            store.SetTypes(node, typesArray);
         }
-        node.TransformFlags = TransformFlags.ContainsTypeScript;
+        store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
         return node;
     }
 
     // @api
-    internal UnionTypeNode CreateUnionTypeNode(IReadOnlyList<Node> types)
+    internal Node CreateUnionTypeNode(IReadOnlyList<Node> types)
     {
-        return (UnionTypeNode)CreateUnionOrIntersectionTypeNode(SyntaxKind.UnionType, types, Parenthesizer.ParenthesizeConstituentTypesOfUnionType);
+        return CreateUnionOrIntersectionTypeNode(SyntaxKind.UnionType, types, Parenthesizer.ParenthesizeConstituentTypesOfUnionType);
     }
 
     // @api
-    internal IntersectionTypeNode CreateIntersectionTypeNode(IReadOnlyList<Node> types)
+    internal Node CreateIntersectionTypeNode(IReadOnlyList<Node> types)
     {
-        return (IntersectionTypeNode)CreateUnionOrIntersectionTypeNode(SyntaxKind.IntersectionType, types, Parenthesizer.ParenthesizeConstituentTypesOfIntersectionType);
+        return CreateUnionOrIntersectionTypeNode(SyntaxKind.IntersectionType, types, Parenthesizer.ParenthesizeConstituentTypesOfIntersectionType);
     }
 
     // @api
-    internal ConditionalTypeNode CreateConditionalTypeNode(Node checkType, Node extendsType, Node trueType, Node falseType)
+    internal Node CreateConditionalTypeNode(Node checkType, Node extendsType, Node trueType, Node falseType)
     {
-        var node = CreateBaseNode<ConditionalTypeNode>(SyntaxKind.ConditionalType);
-        node.CheckType = Parenthesizer.ParenthesizeCheckTypeOfConditionalType(checkType);
-        node.ExtendsType = Parenthesizer.ParenthesizeExtendsTypeOfConditionalType(extendsType);
-        node.TrueType = trueType;
-        node.FalseType = falseType;
-        node.TransformFlags = TransformFlags.ContainsTypeScript;
+        var node = CreateBaseNode(SyntaxKind.ConditionalType);
+        store.SetCheckType(node, Parenthesizer.ParenthesizeCheckTypeOfConditionalType(checkType));
+        store.SetExtendsType(node, Parenthesizer.ParenthesizeExtendsTypeOfConditionalType(extendsType));
+        store.SetTrueType(node, trueType);
+        store.SetFalseType(node, falseType);
+        store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
         // node.locals = undefined; // initialized by binder (LocalsContainer)
         // node.nextContainer = undefined; // initialized by binder (LocalsContainer)
         return node;
     }
 
     // @api
-    internal InferTypeNode CreateInferTypeNode(TypeParameterDeclaration typeParameter)
+    internal Node CreateInferTypeNode(Node typeParameter)
     {
-        var node = CreateBaseNode<InferTypeNode>(SyntaxKind.InferType);
-        node.TypeParameter = typeParameter;
-        node.TransformFlags = TransformFlags.ContainsTypeScript;
+        var node = CreateBaseNode(SyntaxKind.InferType);
+        store.SetTypeParameter(node, typeParameter);
+        store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
         return node;
     }
 
     // @api
-    internal TemplateLiteralTypeNode CreateTemplateLiteralType(TemplateHead head, IReadOnlyList<Node> templateSpans)
+    internal Node CreateTemplateLiteralType(Node head, IReadOnlyList<Node> templateSpans)
     {
-        var node = CreateBaseNode<TemplateLiteralTypeNode>(SyntaxKind.TemplateLiteralType);
-        node.Head = head;
-        node.TemplateSpans = CreateNodeArray(templateSpans);
-        node.TransformFlags = TransformFlags.ContainsTypeScript;
+        var node = CreateBaseNode(SyntaxKind.TemplateLiteralType);
+        store.SetHead(node, head);
+        store.SetTemplateSpans(node, CreateNodeArray(store, templateSpans));
+        store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
         return node;
     }
 
     // @api
-    internal ImportTypeNode CreateImportTypeNode(
+    internal Node CreateImportTypeNode(
         Node argument,
-        ImportAttributes? attributes = null,
-        Node? qualifier = null,
+        Node attributes = default,
+        Node qualifier = default,
         IReadOnlyList<Node>? typeArguments = null,
         bool isTypeOf = false)
     {
-        var node = CreateBaseNode<ImportTypeNode>(SyntaxKind.ImportType);
-        node.Argument = argument;
-        node.Attributes = attributes;
+        var node = CreateBaseNode(SyntaxKind.ImportType);
+        store.SetArgument(node, argument);
+        store.SetAttributes(node, attributes);
         // TypeScript: `if (node.assertions && node.assertions.assertClause && node.attributes) { ... }`; a new node has
         // no `assertions` (the deprecated property is not declared on the generated class), so the test is false.
-        node.Qualifier = qualifier;
-        node.TypeArguments = typeArguments != null ? Parenthesizer.ParenthesizeTypeArguments(typeArguments) : null;
-        node.IsTypeOf = isTypeOf;
-        node.TransformFlags = TransformFlags.ContainsTypeScript;
+        store.SetQualifier(node, qualifier);
+        store.SetTypeArguments(node, typeArguments != null ? Parenthesizer.ParenthesizeTypeArguments(typeArguments) : null);
+        store.SetIsTypeOf(node, isTypeOf);
+        store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
         return node;
     }
 
     // @api
-    internal ParenthesizedTypeNode CreateParenthesizedType(Node type)
+    internal Node CreateParenthesizedType(Node type)
     {
-        var node = CreateBaseNode<ParenthesizedTypeNode>(SyntaxKind.ParenthesizedType);
-        node.Type = type;
-        node.TransformFlags = TransformFlags.ContainsTypeScript;
+        var node = CreateBaseNode(SyntaxKind.ParenthesizedType);
+        store.SetType(node, type);
+        store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
         return node;
     }
 
     // @api
-    internal ThisTypeNode CreateThisTypeNode()
+    internal Node CreateThisTypeNode()
     {
-        var node = CreateBaseNode<ThisTypeNode>(SyntaxKind.ThisType);
-        node.TransformFlags = TransformFlags.ContainsTypeScript;
+        var node = CreateBaseNode(SyntaxKind.ThisType);
+        store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
         return node;
     }
 
     // @api
-    internal TypeOperatorNode CreateTypeOperatorNode(SyntaxKind @operator, Node type)
+    internal Node CreateTypeOperatorNode(SyntaxKind @operator, Node type)
     {
-        var node = CreateBaseNode<TypeOperatorNode>(SyntaxKind.TypeOperator);
-        node.Operator = @operator;
-        node.Type = @operator == SyntaxKind.ReadonlyKeyword ?
+        var node = CreateBaseNode(SyntaxKind.TypeOperator);
+        store.SetOperator(node, @operator);
+        store.SetType(node, @operator == SyntaxKind.ReadonlyKeyword ?
             Parenthesizer.ParenthesizeOperandOfReadonlyTypeOperator(type) :
-            Parenthesizer.ParenthesizeOperandOfTypeOperator(type);
-        node.TransformFlags = TransformFlags.ContainsTypeScript;
+            Parenthesizer.ParenthesizeOperandOfTypeOperator(type));
+        store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
         return node;
     }
 
     // @api
-    internal IndexedAccessTypeNode CreateIndexedAccessTypeNode(Node objectType, Node indexType)
+    internal Node CreateIndexedAccessTypeNode(Node objectType, Node indexType)
     {
-        var node = CreateBaseNode<IndexedAccessTypeNode>(SyntaxKind.IndexedAccessType);
-        node.ObjectType = Parenthesizer.ParenthesizeNonArrayTypeOfPostfixType(objectType);
-        node.IndexType = indexType;
-        node.TransformFlags = TransformFlags.ContainsTypeScript;
+        var node = CreateBaseNode(SyntaxKind.IndexedAccessType);
+        store.SetObjectType(node, Parenthesizer.ParenthesizeNonArrayTypeOfPostfixType(objectType));
+        store.SetIndexType(node, indexType);
+        store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
         return node;
     }
 
     // @api
-    internal MappedTypeNode CreateMappedTypeNode(Node? readonlyToken, TypeParameterDeclaration typeParameter, Node? nameType, Node? questionToken, Node? type, IReadOnlyList<Node>? members)
+    internal Node CreateMappedTypeNode(Node readonlyToken, Node typeParameter, Node nameType, Node questionToken, Node type, IReadOnlyList<Node>? members)
     {
-        var node = CreateBaseDeclaration<MappedTypeNode>(SyntaxKind.MappedType);
-        node.ReadonlyToken = readonlyToken;
-        node.TypeParameter = typeParameter;
-        node.NameType = nameType;
-        node.QuestionToken = questionToken;
-        node.Type = type;
-        node.Members = members != null ? CreateNodeArray(members) : null;
-        node.TransformFlags = TransformFlags.ContainsTypeScript;
+        var node = CreateBaseDeclaration(SyntaxKind.MappedType);
+        store.SetReadonlyToken(node, readonlyToken);
+        store.SetTypeParameter(node, typeParameter);
+        store.SetNameType(node, nameType);
+        store.SetQuestionToken(node, questionToken);
+        store.SetType(node, type);
+        store.SetMembers(node, members != null ? CreateNodeArray(store, members) : null);
+        store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
         // node.locals = undefined; // initialized by binder (LocalsContainer)
         // node.nextContainer = undefined; // initialized by binder (LocalsContainer)
         return node;
     }
 
     // @api
-    internal LiteralTypeNode CreateLiteralTypeNode(Node literal)
+    internal Node CreateLiteralTypeNode(Node literal)
     {
-        var node = CreateBaseNode<LiteralTypeNode>(SyntaxKind.LiteralType);
-        node.Literal = literal;
-        node.TransformFlags = TransformFlags.ContainsTypeScript;
+        var node = CreateBaseNode(SyntaxKind.LiteralType);
+        store.SetLiteral(node, literal);
+        store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
         return node;
     }
 
@@ -321,46 +321,46 @@ internal sealed partial class NodeFactory
     //
 
     // @api
-    internal ObjectBindingPattern CreateObjectBindingPattern(IReadOnlyList<Node> elements)
+    internal Node CreateObjectBindingPattern(IReadOnlyList<Node> elements)
     {
-        var node = CreateBaseNode<ObjectBindingPattern>(SyntaxKind.ObjectBindingPattern);
-        node.Elements = CreateNodeArray(elements);
-        node.TransformFlags |= PropagateChildrenFlags(node.Elements) |
+        var node = CreateBaseNode(SyntaxKind.ObjectBindingPattern);
+        store.SetElements(node, CreateNodeArray(store, elements));
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildrenFlags(store.Elements(node)) |
             TransformFlags.ContainsES2015 |
-            TransformFlags.ContainsBindingPattern;
-        if ((node.TransformFlags & TransformFlags.ContainsRestOrSpread) != 0)
+            TransformFlags.ContainsBindingPattern));
+        if ((store.TransformFlags(node) & TransformFlags.ContainsRestOrSpread) != 0)
         {
-            node.TransformFlags |= TransformFlags.ContainsES2018 |
-                TransformFlags.ContainsObjectRestOrSpread;
+            store.SetTransformFlags(node, store.TransformFlags(node) | (TransformFlags.ContainsES2018 |
+                TransformFlags.ContainsObjectRestOrSpread));
         }
         return node;
     }
 
     // @api
-    internal ArrayBindingPattern CreateArrayBindingPattern(IReadOnlyList<Node> elements)
+    internal Node CreateArrayBindingPattern(IReadOnlyList<Node> elements)
     {
-        var node = CreateBaseNode<ArrayBindingPattern>(SyntaxKind.ArrayBindingPattern);
-        node.Elements = CreateNodeArray(elements);
-        node.TransformFlags |= PropagateChildrenFlags(node.Elements) |
+        var node = CreateBaseNode(SyntaxKind.ArrayBindingPattern);
+        store.SetElements(node, CreateNodeArray(store, elements));
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildrenFlags(store.Elements(node)) |
             TransformFlags.ContainsES2015 |
-            TransformFlags.ContainsBindingPattern;
+            TransformFlags.ContainsBindingPattern));
         return node;
     }
 
     // @api
-    internal BindingElement CreateBindingElement(DotDotDotToken? dotDotDotToken, object? propertyName, object name, Node? initializer = null)
+    internal Node CreateBindingElement(Node dotDotDotToken, object? propertyName, object name, Node initializer = default)
     {
-        var node = CreateBaseDeclaration<BindingElement>(SyntaxKind.BindingElement);
-        node.DotDotDotToken = dotDotDotToken;
-        node.PropertyName = AsName(propertyName);
-        node.Name = AsName(name)!;
-        node.Initializer = AsInitializer(initializer);
-        node.TransformFlags |= PropagateChildFlags(node.DotDotDotToken) |
-            PropagateNameFlags(node.PropertyName) |
-            PropagateNameFlags(node.Name) |
-            PropagateChildFlags(node.Initializer) |
-            (node.DotDotDotToken != null ? TransformFlags.ContainsRestOrSpread : TransformFlags.None) |
-            TransformFlags.ContainsES2015;
+        var node = CreateBaseDeclaration(SyntaxKind.BindingElement);
+        store.SetDotDotDotToken(node, dotDotDotToken);
+        store.SetPropertyName(node, AsName(propertyName));
+        store.SetName(node, AsName(name));
+        store.SetInitializer(node, AsInitializer(initializer));
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.DotDotDotToken(node)) |
+            PropagateNameFlags(store, store.PropertyName(node)) |
+            PropagateNameFlags(store, store.Name(node)) |
+            PropagateChildFlags(store, store.Initializer(node)) |
+            (!store.DotDotDotToken(node).IsNone ? TransformFlags.ContainsRestOrSpread : TransformFlags.None) |
+            TransformFlags.ContainsES2015));
         // node.flowNode = undefined; // initialized by binder (FlowContainer)
         return node;
     }

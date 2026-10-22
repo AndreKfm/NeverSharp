@@ -18,34 +18,34 @@ internal static partial class FactoryUtilities
     /// <summary>
     /// Gets whether an identifier should only be referred to by its local name.
     /// </summary>
-    internal static bool IsLocalName(Identifier node)
+    internal static bool IsLocalName(NodeStore store, Node node)
     {
-        return (Utilities.GetEmitFlags(node) & EmitFlags.LocalName) != 0;
+        return (Utilities.GetEmitFlags(store, node) & EmitFlags.LocalName) != 0;
     }
 
-    internal static bool IsCommaExpression(Node node)
+    internal static bool IsCommaExpression(NodeStore store, Node node)
     {
-        return node.Kind == SyntaxKind.BinaryExpression && ((BinaryExpression)node).OperatorToken.Kind == SyntaxKind.CommaToken;
+        return store.Kind(node) == SyntaxKind.BinaryExpression && store.Kind(store.OperatorToken(node)) == SyntaxKind.CommaToken;
     }
 
-    internal static bool IsCommaSequence(Node node)
+    internal static bool IsCommaSequence(NodeStore store, Node node)
     {
-        return IsCommaExpression(node) || FactoryNodeTests.IsCommaListExpression(node);
+        return IsCommaExpression(store, node) || FactoryNodeTests.IsCommaListExpression(store, node);
     }
 
-    internal static bool IsJSDocTypeAssertion(Node node)
+    internal static bool IsJSDocTypeAssertion(NodeStore store, Node node)
     {
-        return FactoryNodeTests.IsParenthesizedExpression(node)
-            && Utilities.IsInJSFile(node)
-            && UtilitiesPublic.GetJSDocTypeTag(node) != null;
+        return FactoryNodeTests.IsParenthesizedExpression(store, node)
+            && Utilities.IsInJSFile(store, node)
+            && !UtilitiesPublic.GetJSDocTypeTag(store, node).IsNone;
     }
 
-    internal static bool IsOuterExpression(Node node, OuterExpressionKinds kinds = OuterExpressionKinds.All)
+    internal static bool IsOuterExpression(NodeStore store, Node node, OuterExpressionKinds kinds = OuterExpressionKinds.All)
     {
-        switch (node.Kind)
+        switch (store.Kind(node))
         {
             case SyntaxKind.ParenthesizedExpression:
-                if ((kinds & OuterExpressionKinds.ExcludeJSDocTypeAssertion) != 0 && IsJSDocTypeAssertion(node))
+                if ((kinds & OuterExpressionKinds.ExcludeJSDocTypeAssertion) != 0 && IsJSDocTypeAssertion(store, node))
                 {
                     return false;
                 }
@@ -65,20 +65,20 @@ internal static partial class FactoryUtilities
         return false;
     }
 
-    internal static Node SkipOuterExpressions(Node node, OuterExpressionKinds kinds = OuterExpressionKinds.All)
+    internal static Node SkipOuterExpressions(NodeStore store, Node node, OuterExpressionKinds kinds = OuterExpressionKinds.All)
     {
-        while (IsOuterExpression(node, kinds))
+        while (IsOuterExpression(store, node, kinds))
         {
             // `node = node.expression` (every OuterExpression kind declares `expression`)
-            node = node.Kind switch
+            node = store.Kind(node) switch
             {
-                SyntaxKind.ParenthesizedExpression => ((ParenthesizedExpression)node).Expression,
-                SyntaxKind.TypeAssertionExpression => ((TypeAssertion)node).Expression,
-                SyntaxKind.AsExpression => ((AsExpression)node).Expression,
-                SyntaxKind.SatisfiesExpression => ((SatisfiesExpression)node).Expression,
-                SyntaxKind.ExpressionWithTypeArguments => ((ExpressionWithTypeArguments)node).Expression,
-                SyntaxKind.NonNullExpression => ((NonNullExpression)node).Expression,
-                _ => ((PartiallyEmittedExpression)node).Expression,
+                SyntaxKind.ParenthesizedExpression => store.Expression(node),
+                SyntaxKind.TypeAssertionExpression => store.Expression(node),
+                SyntaxKind.AsExpression => store.Expression(node),
+                SyntaxKind.SatisfiesExpression => store.Expression(node),
+                SyntaxKind.ExpressionWithTypeArguments => store.Expression(node),
+                SyntaxKind.NonNullExpression => store.Expression(node),
+                _ => store.Expression(node),
             };
         }
         return node;
@@ -87,9 +87,9 @@ internal static partial class FactoryUtilities
     /// <summary>
     /// Gets the name of an BindingOrAssignmentElement.
     /// </summary>
-    internal static Node? GetTargetOfBindingOrAssignmentElement(Node bindingElement)
+    internal static Node GetTargetOfBindingOrAssignmentElement(NodeStore store, Node bindingElement)
     {
-        if (UtilitiesPublic.IsDeclarationBindingElement(bindingElement))
+        if (UtilitiesPublic.IsDeclarationBindingElement(store, bindingElement))
         {
             // `a` in `let { a } = ...`
             // `a` in `let { a = 1 } = ...`
@@ -107,12 +107,12 @@ internal static partial class FactoryUtilities
             // `{a}` in `let [{a} = 1] = ...`
             // `[a]` in `let [[a]] = ...`
             // `[a]` in `let [[a] = 1] = ...`
-            return NodeAccessors.GetName(bindingElement);
+            return store.Name(bindingElement);
         }
 
-        if (UtilitiesPublic.IsObjectLiteralElementLike(bindingElement))
+        if (UtilitiesPublic.IsObjectLiteralElementLike(store, bindingElement))
         {
-            switch (bindingElement.Kind)
+            switch (store.Kind(bindingElement))
             {
                 case SyntaxKind.PropertyAssignment:
                     // `b` in `({ a: b } = ...)`
@@ -125,36 +125,36 @@ internal static partial class FactoryUtilities
                     // `b.c` in `({ a: b.c = 1 } = ...)`
                     // `b[0]` in `({ a: b[0] } = ...)`
                     // `b[0]` in `({ a: b[0] = 1 } = ...)`
-                    return GetTargetOfBindingOrAssignmentElement(((PropertyAssignment)bindingElement).Initializer);
+                    return GetTargetOfBindingOrAssignmentElement(store, store.Initializer(bindingElement));
 
                 case SyntaxKind.ShorthandPropertyAssignment:
                     // `a` in `({ a } = ...)`
                     // `a` in `({ a = 1 } = ...)`
-                    return ((ShorthandPropertyAssignment)bindingElement).Name;
+                    return store.Name(bindingElement);
 
                 case SyntaxKind.SpreadAssignment:
                     // `a` in `({ ...a } = ...)`
-                    return GetTargetOfBindingOrAssignmentElement(((SpreadAssignment)bindingElement).Expression);
+                    return GetTargetOfBindingOrAssignmentElement(store, store.Expression(bindingElement));
             }
 
             // no target
-            return null;
+            return default;
         }
 
-        if (Utilities.IsAssignmentExpression(bindingElement, /*excludeCompoundAssignment*/ true))
+        if (Utilities.IsAssignmentExpression(store, bindingElement, /*excludeCompoundAssignment*/ true))
         {
             // `a` in `[a = 1] = ...`
             // `{a}` in `[{a} = 1] = ...`
             // `[a]` in `[[a] = 1] = ...`
             // `a.b` in `[a.b = 1] = ...`
             // `a[0]` in `[a[0] = 1] = ...`
-            return GetTargetOfBindingOrAssignmentElement(((BinaryExpression)bindingElement).Left);
+            return GetTargetOfBindingOrAssignmentElement(store, store.Left(bindingElement));
         }
 
-        if (FactoryNodeTests.IsSpreadElement(bindingElement))
+        if (FactoryNodeTests.IsSpreadElement(store, bindingElement))
         {
             // `a` in `[...a] = ...`
-            return GetTargetOfBindingOrAssignmentElement(((SpreadElement)bindingElement).Expression);
+            return GetTargetOfBindingOrAssignmentElement(store, store.Expression(bindingElement));
         }
 
         // `a` in `[a] = ...`
@@ -168,42 +168,42 @@ internal static partial class FactoryUtilities
     /// <summary>
     /// Gets the elements of a BindingOrAssignmentPattern
     /// </summary>
-    internal static NodeArray GetElementsOfBindingOrAssignmentPattern(Node name)
+    internal static NodeArray GetElementsOfBindingOrAssignmentPattern(NodeStore store, Node name)
     {
-        switch (name.Kind)
+        switch (store.Kind(name))
         {
             case SyntaxKind.ObjectBindingPattern:
                 // `a` in `{a}`
-                return ((ObjectBindingPattern)name).Elements;
+                return store.Elements(name);
             case SyntaxKind.ArrayBindingPattern:
                 // `a` in `[a]`
-                return ((ArrayBindingPattern)name).Elements;
+                return store.Elements(name);
             case SyntaxKind.ArrayLiteralExpression:
-                return ((ArrayLiteralExpression)name).Elements;
+                return store.Elements(name);
 
             case SyntaxKind.ObjectLiteralExpression:
                 // `a` in `{a}`
-                return ((ObjectLiteralExpression)name).Properties;
+                return store.Properties(name);
         }
         // (TypeScript's switch is exhaustive over BindingOrAssignmentPattern and returns undefined otherwise.)
         return null!;
     }
 
-    internal static Identifier? GetJSDocTypeAliasName(Node? fullName)
+    internal static Node GetJSDocTypeAliasName(NodeStore store, Node fullName)
     {
-        if (fullName != null)
+        if (!fullName.IsNone)
         {
             var rightNode = fullName;
             while (true)
             {
-                if (FactoryNodeTests.IsIdentifier(rightNode) || ((ModuleDeclaration)rightNode).Body == null)
+                if (FactoryNodeTests.IsIdentifier(store, rightNode) || store.Body(rightNode).IsNone)
                 {
-                    return FactoryNodeTests.IsIdentifier(rightNode) ? (Identifier)rightNode : (Identifier)((ModuleDeclaration)rightNode).Name;
+                    return FactoryNodeTests.IsIdentifier(store, rightNode) ? rightNode : store.Name(rightNode);
                 }
-                rightNode = ((ModuleDeclaration)rightNode).Body!;
+                rightNode = store.Body(rightNode);
             }
         }
-        return null;
+        return default;
     }
 
     /// <summary>
@@ -212,28 +212,28 @@ internal static partial class FactoryUtilities
     /// ObjectLiteralExpression and ArrayLiteralExpression since we do not know whether they belong to an
     /// AssignmentPattern at the time the nodes are parsed.
     /// </summary>
-    internal static bool ContainsObjectRestOrSpread(Node node)
+    internal static bool ContainsObjectRestOrSpread(NodeStore store, Node node)
     {
-        if ((node.TransformFlags & TransformFlags.ContainsObjectRestOrSpread) != 0)
+        if ((store.TransformFlags(node) & TransformFlags.ContainsObjectRestOrSpread) != 0)
         {
             return true;
         }
-        if ((node.TransformFlags & TransformFlags.ContainsES2018) != 0)
+        if ((store.TransformFlags(node) & TransformFlags.ContainsES2018) != 0)
         {
             // check for nested spread assignments, otherwise '{ x: { a, ...b } = foo } = c'
             // will not be correctly interpreted by the ES2018 transformer
-            foreach (var element in GetElementsOfBindingOrAssignmentPattern(node))
+            foreach (var element in GetElementsOfBindingOrAssignmentPattern(store, node))
             {
-                var target = GetTargetOfBindingOrAssignmentElement(element);
-                if (target != null && UtilitiesPublic.IsAssignmentPattern(target))
+                var target = GetTargetOfBindingOrAssignmentElement(store, element);
+                if (!target.IsNone && UtilitiesPublic.IsAssignmentPattern(store, target))
                 {
-                    if ((target.TransformFlags & TransformFlags.ContainsObjectRestOrSpread) != 0)
+                    if ((store.TransformFlags(target) & TransformFlags.ContainsObjectRestOrSpread) != 0)
                     {
                         return true;
                     }
-                    if ((target.TransformFlags & TransformFlags.ContainsES2018) != 0)
+                    if ((store.TransformFlags(target) & TransformFlags.ContainsES2018) != 0)
                     {
-                        if (ContainsObjectRestOrSpread(target))
+                        if (ContainsObjectRestOrSpread(store, target))
                         {
                             return true;
                         }

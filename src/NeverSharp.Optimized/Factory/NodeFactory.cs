@@ -54,7 +54,7 @@ internal interface BaseNodeFactory
 /// class, so the list is a NodeArray object from the start and this field records whether the NodeArray
 /// properties have been assigned yet.
 /// </summary>
-public sealed partial class NodeArray
+internal sealed partial class NodeArray
 {
     internal bool HasNodeArrayProperties;
 }
@@ -67,6 +67,9 @@ internal sealed partial class NodeFactory
 {
     private readonly NodeFactoryFlags flags;
     private readonly BaseNodeFactory baseFactory;
+
+    // Track O: the node store the base factory creates nodes in (set by the parser for each parse).
+    internal NodeStore store = null!;
 
     private NodeFactory(NodeFactoryFlags flags, BaseNodeFactory baseFactory)
     {
@@ -92,7 +95,7 @@ internal sealed partial class NodeFactory
     internal NodeFactoryFlags Flags => flags;
 
     // @api
-    internal static NodeArray CreateNodeArray(IReadOnlyList<Node>? elements = null, bool? hasTrailingComma = null)
+    internal static NodeArray CreateNodeArray(NodeStore store, IReadOnlyList<Node>? elements = null, bool? hasTrailingComma = null)
     {
         if (elements == null || ReferenceEquals(elements, Core.EmptyArray<Node>()))
         {
@@ -143,20 +146,18 @@ internal sealed partial class NodeFactory
         array.End = -1;
         array.HasTrailingComma = hasTrailingComma == true;
         array.TransformFlags = TransformFlags.None;
-        AggregateChildrenFlags(array);
+        AggregateChildrenFlags(store, array);
         return array;
     }
 
-    private T CreateBaseNode<T>(SyntaxKind kind)
-        where T : Node
+    private Node CreateBaseNode(SyntaxKind kind)
     {
-        return (T)baseFactory.CreateBaseNode(kind);
+        return baseFactory.CreateBaseNode(kind);
     }
 
-    private T CreateBaseDeclaration<T>(SyntaxKind kind)
-        where T : Node
+    private Node CreateBaseDeclaration(SyntaxKind kind)
     {
-        var node = CreateBaseNode<T>(kind);
+        var node = CreateBaseNode(kind);
         // node.symbol = undefined!; // initialized by binder
         // node.localSymbol = undefined; // initialized by binder
         // (The fields are typed per class in C# and are null after construction, which is what TypeScript assigns.)
@@ -168,63 +169,63 @@ internal sealed partial class NodeFactory
     //
 
     // @api
-    internal NumericLiteral CreateNumericLiteral(string value, TokenFlags? numericLiteralFlags = null)
+    internal Node CreateNumericLiteral(string value, TokenFlags? numericLiteralFlags = null)
     {
         var flagsValue = numericLiteralFlags ?? TokenFlags.None;
         var text = value;
         Debug.Assert(text.Length == 0 || text[0] != (char)CharacterCodes.minus, "Negative numbers should be created in combination with createPrefixUnaryExpression");
-        var node = CreateBaseDeclaration<NumericLiteral>(SyntaxKind.NumericLiteral);
-        node.Text = text;
-        node.NumericLiteralFlags = flagsValue;
+        var node = CreateBaseDeclaration(SyntaxKind.NumericLiteral);
+        store.SetText(node, text);
+        store.SetNumericLiteralFlags(node, flagsValue);
         if ((flagsValue & TokenFlags.BinaryOrOctalSpecifier) != 0)
         {
-            node.TransformFlags |= TransformFlags.ContainsES2015;
+            store.SetTransformFlags(node, store.TransformFlags(node) | TransformFlags.ContainsES2015);
         }
         return node;
     }
 
     // @api
-    internal NumericLiteral CreateNumericLiteral(double value, TokenFlags? numericLiteralFlags = null)
+    internal Node CreateNumericLiteral(double value, TokenFlags? numericLiteralFlags = null)
     {
         // `typeof value === "number" ? value + "" : value`
         return CreateNumericLiteral(JsNumber.ToString(value), numericLiteralFlags);
     }
 
     // @api
-    internal BigIntLiteral CreateBigIntLiteral(string value)
+    internal Node CreateBigIntLiteral(string value)
     {
         // TypeScript: `value: string | PseudoBigInt`; the parser passes the literal's text.
-        var node = CreateBaseToken<BigIntLiteral>(SyntaxKind.BigIntLiteral);
-        node.Text = value;
-        node.TransformFlags |= TransformFlags.ContainsES2020;
+        var node = CreateBaseToken(SyntaxKind.BigIntLiteral);
+        store.SetText(node, value);
+        store.SetTransformFlags(node, store.TransformFlags(node) | TransformFlags.ContainsES2020);
         return node;
     }
 
-    private StringLiteral CreateBaseStringLiteral(string text, bool? isSingleQuote)
+    private Node CreateBaseStringLiteral(string text, bool? isSingleQuote)
     {
-        var node = CreateBaseDeclaration<StringLiteral>(SyntaxKind.StringLiteral);
-        node.Text = text;
-        node.SingleQuote = isSingleQuote == true;
+        var node = CreateBaseDeclaration(SyntaxKind.StringLiteral);
+        store.SetText(node, text);
+        store.SetSingleQuote(node, isSingleQuote == true);
         return node;
     }
 
     // @api
-    internal StringLiteral CreateStringLiteral(string text, bool? isSingleQuote = null, bool? hasExtendedUnicodeEscape = null)
+    internal Node CreateStringLiteral(string text, bool? isSingleQuote = null, bool? hasExtendedUnicodeEscape = null)
     {
         var node = CreateBaseStringLiteral(text, isSingleQuote);
-        node.HasExtendedUnicodeEscape = hasExtendedUnicodeEscape == true;
+        store.SetHasExtendedUnicodeEscape(node, hasExtendedUnicodeEscape == true);
         if (hasExtendedUnicodeEscape == true)
         {
-            node.TransformFlags |= TransformFlags.ContainsES2015;
+            store.SetTransformFlags(node, store.TransformFlags(node) | TransformFlags.ContainsES2015);
         }
         return node;
     }
 
     // @api
-    internal RegularExpressionLiteral CreateRegularExpressionLiteral(string text)
+    internal Node CreateRegularExpressionLiteral(string text)
     {
-        var node = CreateBaseToken<RegularExpressionLiteral>(SyntaxKind.RegularExpressionLiteral);
-        node.Text = text;
+        var node = CreateBaseToken(SyntaxKind.RegularExpressionLiteral);
+        store.SetText(node, text);
         return node;
     }
 
@@ -232,18 +233,16 @@ internal sealed partial class NodeFactory
     // Identifiers
     //
 
-    private Identifier CreateBaseIdentifier(string escapedText)
+    private Node CreateBaseIdentifier(string escapedText)
     {
-        var node = (Identifier)baseFactory.CreateBaseIdentifierNode(SyntaxKind.Identifier);
-        node.EscapedText = escapedText;
-        node.JsDoc = null; // initialized by parser (JsDocContainer)
-        node.FlowNode = null; // initialized by binder (FlowContainer)
-        node.Symbol = null; // initialized by checker
+        var node = baseFactory.CreateBaseIdentifierNode(SyntaxKind.Identifier);
+        store.SetEscapedText(node, escapedText);
+        store.SetJsDoc(node, null); // initialized by parser (JsDocContainer)
         return node;
     }
 
     // @api
-    internal Identifier CreateIdentifier(string text, SyntaxKind? originalKeywordKind = null, bool? hasExtendedUnicodeEscape = null)
+    internal Node CreateIdentifier(string text, SyntaxKind? originalKeywordKind = null, bool? hasExtendedUnicodeEscape = null)
     {
         if (originalKeywordKind == null && text.Length != 0)
         {
@@ -259,32 +258,32 @@ internal sealed partial class NodeFactory
         var node = CreateBaseIdentifier(UtilitiesPublic.EscapeLeadingUnderscores(text));
         if (hasExtendedUnicodeEscape == true)
         {
-            node.Flags |= NodeFlags.IdentifierHasExtendedUnicodeEscape;
+            store.SetFlags(node, store.Flags(node) | NodeFlags.IdentifierHasExtendedUnicodeEscape);
         }
 
         // NOTE: we do not include transform flags of typeArguments in an identifier as they do not contribute to transformations
-        if ((string)node.EscapedText! == "await")
+        if ((string)store.EscapedText(node)! == "await")
         {
-            node.TransformFlags |= TransformFlags.ContainsPossibleTopLevelAwait;
+            store.SetTransformFlags(node, store.TransformFlags(node) | TransformFlags.ContainsPossibleTopLevelAwait);
         }
-        if ((node.Flags & NodeFlags.IdentifierHasExtendedUnicodeEscape) != 0)
+        if ((store.Flags(node) & NodeFlags.IdentifierHasExtendedUnicodeEscape) != 0)
         {
-            node.TransformFlags |= TransformFlags.ContainsES2015;
+            store.SetTransformFlags(node, store.TransformFlags(node) | TransformFlags.ContainsES2015);
         }
 
         return node;
     }
 
-    private PrivateIdentifier CreateBasePrivateIdentifier(string escapedText)
+    private Node CreateBasePrivateIdentifier(string escapedText)
     {
-        var node = (PrivateIdentifier)baseFactory.CreateBasePrivateIdentifierNode(SyntaxKind.PrivateIdentifier);
-        node.EscapedText = escapedText;
-        node.TransformFlags |= TransformFlags.ContainsClassFields;
+        var node = baseFactory.CreateBasePrivateIdentifierNode(SyntaxKind.PrivateIdentifier);
+        store.SetEscapedText(node, escapedText);
+        store.SetTransformFlags(node, store.TransformFlags(node) | TransformFlags.ContainsClassFields);
         return node;
     }
 
     // @api
-    internal PrivateIdentifier CreatePrivateIdentifier(string text)
+    internal Node CreatePrivateIdentifier(string text)
     {
         if (!Core.StartsWith(text, "#"))
         {
@@ -297,10 +296,9 @@ internal sealed partial class NodeFactory
     // Punctuation
     //
 
-    private T CreateBaseToken<T>(SyntaxKind kind)
-        where T : Node
+    private Node CreateBaseToken(SyntaxKind kind)
     {
-        return (T)baseFactory.CreateBaseTokenNode(kind);
+        return baseFactory.CreateBaseTokenNode(kind);
     }
 
     // @api
@@ -310,7 +308,7 @@ internal sealed partial class NodeFactory
         Debug.Assert(token <= SyntaxKind.FirstTemplateToken || token >= SyntaxKind.LastTemplateToken, "Invalid token. Use 'createTemplateLiteralLikeNode' to create template literals.");
         Debug.Assert(token <= SyntaxKind.FirstLiteralToken || token >= SyntaxKind.LastLiteralToken, "Invalid token. Use 'createLiteralLikeNode' to create literals.");
         Debug.Assert(token != SyntaxKind.Identifier, "Invalid token. Use 'createIdentifier' to create identifiers");
-        var node = CreateBaseToken<Node>(token);
+        var node = CreateBaseToken(token);
         var transformFlags = TransformFlags.None;
         switch (token)
         {
@@ -349,7 +347,6 @@ internal sealed partial class NodeFactory
                 break;
             case SyntaxKind.SuperKeyword:
                 transformFlags = TransformFlags.ContainsES2015 | TransformFlags.ContainsLexicalSuper;
-                ((SuperExpression)node).FlowNode = null; // initialized by binder (FlowContainer)
                 break;
             case SyntaxKind.StaticKeyword:
                 transformFlags = TransformFlags.ContainsES2015;
@@ -360,47 +357,46 @@ internal sealed partial class NodeFactory
             case SyntaxKind.ThisKeyword:
                 // 'this' indicates a lexical 'this'
                 transformFlags = TransformFlags.ContainsLexicalThis;
-                ((ThisExpression)node).FlowNode = null; // initialized by binder (FlowContainer)
                 break;
         }
         if (transformFlags != TransformFlags.None)
         {
-            node.TransformFlags |= transformFlags;
+            store.SetTransformFlags(node, store.TransformFlags(node) | transformFlags);
         }
         return node;
     }
 
     //// File-level functions of nodeFactory.ts: propagation of transform flags.
 
-    internal static TransformFlags PropagateNameFlags(Node? node)
+    internal static TransformFlags PropagateNameFlags(NodeStore store, Node node)
     {
-        return node != null && FactoryNodeTests.IsIdentifier(node) ? PropagateIdentifierNameFlags((Identifier)node) : PropagateChildFlags(node);
+        return !node.IsNone && FactoryNodeTests.IsIdentifier(store, node) ? PropagateIdentifierNameFlags(store, node) : PropagateChildFlags(store, node);
     }
 
-    internal static TransformFlags PropagateIdentifierNameFlags(Identifier node)
+    internal static TransformFlags PropagateIdentifierNameFlags(NodeStore store, Node node)
     {
         // An IdentifierName is allowed to be `await`
-        return PropagateChildFlags(node) & ~TransformFlags.ContainsPossibleTopLevelAwait;
+        return PropagateChildFlags(store, node) & ~TransformFlags.ContainsPossibleTopLevelAwait;
     }
 
-    internal static TransformFlags PropagatePropertyNameFlagsOfChild(Node node, TransformFlags transformFlags)
+    internal static TransformFlags PropagatePropertyNameFlagsOfChild(NodeStore store, Node node, TransformFlags transformFlags)
     {
-        return transformFlags | (node.TransformFlags & TransformFlags.PropertyNamePropagatingFlags);
+        return transformFlags | (store.TransformFlags(node) & TransformFlags.PropertyNamePropagatingFlags);
     }
 
-    internal static TransformFlags PropagateChildFlags(Node? child)
+    internal static TransformFlags PropagateChildFlags(NodeStore store, Node child)
     {
-        if (child == null)
+        if (child.IsNone)
         {
             return TransformFlags.None;
         }
-        var childFlags = child.TransformFlags & ~GetTransformFlagsSubtreeExclusions(child.Kind);
-        if (UtilitiesPublic.IsNamedDeclaration(child))
+        var childFlags = store.TransformFlags(child) & ~GetTransformFlagsSubtreeExclusions(store.Kind(child));
+        if (UtilitiesPublic.IsNamedDeclaration(store, child))
         {
-            var name = NodeAccessors.GetName(child)!;
-            if (UtilitiesPublic.IsPropertyName(name))
+            var name = store.Name(child);
+            if (UtilitiesPublic.IsPropertyName(store, name))
             {
-                return PropagatePropertyNameFlagsOfChild(name, childFlags);
+                return PropagatePropertyNameFlagsOfChild(store, name, childFlags);
             }
         }
         return childFlags;
@@ -411,12 +407,12 @@ internal sealed partial class NodeFactory
         return children != null ? children.TransformFlags : TransformFlags.None;
     }
 
-    internal static void AggregateChildrenFlags(NodeArray children)
+    internal static void AggregateChildrenFlags(NodeStore store, NodeArray children)
     {
         var subtreeFlags = TransformFlags.None;
         foreach (var child in children)
         {
-            subtreeFlags |= PropagateChildFlags(child);
+            subtreeFlags |= PropagateChildFlags(store, child);
         }
         children.TransformFlags = subtreeFlags;
     }

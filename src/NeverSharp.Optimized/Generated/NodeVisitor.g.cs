@@ -15,1222 +15,697 @@ using NeverSharp.Generated;
 
 namespace NeverSharp.Optimized;
 
-public static partial class NodeVisitor
+internal static partial class NodeVisitor
 {
     /// <summary>parser.ts forEachChild: visits the children of a node in TypeScript's order; returns the first non-null callback result.</summary>
-    public static T? ForEachChild<T>(Node? node, Func<Node, T?> cbNode, Func<NodeArray, T?>? cbNodes = null) where T : class
+    public static T? ForEachChild<T>(NodeStore store, Node node, Func<Node, T?> cbNode, Func<NodeArray, T?>? cbNodes = null) where T : class
     {
-        if (node is null || node.Kind <= SyntaxKind.LastToken)
+        if (node.IsNone || store.Kind(node) <= SyntaxKind.LastToken)
         {
             return null;
         }
-        switch (node.Kind)
+        switch (store.Kind(node))
         {
             case SyntaxKind.QualifiedName:
-            {
-                var n = (QualifiedName)node;
-                return VisitNode(cbNode, n.Left)
-                ?? VisitNode(cbNode, n.Right);
-            }
+                return VisitNode(cbNode, store.Left(node))
+                ?? VisitNode(cbNode, store.Right(node));
             case SyntaxKind.TypeParameter:
-            {
-                var n = (TypeParameterDeclaration)node;
-                return VisitNodes(cbNode, cbNodes, n.Modifiers)
-                ?? VisitNode(cbNode, n.Name)
-                ?? VisitNode(cbNode, n.Constraint)
-                ?? VisitNode(cbNode, n.Default)
-                ?? VisitNode(cbNode, n.Expression);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                ?? VisitNode(cbNode, store.Name(node))
+                ?? VisitNode(cbNode, store.Constraint(node))
+                ?? VisitNode(cbNode, store.Default(node))
+                ?? VisitNode(cbNode, store.Expression(node));
             case SyntaxKind.ShorthandPropertyAssignment:
-            {
-                var n = (ShorthandPropertyAssignment)node;
-                return VisitNodes(cbNode, cbNodes, n.Modifiers)
-                ?? VisitNode(cbNode, n.Name)
-                ?? VisitNode(cbNode, n.QuestionToken)
-                ?? VisitNode(cbNode, n.ExclamationToken)
-                ?? VisitNode(cbNode, n.EqualsToken)
-                ?? VisitNode(cbNode, n.ObjectAssignmentInitializer);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                ?? VisitNode(cbNode, store.Name(node))
+                ?? VisitNode(cbNode, store.QuestionToken(node))
+                ?? VisitNode(cbNode, store.ExclamationToken(node))
+                ?? VisitNode(cbNode, store.EqualsToken(node))
+                ?? VisitNode(cbNode, store.ObjectAssignmentInitializer(node));
             case SyntaxKind.SpreadAssignment:
-            {
-                var n = (SpreadAssignment)node;
-                return VisitNode(cbNode, n.Expression);
-            }
+                return VisitNode(cbNode, store.Expression(node));
             case SyntaxKind.Parameter:
-            {
-                var n = (ParameterDeclaration)node;
-                return VisitNodes(cbNode, cbNodes, n.Modifiers)
-                ?? VisitNode(cbNode, n.DotDotDotToken)
-                ?? VisitNode(cbNode, n.Name)
-                ?? VisitNode(cbNode, n.QuestionToken)
-                ?? VisitNode(cbNode, n.Type)
-                ?? VisitNode(cbNode, n.Initializer);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                ?? VisitNode(cbNode, store.DotDotDotToken(node))
+                ?? VisitNode(cbNode, store.Name(node))
+                ?? VisitNode(cbNode, store.QuestionToken(node))
+                ?? VisitNode(cbNode, store.Type(node))
+                ?? VisitNode(cbNode, store.Initializer(node));
             case SyntaxKind.PropertyDeclaration:
-            {
-                var n = (PropertyDeclaration)node;
-                return VisitNodes(cbNode, cbNodes, n.Modifiers)
-                ?? VisitNode(cbNode, n.Name)
-                ?? VisitNode(cbNode, n.QuestionToken)
-                ?? VisitNode(cbNode, n.ExclamationToken)
-                ?? VisitNode(cbNode, n.Type)
-                ?? VisitNode(cbNode, n.Initializer);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                ?? VisitNode(cbNode, store.Name(node))
+                ?? VisitNode(cbNode, store.QuestionToken(node))
+                ?? VisitNode(cbNode, store.ExclamationToken(node))
+                ?? VisitNode(cbNode, store.Type(node))
+                ?? VisitNode(cbNode, store.Initializer(node));
             case SyntaxKind.PropertySignature:
-            {
-                var n = (PropertySignature)node;
-                return VisitNodes(cbNode, cbNodes, n.Modifiers)
-                ?? VisitNode(cbNode, n.Name)
-                ?? VisitNode(cbNode, n.QuestionToken)
-                ?? VisitNode(cbNode, n.Type)
-                ?? VisitNode(cbNode, n.Initializer);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                ?? VisitNode(cbNode, store.Name(node))
+                ?? VisitNode(cbNode, store.QuestionToken(node))
+                ?? VisitNode(cbNode, store.Type(node))
+                ?? VisitNode(cbNode, store.Initializer(node));
             case SyntaxKind.PropertyAssignment:
-            {
-                var n = (PropertyAssignment)node;
-                return VisitNodes(cbNode, cbNodes, n.Modifiers)
-                ?? VisitNode(cbNode, n.Name)
-                ?? VisitNode(cbNode, n.QuestionToken)
-                ?? VisitNode(cbNode, n.ExclamationToken)
-                ?? VisitNode(cbNode, n.Initializer);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                ?? VisitNode(cbNode, store.Name(node))
+                ?? VisitNode(cbNode, store.QuestionToken(node))
+                ?? VisitNode(cbNode, store.ExclamationToken(node))
+                ?? VisitNode(cbNode, store.Initializer(node));
             case SyntaxKind.VariableDeclaration:
-            {
-                var n = (VariableDeclaration)node;
-                return VisitNode(cbNode, n.Name)
-                ?? VisitNode(cbNode, n.ExclamationToken)
-                ?? VisitNode(cbNode, n.Type)
-                ?? VisitNode(cbNode, n.Initializer);
-            }
+                return VisitNode(cbNode, store.Name(node))
+                ?? VisitNode(cbNode, store.ExclamationToken(node))
+                ?? VisitNode(cbNode, store.Type(node))
+                ?? VisitNode(cbNode, store.Initializer(node));
             case SyntaxKind.BindingElement:
-            {
-                var n = (BindingElement)node;
-                return VisitNode(cbNode, n.DotDotDotToken)
-                ?? VisitNode(cbNode, n.PropertyName)
-                ?? VisitNode(cbNode, n.Name)
-                ?? VisitNode(cbNode, n.Initializer);
-            }
+                return VisitNode(cbNode, store.DotDotDotToken(node))
+                ?? VisitNode(cbNode, store.PropertyName(node))
+                ?? VisitNode(cbNode, store.Name(node))
+                ?? VisitNode(cbNode, store.Initializer(node));
             case SyntaxKind.IndexSignature:
-            {
-                var n = (IndexSignatureDeclaration)node;
-                return VisitNodes(cbNode, cbNodes, n.Modifiers)
-                ?? VisitNodes(cbNode, cbNodes, n.TypeParameters)
-                ?? VisitNodes(cbNode, cbNodes, n.Parameters)
-                ?? VisitNode(cbNode, n.Type);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                ?? VisitNodes(cbNode, cbNodes, store.TypeParameters(node))
+                ?? VisitNodes(cbNode, cbNodes, store.Parameters(node))
+                ?? VisitNode(cbNode, store.Type(node));
             case SyntaxKind.ConstructorType:
-            {
-                var n = (ConstructorTypeNode)node;
-                return VisitNodes(cbNode, cbNodes, n.Modifiers)
-                ?? VisitNodes(cbNode, cbNodes, n.TypeParameters)
-                ?? VisitNodes(cbNode, cbNodes, n.Parameters)
-                ?? VisitNode(cbNode, n.Type);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                ?? VisitNodes(cbNode, cbNodes, store.TypeParameters(node))
+                ?? VisitNodes(cbNode, cbNodes, store.Parameters(node))
+                ?? VisitNode(cbNode, store.Type(node));
             case SyntaxKind.FunctionType:
-            {
-                var n = (FunctionTypeNode)node;
-                return VisitNodes(cbNode, cbNodes, n.Modifiers)
-                ?? VisitNodes(cbNode, cbNodes, n.TypeParameters)
-                ?? VisitNodes(cbNode, cbNodes, n.Parameters)
-                ?? VisitNode(cbNode, n.Type);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                ?? VisitNodes(cbNode, cbNodes, store.TypeParameters(node))
+                ?? VisitNodes(cbNode, cbNodes, store.Parameters(node))
+                ?? VisitNode(cbNode, store.Type(node));
             case SyntaxKind.CallSignature:
-            {
-                var n = (CallSignatureDeclaration)node;
-                return VisitNodes(cbNode, cbNodes, n.TypeParameters)
-                ?? VisitNodes(cbNode, cbNodes, n.Parameters)
-                ?? VisitNode(cbNode, n.Type);
-            }
+                return VisitNodes(cbNode, cbNodes, store.TypeParameters(node))
+                ?? VisitNodes(cbNode, cbNodes, store.Parameters(node))
+                ?? VisitNode(cbNode, store.Type(node));
             case SyntaxKind.ConstructSignature:
-            {
-                var n = (ConstructSignatureDeclaration)node;
-                return VisitNodes(cbNode, cbNodes, n.TypeParameters)
-                ?? VisitNodes(cbNode, cbNodes, n.Parameters)
-                ?? VisitNode(cbNode, n.Type);
-            }
+                return VisitNodes(cbNode, cbNodes, store.TypeParameters(node))
+                ?? VisitNodes(cbNode, cbNodes, store.Parameters(node))
+                ?? VisitNode(cbNode, store.Type(node));
             case SyntaxKind.MethodDeclaration:
-            {
-                var n = (MethodDeclaration)node;
-                return VisitNodes(cbNode, cbNodes, n.Modifiers)
-                ?? VisitNode(cbNode, n.AsteriskToken)
-                ?? VisitNode(cbNode, n.Name)
-                ?? VisitNode(cbNode, n.QuestionToken)
-                ?? VisitNode(cbNode, n.ExclamationToken)
-                ?? VisitNodes(cbNode, cbNodes, n.TypeParameters)
-                ?? VisitNodes(cbNode, cbNodes, n.Parameters)
-                ?? VisitNode(cbNode, n.Type)
-                ?? VisitNode(cbNode, n.Body);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                ?? VisitNode(cbNode, store.AsteriskToken(node))
+                ?? VisitNode(cbNode, store.Name(node))
+                ?? VisitNode(cbNode, store.QuestionToken(node))
+                ?? VisitNode(cbNode, store.ExclamationToken(node))
+                ?? VisitNodes(cbNode, cbNodes, store.TypeParameters(node))
+                ?? VisitNodes(cbNode, cbNodes, store.Parameters(node))
+                ?? VisitNode(cbNode, store.Type(node))
+                ?? VisitNode(cbNode, store.Body(node));
             case SyntaxKind.MethodSignature:
-            {
-                var n = (MethodSignature)node;
-                return VisitNodes(cbNode, cbNodes, n.Modifiers)
-                ?? VisitNode(cbNode, n.Name)
-                ?? VisitNode(cbNode, n.QuestionToken)
-                ?? VisitNodes(cbNode, cbNodes, n.TypeParameters)
-                ?? VisitNodes(cbNode, cbNodes, n.Parameters)
-                ?? VisitNode(cbNode, n.Type);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                ?? VisitNode(cbNode, store.Name(node))
+                ?? VisitNode(cbNode, store.QuestionToken(node))
+                ?? VisitNodes(cbNode, cbNodes, store.TypeParameters(node))
+                ?? VisitNodes(cbNode, cbNodes, store.Parameters(node))
+                ?? VisitNode(cbNode, store.Type(node));
             case SyntaxKind.Constructor:
-            {
-                var n = (ConstructorDeclaration)node;
-                return VisitNodes(cbNode, cbNodes, n.Modifiers)
-                ?? VisitNode(cbNode, n.Name)
-                ?? VisitNodes(cbNode, cbNodes, n.TypeParameters)
-                ?? VisitNodes(cbNode, cbNodes, n.Parameters)
-                ?? VisitNode(cbNode, n.Type)
-                ?? VisitNode(cbNode, n.Body);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                ?? VisitNode(cbNode, store.Name(node))
+                ?? VisitNodes(cbNode, cbNodes, store.TypeParameters(node))
+                ?? VisitNodes(cbNode, cbNodes, store.Parameters(node))
+                ?? VisitNode(cbNode, store.Type(node))
+                ?? VisitNode(cbNode, store.Body(node));
             case SyntaxKind.GetAccessor:
-            {
-                var n = (GetAccessorDeclaration)node;
-                return VisitNodes(cbNode, cbNodes, n.Modifiers)
-                ?? VisitNode(cbNode, n.Name)
-                ?? VisitNodes(cbNode, cbNodes, n.TypeParameters)
-                ?? VisitNodes(cbNode, cbNodes, n.Parameters)
-                ?? VisitNode(cbNode, n.Type)
-                ?? VisitNode(cbNode, n.Body);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                ?? VisitNode(cbNode, store.Name(node))
+                ?? VisitNodes(cbNode, cbNodes, store.TypeParameters(node))
+                ?? VisitNodes(cbNode, cbNodes, store.Parameters(node))
+                ?? VisitNode(cbNode, store.Type(node))
+                ?? VisitNode(cbNode, store.Body(node));
             case SyntaxKind.SetAccessor:
-            {
-                var n = (SetAccessorDeclaration)node;
-                return VisitNodes(cbNode, cbNodes, n.Modifiers)
-                ?? VisitNode(cbNode, n.Name)
-                ?? VisitNodes(cbNode, cbNodes, n.TypeParameters)
-                ?? VisitNodes(cbNode, cbNodes, n.Parameters)
-                ?? VisitNode(cbNode, n.Type)
-                ?? VisitNode(cbNode, n.Body);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                ?? VisitNode(cbNode, store.Name(node))
+                ?? VisitNodes(cbNode, cbNodes, store.TypeParameters(node))
+                ?? VisitNodes(cbNode, cbNodes, store.Parameters(node))
+                ?? VisitNode(cbNode, store.Type(node))
+                ?? VisitNode(cbNode, store.Body(node));
             case SyntaxKind.FunctionDeclaration:
-            {
-                var n = (FunctionDeclaration)node;
-                return VisitNodes(cbNode, cbNodes, n.Modifiers)
-                ?? VisitNode(cbNode, n.AsteriskToken)
-                ?? VisitNode(cbNode, n.Name)
-                ?? VisitNodes(cbNode, cbNodes, n.TypeParameters)
-                ?? VisitNodes(cbNode, cbNodes, n.Parameters)
-                ?? VisitNode(cbNode, n.Type)
-                ?? VisitNode(cbNode, n.Body);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                ?? VisitNode(cbNode, store.AsteriskToken(node))
+                ?? VisitNode(cbNode, store.Name(node))
+                ?? VisitNodes(cbNode, cbNodes, store.TypeParameters(node))
+                ?? VisitNodes(cbNode, cbNodes, store.Parameters(node))
+                ?? VisitNode(cbNode, store.Type(node))
+                ?? VisitNode(cbNode, store.Body(node));
             case SyntaxKind.FunctionExpression:
-            {
-                var n = (FunctionExpression)node;
-                return VisitNodes(cbNode, cbNodes, n.Modifiers)
-                ?? VisitNode(cbNode, n.AsteriskToken)
-                ?? VisitNode(cbNode, n.Name)
-                ?? VisitNodes(cbNode, cbNodes, n.TypeParameters)
-                ?? VisitNodes(cbNode, cbNodes, n.Parameters)
-                ?? VisitNode(cbNode, n.Type)
-                ?? VisitNode(cbNode, n.Body);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                ?? VisitNode(cbNode, store.AsteriskToken(node))
+                ?? VisitNode(cbNode, store.Name(node))
+                ?? VisitNodes(cbNode, cbNodes, store.TypeParameters(node))
+                ?? VisitNodes(cbNode, cbNodes, store.Parameters(node))
+                ?? VisitNode(cbNode, store.Type(node))
+                ?? VisitNode(cbNode, store.Body(node));
             case SyntaxKind.ArrowFunction:
-            {
-                var n = (ArrowFunction)node;
-                return VisitNodes(cbNode, cbNodes, n.Modifiers)
-                ?? VisitNodes(cbNode, cbNodes, n.TypeParameters)
-                ?? VisitNodes(cbNode, cbNodes, n.Parameters)
-                ?? VisitNode(cbNode, n.Type)
-                ?? VisitNode(cbNode, n.EqualsGreaterThanToken)
-                ?? VisitNode(cbNode, n.Body);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                ?? VisitNodes(cbNode, cbNodes, store.TypeParameters(node))
+                ?? VisitNodes(cbNode, cbNodes, store.Parameters(node))
+                ?? VisitNode(cbNode, store.Type(node))
+                ?? VisitNode(cbNode, store.EqualsGreaterThanToken(node))
+                ?? VisitNode(cbNode, store.Body(node));
             case SyntaxKind.ClassStaticBlockDeclaration:
-            {
-                var n = (ClassStaticBlockDeclaration)node;
-                return VisitNodes(cbNode, cbNodes, n.Modifiers)
-                ?? VisitNode(cbNode, n.Body);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                ?? VisitNode(cbNode, store.Body(node));
             case SyntaxKind.TypeReference:
-            {
-                var n = (TypeReferenceNode)node;
-                return VisitNode(cbNode, n.TypeName)
-                ?? VisitNodes(cbNode, cbNodes, n.TypeArguments);
-            }
+                return VisitNode(cbNode, store.TypeName(node))
+                ?? VisitNodes(cbNode, cbNodes, store.TypeArguments(node));
             case SyntaxKind.TypePredicate:
-            {
-                var n = (TypePredicateNode)node;
-                return VisitNode(cbNode, n.AssertsModifier)
-                ?? VisitNode(cbNode, n.ParameterName)
-                ?? VisitNode(cbNode, n.Type);
-            }
+                return VisitNode(cbNode, store.AssertsModifier(node))
+                ?? VisitNode(cbNode, store.ParameterName(node))
+                ?? VisitNode(cbNode, store.Type(node));
             case SyntaxKind.TypeQuery:
-            {
-                var n = (TypeQueryNode)node;
-                return VisitNode(cbNode, n.ExprName)
-                ?? VisitNodes(cbNode, cbNodes, n.TypeArguments);
-            }
+                return VisitNode(cbNode, store.ExprName(node))
+                ?? VisitNodes(cbNode, cbNodes, store.TypeArguments(node));
             case SyntaxKind.TypeLiteral:
-            {
-                var n = (TypeLiteralNode)node;
-                return VisitNodes(cbNode, cbNodes, n.Members);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Members(node));
             case SyntaxKind.ArrayType:
-            {
-                var n = (ArrayTypeNode)node;
-                return VisitNode(cbNode, n.ElementType);
-            }
+                return VisitNode(cbNode, store.ElementType(node));
             case SyntaxKind.TupleType:
-            {
-                var n = (TupleTypeNode)node;
-                return VisitNodes(cbNode, cbNodes, n.Elements);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Elements(node));
             case SyntaxKind.UnionType:
-            {
-                var n = (UnionTypeNode)node;
-                return VisitNodes(cbNode, cbNodes, n.Types);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Types(node));
             case SyntaxKind.IntersectionType:
-            {
-                var n = (IntersectionTypeNode)node;
-                return VisitNodes(cbNode, cbNodes, n.Types);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Types(node));
             case SyntaxKind.ConditionalType:
-            {
-                var n = (ConditionalTypeNode)node;
-                return VisitNode(cbNode, n.CheckType)
-                ?? VisitNode(cbNode, n.ExtendsType)
-                ?? VisitNode(cbNode, n.TrueType)
-                ?? VisitNode(cbNode, n.FalseType);
-            }
+                return VisitNode(cbNode, store.CheckType(node))
+                ?? VisitNode(cbNode, store.ExtendsType(node))
+                ?? VisitNode(cbNode, store.TrueType(node))
+                ?? VisitNode(cbNode, store.FalseType(node));
             case SyntaxKind.InferType:
-            {
-                var n = (InferTypeNode)node;
-                return VisitNode(cbNode, n.TypeParameter);
-            }
+                return VisitNode(cbNode, store.TypeParameter(node));
             case SyntaxKind.ImportType:
-            {
-                var n = (ImportTypeNode)node;
-                return VisitNode(cbNode, n.Argument)
-                ?? VisitNode(cbNode, n.Attributes)
-                ?? VisitNode(cbNode, n.Qualifier)
-                ?? VisitNodes(cbNode, cbNodes, n.TypeArguments);
-            }
+                return VisitNode(cbNode, store.Argument(node))
+                ?? VisitNode(cbNode, store.Attributes(node))
+                ?? VisitNode(cbNode, store.Qualifier(node))
+                ?? VisitNodes(cbNode, cbNodes, store.TypeArguments(node));
             case SyntaxKind.ImportTypeAssertionContainer:
-            {
-                var n = (ImportTypeAssertionContainer)node;
-                return VisitNode(cbNode, n.AssertClause);
-            }
+                return VisitNode(cbNode, store.AssertClause(node));
             case SyntaxKind.ParenthesizedType:
-            {
-                var n = (ParenthesizedTypeNode)node;
-                return VisitNode(cbNode, n.Type);
-            }
+                return VisitNode(cbNode, store.Type(node));
             case SyntaxKind.TypeOperator:
-            {
-                var n = (TypeOperatorNode)node;
-                return VisitNode(cbNode, n.Type);
-            }
+                return VisitNode(cbNode, store.Type(node));
             case SyntaxKind.IndexedAccessType:
-            {
-                var n = (IndexedAccessTypeNode)node;
-                return VisitNode(cbNode, n.ObjectType)
-                ?? VisitNode(cbNode, n.IndexType);
-            }
+                return VisitNode(cbNode, store.ObjectType(node))
+                ?? VisitNode(cbNode, store.IndexType(node));
             case SyntaxKind.MappedType:
-            {
-                var n = (MappedTypeNode)node;
-                return VisitNode(cbNode, n.ReadonlyToken)
-                ?? VisitNode(cbNode, n.TypeParameter)
-                ?? VisitNode(cbNode, n.NameType)
-                ?? VisitNode(cbNode, n.QuestionToken)
-                ?? VisitNode(cbNode, n.Type)
-                ?? VisitNodes(cbNode, cbNodes, n.Members);
-            }
+                return VisitNode(cbNode, store.ReadonlyToken(node))
+                ?? VisitNode(cbNode, store.TypeParameter(node))
+                ?? VisitNode(cbNode, store.NameType(node))
+                ?? VisitNode(cbNode, store.QuestionToken(node))
+                ?? VisitNode(cbNode, store.Type(node))
+                ?? VisitNodes(cbNode, cbNodes, store.Members(node));
             case SyntaxKind.LiteralType:
-            {
-                var n = (LiteralTypeNode)node;
-                return VisitNode(cbNode, n.Literal);
-            }
+                return VisitNode(cbNode, store.Literal(node));
             case SyntaxKind.NamedTupleMember:
-            {
-                var n = (NamedTupleMember)node;
-                return VisitNode(cbNode, n.DotDotDotToken)
-                ?? VisitNode(cbNode, n.Name)
-                ?? VisitNode(cbNode, n.QuestionToken)
-                ?? VisitNode(cbNode, n.Type);
-            }
+                return VisitNode(cbNode, store.DotDotDotToken(node))
+                ?? VisitNode(cbNode, store.Name(node))
+                ?? VisitNode(cbNode, store.QuestionToken(node))
+                ?? VisitNode(cbNode, store.Type(node));
             case SyntaxKind.ObjectBindingPattern:
-            {
-                var n = (ObjectBindingPattern)node;
-                return VisitNodes(cbNode, cbNodes, n.Elements);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Elements(node));
             case SyntaxKind.ArrayBindingPattern:
-            {
-                var n = (ArrayBindingPattern)node;
-                return VisitNodes(cbNode, cbNodes, n.Elements);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Elements(node));
             case SyntaxKind.ArrayLiteralExpression:
-            {
-                var n = (ArrayLiteralExpression)node;
-                return VisitNodes(cbNode, cbNodes, n.Elements);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Elements(node));
             case SyntaxKind.ObjectLiteralExpression:
-            {
-                var n = (ObjectLiteralExpression)node;
-                return VisitNodes(cbNode, cbNodes, n.Properties);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Properties(node));
             case SyntaxKind.PropertyAccessExpression:
-            {
-                var n = (PropertyAccessExpression)node;
-                return VisitNode(cbNode, n.Expression)
-                ?? VisitNode(cbNode, n.QuestionDotToken)
-                ?? VisitNode(cbNode, n.Name);
-            }
+                return VisitNode(cbNode, store.Expression(node))
+                ?? VisitNode(cbNode, store.QuestionDotToken(node))
+                ?? VisitNode(cbNode, store.Name(node));
             case SyntaxKind.ElementAccessExpression:
-            {
-                var n = (ElementAccessExpression)node;
-                return VisitNode(cbNode, n.Expression)
-                ?? VisitNode(cbNode, n.QuestionDotToken)
-                ?? VisitNode(cbNode, n.ArgumentExpression);
-            }
+                return VisitNode(cbNode, store.Expression(node))
+                ?? VisitNode(cbNode, store.QuestionDotToken(node))
+                ?? VisitNode(cbNode, store.ArgumentExpression(node));
             case SyntaxKind.CallExpression:
-            {
-                var n = (CallExpression)node;
-                return VisitNode(cbNode, n.Expression)
-                ?? VisitNode(cbNode, n.QuestionDotToken)
-                ?? VisitNodes(cbNode, cbNodes, n.TypeArguments)
-                ?? VisitNodes(cbNode, cbNodes, n.Arguments);
-            }
+                return VisitNode(cbNode, store.Expression(node))
+                ?? VisitNode(cbNode, store.QuestionDotToken(node))
+                ?? VisitNodes(cbNode, cbNodes, store.TypeArguments(node))
+                ?? VisitNodes(cbNode, cbNodes, store.Arguments(node));
             case SyntaxKind.NewExpression:
-            {
-                var n = (NewExpression)node;
-                return VisitNode(cbNode, n.Expression)
+                return VisitNode(cbNode, store.Expression(node))
                 ?? null
-                ?? VisitNodes(cbNode, cbNodes, n.TypeArguments)
-                ?? VisitNodes(cbNode, cbNodes, n.Arguments);
-            }
+                ?? VisitNodes(cbNode, cbNodes, store.TypeArguments(node))
+                ?? VisitNodes(cbNode, cbNodes, store.Arguments(node));
             case SyntaxKind.TaggedTemplateExpression:
-            {
-                var n = (TaggedTemplateExpression)node;
-                return VisitNode(cbNode, n.Tag)
-                ?? VisitNode(cbNode, n.QuestionDotToken)
-                ?? VisitNodes(cbNode, cbNodes, n.TypeArguments)
-                ?? VisitNode(cbNode, n.Template);
-            }
+                return VisitNode(cbNode, store.Tag(node))
+                ?? VisitNode(cbNode, store.QuestionDotToken(node))
+                ?? VisitNodes(cbNode, cbNodes, store.TypeArguments(node))
+                ?? VisitNode(cbNode, store.Template(node));
             case SyntaxKind.TypeAssertionExpression:
-            {
-                var n = (TypeAssertion)node;
-                return VisitNode(cbNode, n.Type)
-                ?? VisitNode(cbNode, n.Expression);
-            }
+                return VisitNode(cbNode, store.Type(node))
+                ?? VisitNode(cbNode, store.Expression(node));
             case SyntaxKind.ParenthesizedExpression:
-            {
-                var n = (ParenthesizedExpression)node;
-                return VisitNode(cbNode, n.Expression);
-            }
+                return VisitNode(cbNode, store.Expression(node));
             case SyntaxKind.DeleteExpression:
-            {
-                var n = (DeleteExpression)node;
-                return VisitNode(cbNode, n.Expression);
-            }
+                return VisitNode(cbNode, store.Expression(node));
             case SyntaxKind.TypeOfExpression:
-            {
-                var n = (TypeOfExpression)node;
-                return VisitNode(cbNode, n.Expression);
-            }
+                return VisitNode(cbNode, store.Expression(node));
             case SyntaxKind.VoidExpression:
-            {
-                var n = (VoidExpression)node;
-                return VisitNode(cbNode, n.Expression);
-            }
+                return VisitNode(cbNode, store.Expression(node));
             case SyntaxKind.PrefixUnaryExpression:
-            {
-                var n = (PrefixUnaryExpression)node;
-                return VisitNode(cbNode, n.Operand);
-            }
+                return VisitNode(cbNode, store.Operand(node));
             case SyntaxKind.YieldExpression:
-            {
-                var n = (YieldExpression)node;
-                return VisitNode(cbNode, n.AsteriskToken)
-                ?? VisitNode(cbNode, n.Expression);
-            }
+                return VisitNode(cbNode, store.AsteriskToken(node))
+                ?? VisitNode(cbNode, store.Expression(node));
             case SyntaxKind.AwaitExpression:
-            {
-                var n = (AwaitExpression)node;
-                return VisitNode(cbNode, n.Expression);
-            }
+                return VisitNode(cbNode, store.Expression(node));
             case SyntaxKind.PostfixUnaryExpression:
-            {
-                var n = (PostfixUnaryExpression)node;
-                return VisitNode(cbNode, n.Operand);
-            }
+                return VisitNode(cbNode, store.Operand(node));
             case SyntaxKind.BinaryExpression:
-            {
-                var n = (BinaryExpression)node;
-                return VisitNode(cbNode, n.Left)
-                ?? VisitNode(cbNode, n.OperatorToken)
-                ?? VisitNode(cbNode, n.Right);
-            }
+                return VisitNode(cbNode, store.Left(node))
+                ?? VisitNode(cbNode, store.OperatorToken(node))
+                ?? VisitNode(cbNode, store.Right(node));
             case SyntaxKind.AsExpression:
-            {
-                var n = (AsExpression)node;
-                return VisitNode(cbNode, n.Expression)
-                ?? VisitNode(cbNode, n.Type);
-            }
+                return VisitNode(cbNode, store.Expression(node))
+                ?? VisitNode(cbNode, store.Type(node));
             case SyntaxKind.NonNullExpression:
-            {
-                var n = (NonNullExpression)node;
-                return VisitNode(cbNode, n.Expression);
-            }
+                return VisitNode(cbNode, store.Expression(node));
             case SyntaxKind.SatisfiesExpression:
-            {
-                var n = (SatisfiesExpression)node;
-                return VisitNode(cbNode, n.Expression)
-                ?? VisitNode(cbNode, n.Type);
-            }
+                return VisitNode(cbNode, store.Expression(node))
+                ?? VisitNode(cbNode, store.Type(node));
             case SyntaxKind.MetaProperty:
-            {
-                var n = (MetaProperty)node;
-                return VisitNode(cbNode, n.Name);
-            }
+                return VisitNode(cbNode, store.Name(node));
             case SyntaxKind.ConditionalExpression:
-            {
-                var n = (ConditionalExpression)node;
-                return VisitNode(cbNode, n.Condition)
-                ?? VisitNode(cbNode, n.QuestionToken)
-                ?? VisitNode(cbNode, n.WhenTrue)
-                ?? VisitNode(cbNode, n.ColonToken)
-                ?? VisitNode(cbNode, n.WhenFalse);
-            }
+                return VisitNode(cbNode, store.Condition(node))
+                ?? VisitNode(cbNode, store.QuestionToken(node))
+                ?? VisitNode(cbNode, store.WhenTrue(node))
+                ?? VisitNode(cbNode, store.ColonToken(node))
+                ?? VisitNode(cbNode, store.WhenFalse(node));
             case SyntaxKind.SpreadElement:
-            {
-                var n = (SpreadElement)node;
-                return VisitNode(cbNode, n.Expression);
-            }
+                return VisitNode(cbNode, store.Expression(node));
             case SyntaxKind.Block:
-            {
-                var n = (Block)node;
-                return VisitNodes(cbNode, cbNodes, n.Statements);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Statements(node));
             case SyntaxKind.ModuleBlock:
-            {
-                var n = (ModuleBlock)node;
-                return VisitNodes(cbNode, cbNodes, n.Statements);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Statements(node));
             case SyntaxKind.SourceFile:
-            {
-                var n = (SourceFile)node;
-                return VisitNodes(cbNode, cbNodes, n.Statements)
-                ?? VisitNode(cbNode, n.EndOfFileToken);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Statements(node))
+                ?? VisitNode(cbNode, store.EndOfFileToken(node));
             case SyntaxKind.VariableStatement:
-            {
-                var n = (VariableStatement)node;
-                return VisitNodes(cbNode, cbNodes, n.Modifiers)
-                ?? VisitNode(cbNode, n.DeclarationList);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                ?? VisitNode(cbNode, store.DeclarationList(node));
             case SyntaxKind.VariableDeclarationList:
-            {
-                var n = (VariableDeclarationList)node;
-                return VisitNodes(cbNode, cbNodes, n.Declarations);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Declarations(node));
             case SyntaxKind.ExpressionStatement:
-            {
-                var n = (ExpressionStatement)node;
-                return VisitNode(cbNode, n.Expression);
-            }
+                return VisitNode(cbNode, store.Expression(node));
             case SyntaxKind.IfStatement:
-            {
-                var n = (IfStatement)node;
-                return VisitNode(cbNode, n.Expression)
-                ?? VisitNode(cbNode, n.ThenStatement)
-                ?? VisitNode(cbNode, n.ElseStatement);
-            }
+                return VisitNode(cbNode, store.Expression(node))
+                ?? VisitNode(cbNode, store.ThenStatement(node))
+                ?? VisitNode(cbNode, store.ElseStatement(node));
             case SyntaxKind.DoStatement:
-            {
-                var n = (DoStatement)node;
-                return VisitNode(cbNode, n.Statement)
-                ?? VisitNode(cbNode, n.Expression);
-            }
+                return VisitNode(cbNode, store.Statement(node))
+                ?? VisitNode(cbNode, store.Expression(node));
             case SyntaxKind.WhileStatement:
-            {
-                var n = (WhileStatement)node;
-                return VisitNode(cbNode, n.Expression)
-                ?? VisitNode(cbNode, n.Statement);
-            }
+                return VisitNode(cbNode, store.Expression(node))
+                ?? VisitNode(cbNode, store.Statement(node));
             case SyntaxKind.ForStatement:
-            {
-                var n = (ForStatement)node;
-                return VisitNode(cbNode, n.Initializer)
-                ?? VisitNode(cbNode, n.Condition)
-                ?? VisitNode(cbNode, n.Incrementor)
-                ?? VisitNode(cbNode, n.Statement);
-            }
+                return VisitNode(cbNode, store.Initializer(node))
+                ?? VisitNode(cbNode, store.Condition(node))
+                ?? VisitNode(cbNode, store.Incrementor(node))
+                ?? VisitNode(cbNode, store.Statement(node));
             case SyntaxKind.ForInStatement:
-            {
-                var n = (ForInStatement)node;
-                return VisitNode(cbNode, n.Initializer)
-                ?? VisitNode(cbNode, n.Expression)
-                ?? VisitNode(cbNode, n.Statement);
-            }
+                return VisitNode(cbNode, store.Initializer(node))
+                ?? VisitNode(cbNode, store.Expression(node))
+                ?? VisitNode(cbNode, store.Statement(node));
             case SyntaxKind.ForOfStatement:
-            {
-                var n = (ForOfStatement)node;
-                return VisitNode(cbNode, n.AwaitModifier)
-                ?? VisitNode(cbNode, n.Initializer)
-                ?? VisitNode(cbNode, n.Expression)
-                ?? VisitNode(cbNode, n.Statement);
-            }
+                return VisitNode(cbNode, store.AwaitModifier(node))
+                ?? VisitNode(cbNode, store.Initializer(node))
+                ?? VisitNode(cbNode, store.Expression(node))
+                ?? VisitNode(cbNode, store.Statement(node));
             case SyntaxKind.ContinueStatement:
-            {
-                var n = (ContinueStatement)node;
-                return VisitNode(cbNode, n.Label);
-            }
+                return VisitNode(cbNode, store.Label(node));
             case SyntaxKind.BreakStatement:
-            {
-                var n = (BreakStatement)node;
-                return VisitNode(cbNode, n.Label);
-            }
+                return VisitNode(cbNode, store.Label(node));
             case SyntaxKind.ReturnStatement:
-            {
-                var n = (ReturnStatement)node;
-                return VisitNode(cbNode, n.Expression);
-            }
+                return VisitNode(cbNode, store.Expression(node));
             case SyntaxKind.WithStatement:
-            {
-                var n = (WithStatement)node;
-                return VisitNode(cbNode, n.Expression)
-                ?? VisitNode(cbNode, n.Statement);
-            }
+                return VisitNode(cbNode, store.Expression(node))
+                ?? VisitNode(cbNode, store.Statement(node));
             case SyntaxKind.SwitchStatement:
-            {
-                var n = (SwitchStatement)node;
-                return VisitNode(cbNode, n.Expression)
-                ?? VisitNode(cbNode, n.CaseBlock);
-            }
+                return VisitNode(cbNode, store.Expression(node))
+                ?? VisitNode(cbNode, store.CaseBlock(node));
             case SyntaxKind.CaseBlock:
-            {
-                var n = (CaseBlock)node;
-                return VisitNodes(cbNode, cbNodes, n.Clauses);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Clauses(node));
             case SyntaxKind.CaseClause:
-            {
-                var n = (CaseClause)node;
-                return VisitNode(cbNode, n.Expression)
-                ?? VisitNodes(cbNode, cbNodes, n.Statements);
-            }
+                return VisitNode(cbNode, store.Expression(node))
+                ?? VisitNodes(cbNode, cbNodes, store.Statements(node));
             case SyntaxKind.DefaultClause:
-            {
-                var n = (DefaultClause)node;
-                return VisitNodes(cbNode, cbNodes, n.Statements);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Statements(node));
             case SyntaxKind.LabeledStatement:
-            {
-                var n = (LabeledStatement)node;
-                return VisitNode(cbNode, n.Label)
-                ?? VisitNode(cbNode, n.Statement);
-            }
+                return VisitNode(cbNode, store.Label(node))
+                ?? VisitNode(cbNode, store.Statement(node));
             case SyntaxKind.ThrowStatement:
-            {
-                var n = (ThrowStatement)node;
-                return VisitNode(cbNode, n.Expression);
-            }
+                return VisitNode(cbNode, store.Expression(node));
             case SyntaxKind.TryStatement:
-            {
-                var n = (TryStatement)node;
-                return VisitNode(cbNode, n.TryBlock)
-                ?? VisitNode(cbNode, n.CatchClause)
-                ?? VisitNode(cbNode, n.FinallyBlock);
-            }
+                return VisitNode(cbNode, store.TryBlock(node))
+                ?? VisitNode(cbNode, store.CatchClause(node))
+                ?? VisitNode(cbNode, store.FinallyBlock(node));
             case SyntaxKind.CatchClause:
-            {
-                var n = (CatchClause)node;
-                return VisitNode(cbNode, n.VariableDeclaration)
-                ?? VisitNode(cbNode, n.Block);
-            }
+                return VisitNode(cbNode, store.VariableDeclaration(node))
+                ?? VisitNode(cbNode, store.Block(node));
             case SyntaxKind.Decorator:
-            {
-                var n = (Decorator)node;
-                return VisitNode(cbNode, n.Expression);
-            }
+                return VisitNode(cbNode, store.Expression(node));
             case SyntaxKind.ClassDeclaration:
-            {
-                var n = (ClassDeclaration)node;
-                return VisitNodes(cbNode, cbNodes, n.Modifiers)
-                ?? VisitNode(cbNode, n.Name)
-                ?? VisitNodes(cbNode, cbNodes, n.TypeParameters)
-                ?? VisitNodes(cbNode, cbNodes, n.HeritageClauses)
-                ?? VisitNodes(cbNode, cbNodes, n.Members);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                ?? VisitNode(cbNode, store.Name(node))
+                ?? VisitNodes(cbNode, cbNodes, store.TypeParameters(node))
+                ?? VisitNodes(cbNode, cbNodes, store.HeritageClauses(node))
+                ?? VisitNodes(cbNode, cbNodes, store.Members(node));
             case SyntaxKind.ClassExpression:
-            {
-                var n = (ClassExpression)node;
-                return VisitNodes(cbNode, cbNodes, n.Modifiers)
-                ?? VisitNode(cbNode, n.Name)
-                ?? VisitNodes(cbNode, cbNodes, n.TypeParameters)
-                ?? VisitNodes(cbNode, cbNodes, n.HeritageClauses)
-                ?? VisitNodes(cbNode, cbNodes, n.Members);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                ?? VisitNode(cbNode, store.Name(node))
+                ?? VisitNodes(cbNode, cbNodes, store.TypeParameters(node))
+                ?? VisitNodes(cbNode, cbNodes, store.HeritageClauses(node))
+                ?? VisitNodes(cbNode, cbNodes, store.Members(node));
             case SyntaxKind.InterfaceDeclaration:
-            {
-                var n = (InterfaceDeclaration)node;
-                return VisitNodes(cbNode, cbNodes, n.Modifiers)
-                ?? VisitNode(cbNode, n.Name)
-                ?? VisitNodes(cbNode, cbNodes, n.TypeParameters)
-                ?? VisitNodes(cbNode, cbNodes, n.HeritageClauses)
-                ?? VisitNodes(cbNode, cbNodes, n.Members);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                ?? VisitNode(cbNode, store.Name(node))
+                ?? VisitNodes(cbNode, cbNodes, store.TypeParameters(node))
+                ?? VisitNodes(cbNode, cbNodes, store.HeritageClauses(node))
+                ?? VisitNodes(cbNode, cbNodes, store.Members(node));
             case SyntaxKind.TypeAliasDeclaration:
-            {
-                var n = (TypeAliasDeclaration)node;
-                return VisitNodes(cbNode, cbNodes, n.Modifiers)
-                ?? VisitNode(cbNode, n.Name)
-                ?? VisitNodes(cbNode, cbNodes, n.TypeParameters)
-                ?? VisitNode(cbNode, n.Type);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                ?? VisitNode(cbNode, store.Name(node))
+                ?? VisitNodes(cbNode, cbNodes, store.TypeParameters(node))
+                ?? VisitNode(cbNode, store.Type(node));
             case SyntaxKind.EnumDeclaration:
-            {
-                var n = (EnumDeclaration)node;
-                return VisitNodes(cbNode, cbNodes, n.Modifiers)
-                ?? VisitNode(cbNode, n.Name)
-                ?? VisitNodes(cbNode, cbNodes, n.Members);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                ?? VisitNode(cbNode, store.Name(node))
+                ?? VisitNodes(cbNode, cbNodes, store.Members(node));
             case SyntaxKind.EnumMember:
-            {
-                var n = (EnumMember)node;
-                return VisitNode(cbNode, n.Name)
-                ?? VisitNode(cbNode, n.Initializer);
-            }
+                return VisitNode(cbNode, store.Name(node))
+                ?? VisitNode(cbNode, store.Initializer(node));
             case SyntaxKind.ModuleDeclaration:
-            {
-                var n = (ModuleDeclaration)node;
-                return VisitNodes(cbNode, cbNodes, n.Modifiers)
-                ?? VisitNode(cbNode, n.Name)
-                ?? VisitNode(cbNode, n.Body);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                ?? VisitNode(cbNode, store.Name(node))
+                ?? VisitNode(cbNode, store.Body(node));
             case SyntaxKind.ImportEqualsDeclaration:
-            {
-                var n = (ImportEqualsDeclaration)node;
-                return VisitNodes(cbNode, cbNodes, n.Modifiers)
-                ?? VisitNode(cbNode, n.Name)
-                ?? VisitNode(cbNode, n.ModuleReference);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                ?? VisitNode(cbNode, store.Name(node))
+                ?? VisitNode(cbNode, store.ModuleReference(node));
             case SyntaxKind.ImportDeclaration:
-            {
-                var n = (ImportDeclaration)node;
-                return VisitNodes(cbNode, cbNodes, n.Modifiers)
-                ?? VisitNode(cbNode, n.ImportClause)
-                ?? VisitNode(cbNode, n.ModuleSpecifier)
-                ?? VisitNode(cbNode, n.Attributes);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                ?? VisitNode(cbNode, store.ImportClause(node))
+                ?? VisitNode(cbNode, store.ModuleSpecifier(node))
+                ?? VisitNode(cbNode, store.Attributes(node));
             case SyntaxKind.ImportClause:
-            {
-                var n = (ImportClause)node;
-                return VisitNode(cbNode, n.Name)
-                ?? VisitNode(cbNode, n.NamedBindings);
-            }
+                return VisitNode(cbNode, store.Name(node))
+                ?? VisitNode(cbNode, store.NamedBindings(node));
             case SyntaxKind.ImportAttributes:
-            {
-                var n = (ImportAttributes)node;
-                return VisitNodes(cbNode, cbNodes, n.Elements);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Elements(node));
             case SyntaxKind.ImportAttribute:
-            {
-                var n = (ImportAttribute)node;
-                return VisitNode(cbNode, n.Name)
-                ?? VisitNode(cbNode, n.Value);
-            }
+                return VisitNode(cbNode, store.Name(node))
+                ?? VisitNode(cbNode, store.Value(node));
             case SyntaxKind.NamespaceExportDeclaration:
-            {
-                var n = (NamespaceExportDeclaration)node;
-                return VisitNodes(cbNode, cbNodes, n.Modifiers)
-                ?? VisitNode(cbNode, n.Name);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                ?? VisitNode(cbNode, store.Name(node));
             case SyntaxKind.NamespaceImport:
-            {
-                var n = (NamespaceImport)node;
-                return VisitNode(cbNode, n.Name);
-            }
+                return VisitNode(cbNode, store.Name(node));
             case SyntaxKind.NamespaceExport:
-            {
-                var n = (NamespaceExport)node;
-                return VisitNode(cbNode, n.Name);
-            }
+                return VisitNode(cbNode, store.Name(node));
             case SyntaxKind.NamedImports:
-            {
-                var n = (NamedImports)node;
-                return VisitNodes(cbNode, cbNodes, n.Elements);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Elements(node));
             case SyntaxKind.NamedExports:
-            {
-                var n = (NamedExports)node;
-                return VisitNodes(cbNode, cbNodes, n.Elements);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Elements(node));
             case SyntaxKind.ExportDeclaration:
-            {
-                var n = (ExportDeclaration)node;
-                return VisitNodes(cbNode, cbNodes, n.Modifiers)
-                ?? VisitNode(cbNode, n.ExportClause)
-                ?? VisitNode(cbNode, n.ModuleSpecifier)
-                ?? VisitNode(cbNode, n.Attributes);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                ?? VisitNode(cbNode, store.ExportClause(node))
+                ?? VisitNode(cbNode, store.ModuleSpecifier(node))
+                ?? VisitNode(cbNode, store.Attributes(node));
             case SyntaxKind.ImportSpecifier:
-            {
-                var n = (ImportSpecifier)node;
-                return VisitNode(cbNode, n.PropertyName)
-                ?? VisitNode(cbNode, n.Name);
-            }
+                return VisitNode(cbNode, store.PropertyName(node))
+                ?? VisitNode(cbNode, store.Name(node));
             case SyntaxKind.ExportSpecifier:
-            {
-                var n = (ExportSpecifier)node;
-                return VisitNode(cbNode, n.PropertyName)
-                ?? VisitNode(cbNode, n.Name);
-            }
+                return VisitNode(cbNode, store.PropertyName(node))
+                ?? VisitNode(cbNode, store.Name(node));
             case SyntaxKind.ExportAssignment:
-            {
-                var n = (ExportAssignment)node;
-                return VisitNodes(cbNode, cbNodes, n.Modifiers)
-                ?? VisitNode(cbNode, n.Expression);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                ?? VisitNode(cbNode, store.Expression(node));
             case SyntaxKind.TemplateExpression:
-            {
-                var n = (TemplateExpression)node;
-                return VisitNode(cbNode, n.Head)
-                ?? VisitNodes(cbNode, cbNodes, n.TemplateSpans);
-            }
+                return VisitNode(cbNode, store.Head(node))
+                ?? VisitNodes(cbNode, cbNodes, store.TemplateSpans(node));
             case SyntaxKind.TemplateSpan:
-            {
-                var n = (TemplateSpan)node;
-                return VisitNode(cbNode, n.Expression)
-                ?? VisitNode(cbNode, n.Literal);
-            }
+                return VisitNode(cbNode, store.Expression(node))
+                ?? VisitNode(cbNode, store.Literal(node));
             case SyntaxKind.TemplateLiteralType:
-            {
-                var n = (TemplateLiteralTypeNode)node;
-                return VisitNode(cbNode, n.Head)
-                ?? VisitNodes(cbNode, cbNodes, n.TemplateSpans);
-            }
+                return VisitNode(cbNode, store.Head(node))
+                ?? VisitNodes(cbNode, cbNodes, store.TemplateSpans(node));
             case SyntaxKind.TemplateLiteralTypeSpan:
-            {
-                var n = (TemplateLiteralTypeSpan)node;
-                return VisitNode(cbNode, n.Type)
-                ?? VisitNode(cbNode, n.Literal);
-            }
+                return VisitNode(cbNode, store.Type(node))
+                ?? VisitNode(cbNode, store.Literal(node));
             case SyntaxKind.ComputedPropertyName:
-            {
-                var n = (ComputedPropertyName)node;
-                return VisitNode(cbNode, n.Expression);
-            }
+                return VisitNode(cbNode, store.Expression(node));
             case SyntaxKind.HeritageClause:
-            {
-                var n = (HeritageClause)node;
-                return VisitNodes(cbNode, cbNodes, n.Types);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Types(node));
             case SyntaxKind.ExpressionWithTypeArguments:
-            {
-                var n = (ExpressionWithTypeArguments)node;
-                return VisitNode(cbNode, n.Expression)
-                ?? VisitNodes(cbNode, cbNodes, n.TypeArguments);
-            }
+                return VisitNode(cbNode, store.Expression(node))
+                ?? VisitNodes(cbNode, cbNodes, store.TypeArguments(node));
             case SyntaxKind.ExternalModuleReference:
-            {
-                var n = (ExternalModuleReference)node;
-                return VisitNode(cbNode, n.Expression);
-            }
+                return VisitNode(cbNode, store.Expression(node));
             case SyntaxKind.MissingDeclaration:
-            {
-                var n = (MissingDeclaration)node;
-                return VisitNodes(cbNode, cbNodes, n.Modifiers);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Modifiers(node));
             case SyntaxKind.CommaListExpression:
-            {
-                var n = (CommaListExpression)node;
-                return VisitNodes(cbNode, cbNodes, n.Elements);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Elements(node));
             case SyntaxKind.JsxElement:
-            {
-                var n = (JsxElement)node;
-                return VisitNode(cbNode, n.OpeningElement)
-                ?? VisitNodes(cbNode, cbNodes, n.Children)
-                ?? VisitNode(cbNode, n.ClosingElement);
-            }
+                return VisitNode(cbNode, store.OpeningElement(node))
+                ?? VisitNodes(cbNode, cbNodes, store.Children(node))
+                ?? VisitNode(cbNode, store.ClosingElement(node));
             case SyntaxKind.JsxFragment:
-            {
-                var n = (JsxFragment)node;
-                return VisitNode(cbNode, n.OpeningFragment)
-                ?? VisitNodes(cbNode, cbNodes, n.Children)
-                ?? VisitNode(cbNode, n.ClosingFragment);
-            }
+                return VisitNode(cbNode, store.OpeningFragment(node))
+                ?? VisitNodes(cbNode, cbNodes, store.Children(node))
+                ?? VisitNode(cbNode, store.ClosingFragment(node));
             case SyntaxKind.JsxSelfClosingElement:
-            {
-                var n = (JsxSelfClosingElement)node;
-                return VisitNode(cbNode, n.TagName)
-                ?? VisitNodes(cbNode, cbNodes, n.TypeArguments)
-                ?? VisitNode(cbNode, n.Attributes);
-            }
+                return VisitNode(cbNode, store.TagName(node))
+                ?? VisitNodes(cbNode, cbNodes, store.TypeArguments(node))
+                ?? VisitNode(cbNode, store.Attributes(node));
             case SyntaxKind.JsxOpeningElement:
-            {
-                var n = (JsxOpeningElement)node;
-                return VisitNode(cbNode, n.TagName)
-                ?? VisitNodes(cbNode, cbNodes, n.TypeArguments)
-                ?? VisitNode(cbNode, n.Attributes);
-            }
+                return VisitNode(cbNode, store.TagName(node))
+                ?? VisitNodes(cbNode, cbNodes, store.TypeArguments(node))
+                ?? VisitNode(cbNode, store.Attributes(node));
             case SyntaxKind.JsxAttributes:
-            {
-                var n = (JsxAttributes)node;
-                return VisitNodes(cbNode, cbNodes, n.Properties);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Properties(node));
             case SyntaxKind.JsxAttribute:
-            {
-                var n = (JsxAttribute)node;
-                return VisitNode(cbNode, n.Name)
-                ?? VisitNode(cbNode, n.Initializer);
-            }
+                return VisitNode(cbNode, store.Name(node))
+                ?? VisitNode(cbNode, store.Initializer(node));
             case SyntaxKind.JsxSpreadAttribute:
-            {
-                var n = (JsxSpreadAttribute)node;
-                return VisitNode(cbNode, n.Expression);
-            }
+                return VisitNode(cbNode, store.Expression(node));
             case SyntaxKind.JsxExpression:
-            {
-                var n = (JsxExpression)node;
-                return VisitNode(cbNode, n.DotDotDotToken)
-                ?? VisitNode(cbNode, n.Expression);
-            }
+                return VisitNode(cbNode, store.DotDotDotToken(node))
+                ?? VisitNode(cbNode, store.Expression(node));
             case SyntaxKind.JsxClosingElement:
-            {
-                var n = (JsxClosingElement)node;
-                return VisitNode(cbNode, n.TagName);
-            }
+                return VisitNode(cbNode, store.TagName(node));
             case SyntaxKind.JsxNamespacedName:
-            {
-                var n = (JsxNamespacedName)node;
-                return VisitNode(cbNode, n.Namespace)
-                ?? VisitNode(cbNode, n.Name);
-            }
+                return VisitNode(cbNode, store.Namespace(node))
+                ?? VisitNode(cbNode, store.Name(node));
             case SyntaxKind.OptionalType:
-            {
-                var n = (OptionalTypeNode)node;
-                return VisitNode(cbNode, n.Type);
-            }
+                return VisitNode(cbNode, store.Type(node));
             case SyntaxKind.RestType:
-            {
-                var n = (RestTypeNode)node;
-                return VisitNode(cbNode, n.Type);
-            }
+                return VisitNode(cbNode, store.Type(node));
             case SyntaxKind.JSDocTypeExpression:
-            {
-                var n = (JSDocTypeExpression)node;
-                return VisitNode(cbNode, n.Type);
-            }
+                return VisitNode(cbNode, store.Type(node));
             case SyntaxKind.JSDocNonNullableType:
-            {
-                var n = (JSDocNonNullableType)node;
-                return VisitNode(cbNode, n.Type);
-            }
+                return VisitNode(cbNode, store.Type(node));
             case SyntaxKind.JSDocNullableType:
-            {
-                var n = (JSDocNullableType)node;
-                return VisitNode(cbNode, n.Type);
-            }
+                return VisitNode(cbNode, store.Type(node));
             case SyntaxKind.JSDocOptionalType:
-            {
-                var n = (JSDocOptionalType)node;
-                return VisitNode(cbNode, n.Type);
-            }
+                return VisitNode(cbNode, store.Type(node));
             case SyntaxKind.JSDocVariadicType:
-            {
-                var n = (JSDocVariadicType)node;
-                return VisitNode(cbNode, n.Type);
-            }
+                return VisitNode(cbNode, store.Type(node));
             case SyntaxKind.JSDocFunctionType:
-            {
-                var n = (JSDocFunctionType)node;
-                return VisitNodes(cbNode, cbNodes, n.Parameters)
-                ?? VisitNode(cbNode, n.Type);
-            }
+                return VisitNodes(cbNode, cbNodes, store.Parameters(node))
+                ?? VisitNode(cbNode, store.Type(node));
             case SyntaxKind.JSDoc:
-            {
-                var n = (JSDoc)node;
-                return (n.Comment is string
+                return (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, n.Comment as NodeArray))
-                ?? VisitNodes(cbNode, cbNodes, n.Tags);
-            }
+                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray))
+                ?? VisitNodes(cbNode, cbNodes, store.Tags(node));
             case SyntaxKind.JSDocSeeTag:
-            {
-                var n = (JSDocSeeTag)node;
-                return VisitNode(cbNode, n.TagName)
-                ?? VisitNode(cbNode, n.Name)
-                ?? (n.Comment is string
+                return VisitNode(cbNode, store.TagName(node))
+                ?? VisitNode(cbNode, store.Name(node))
+                ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, n.Comment as NodeArray));
-            }
+                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
             case SyntaxKind.JSDocNameReference:
-            {
-                var n = (JSDocNameReference)node;
-                return VisitNode(cbNode, n.Name);
-            }
+                return VisitNode(cbNode, store.Name(node));
             case SyntaxKind.JSDocMemberName:
-            {
-                var n = (JSDocMemberName)node;
-                return VisitNode(cbNode, n.Left)
-                ?? VisitNode(cbNode, n.Right);
-            }
+                return VisitNode(cbNode, store.Left(node))
+                ?? VisitNode(cbNode, store.Right(node));
             case SyntaxKind.JSDocParameterTag:
-            {
-                var n = (JSDocParameterTag)node;
-                return VisitNode(cbNode, n.TagName)
-                ?? (n.IsNameFirst
-                ? VisitNode(cbNode, n.Name)
-                ?? VisitNode(cbNode, n.TypeExpression)
-                : VisitNode(cbNode, n.TypeExpression)
-                ?? VisitNode(cbNode, n.Name))
-                ?? (n.Comment is string
+                return VisitNode(cbNode, store.TagName(node))
+                ?? (store.IsNameFirst(node)
+                ? VisitNode(cbNode, store.Name(node))
+                ?? VisitNode(cbNode, store.TypeExpression(node))
+                : VisitNode(cbNode, store.TypeExpression(node))
+                ?? VisitNode(cbNode, store.Name(node)))
+                ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, n.Comment as NodeArray));
-            }
+                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
             case SyntaxKind.JSDocPropertyTag:
-            {
-                var n = (JSDocPropertyTag)node;
-                return VisitNode(cbNode, n.TagName)
-                ?? (n.IsNameFirst
-                ? VisitNode(cbNode, n.Name)
-                ?? VisitNode(cbNode, n.TypeExpression)
-                : VisitNode(cbNode, n.TypeExpression)
-                ?? VisitNode(cbNode, n.Name))
-                ?? (n.Comment is string
+                return VisitNode(cbNode, store.TagName(node))
+                ?? (store.IsNameFirst(node)
+                ? VisitNode(cbNode, store.Name(node))
+                ?? VisitNode(cbNode, store.TypeExpression(node))
+                : VisitNode(cbNode, store.TypeExpression(node))
+                ?? VisitNode(cbNode, store.Name(node)))
+                ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, n.Comment as NodeArray));
-            }
+                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
             case SyntaxKind.JSDocAuthorTag:
-            {
-                var n = (JSDocAuthorTag)node;
-                return VisitNode(cbNode, n.TagName)
-                ?? (n.Comment is string
+                return VisitNode(cbNode, store.TagName(node))
+                ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, n.Comment as NodeArray));
-            }
+                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
             case SyntaxKind.JSDocImplementsTag:
-            {
-                var n = (JSDocImplementsTag)node;
-                return VisitNode(cbNode, n.TagName)
-                ?? VisitNode(cbNode, n.Class)
-                ?? (n.Comment is string
+                return VisitNode(cbNode, store.TagName(node))
+                ?? VisitNode(cbNode, store.Class(node))
+                ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, n.Comment as NodeArray));
-            }
+                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
             case SyntaxKind.JSDocAugmentsTag:
-            {
-                var n = (JSDocAugmentsTag)node;
-                return VisitNode(cbNode, n.TagName)
-                ?? VisitNode(cbNode, n.Class)
-                ?? (n.Comment is string
+                return VisitNode(cbNode, store.TagName(node))
+                ?? VisitNode(cbNode, store.Class(node))
+                ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, n.Comment as NodeArray));
-            }
+                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
             case SyntaxKind.JSDocTemplateTag:
-            {
-                var n = (JSDocTemplateTag)node;
-                return VisitNode(cbNode, n.TagName)
-                ?? VisitNode(cbNode, n.Constraint)
-                ?? VisitNodes(cbNode, cbNodes, n.TypeParameters)
-                ?? (n.Comment is string
+                return VisitNode(cbNode, store.TagName(node))
+                ?? VisitNode(cbNode, store.Constraint(node))
+                ?? VisitNodes(cbNode, cbNodes, store.TypeParameters(node))
+                ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, n.Comment as NodeArray));
-            }
+                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
             case SyntaxKind.JSDocTypedefTag:
-            {
-                var n = (JSDocTypedefTag)node;
-                return VisitNode(cbNode, n.TagName)
-                ?? ((n.TypeExpression is not null && n.TypeExpression?.Kind == SyntaxKind.JSDocTypeExpression)
-                ? VisitNode(cbNode, n.TypeExpression)
-                ?? VisitNode(cbNode, n.FullName)
-                ?? (n.Comment is string
+                return VisitNode(cbNode, store.TagName(node))
+                ?? ((!store.TypeExpression(node).IsNone && store.Kind(store.TypeExpression(node)) == SyntaxKind.JSDocTypeExpression)
+                ? VisitNode(cbNode, store.TypeExpression(node))
+                ?? VisitNode(cbNode, store.FullName(node))
+                ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, n.Comment as NodeArray))
-                : VisitNode(cbNode, n.FullName)
-                ?? VisitNode(cbNode, n.TypeExpression)
-                ?? (n.Comment is string
+                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray))
+                : VisitNode(cbNode, store.FullName(node))
+                ?? VisitNode(cbNode, store.TypeExpression(node))
+                ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, n.Comment as NodeArray)));
-            }
+                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray)));
             case SyntaxKind.JSDocCallbackTag:
-            {
-                var n = (JSDocCallbackTag)node;
-                return VisitNode(cbNode, n.TagName)
-                ?? VisitNode(cbNode, n.FullName)
-                ?? VisitNode(cbNode, n.TypeExpression)
-                ?? (n.Comment is string
+                return VisitNode(cbNode, store.TagName(node))
+                ?? VisitNode(cbNode, store.FullName(node))
+                ?? VisitNode(cbNode, store.TypeExpression(node))
+                ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, n.Comment as NodeArray));
-            }
+                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
             case SyntaxKind.JSDocReturnTag:
-            {
-                var n = (JSDocReturnTag)node;
-                return VisitNode(cbNode, n.TagName)
-                ?? VisitNode(cbNode, n.TypeExpression)
-                ?? (n.Comment is string
+                return VisitNode(cbNode, store.TagName(node))
+                ?? VisitNode(cbNode, store.TypeExpression(node))
+                ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, n.Comment as NodeArray));
-            }
+                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
             case SyntaxKind.JSDocTypeTag:
-            {
-                var n = (JSDocTypeTag)node;
-                return VisitNode(cbNode, n.TagName)
-                ?? VisitNode(cbNode, n.TypeExpression)
-                ?? (n.Comment is string
+                return VisitNode(cbNode, store.TagName(node))
+                ?? VisitNode(cbNode, store.TypeExpression(node))
+                ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, n.Comment as NodeArray));
-            }
+                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
             case SyntaxKind.JSDocThisTag:
-            {
-                var n = (JSDocThisTag)node;
-                return VisitNode(cbNode, n.TagName)
-                ?? VisitNode(cbNode, n.TypeExpression)
-                ?? (n.Comment is string
+                return VisitNode(cbNode, store.TagName(node))
+                ?? VisitNode(cbNode, store.TypeExpression(node))
+                ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, n.Comment as NodeArray));
-            }
+                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
             case SyntaxKind.JSDocEnumTag:
-            {
-                var n = (JSDocEnumTag)node;
-                return VisitNode(cbNode, n.TagName)
-                ?? VisitNode(cbNode, n.TypeExpression)
-                ?? (n.Comment is string
+                return VisitNode(cbNode, store.TagName(node))
+                ?? VisitNode(cbNode, store.TypeExpression(node))
+                ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, n.Comment as NodeArray));
-            }
+                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
             case SyntaxKind.JSDocSatisfiesTag:
-            {
-                var n = (JSDocSatisfiesTag)node;
-                return VisitNode(cbNode, n.TagName)
-                ?? VisitNode(cbNode, n.TypeExpression)
-                ?? (n.Comment is string
+                return VisitNode(cbNode, store.TagName(node))
+                ?? VisitNode(cbNode, store.TypeExpression(node))
+                ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, n.Comment as NodeArray));
-            }
+                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
             case SyntaxKind.JSDocThrowsTag:
-            {
-                var n = (JSDocThrowsTag)node;
-                return VisitNode(cbNode, n.TagName)
-                ?? VisitNode(cbNode, n.TypeExpression)
-                ?? (n.Comment is string
+                return VisitNode(cbNode, store.TagName(node))
+                ?? VisitNode(cbNode, store.TypeExpression(node))
+                ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, n.Comment as NodeArray));
-            }
+                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
             case SyntaxKind.JSDocOverloadTag:
-            {
-                var n = (JSDocOverloadTag)node;
-                return VisitNode(cbNode, n.TagName)
-                ?? VisitNode(cbNode, n.TypeExpression)
-                ?? (n.Comment is string
+                return VisitNode(cbNode, store.TagName(node))
+                ?? VisitNode(cbNode, store.TypeExpression(node))
+                ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, n.Comment as NodeArray));
-            }
+                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
             case SyntaxKind.JSDocSignature:
-            {
-                var n = (JSDocSignature)node;
-                return ForEachElement(n.TypeParameters, cbNode)
-                ?? ForEachElement(n.Parameters, cbNode)
-                ?? VisitNode(cbNode, n.Type);
-            }
+                return ForEachElement(store.JSDocSignatureTypeParameters(node), cbNode)
+                ?? ForEachElement(store.JSDocSignatureParameters(node), cbNode)
+                ?? VisitNode(cbNode, store.Type(node));
             case SyntaxKind.JSDocLink:
-            {
-                var n = (JSDocLink)node;
-                return VisitNode(cbNode, n.Name);
-            }
+                return VisitNode(cbNode, store.Name(node));
             case SyntaxKind.JSDocLinkCode:
-            {
-                var n = (JSDocLinkCode)node;
-                return VisitNode(cbNode, n.Name);
-            }
+                return VisitNode(cbNode, store.Name(node));
             case SyntaxKind.JSDocLinkPlain:
-            {
-                var n = (JSDocLinkPlain)node;
-                return VisitNode(cbNode, n.Name);
-            }
+                return VisitNode(cbNode, store.Name(node));
             case SyntaxKind.JSDocTypeLiteral:
-            {
-                var n = (JSDocTypeLiteral)node;
-                return ForEachElement(n.JsDocPropertyTags, cbNode);
-            }
+                return ForEachElement(store.JsDocPropertyTags(node), cbNode);
             case SyntaxKind.JSDocTag:
-            {
-                var n = (JSDocUnknownTag)node;
-                return VisitNode(cbNode, n.TagName)
-                ?? (n.Comment is string
+                return VisitNode(cbNode, store.TagName(node))
+                ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, n.Comment as NodeArray));
-            }
+                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
             case SyntaxKind.JSDocClassTag:
-            {
-                var n = (JSDocClassTag)node;
-                return VisitNode(cbNode, n.TagName)
-                ?? (n.Comment is string
+                return VisitNode(cbNode, store.TagName(node))
+                ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, n.Comment as NodeArray));
-            }
+                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
             case SyntaxKind.JSDocPublicTag:
-            {
-                var n = (JSDocPublicTag)node;
-                return VisitNode(cbNode, n.TagName)
-                ?? (n.Comment is string
+                return VisitNode(cbNode, store.TagName(node))
+                ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, n.Comment as NodeArray));
-            }
+                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
             case SyntaxKind.JSDocPrivateTag:
-            {
-                var n = (JSDocPrivateTag)node;
-                return VisitNode(cbNode, n.TagName)
-                ?? (n.Comment is string
+                return VisitNode(cbNode, store.TagName(node))
+                ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, n.Comment as NodeArray));
-            }
+                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
             case SyntaxKind.JSDocProtectedTag:
-            {
-                var n = (JSDocProtectedTag)node;
-                return VisitNode(cbNode, n.TagName)
-                ?? (n.Comment is string
+                return VisitNode(cbNode, store.TagName(node))
+                ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, n.Comment as NodeArray));
-            }
+                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
             case SyntaxKind.JSDocReadonlyTag:
-            {
-                var n = (JSDocReadonlyTag)node;
-                return VisitNode(cbNode, n.TagName)
-                ?? (n.Comment is string
+                return VisitNode(cbNode, store.TagName(node))
+                ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, n.Comment as NodeArray));
-            }
+                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
             case SyntaxKind.JSDocDeprecatedTag:
-            {
-                var n = (JSDocDeprecatedTag)node;
-                return VisitNode(cbNode, n.TagName)
-                ?? (n.Comment is string
+                return VisitNode(cbNode, store.TagName(node))
+                ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, n.Comment as NodeArray));
-            }
+                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
             case SyntaxKind.JSDocOverrideTag:
-            {
-                var n = (JSDocOverrideTag)node;
-                return VisitNode(cbNode, n.TagName)
-                ?? (n.Comment is string
+                return VisitNode(cbNode, store.TagName(node))
+                ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, n.Comment as NodeArray));
-            }
+                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
             case SyntaxKind.JSDocImportTag:
-            {
-                var n = (JSDocImportTag)node;
-                return VisitNode(cbNode, n.TagName)
-                ?? VisitNode(cbNode, n.ImportClause)
-                ?? VisitNode(cbNode, n.ModuleSpecifier)
-                ?? VisitNode(cbNode, n.Attributes)
-                ?? (n.Comment is string
+                return VisitNode(cbNode, store.TagName(node))
+                ?? VisitNode(cbNode, store.ImportClause(node))
+                ?? VisitNode(cbNode, store.ModuleSpecifier(node))
+                ?? VisitNode(cbNode, store.Attributes(node))
+                ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, n.Comment as NodeArray));
-            }
+                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
             case SyntaxKind.PartiallyEmittedExpression:
-            {
-                var n = (PartiallyEmittedExpression)node;
-                return VisitNode(cbNode, n.Expression);
-            }
+                return VisitNode(cbNode, store.Expression(node));
             default:
                 return null;
         }
     }
 
     // parser.ts visitNode
-    private static T? VisitNode<T>(Func<Node, T?> cbNode, Node? node) where T : class => node is null ? null : cbNode(node);
+    private static T? VisitNode<T>(Func<Node, T?> cbNode, Node node) where T : class => node.IsNone ? null : cbNode(node);
 
     // parser.ts visitNodes
     private static T? VisitNodes<T>(Func<Node, T?> cbNode, Func<NodeArray, T?>? cbNodes, NodeArray? nodes) where T : class

@@ -17,7 +17,7 @@ internal class DiagnosticRelatedInformation
 {
     public DiagnosticCategory Category;
     public int Code;
-    public SourceFile? File;
+    public Node File;
     public int? StartOrUndefined;
     public int? LengthOrUndefined;
 
@@ -103,27 +103,47 @@ internal sealed class AmdDependency
 }
 
 /// <summary>
-/// types.ts: SourceFile, the members the generator leaves to the port (see the comment above SourceFile in
-/// Nodes.g.cs); `pragmas` is declared with the pragma types in Parser.Pragmas.cs.
+/// The result of Parser.CreateSourceFile in Track O: the SourceFile node (types.ts: SourceFile) and the node store
+/// of its parse. The SourceFile node's members are read through the store (Generated/NodeStore.g.cs, including the
+/// members Track F declares by hand: diagnostics, references, pragmas); the ones the tools need are exposed here.
 /// </summary>
-public sealed partial class SourceFile : ISourceFileLike
+internal sealed class SourceFile
 {
-    internal IReadOnlyList<AmdDependency> AmdDependencies = null!;
-    internal IReadOnlyList<FileReference> ReferencedFiles = null!;
-    internal IReadOnlyList<FileReference> TypeReferenceDirectives = null!;
-    internal IReadOnlyList<FileReference> LibReferenceDirectives = null!;
-    internal List<DiagnosticWithLocation> ParseDiagnostics = null!;
-    internal List<DiagnosticWithLocation>? BindDiagnostics;
-    internal List<DiagnosticWithLocation>? BindSuggestionDiagnostics;
-    internal List<DiagnosticWithLocation>? JsDocDiagnostics;
-    internal List<CommentDirective>? CommentDirectives;
-    internal CheckJsDirective? CheckJsDirective;
-
-    string ISourceFileLike.Text => Text;
-
-    IReadOnlyList<int>? ISourceFileLike.LineMap
+    internal SourceFile(NodeStore store, Node root)
     {
-        get => LineMap;
-        set => LineMap = value;
+        Store = store;
+        Root = root;
+    }
+
+    internal NodeStore Store { get; }
+
+    /// <summary>The SourceFile node.</summary>
+    internal Node Root { get; }
+
+    internal int NodeCount => Store.NodeCount(Root);
+
+    internal List<DiagnosticWithLocation> ParseDiagnostics => Store.ParseDiagnostics(Root);
+
+    internal List<DiagnosticWithLocation>? JsDocDiagnostics => Store.JsDocDiagnostics(Root);
+}
+
+/// <summary>A SourceFile node as types.ts' SourceFileLike (text and line map read and written through the store).</summary>
+internal sealed class SourceFileNodeLike : ISourceFileLike
+{
+    private readonly NodeStore store;
+    private readonly Node sourceFile;
+
+    internal SourceFileNodeLike(NodeStore store, Node sourceFile)
+    {
+        this.store = store;
+        this.sourceFile = sourceFile;
+    }
+
+    public string Text => store.Text(sourceFile);
+
+    public IReadOnlyList<int>? LineMap
+    {
+        get => store.LineMap(sourceFile);
+        set => store.SetLineMap(sourceFile, value);
     }
 }

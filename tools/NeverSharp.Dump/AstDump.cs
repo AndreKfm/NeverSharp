@@ -203,6 +203,30 @@ internal static class AstDump
             new CreateSourceFileOptions { LanguageVersion = ScriptTarget.Latest, JsDocParsingMode = mode },
             setParentNodes: false, scriptKind);
         var lines = new List<DumpLine>();
+#if TRACK_OPTIMIZED
+        // Track O: nodes are handles; kind, range, flags, jsDoc and children are read through the parse's store.
+        var store = sourceFile.Store;
+        void Visit(Node node, int depth, bool jsdoc)
+        {
+            var jsDoc = store.JsDoc(node);
+            var kind = store.Kind(node);
+            lines.Add(new DumpLine(depth, KindNames.TryGetValue((int)kind, out var name) ? name : "undefined", store.Pos(node), store.End(node),
+                FlagNames(kind, (int)store.Flags(node), jsDoc is { Count: > 0 }), jsdoc));
+            if (jsDoc is not null)
+            {
+                foreach (var comment in jsDoc)
+                {
+                    Visit(comment, depth + 1, true);
+                }
+            }
+            NodeVisitor.ForEachChild<object>(store, node, child =>
+            {
+                Visit(child, depth + 1, jsdoc);
+                return null;
+            });
+        }
+        Visit(sourceFile.Root, 0, false);
+#else
         void Visit(Node node, int depth, bool jsdoc)
         {
             var jsDoc = JSDocContainers.GetJsDoc(node);
@@ -222,6 +246,7 @@ internal static class AstDump
             });
         }
         Visit(sourceFile, 0, false);
+#endif
         var diag = new List<DumpDiagnostic>();
         foreach (var d in sourceFile.ParseDiagnostics)
         {

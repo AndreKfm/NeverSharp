@@ -20,12 +20,12 @@ internal sealed partial class NodeFactory
     //
 
     // @api
-    internal Block CreateBlock(IReadOnlyList<Node> statements, bool? multiLine = null)
+    internal Node CreateBlock(IReadOnlyList<Node> statements, bool? multiLine = null)
     {
-        var node = CreateBaseNode<Block>(SyntaxKind.Block);
-        node.Statements = CreateNodeArray(statements);
-        node.MultiLine = multiLine == true;
-        node.TransformFlags |= PropagateChildrenFlags(node.Statements);
+        var node = CreateBaseNode(SyntaxKind.Block);
+        store.SetStatements(node, CreateNodeArray(store, statements));
+        store.SetMultiLine(node, multiLine == true);
+        store.SetTransformFlags(node, store.TransformFlags(node) | PropagateChildrenFlags(store.Statements(node)));
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         // node.locals = undefined; // initialized by binder (LocalsContainer)
         // node.nextContainer = undefined; // initialized by binder (LocalsContainer)
@@ -34,16 +34,16 @@ internal sealed partial class NodeFactory
 
     /// <summary>`createVariableStatement(modifiers, declarationList: VariableDeclarationList | readonly VariableDeclaration[])`.</summary>
     // @api
-    internal VariableStatement CreateVariableStatement(IReadOnlyList<Node>? modifiers, object declarationList)
+    internal Node CreateVariableStatement(IReadOnlyList<Node>? modifiers, object declarationList)
     {
-        var node = CreateBaseNode<VariableStatement>(SyntaxKind.VariableStatement);
-        node.Modifiers = AsNodeArray(modifiers);
-        node.DeclarationList = declarationList is IReadOnlyList<Node> list ? CreateVariableDeclarationList(list) : (VariableDeclarationList)declarationList;
-        node.TransformFlags |= PropagateChildrenFlags(node.Modifiers) |
-            PropagateChildFlags(node.DeclarationList);
-        if ((Utilities.ModifiersToFlags(node.Modifiers) & ModifierFlags.Ambient) != 0)
+        var node = CreateBaseNode(SyntaxKind.VariableStatement);
+        store.SetModifiers(node, AsNodeArray(store, modifiers));
+        store.SetDeclarationList(node, declarationList is IReadOnlyList<Node> list ? CreateVariableDeclarationList(list) : Node.FromObject(declarationList));
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildrenFlags(store.Modifiers(node)) |
+            PropagateChildFlags(store, store.DeclarationList(node))));
+        if ((Utilities.ModifiersToFlags(store, store.Modifiers(node)) & ModifierFlags.Ambient) != 0)
         {
-            node.TransformFlags = TransformFlags.ContainsTypeScript;
+            store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
         }
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         // node.flowNode = undefined; // initialized by binder (FlowContainer)
@@ -51,77 +51,77 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal EmptyStatement CreateEmptyStatement()
+    internal Node CreateEmptyStatement()
     {
-        var node = CreateBaseNode<EmptyStatement>(SyntaxKind.EmptyStatement);
+        var node = CreateBaseNode(SyntaxKind.EmptyStatement);
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         return node;
     }
 
     // @api
-    internal ExpressionStatement CreateExpressionStatement(Node expression)
+    internal Node CreateExpressionStatement(Node expression)
     {
-        var node = CreateBaseNode<ExpressionStatement>(SyntaxKind.ExpressionStatement);
-        node.Expression = Parenthesizer.ParenthesizeExpressionOfExpressionStatement(expression);
-        node.TransformFlags |= PropagateChildFlags(node.Expression);
-        // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
-        // node.flowNode = undefined; // initialized by binder (FlowContainer)
-        return node;
-    }
-
-    // @api
-    internal IfStatement CreateIfStatement(Node expression, Node thenStatement, Node? elseStatement = null)
-    {
-        var node = CreateBaseNode<IfStatement>(SyntaxKind.IfStatement);
-        node.Expression = expression;
-        node.ThenStatement = AsEmbeddedStatement(thenStatement)!;
-        node.ElseStatement = AsEmbeddedStatement(elseStatement);
-        node.TransformFlags |= PropagateChildFlags(node.Expression) |
-            PropagateChildFlags(node.ThenStatement) |
-            PropagateChildFlags(node.ElseStatement);
+        var node = CreateBaseNode(SyntaxKind.ExpressionStatement);
+        store.SetExpression(node, Parenthesizer.ParenthesizeExpressionOfExpressionStatement(expression));
+        store.SetTransformFlags(node, store.TransformFlags(node) | PropagateChildFlags(store, store.Expression(node)));
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         // node.flowNode = undefined; // initialized by binder (FlowContainer)
         return node;
     }
 
     // @api
-    internal DoStatement CreateDoStatement(Node statement, Node expression)
+    internal Node CreateIfStatement(Node expression, Node thenStatement, Node elseStatement = default)
     {
-        var node = CreateBaseNode<DoStatement>(SyntaxKind.DoStatement);
-        node.Statement = AsEmbeddedStatement(statement)!;
-        node.Expression = expression;
-        node.TransformFlags |= PropagateChildFlags(node.Statement) |
-            PropagateChildFlags(node.Expression);
+        var node = CreateBaseNode(SyntaxKind.IfStatement);
+        store.SetExpression(node, expression);
+        store.SetThenStatement(node, AsEmbeddedStatement(thenStatement));
+        store.SetElseStatement(node, AsEmbeddedStatement(elseStatement));
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.Expression(node)) |
+            PropagateChildFlags(store, store.ThenStatement(node)) |
+            PropagateChildFlags(store, store.ElseStatement(node))));
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         // node.flowNode = undefined; // initialized by binder (FlowContainer)
         return node;
     }
 
     // @api
-    internal WhileStatement CreateWhileStatement(Node expression, Node statement)
+    internal Node CreateDoStatement(Node statement, Node expression)
     {
-        var node = CreateBaseNode<WhileStatement>(SyntaxKind.WhileStatement);
-        node.Expression = expression;
-        node.Statement = AsEmbeddedStatement(statement)!;
-        node.TransformFlags |= PropagateChildFlags(node.Expression) |
-            PropagateChildFlags(node.Statement);
+        var node = CreateBaseNode(SyntaxKind.DoStatement);
+        store.SetStatement(node, AsEmbeddedStatement(statement));
+        store.SetExpression(node, expression);
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.Statement(node)) |
+            PropagateChildFlags(store, store.Expression(node))));
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         // node.flowNode = undefined; // initialized by binder (FlowContainer)
         return node;
     }
 
     // @api
-    internal ForStatement CreateForStatement(Node? initializer, Node? condition, Node? incrementor, Node statement)
+    internal Node CreateWhileStatement(Node expression, Node statement)
     {
-        var node = CreateBaseNode<ForStatement>(SyntaxKind.ForStatement);
-        node.Initializer = initializer;
-        node.Condition = condition;
-        node.Incrementor = incrementor;
-        node.Statement = AsEmbeddedStatement(statement)!;
-        node.TransformFlags |= PropagateChildFlags(node.Initializer) |
-            PropagateChildFlags(node.Condition) |
-            PropagateChildFlags(node.Incrementor) |
-            PropagateChildFlags(node.Statement);
+        var node = CreateBaseNode(SyntaxKind.WhileStatement);
+        store.SetExpression(node, expression);
+        store.SetStatement(node, AsEmbeddedStatement(statement));
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.Expression(node)) |
+            PropagateChildFlags(store, store.Statement(node))));
+        // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
+        // node.flowNode = undefined; // initialized by binder (FlowContainer)
+        return node;
+    }
+
+    // @api
+    internal Node CreateForStatement(Node initializer, Node condition, Node incrementor, Node statement)
+    {
+        var node = CreateBaseNode(SyntaxKind.ForStatement);
+        store.SetInitializer(node, initializer);
+        store.SetCondition(node, condition);
+        store.SetIncrementor(node, incrementor);
+        store.SetStatement(node, AsEmbeddedStatement(statement));
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.Initializer(node)) |
+            PropagateChildFlags(store, store.Condition(node)) |
+            PropagateChildFlags(store, store.Incrementor(node)) |
+            PropagateChildFlags(store, store.Statement(node))));
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         // node.locals = undefined; // initialized by binder (LocalsContainer)
         // node.nextContainer = undefined; // initialized by binder (LocalsContainer)
@@ -130,15 +130,15 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal ForInStatement CreateForInStatement(Node initializer, Node expression, Node statement)
+    internal Node CreateForInStatement(Node initializer, Node expression, Node statement)
     {
-        var node = CreateBaseNode<ForInStatement>(SyntaxKind.ForInStatement);
-        node.Initializer = initializer;
-        node.Expression = expression;
-        node.Statement = AsEmbeddedStatement(statement)!;
-        node.TransformFlags |= PropagateChildFlags(node.Initializer) |
-            PropagateChildFlags(node.Expression) |
-            PropagateChildFlags(node.Statement);
+        var node = CreateBaseNode(SyntaxKind.ForInStatement);
+        store.SetInitializer(node, initializer);
+        store.SetExpression(node, expression);
+        store.SetStatement(node, AsEmbeddedStatement(statement));
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.Initializer(node)) |
+            PropagateChildFlags(store, store.Expression(node)) |
+            PropagateChildFlags(store, store.Statement(node))));
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         // node.locals = undefined; // initialized by binder (LocalsContainer)
         // node.nextContainer = undefined; // initialized by binder (LocalsContainer)
@@ -147,21 +147,21 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal ForOfStatement CreateForOfStatement(AwaitKeyword? awaitModifier, Node initializer, Node expression, Node statement)
+    internal Node CreateForOfStatement(Node awaitModifier, Node initializer, Node expression, Node statement)
     {
-        var node = CreateBaseNode<ForOfStatement>(SyntaxKind.ForOfStatement);
-        node.AwaitModifier = awaitModifier;
-        node.Initializer = initializer;
-        node.Expression = Parenthesizer.ParenthesizeExpressionForDisallowedComma(expression);
-        node.Statement = AsEmbeddedStatement(statement)!;
-        node.TransformFlags |= PropagateChildFlags(node.AwaitModifier) |
-            PropagateChildFlags(node.Initializer) |
-            PropagateChildFlags(node.Expression) |
-            PropagateChildFlags(node.Statement) |
-            TransformFlags.ContainsES2015;
-        if (awaitModifier != null)
+        var node = CreateBaseNode(SyntaxKind.ForOfStatement);
+        store.SetAwaitModifier(node, awaitModifier);
+        store.SetInitializer(node, initializer);
+        store.SetExpression(node, Parenthesizer.ParenthesizeExpressionForDisallowedComma(expression));
+        store.SetStatement(node, AsEmbeddedStatement(statement));
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.AwaitModifier(node)) |
+            PropagateChildFlags(store, store.Initializer(node)) |
+            PropagateChildFlags(store, store.Expression(node)) |
+            PropagateChildFlags(store, store.Statement(node)) |
+            TransformFlags.ContainsES2015));
+        if (!awaitModifier.IsNone)
         {
-            node.TransformFlags |= TransformFlags.ContainsES2018;
+            store.SetTransformFlags(node, store.TransformFlags(node) | TransformFlags.ContainsES2018);
         }
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         // node.locals = undefined; // initialized by binder (LocalsContainer)
@@ -171,193 +171,193 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal ContinueStatement CreateContinueStatement(object? label = null)
+    internal Node CreateContinueStatement(object? label = null)
     {
-        var node = CreateBaseNode<ContinueStatement>(SyntaxKind.ContinueStatement);
-        node.Label = (Identifier?)AsName(label);
-        node.TransformFlags |= PropagateChildFlags(node.Label) |
-            TransformFlags.ContainsHoistedDeclarationOrCompletion;
+        var node = CreateBaseNode(SyntaxKind.ContinueStatement);
+        store.SetLabel(node, AsName(label));
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.Label(node)) |
+            TransformFlags.ContainsHoistedDeclarationOrCompletion));
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         // node.flowNode = undefined; // initialized by binder (FlowContainer)
         return node;
     }
 
     // @api
-    internal BreakStatement CreateBreakStatement(object? label = null)
+    internal Node CreateBreakStatement(object? label = null)
     {
-        var node = CreateBaseNode<BreakStatement>(SyntaxKind.BreakStatement);
-        node.Label = (Identifier?)AsName(label);
-        node.TransformFlags |= PropagateChildFlags(node.Label) |
-            TransformFlags.ContainsHoistedDeclarationOrCompletion;
+        var node = CreateBaseNode(SyntaxKind.BreakStatement);
+        store.SetLabel(node, AsName(label));
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.Label(node)) |
+            TransformFlags.ContainsHoistedDeclarationOrCompletion));
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         // node.flowNode = undefined; // initialized by binder (FlowContainer)
         return node;
     }
 
     // @api
-    internal ReturnStatement CreateReturnStatement(Node? expression = null)
+    internal Node CreateReturnStatement(Node expression = default)
     {
-        var node = CreateBaseNode<ReturnStatement>(SyntaxKind.ReturnStatement);
-        node.Expression = expression;
+        var node = CreateBaseNode(SyntaxKind.ReturnStatement);
+        store.SetExpression(node, expression);
         // return in an ES2018 async generator must be awaited
-        node.TransformFlags |= PropagateChildFlags(node.Expression) |
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.Expression(node)) |
             TransformFlags.ContainsES2018 |
-            TransformFlags.ContainsHoistedDeclarationOrCompletion;
+            TransformFlags.ContainsHoistedDeclarationOrCompletion));
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         // node.flowNode = undefined; // initialized by binder (FlowContainer)
         return node;
     }
 
     // @api
-    internal WithStatement CreateWithStatement(Node expression, Node statement)
+    internal Node CreateWithStatement(Node expression, Node statement)
     {
-        var node = CreateBaseNode<WithStatement>(SyntaxKind.WithStatement);
-        node.Expression = expression;
-        node.Statement = AsEmbeddedStatement(statement)!;
-        node.TransformFlags |= PropagateChildFlags(node.Expression) |
-            PropagateChildFlags(node.Statement);
+        var node = CreateBaseNode(SyntaxKind.WithStatement);
+        store.SetExpression(node, expression);
+        store.SetStatement(node, AsEmbeddedStatement(statement));
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.Expression(node)) |
+            PropagateChildFlags(store, store.Statement(node))));
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         // node.flowNode = undefined; // initialized by binder (FlowContainer)
         return node;
     }
 
     // @api
-    internal SwitchStatement CreateSwitchStatement(Node expression, CaseBlock caseBlock)
+    internal Node CreateSwitchStatement(Node expression, Node caseBlock)
     {
-        var node = CreateBaseNode<SwitchStatement>(SyntaxKind.SwitchStatement);
-        node.Expression = Parenthesizer.ParenthesizeExpressionForDisallowedComma(expression);
-        node.CaseBlock = caseBlock;
-        node.TransformFlags |= PropagateChildFlags(node.Expression) |
-            PropagateChildFlags(node.CaseBlock);
+        var node = CreateBaseNode(SyntaxKind.SwitchStatement);
+        store.SetExpression(node, Parenthesizer.ParenthesizeExpressionForDisallowedComma(expression));
+        store.SetCaseBlock(node, caseBlock);
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.Expression(node)) |
+            PropagateChildFlags(store, store.CaseBlock(node))));
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         // node.flowNode = undefined; // initialized by binder (FlowContainer)
-        node.PossiblyExhaustive = false; // initialized by binder
+        store.SetPossiblyExhaustive(node, false); // initialized by binder
         return node;
     }
 
     // @api
-    internal LabeledStatement CreateLabeledStatement(object label, Node statement)
+    internal Node CreateLabeledStatement(object label, Node statement)
     {
-        var node = CreateBaseNode<LabeledStatement>(SyntaxKind.LabeledStatement);
-        node.Label = (Identifier)AsName(label)!;
-        node.Statement = AsEmbeddedStatement(statement)!;
-        node.TransformFlags |= PropagateChildFlags(node.Label) |
-            PropagateChildFlags(node.Statement);
-        // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
-        // node.flowNode = undefined; // initialized by binder (FlowContainer)
-        return node;
-    }
-
-    // @api
-    internal ThrowStatement CreateThrowStatement(Node expression)
-    {
-        var node = CreateBaseNode<ThrowStatement>(SyntaxKind.ThrowStatement);
-        node.Expression = expression;
-        node.TransformFlags |= PropagateChildFlags(node.Expression);
+        var node = CreateBaseNode(SyntaxKind.LabeledStatement);
+        store.SetLabel(node, AsName(label));
+        store.SetStatement(node, AsEmbeddedStatement(statement));
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.Label(node)) |
+            PropagateChildFlags(store, store.Statement(node))));
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         // node.flowNode = undefined; // initialized by binder (FlowContainer)
         return node;
     }
 
     // @api
-    internal TryStatement CreateTryStatement(Block tryBlock, CatchClause? catchClause, Block? finallyBlock)
+    internal Node CreateThrowStatement(Node expression)
     {
-        var node = CreateBaseNode<TryStatement>(SyntaxKind.TryStatement);
-        node.TryBlock = tryBlock;
-        node.CatchClause = catchClause;
-        node.FinallyBlock = finallyBlock;
-        node.TransformFlags |= PropagateChildFlags(node.TryBlock) |
-            PropagateChildFlags(node.CatchClause) |
-            PropagateChildFlags(node.FinallyBlock);
+        var node = CreateBaseNode(SyntaxKind.ThrowStatement);
+        store.SetExpression(node, expression);
+        store.SetTransformFlags(node, store.TransformFlags(node) | PropagateChildFlags(store, store.Expression(node)));
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         // node.flowNode = undefined; // initialized by binder (FlowContainer)
         return node;
     }
 
     // @api
-    internal DebuggerStatement CreateDebuggerStatement()
+    internal Node CreateTryStatement(Node tryBlock, Node catchClause, Node finallyBlock)
     {
-        var node = CreateBaseNode<DebuggerStatement>(SyntaxKind.DebuggerStatement);
+        var node = CreateBaseNode(SyntaxKind.TryStatement);
+        store.SetTryBlock(node, tryBlock);
+        store.SetCatchClause(node, catchClause);
+        store.SetFinallyBlock(node, finallyBlock);
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.TryBlock(node)) |
+            PropagateChildFlags(store, store.CatchClause(node)) |
+            PropagateChildFlags(store, store.FinallyBlock(node))));
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         // node.flowNode = undefined; // initialized by binder (FlowContainer)
         return node;
     }
 
     // @api
-    internal VariableDeclaration CreateVariableDeclaration(object? name, ExclamationToken? exclamationToken, Node? type, Node? initializer)
+    internal Node CreateDebuggerStatement()
     {
-        var node = CreateBaseDeclaration<VariableDeclaration>(SyntaxKind.VariableDeclaration);
-        node.Name = AsName(name)!;
-        node.ExclamationToken = exclamationToken;
-        node.Type = type;
-        node.Initializer = AsInitializer(initializer);
-        node.TransformFlags |= PropagateNameFlags(node.Name) |
-            PropagateChildFlags(node.Initializer) |
-            ((node.ExclamationToken ?? node.Type) != null ? TransformFlags.ContainsTypeScript : TransformFlags.None);
+        var node = CreateBaseNode(SyntaxKind.DebuggerStatement);
+        // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
+        // node.flowNode = undefined; // initialized by binder (FlowContainer)
+        return node;
+    }
+
+    // @api
+    internal Node CreateVariableDeclaration(object? name, Node exclamationToken, Node type, Node initializer)
+    {
+        var node = CreateBaseDeclaration(SyntaxKind.VariableDeclaration);
+        store.SetName(node, AsName(name));
+        store.SetExclamationToken(node, exclamationToken);
+        store.SetType(node, type);
+        store.SetInitializer(node, AsInitializer(initializer));
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateNameFlags(store, store.Name(node)) |
+            PropagateChildFlags(store, store.Initializer(node)) |
+            (!((store.ExclamationToken(node) is { IsNone: false } __t1 ? __t1 : store.Type(node))).IsNone ? TransformFlags.ContainsTypeScript : TransformFlags.None)));
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         return node;
     }
 
     // @api
-    internal VariableDeclarationList CreateVariableDeclarationList(IReadOnlyList<Node> declarations, NodeFlags flags = NodeFlags.None)
+    internal Node CreateVariableDeclarationList(IReadOnlyList<Node> declarations, NodeFlags flags = NodeFlags.None)
     {
-        var node = CreateBaseNode<VariableDeclarationList>(SyntaxKind.VariableDeclarationList);
-        node.Flags |= flags & NodeFlags.BlockScoped;
-        node.Declarations = CreateNodeArray(declarations);
-        node.TransformFlags |= PropagateChildrenFlags(node.Declarations) |
-            TransformFlags.ContainsHoistedDeclarationOrCompletion;
+        var node = CreateBaseNode(SyntaxKind.VariableDeclarationList);
+        store.SetFlags(node, store.Flags(node) | (flags & NodeFlags.BlockScoped));
+        store.SetDeclarations(node, CreateNodeArray(store, declarations));
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildrenFlags(store.Declarations(node)) |
+            TransformFlags.ContainsHoistedDeclarationOrCompletion));
         if ((flags & NodeFlags.BlockScoped) != 0)
         {
-            node.TransformFlags |= TransformFlags.ContainsES2015 |
-                TransformFlags.ContainsBlockScopedBinding;
+            store.SetTransformFlags(node, store.TransformFlags(node) | (TransformFlags.ContainsES2015 |
+                TransformFlags.ContainsBlockScopedBinding));
         }
         if ((flags & NodeFlags.Using) != 0)
         {
-            node.TransformFlags |= TransformFlags.ContainsESNext;
+            store.SetTransformFlags(node, store.TransformFlags(node) | TransformFlags.ContainsESNext);
         }
         return node;
     }
 
     // @api
-    internal FunctionDeclaration CreateFunctionDeclaration(
+    internal Node CreateFunctionDeclaration(
         IReadOnlyList<Node>? modifiers,
-        AsteriskToken? asteriskToken,
+        Node asteriskToken,
         object? name,
         IReadOnlyList<Node>? typeParameters,
         IReadOnlyList<Node> parameters,
-        Node? type,
-        Block? body)
+        Node type,
+        Node body)
     {
-        var node = CreateBaseDeclaration<FunctionDeclaration>(SyntaxKind.FunctionDeclaration);
-        node.Modifiers = AsNodeArray(modifiers);
-        node.AsteriskToken = asteriskToken;
-        node.Name = (Identifier?)AsName(name);
-        node.TypeParameters = AsNodeArray(typeParameters);
-        node.Parameters = CreateNodeArray(parameters);
-        node.Type = type;
-        node.Body = body;
-        if (node.Body == null || (Utilities.ModifiersToFlags(node.Modifiers) & ModifierFlags.Ambient) != 0)
+        var node = CreateBaseDeclaration(SyntaxKind.FunctionDeclaration);
+        store.SetModifiers(node, AsNodeArray(store, modifiers));
+        store.SetAsteriskToken(node, asteriskToken);
+        store.SetName(node, AsName(name));
+        store.SetTypeParameters(node, AsNodeArray(store, typeParameters));
+        store.SetParameters(node, CreateNodeArray(store, parameters));
+        store.SetType(node, type);
+        store.SetBody(node, body);
+        if (store.Body(node).IsNone || (Utilities.ModifiersToFlags(store, store.Modifiers(node)) & ModifierFlags.Ambient) != 0)
         {
-            node.TransformFlags = TransformFlags.ContainsTypeScript;
+            store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
         }
         else
         {
-            var isAsync = (Utilities.ModifiersToFlags(node.Modifiers) & ModifierFlags.Async) != 0;
-            var isGenerator = node.AsteriskToken != null;
+            var isAsync = (Utilities.ModifiersToFlags(store, store.Modifiers(node)) & ModifierFlags.Async) != 0;
+            var isGenerator = !store.AsteriskToken(node).IsNone;
             var isAsyncGenerator = isAsync && isGenerator;
-            node.TransformFlags = PropagateChildrenFlags(node.Modifiers) |
-                PropagateChildFlags(node.AsteriskToken) |
-                PropagateNameFlags(node.Name) |
-                PropagateChildrenFlags(node.TypeParameters) |
-                PropagateChildrenFlags(node.Parameters) |
-                PropagateChildFlags(node.Type) |
-                (PropagateChildFlags(node.Body) & ~TransformFlags.ContainsPossibleTopLevelAwait) |
+            store.SetTransformFlags(node, PropagateChildrenFlags(store.Modifiers(node)) |
+                PropagateChildFlags(store, store.AsteriskToken(node)) |
+                PropagateNameFlags(store, store.Name(node)) |
+                PropagateChildrenFlags(store.TypeParameters(node)) |
+                PropagateChildrenFlags(store.Parameters(node)) |
+                PropagateChildFlags(store, store.Type(node)) |
+                (PropagateChildFlags(store, store.Body(node)) & ~TransformFlags.ContainsPossibleTopLevelAwait) |
                 (isAsyncGenerator ? TransformFlags.ContainsES2018 :
                     isAsync ? TransformFlags.ContainsES2017 :
                     isGenerator ? TransformFlags.ContainsGenerator :
                     TransformFlags.None) |
-                (node.TypeParameters != null || node.Type != null ? TransformFlags.ContainsTypeScript : TransformFlags.None) |
-                TransformFlags.ContainsHoistedDeclarationOrCompletion;
+                (store.TypeParameters(node) != null || !store.Type(node).IsNone ? TransformFlags.ContainsTypeScript : TransformFlags.None) |
+                TransformFlags.ContainsHoistedDeclarationOrCompletion);
         }
         // node.typeArguments = undefined; // used in quick info
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
@@ -369,35 +369,35 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal ClassDeclaration CreateClassDeclaration(
+    internal Node CreateClassDeclaration(
         IReadOnlyList<Node>? modifiers,
         object? name,
         IReadOnlyList<Node>? typeParameters,
         IReadOnlyList<Node>? heritageClauses,
         IReadOnlyList<Node> members)
     {
-        var node = CreateBaseDeclaration<ClassDeclaration>(SyntaxKind.ClassDeclaration);
-        node.Modifiers = AsNodeArray(modifiers);
-        node.Name = (Identifier?)AsName(name);
-        node.TypeParameters = AsNodeArray(typeParameters);
-        node.HeritageClauses = AsNodeArray(heritageClauses);
-        node.Members = CreateNodeArray(members);
-        if ((Utilities.ModifiersToFlags(node.Modifiers) & ModifierFlags.Ambient) != 0)
+        var node = CreateBaseDeclaration(SyntaxKind.ClassDeclaration);
+        store.SetModifiers(node, AsNodeArray(store, modifiers));
+        store.SetName(node, AsName(name));
+        store.SetTypeParameters(node, AsNodeArray(store, typeParameters));
+        store.SetHeritageClauses(node, AsNodeArray(store, heritageClauses));
+        store.SetMembers(node, CreateNodeArray(store, members));
+        if ((Utilities.ModifiersToFlags(store, store.Modifiers(node)) & ModifierFlags.Ambient) != 0)
         {
-            node.TransformFlags = TransformFlags.ContainsTypeScript;
+            store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
         }
         else
         {
-            node.TransformFlags |= PropagateChildrenFlags(node.Modifiers) |
-                PropagateNameFlags(node.Name) |
-                PropagateChildrenFlags(node.TypeParameters) |
-                PropagateChildrenFlags(node.HeritageClauses) |
-                PropagateChildrenFlags(node.Members) |
-                (node.TypeParameters != null ? TransformFlags.ContainsTypeScript : TransformFlags.None) |
-                TransformFlags.ContainsES2015;
-            if ((node.TransformFlags & TransformFlags.ContainsTypeScriptClassSyntax) != 0)
+            store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildrenFlags(store.Modifiers(node)) |
+                PropagateNameFlags(store, store.Name(node)) |
+                PropagateChildrenFlags(store.TypeParameters(node)) |
+                PropagateChildrenFlags(store.HeritageClauses(node)) |
+                PropagateChildrenFlags(store.Members(node)!) |
+                (store.TypeParameters(node) != null ? TransformFlags.ContainsTypeScript : TransformFlags.None) |
+                TransformFlags.ContainsES2015));
+            if ((store.TransformFlags(node) & TransformFlags.ContainsTypeScriptClassSyntax) != 0)
             {
-                node.TransformFlags |= TransformFlags.ContainsTypeScript;
+                store.SetTransformFlags(node, store.TransformFlags(node) | TransformFlags.ContainsTypeScript);
             }
         }
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
@@ -405,37 +405,37 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal InterfaceDeclaration CreateInterfaceDeclaration(
+    internal Node CreateInterfaceDeclaration(
         IReadOnlyList<Node>? modifiers,
         object name,
         IReadOnlyList<Node>? typeParameters,
         IReadOnlyList<Node>? heritageClauses,
         IReadOnlyList<Node> members)
     {
-        var node = CreateBaseDeclaration<InterfaceDeclaration>(SyntaxKind.InterfaceDeclaration);
-        node.Modifiers = AsNodeArray(modifiers);
-        node.Name = (Identifier)AsName(name)!;
-        node.TypeParameters = AsNodeArray(typeParameters);
-        node.HeritageClauses = AsNodeArray(heritageClauses);
-        node.Members = CreateNodeArray(members);
-        node.TransformFlags = TransformFlags.ContainsTypeScript;
+        var node = CreateBaseDeclaration(SyntaxKind.InterfaceDeclaration);
+        store.SetModifiers(node, AsNodeArray(store, modifiers));
+        store.SetName(node, AsName(name));
+        store.SetTypeParameters(node, AsNodeArray(store, typeParameters));
+        store.SetHeritageClauses(node, AsNodeArray(store, heritageClauses));
+        store.SetMembers(node, CreateNodeArray(store, members));
+        store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         return node;
     }
 
     // @api
-    internal TypeAliasDeclaration CreateTypeAliasDeclaration(
+    internal Node CreateTypeAliasDeclaration(
         IReadOnlyList<Node>? modifiers,
         object name,
         IReadOnlyList<Node>? typeParameters,
         Node type)
     {
-        var node = CreateBaseDeclaration<TypeAliasDeclaration>(SyntaxKind.TypeAliasDeclaration);
-        node.Modifiers = AsNodeArray(modifiers);
-        node.Name = (Identifier)AsName(name)!;
-        node.TypeParameters = AsNodeArray(typeParameters);
-        node.Type = type;
-        node.TransformFlags = TransformFlags.ContainsTypeScript;
+        var node = CreateBaseDeclaration(SyntaxKind.TypeAliasDeclaration);
+        store.SetModifiers(node, AsNodeArray(store, modifiers));
+        store.SetName(node, AsName(name));
+        store.SetTypeParameters(node, AsNodeArray(store, typeParameters));
+        store.SetType(node, type);
+        store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         // node.locals = undefined; // initialized by binder (LocalsContainer)
         // node.nextContainer = undefined; // initialized by binder (LocalsContainer)
@@ -443,48 +443,48 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal EnumDeclaration CreateEnumDeclaration(
+    internal Node CreateEnumDeclaration(
         IReadOnlyList<Node>? modifiers,
         object name,
         IReadOnlyList<Node> members)
     {
-        var node = CreateBaseDeclaration<EnumDeclaration>(SyntaxKind.EnumDeclaration);
-        node.Modifiers = AsNodeArray(modifiers);
-        node.Name = (Identifier)AsName(name)!;
-        node.Members = CreateNodeArray(members);
-        node.TransformFlags |= PropagateChildrenFlags(node.Modifiers) |
-            PropagateChildFlags(node.Name) |
-            PropagateChildrenFlags(node.Members) |
-            TransformFlags.ContainsTypeScript;
-        node.TransformFlags &= ~TransformFlags.ContainsPossibleTopLevelAwait; // Enum declarations cannot contain `await`
+        var node = CreateBaseDeclaration(SyntaxKind.EnumDeclaration);
+        store.SetModifiers(node, AsNodeArray(store, modifiers));
+        store.SetName(node, AsName(name));
+        store.SetMembers(node, CreateNodeArray(store, members));
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildrenFlags(store.Modifiers(node)) |
+            PropagateChildFlags(store, store.Name(node)) |
+            PropagateChildrenFlags(store.Members(node)!) |
+            TransformFlags.ContainsTypeScript));
+        store.SetTransformFlags(node, store.TransformFlags(node) & (~TransformFlags.ContainsPossibleTopLevelAwait)); // Enum declarations cannot contain `await`
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         return node;
     }
 
     // @api
-    internal ModuleDeclaration CreateModuleDeclaration(
+    internal Node CreateModuleDeclaration(
         IReadOnlyList<Node>? modifiers,
         Node name,
-        Node? body,
+        Node body,
         NodeFlags flags = NodeFlags.None)
     {
-        var node = CreateBaseDeclaration<ModuleDeclaration>(SyntaxKind.ModuleDeclaration);
-        node.Modifiers = AsNodeArray(modifiers);
-        node.Flags |= flags & (NodeFlags.Namespace | NodeFlags.NestedNamespace | NodeFlags.GlobalAugmentation);
-        node.Name = name;
-        node.Body = body;
-        if ((Utilities.ModifiersToFlags(node.Modifiers) & ModifierFlags.Ambient) != 0)
+        var node = CreateBaseDeclaration(SyntaxKind.ModuleDeclaration);
+        store.SetModifiers(node, AsNodeArray(store, modifiers));
+        store.SetFlags(node, store.Flags(node) | (flags & (NodeFlags.Namespace | NodeFlags.NestedNamespace | NodeFlags.GlobalAugmentation)));
+        store.SetName(node, name);
+        store.SetBody(node, body);
+        if ((Utilities.ModifiersToFlags(store, store.Modifiers(node)) & ModifierFlags.Ambient) != 0)
         {
-            node.TransformFlags = TransformFlags.ContainsTypeScript;
+            store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
         }
         else
         {
-            node.TransformFlags |= PropagateChildrenFlags(node.Modifiers) |
-                PropagateChildFlags(node.Name) |
-                PropagateChildFlags(node.Body) |
-                TransformFlags.ContainsTypeScript;
+            store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildrenFlags(store.Modifiers(node)) |
+                PropagateChildFlags(store, store.Name(node)) |
+                PropagateChildFlags(store, store.Body(node)) |
+                TransformFlags.ContainsTypeScript));
         }
-        node.TransformFlags &= ~TransformFlags.ContainsPossibleTopLevelAwait; // Module declarations cannot contain `await`.
+        store.SetTransformFlags(node, store.TransformFlags(node) & (~TransformFlags.ContainsPossibleTopLevelAwait)); // Module declarations cannot contain `await`.
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         // node.locals = undefined; // initialized by binder (LocalsContainer)
         // node.nextContainer = undefined; // initialized by binder (LocalsContainer)
@@ -492,243 +492,243 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal ModuleBlock CreateModuleBlock(IReadOnlyList<Node> statements)
+    internal Node CreateModuleBlock(IReadOnlyList<Node> statements)
     {
-        var node = CreateBaseNode<ModuleBlock>(SyntaxKind.ModuleBlock);
-        node.Statements = CreateNodeArray(statements);
-        node.TransformFlags |= PropagateChildrenFlags(node.Statements);
+        var node = CreateBaseNode(SyntaxKind.ModuleBlock);
+        store.SetStatements(node, CreateNodeArray(store, statements));
+        store.SetTransformFlags(node, store.TransformFlags(node) | PropagateChildrenFlags(store.Statements(node)));
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         return node;
     }
 
     // @api
-    internal CaseBlock CreateCaseBlock(IReadOnlyList<Node> clauses)
+    internal Node CreateCaseBlock(IReadOnlyList<Node> clauses)
     {
-        var node = CreateBaseNode<CaseBlock>(SyntaxKind.CaseBlock);
-        node.Clauses = CreateNodeArray(clauses);
-        node.TransformFlags |= PropagateChildrenFlags(node.Clauses);
+        var node = CreateBaseNode(SyntaxKind.CaseBlock);
+        store.SetClauses(node, CreateNodeArray(store, clauses));
+        store.SetTransformFlags(node, store.TransformFlags(node) | PropagateChildrenFlags(store.Clauses(node)));
         // node.locals = undefined; // initialized by binder (LocalsContainer)
         // node.nextContainer = undefined; // initialized by binder (LocalsContainer)
         return node;
     }
 
     // @api
-    internal NamespaceExportDeclaration CreateNamespaceExportDeclaration(object name)
+    internal Node CreateNamespaceExportDeclaration(object name)
     {
-        var node = CreateBaseDeclaration<NamespaceExportDeclaration>(SyntaxKind.NamespaceExportDeclaration);
-        node.Name = (Identifier)AsName(name)!;
-        node.TransformFlags |= PropagateIdentifierNameFlags(node.Name) |
-            TransformFlags.ContainsTypeScript;
-        node.Modifiers = null; // initialized by parser to report grammar errors
+        var node = CreateBaseDeclaration(SyntaxKind.NamespaceExportDeclaration);
+        store.SetName(node, AsName(name));
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateIdentifierNameFlags(store, store.Name(node)) |
+            TransformFlags.ContainsTypeScript));
+        store.SetModifiers(node, null); // initialized by parser to report grammar errors
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         return node;
     }
 
     // @api
-    internal ImportEqualsDeclaration CreateImportEqualsDeclaration(
+    internal Node CreateImportEqualsDeclaration(
         IReadOnlyList<Node>? modifiers,
         bool isTypeOnly,
         object name,
         Node moduleReference)
     {
-        var node = CreateBaseDeclaration<ImportEqualsDeclaration>(SyntaxKind.ImportEqualsDeclaration);
-        node.Modifiers = AsNodeArray(modifiers);
-        node.Name = (Identifier)AsName(name)!;
-        node.IsTypeOnly = isTypeOnly;
-        node.ModuleReference = moduleReference;
-        node.TransformFlags |= PropagateChildrenFlags(node.Modifiers) |
-            PropagateIdentifierNameFlags(node.Name) |
-            PropagateChildFlags(node.ModuleReference);
-        if (!FactoryNodeTests.IsExternalModuleReference(node.ModuleReference))
+        var node = CreateBaseDeclaration(SyntaxKind.ImportEqualsDeclaration);
+        store.SetModifiers(node, AsNodeArray(store, modifiers));
+        store.SetName(node, AsName(name));
+        store.SetIsTypeOnly(node, isTypeOnly);
+        store.SetModuleReference(node, moduleReference);
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildrenFlags(store.Modifiers(node)) |
+            PropagateIdentifierNameFlags(store, store.Name(node)) |
+            PropagateChildFlags(store, store.ModuleReference(node))));
+        if (!FactoryNodeTests.IsExternalModuleReference(store, store.ModuleReference(node)))
         {
-            node.TransformFlags |= TransformFlags.ContainsTypeScript;
+            store.SetTransformFlags(node, store.TransformFlags(node) | TransformFlags.ContainsTypeScript);
         }
-        node.TransformFlags &= ~TransformFlags.ContainsPossibleTopLevelAwait; // Import= declaration is always parsed in an Await context
+        store.SetTransformFlags(node, store.TransformFlags(node) & (~TransformFlags.ContainsPossibleTopLevelAwait)); // Import= declaration is always parsed in an Await context
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         return node;
     }
 
     // @api
-    internal ImportDeclaration CreateImportDeclaration(
+    internal Node CreateImportDeclaration(
         IReadOnlyList<Node>? modifiers,
-        ImportClause? importClause,
+        Node importClause,
         Node moduleSpecifier,
-        ImportAttributes? attributes)
+        Node attributes)
     {
-        var node = CreateBaseNode<ImportDeclaration>(SyntaxKind.ImportDeclaration);
-        node.Modifiers = AsNodeArray(modifiers);
-        node.ImportClause = importClause;
-        node.ModuleSpecifier = moduleSpecifier;
-        node.Attributes = attributes;
-        node.AssertClause = attributes;
-        node.TransformFlags |= PropagateChildFlags(node.ImportClause) |
-            PropagateChildFlags(node.ModuleSpecifier);
-        node.TransformFlags &= ~TransformFlags.ContainsPossibleTopLevelAwait; // always parsed in an Await context
+        var node = CreateBaseNode(SyntaxKind.ImportDeclaration);
+        store.SetModifiers(node, AsNodeArray(store, modifiers));
+        store.SetImportClause(node, importClause);
+        store.SetModuleSpecifier(node, moduleSpecifier);
+        store.SetAttributes(node, attributes);
+        store.SetAssertClause(node, attributes);
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.ImportClause(node)) |
+            PropagateChildFlags(store, store.ModuleSpecifier(node))));
+        store.SetTransformFlags(node, store.TransformFlags(node) & (~TransformFlags.ContainsPossibleTopLevelAwait)); // always parsed in an Await context
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         return node;
     }
 
     /// <summary>`createImportClause(phaseModifier: ImportPhaseModifierSyntaxKind | boolean | undefined, ...)` with a boolean.</summary>
     // @api
-    internal ImportClause CreateImportClause(bool phaseModifier, Identifier? name, Node? namedBindings)
+    internal Node CreateImportClause(bool phaseModifier, Node name, Node namedBindings)
     {
         return CreateImportClause(phaseModifier ? (SyntaxKind?)SyntaxKind.TypeKeyword : null, name, namedBindings);
     }
 
     /// <summary>`createImportClause(phaseModifier: ImportPhaseModifierSyntaxKind | boolean | undefined, ...)` with a kind or undefined.</summary>
     // @api
-    internal ImportClause CreateImportClause(SyntaxKind? phaseModifier, Identifier? name, Node? namedBindings)
+    internal Node CreateImportClause(SyntaxKind? phaseModifier, Node name, Node namedBindings)
     {
-        var node = CreateBaseDeclaration<ImportClause>(SyntaxKind.ImportClause);
-        node.IsTypeOnly = phaseModifier == SyntaxKind.TypeKeyword;
+        var node = CreateBaseDeclaration(SyntaxKind.ImportClause);
+        store.SetIsTypeOnly(node, phaseModifier == SyntaxKind.TypeKeyword);
         // (TypeScript stores undefined; the generated field is a SyntaxKind, so undefined is SyntaxKind.Unknown.)
-        node.PhaseModifier = phaseModifier ?? SyntaxKind.Unknown;
-        node.Name = name;
-        node.NamedBindings = namedBindings;
-        node.TransformFlags |= PropagateChildFlags(node.Name) |
-            PropagateChildFlags(node.NamedBindings);
+        store.SetPhaseModifier(node, phaseModifier ?? SyntaxKind.Unknown);
+        store.SetName(node, name);
+        store.SetNamedBindings(node, namedBindings);
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.Name(node)) |
+            PropagateChildFlags(store, store.NamedBindings(node))));
         if (phaseModifier == SyntaxKind.TypeKeyword)
         {
-            node.TransformFlags |= TransformFlags.ContainsTypeScript;
+            store.SetTransformFlags(node, store.TransformFlags(node) | TransformFlags.ContainsTypeScript);
         }
-        node.TransformFlags &= ~TransformFlags.ContainsPossibleTopLevelAwait; // always parsed in an Await context
+        store.SetTransformFlags(node, store.TransformFlags(node) & (~TransformFlags.ContainsPossibleTopLevelAwait)); // always parsed in an Await context
         return node;
     }
 
     // @api
-    internal ImportAttributes CreateImportAttributes(IReadOnlyList<Node> elements, bool? multiLine = null, SyntaxKind? token = null)
+    internal Node CreateImportAttributes(IReadOnlyList<Node> elements, bool? multiLine = null, SyntaxKind? token = null)
     {
-        var node = CreateBaseNode<ImportAttributes>(SyntaxKind.ImportAttributes);
-        node.Token = token ?? SyntaxKind.WithKeyword;
-        node.Elements = CreateNodeArray(elements);
-        node.MultiLine = multiLine == true;
-        node.TransformFlags |= TransformFlags.ContainsESNext;
+        var node = CreateBaseNode(SyntaxKind.ImportAttributes);
+        store.SetToken(node, token ?? SyntaxKind.WithKeyword);
+        store.SetElements(node, CreateNodeArray(store, elements));
+        store.SetMultiLine(node, multiLine == true);
+        store.SetTransformFlags(node, store.TransformFlags(node) | TransformFlags.ContainsESNext);
         return node;
     }
 
     // @api
-    internal ImportAttribute CreateImportAttribute(Node name, Node value)
+    internal Node CreateImportAttribute(Node name, Node value)
     {
-        var node = CreateBaseNode<ImportAttribute>(SyntaxKind.ImportAttribute);
-        node.Name = name;
-        node.Value = value;
-        node.TransformFlags |= TransformFlags.ContainsESNext;
+        var node = CreateBaseNode(SyntaxKind.ImportAttribute);
+        store.SetName(node, name);
+        store.SetValue(node, value);
+        store.SetTransformFlags(node, store.TransformFlags(node) | TransformFlags.ContainsESNext);
         return node;
     }
 
     // @api
-    internal NamespaceImport CreateNamespaceImport(Identifier name)
+    internal Node CreateNamespaceImport(Node name)
     {
-        var node = CreateBaseDeclaration<NamespaceImport>(SyntaxKind.NamespaceImport);
-        node.Name = name;
-        node.TransformFlags |= PropagateChildFlags(node.Name);
-        node.TransformFlags &= ~TransformFlags.ContainsPossibleTopLevelAwait; // always parsed in an Await context
+        var node = CreateBaseDeclaration(SyntaxKind.NamespaceImport);
+        store.SetName(node, name);
+        store.SetTransformFlags(node, store.TransformFlags(node) | PropagateChildFlags(store, store.Name(node)));
+        store.SetTransformFlags(node, store.TransformFlags(node) & (~TransformFlags.ContainsPossibleTopLevelAwait)); // always parsed in an Await context
         return node;
     }
 
     // @api
-    internal NamespaceExport CreateNamespaceExport(Node name)
+    internal Node CreateNamespaceExport(Node name)
     {
-        var node = CreateBaseDeclaration<NamespaceExport>(SyntaxKind.NamespaceExport);
-        node.Name = name;
-        node.TransformFlags |= PropagateChildFlags(node.Name) |
-            TransformFlags.ContainsES2020;
-        node.TransformFlags &= ~TransformFlags.ContainsPossibleTopLevelAwait; // always parsed in an Await context
+        var node = CreateBaseDeclaration(SyntaxKind.NamespaceExport);
+        store.SetName(node, name);
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.Name(node)) |
+            TransformFlags.ContainsES2020));
+        store.SetTransformFlags(node, store.TransformFlags(node) & (~TransformFlags.ContainsPossibleTopLevelAwait)); // always parsed in an Await context
         return node;
     }
 
     // @api
-    internal NamedImports CreateNamedImports(IReadOnlyList<Node> elements)
+    internal Node CreateNamedImports(IReadOnlyList<Node> elements)
     {
-        var node = CreateBaseNode<NamedImports>(SyntaxKind.NamedImports);
-        node.Elements = CreateNodeArray(elements);
-        node.TransformFlags |= PropagateChildrenFlags(node.Elements);
-        node.TransformFlags &= ~TransformFlags.ContainsPossibleTopLevelAwait; // always parsed in an Await context
+        var node = CreateBaseNode(SyntaxKind.NamedImports);
+        store.SetElements(node, CreateNodeArray(store, elements));
+        store.SetTransformFlags(node, store.TransformFlags(node) | PropagateChildrenFlags(store.Elements(node)));
+        store.SetTransformFlags(node, store.TransformFlags(node) & (~TransformFlags.ContainsPossibleTopLevelAwait)); // always parsed in an Await context
         return node;
     }
 
     // @api
-    internal ImportSpecifier CreateImportSpecifier(bool isTypeOnly, Node? propertyName, Identifier name)
+    internal Node CreateImportSpecifier(bool isTypeOnly, Node propertyName, Node name)
     {
-        var node = CreateBaseDeclaration<ImportSpecifier>(SyntaxKind.ImportSpecifier);
-        node.IsTypeOnly = isTypeOnly;
-        node.PropertyName = propertyName;
-        node.Name = name;
-        node.TransformFlags |= PropagateChildFlags(node.PropertyName) |
-            PropagateChildFlags(node.Name);
-        node.TransformFlags &= ~TransformFlags.ContainsPossibleTopLevelAwait; // always parsed in an Await context
+        var node = CreateBaseDeclaration(SyntaxKind.ImportSpecifier);
+        store.SetIsTypeOnly(node, isTypeOnly);
+        store.SetPropertyName(node, propertyName);
+        store.SetName(node, name);
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.PropertyName(node)) |
+            PropagateChildFlags(store, store.Name(node))));
+        store.SetTransformFlags(node, store.TransformFlags(node) & (~TransformFlags.ContainsPossibleTopLevelAwait)); // always parsed in an Await context
         return node;
     }
 
     // @api
-    internal ExportAssignment CreateExportAssignment(
+    internal Node CreateExportAssignment(
         IReadOnlyList<Node>? modifiers,
         bool? isExportEquals,
         Node expression)
     {
-        var node = CreateBaseDeclaration<ExportAssignment>(SyntaxKind.ExportAssignment);
-        node.Modifiers = AsNodeArray(modifiers);
-        node.IsExportEquals = isExportEquals == true;
-        node.Expression = isExportEquals == true
-            ? Parenthesizer.ParenthesizeRightSideOfBinary(SyntaxKind.EqualsToken, /*leftSide*/ null, expression)
-            : Parenthesizer.ParenthesizeExpressionOfExportDefault(expression);
-        node.TransformFlags |= PropagateChildrenFlags(node.Modifiers) | PropagateChildFlags(node.Expression);
-        node.TransformFlags &= ~TransformFlags.ContainsPossibleTopLevelAwait; // always parsed in an Await context
+        var node = CreateBaseDeclaration(SyntaxKind.ExportAssignment);
+        store.SetModifiers(node, AsNodeArray(store, modifiers));
+        store.SetIsExportEquals(node, isExportEquals == true);
+        store.SetExpression(node, isExportEquals == true
+            ? Parenthesizer.ParenthesizeRightSideOfBinary(SyntaxKind.EqualsToken, /*leftSide*/ default, expression)
+            : Parenthesizer.ParenthesizeExpressionOfExportDefault(expression));
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildrenFlags(store.Modifiers(node)) | PropagateChildFlags(store, store.Expression(node))));
+        store.SetTransformFlags(node, store.TransformFlags(node) & (~TransformFlags.ContainsPossibleTopLevelAwait)); // always parsed in an Await context
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         return node;
     }
 
     // @api
-    internal ExportDeclaration CreateExportDeclaration(
+    internal Node CreateExportDeclaration(
         IReadOnlyList<Node>? modifiers,
         bool isTypeOnly,
-        Node? exportClause,
-        Node? moduleSpecifier = null,
-        ImportAttributes? attributes = null)
+        Node exportClause,
+        Node moduleSpecifier = default,
+        Node attributes = default)
     {
-        var node = CreateBaseDeclaration<ExportDeclaration>(SyntaxKind.ExportDeclaration);
-        node.Modifiers = AsNodeArray(modifiers);
-        node.IsTypeOnly = isTypeOnly;
-        node.ExportClause = exportClause;
-        node.ModuleSpecifier = moduleSpecifier;
-        node.Attributes = attributes;
-        node.AssertClause = attributes;
-        node.TransformFlags |= PropagateChildrenFlags(node.Modifiers) |
-            PropagateChildFlags(node.ExportClause) |
-            PropagateChildFlags(node.ModuleSpecifier);
-        node.TransformFlags &= ~TransformFlags.ContainsPossibleTopLevelAwait; // always parsed in an Await context
+        var node = CreateBaseDeclaration(SyntaxKind.ExportDeclaration);
+        store.SetModifiers(node, AsNodeArray(store, modifiers));
+        store.SetIsTypeOnly(node, isTypeOnly);
+        store.SetExportClause(node, exportClause);
+        store.SetModuleSpecifier(node, moduleSpecifier);
+        store.SetAttributes(node, attributes);
+        store.SetAssertClause(node, attributes);
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildrenFlags(store.Modifiers(node)) |
+            PropagateChildFlags(store, store.ExportClause(node)) |
+            PropagateChildFlags(store, store.ModuleSpecifier(node))));
+        store.SetTransformFlags(node, store.TransformFlags(node) & (~TransformFlags.ContainsPossibleTopLevelAwait)); // always parsed in an Await context
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         return node;
     }
 
     // @api
-    internal NamedExports CreateNamedExports(IReadOnlyList<Node> elements)
+    internal Node CreateNamedExports(IReadOnlyList<Node> elements)
     {
-        var node = CreateBaseNode<NamedExports>(SyntaxKind.NamedExports);
-        node.Elements = CreateNodeArray(elements);
-        node.TransformFlags |= PropagateChildrenFlags(node.Elements);
-        node.TransformFlags &= ~TransformFlags.ContainsPossibleTopLevelAwait; // always parsed in an Await context
+        var node = CreateBaseNode(SyntaxKind.NamedExports);
+        store.SetElements(node, CreateNodeArray(store, elements));
+        store.SetTransformFlags(node, store.TransformFlags(node) | PropagateChildrenFlags(store.Elements(node)));
+        store.SetTransformFlags(node, store.TransformFlags(node) & (~TransformFlags.ContainsPossibleTopLevelAwait)); // always parsed in an Await context
         return node;
     }
 
     // @api
-    internal ExportSpecifier CreateExportSpecifier(bool isTypeOnly, object? propertyName, object name)
+    internal Node CreateExportSpecifier(bool isTypeOnly, object? propertyName, object name)
     {
-        var node = CreateBaseNode<ExportSpecifier>(SyntaxKind.ExportSpecifier);
-        node.IsTypeOnly = isTypeOnly;
-        node.PropertyName = AsName(propertyName);
-        node.Name = AsName(name)!;
-        node.TransformFlags |= PropagateChildFlags(node.PropertyName) |
-            PropagateChildFlags(node.Name);
-        node.TransformFlags &= ~TransformFlags.ContainsPossibleTopLevelAwait; // always parsed in an Await context
+        var node = CreateBaseNode(SyntaxKind.ExportSpecifier);
+        store.SetIsTypeOnly(node, isTypeOnly);
+        store.SetPropertyName(node, AsName(propertyName));
+        store.SetName(node, AsName(name));
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.PropertyName(node)) |
+            PropagateChildFlags(store, store.Name(node))));
+        store.SetTransformFlags(node, store.TransformFlags(node) & (~TransformFlags.ContainsPossibleTopLevelAwait)); // always parsed in an Await context
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         return node;
     }
 
     // @api
-    internal MissingDeclaration CreateMissingDeclaration()
+    internal Node CreateMissingDeclaration()
     {
-        var node = CreateBaseDeclaration<MissingDeclaration>(SyntaxKind.MissingDeclaration);
+        var node = CreateBaseDeclaration(SyntaxKind.MissingDeclaration);
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         return node;
     }
@@ -738,12 +738,12 @@ internal sealed partial class NodeFactory
     //
 
     // @api
-    internal ExternalModuleReference CreateExternalModuleReference(Node expression)
+    internal Node CreateExternalModuleReference(Node expression)
     {
-        var node = CreateBaseNode<ExternalModuleReference>(SyntaxKind.ExternalModuleReference);
-        node.Expression = expression;
-        node.TransformFlags |= PropagateChildFlags(node.Expression);
-        node.TransformFlags &= ~TransformFlags.ContainsPossibleTopLevelAwait; // always parsed in an Await context
+        var node = CreateBaseNode(SyntaxKind.ExternalModuleReference);
+        store.SetExpression(node, expression);
+        store.SetTransformFlags(node, store.TransformFlags(node) | PropagateChildFlags(store, store.Expression(node)));
+        store.SetTransformFlags(node, store.TransformFlags(node) & (~TransformFlags.ContainsPossibleTopLevelAwait)); // always parsed in an Await context
         return node;
     }
 }
