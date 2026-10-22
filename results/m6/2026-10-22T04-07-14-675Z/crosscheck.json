@@ -1,0 +1,76 @@
+{
+ "runId": "2026-10-22T04-07-14-675Z",
+ "fixedCostSeconds": 0.014163350000000002,
+ "rows": [
+  {
+   "repo": "vscode",
+   "files": 11724,
+   "tsgoParseSeconds": 1.043,
+   "tsgoParseRuns": [
+    1.282,
+    1.028,
+    1.127,
+    1.043,
+    0.979
+   ],
+   "driverParseSeconds": 1.04489385,
+   "ratio": 1.0018157718120806
+  },
+  {
+   "repo": "sentry",
+   "files": 8932,
+   "tsgoParseSeconds": 0.53,
+   "tsgoParseRuns": [
+    0.644,
+    0.543,
+    0.526,
+    0.504,
+    0.53
+   ],
+   "driverParseSeconds": 0.3984416,
+   "ratio": 0.7517766037735849
+  },
+  {
+   "repo": "bluesky",
+   "files": 1688,
+   "tsgoParseSeconds": 0.114,
+   "tsgoParseRuns": [
+    0.134,
+    0.108,
+    0.123,
+    0.111,
+    0.114
+   ],
+   "driverParseSeconds": 0.08889175,
+   "ratio": 0.7797521929824561
+  },
+  {
+   "repo": "playwright",
+   "files": 1415,
+   "tsgoParseSeconds": 0.135,
+   "tsgoParseRuns": [
+    0.152,
+    0.14,
+    0.135,
+    0.126,
+    0.132
+   ],
+   "driverParseSeconds": 0.1269724,
+   "ratio": 0.9405362962962963
+  },
+  {
+   "repo": "tldraw",
+   "files": 2508,
+   "tsgoParseSeconds": 0.18,
+   "tsgoParseRuns": [
+    0.194,
+    0.17,
+    0.163,
+    0.191,
+    0.18
+   ],
+   "driverParseSeconds": 0.13755435000000002,
+   "ratio": 0.7641908333333335
+  }
+ ]
+}
