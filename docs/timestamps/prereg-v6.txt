@@ -1,0 +1,21 @@
+NeverSharp pre-registration timestamp
+
+tag:                 prereg/v6
+tag object:          b13d982c88bd4ba30ea52a7d1b03c7b788b068e7
+tagged commit:       374bdcaa9a38a5a81ca331875470032cbaa1eda5
+commit tree:         683b6fc58289cb01f690a7ea12bd0ec5fda1ffc3
+commit date:         2026-10-22T19:27:40+02:00
+
+SHA-256 of files at the tagged commit (content as stored in git, `git show <commit>:<path> | sha256sum`):
+docs/preregistration.md                     43cd0eaa72499370821e39a29da3aa9d06ee8ba298bab70b89828e5d616189a5
+docs/phase1-plan.md                         cfcc59b98fd3df87a8218c3ed1a635e7dc3c2d9f34d5bc863adbf2539f6bb1bc
+docs/benchmark-harness.md                   9c4a2496cf9d4018c4f02e45313278473af90c2dd037133dccb2c9490cbc5961
+docs/references.md                          838be041ed2dd98ab998dc498d988562ab3aa63c1b4c26522c49abbf6488b9e6
+pins.json                                   d80f5bea7ff497eee20cdc801f4d968c4ea788c6d3c057effbad512ed814816d
+eng/Gate2.Optimized.props                   126d001b31867b0c0f9083507e9c7f13b7bcc006104707887e2d30949b0ae82f
+eng/simd.noalloc-allowlist.toml             91a2efee2d2f9e2197be29f1f7eacf5ec5c4a08ef3f785c5760802f1476f6e16
+eng/optimized.noalloc-allowlist.toml        b36efa146c020eb85066e908346623cecb6d64daf25ff482d52f3e9f3965ff26
+harness/bench/report.mjs                    19946ccfb6252aaedc45d6a4c7a46ede6b888806ee102a168b0d3c73265b9a70
+harness/bench/bench.mjs                     51277a2d35418957228f0e2cabc3d2d4249ffbcffab4cf0fcf06070fc258f0bf
+
+Verify: ots verify docs/timestamps/prereg-v6.txt.ots  (after the proof has been upgraded with ots upgrade)
