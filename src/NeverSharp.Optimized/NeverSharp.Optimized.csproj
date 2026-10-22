@@ -13,6 +13,7 @@
     <!-- Ported code is internal; the gates, the dump tool, the drivers and the benchmarks reach it as for Track F. -->
     <InternalsVisibleTo Include="NeverSharp.Optimized.Tests" />
     <InternalsVisibleTo Include="NeverSharp.Dump.Optimized" />
+    <InternalsVisibleTo Include="NeverSharp.ReaderCheck" />
     <InternalsVisibleTo Include="parse-cs-optimized-aot-ws" />
     <InternalsVisibleTo Include="parse-cs-optimized-aot-srv" />
     <InternalsVisibleTo Include="parse-cs-optimized-jit-ws" />

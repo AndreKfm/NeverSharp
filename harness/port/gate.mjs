@@ -85,6 +85,10 @@ if (moduleId === "M34" || moduleId === "M5") {
         { timeout: 30 * 60 * 1000, showOutput: true });
     if (dumped) gate("g1-none-compare", node, ["harness/astdump/compare-ast.mjs", "--jsdoc-mode", "none", "--corpus", corpus, "--actual", actual, "--show", "15"], { showOutput: true });
 }
+if (track === "optimized") {
+    // Step O1: Track O reads files itself; its reader against ts.sys.readFile's semantics on every corpus file.
+    gate("reader-check", "dotnet", ["run", "-c", "Release", "--project", "tools/NeverSharp.ReaderCheck", "--", "--main", main], { showOutput: true });
+}
 if (moduleId === "M5") {
     // Gate 1 proper: AST dump with JSDocParsingMode.ParseAll, including the JSDoc section, byte-identical to tsc 6.0.3's (dumps/ts).
     const corpus = join(main, "artifacts", "equivalence");

@@ -256,6 +256,16 @@ internal sealed partial class Parser
         store.SetExternalModuleIndicator(sourceFile, indicator.IsNone ? null : indicator);
     }
 
+    /// <summary>
+    /// Track O (step O1 seam): reads the file at <paramref name="path"/> through <see cref="SourceText.Read"/> and
+    /// parses it, as tsc's compiler host does (read, then createSourceFile). The parse-only driver calls this.
+    /// </summary>
+    internal static SourceFile ParseFile(string path, string fileName, CreateSourceFileOptions options, bool setParentNodes = false, ScriptKind? scriptKind = null)
+    {
+        var text = SourceText.Read(path);
+        return CreateSourceFile(fileName, text.Text, options, setParentNodes, scriptKind);
+    }
+
     internal static SourceFile CreateSourceFile(string fileName, string sourceText, ScriptTarget languageVersion, bool setParentNodes = false, ScriptKind? scriptKind = null)
     {
         return CreateSourceFile(fileName, sourceText, new CreateSourceFileOptions { LanguageVersion = languageVersion }, setParentNodes, scriptKind);

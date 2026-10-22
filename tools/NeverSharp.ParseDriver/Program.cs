@@ -51,8 +51,13 @@ var options = new CreateSourceFileOptions { LanguageVersion = ScriptTarget.Lates
 
 void ParseOne(int i)
 {
+#if TRACK_OPTIMIZED
+    // Track O reads files itself (step O1: SourceText.Read, sys.ts semantics, checked by tools/NeverSharp.ReaderCheck).
+    sourceFiles[i] = Parser.ParseFile(files[i], files[i].Replace('\\', '/'), options, setParentNodes: false, KindOf(files[i]));
+#else
     texts[i] = ReadFile(files[i]);
     sourceFiles[i] = Parser.CreateSourceFile(files[i].Replace('\\', '/'), texts[i], options, setParentNodes: false, KindOf(files[i]));
+#endif
 }
 
 if (single)
@@ -76,7 +81,11 @@ else
 long chars = 0, nodes = 0;
 for (var i = 0; i < files.Length; i++)
 {
+#if TRACK_OPTIMIZED
+    chars += sourceFiles[i].TextLength;
+#else
     chars += texts[i].Length;
+#endif
     nodes += sourceFiles[i].NodeCount;
 }
 
@@ -107,7 +116,8 @@ static ScriptKind KindOf(string name) => Path.GetExtension(name).ToLowerInvarian
     _ => ScriptKind.Unknown,
 };
 
-// sys.ts readFile: byte order marks decide the encoding, UTF-8 otherwise.
+// sys.ts readFile: byte order marks decide the encoding, UTF-8 otherwise (Track F; Track O reads through SourceText).
+#if !TRACK_OPTIMIZED
 static string ReadFile(string path)
 {
     var bytes = File.ReadAllBytes(path);
@@ -125,3 +135,4 @@ static string ReadFile(string path)
     }
     return Encoding.UTF8.GetString(bytes);
 }
+#endif

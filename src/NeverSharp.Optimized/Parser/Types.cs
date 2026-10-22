@@ -128,6 +128,10 @@ internal sealed class SourceFile
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal int NodeCount => Store.NodeCount(Root);
 
+    /// <summary>Length of the source text in UTF-16 code units (the parse-only driver reports it).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal int TextLength => Store.Texts.Source.Length;
+
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal List<DiagnosticWithLocation> ParseDiagnostics => Store.ParseDiagnostics(Root);
 

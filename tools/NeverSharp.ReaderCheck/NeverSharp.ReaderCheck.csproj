@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Reader check of Track O (step O1): Track O's SourceText.Read against the semantics of ts.sys.readFile on every
+    file of the parse-only file lists (benchmark repositories and tuning corpus) and every equivalence unit.
+    Gate 1 does not cover Track O's reader: the dump writers read files themselves.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>NeverSharp.ReaderCheck</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="$(RepoRoot)src/NeverSharp.Optimized/NeverSharp.Optimized.csproj" />
+  </ItemGroup>
+</Project>
