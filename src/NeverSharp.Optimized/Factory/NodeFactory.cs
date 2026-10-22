@@ -154,11 +154,11 @@ internal sealed partial class NodeFactory
     //
 
     // @api
-    internal Node CreateNumericLiteral(string value, TokenFlags? numericLiteralFlags = null)
+    internal Node CreateNumericLiteral(TextRef value, TokenFlags? numericLiteralFlags = null)
     {
         var flagsValue = numericLiteralFlags ?? TokenFlags.None;
         var text = value;
-        Debug.Assert(text.Length == 0 || text[0] != (char)CharacterCodes.minus, "Negative numbers should be created in combination with createPrefixUnaryExpression");
+        Debug.Assert(text.Length <= 0 || store.Texts.Span(text)[0] != (char)CharacterCodes.minus, "Negative numbers should be created in combination with createPrefixUnaryExpression");
         var node = CreateBaseDeclaration(SyntaxKind.NumericLiteral);
         store.SetText(node, text);
         store.SetNumericLiteralFlags(node, flagsValue);
@@ -173,11 +173,11 @@ internal sealed partial class NodeFactory
     internal Node CreateNumericLiteral(double value, TokenFlags? numericLiteralFlags = null)
     {
         // `typeof value === "number" ? value + "" : value`
-        return CreateNumericLiteral(JsNumber.ToString(value), numericLiteralFlags);
+        return CreateNumericLiteral(store.Texts.Add(JsNumber.ToString(value)), numericLiteralFlags);
     }
 
     // @api
-    internal Node CreateBigIntLiteral(string value)
+    internal Node CreateBigIntLiteral(TextRef value)
     {
         // TypeScript: `value: string | PseudoBigInt`; the parser passes the literal's text.
         var node = CreateBaseToken(SyntaxKind.BigIntLiteral);
@@ -186,7 +186,7 @@ internal sealed partial class NodeFactory
         return node;
     }
 
-    private Node CreateBaseStringLiteral(string text, bool? isSingleQuote)
+    private Node CreateBaseStringLiteral(TextRef text, bool? isSingleQuote)
     {
         var node = CreateBaseDeclaration(SyntaxKind.StringLiteral);
         store.SetText(node, text);
@@ -195,7 +195,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateStringLiteral(string text, bool? isSingleQuote = null, bool? hasExtendedUnicodeEscape = null)
+    internal Node CreateStringLiteral(TextRef text, bool? isSingleQuote = null, bool? hasExtendedUnicodeEscape = null)
     {
         var node = CreateBaseStringLiteral(text, isSingleQuote);
         store.SetHasExtendedUnicodeEscape(node, hasExtendedUnicodeEscape == true);
@@ -207,7 +207,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateRegularExpressionLiteral(string text)
+    internal Node CreateRegularExpressionLiteral(TextRef text)
     {
         var node = CreateBaseToken(SyntaxKind.RegularExpressionLiteral);
         store.SetText(node, text);
@@ -218,7 +218,7 @@ internal sealed partial class NodeFactory
     // Identifiers
     //
 
-    private Node CreateBaseIdentifier(string escapedText)
+    private Node CreateBaseIdentifier(TextRef escapedText)
     {
         var node = baseFactory.CreateBaseIdentifierNode(SyntaxKind.Identifier);
         store.SetEscapedText(node, escapedText);
@@ -227,27 +227,20 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateIdentifier(string text, SyntaxKind? originalKeywordKind = null, bool? hasExtendedUnicodeEscape = null)
+    internal Node CreateIdentifier(TextRef text, SyntaxKind? originalKeywordKind = null, bool? hasExtendedUnicodeEscape = null)
     {
-        if (originalKeywordKind == null && text.Length != 0)
-        {
-            originalKeywordKind = Scanner.StringToToken(text);
-        }
-        if (originalKeywordKind == SyntaxKind.Identifier)
-        {
-            originalKeywordKind = null;
-        }
-        // (originalKeywordKind is not stored on the node; TypeScript computes it as above and does not use it further.)
+        // (Track O: originalKeywordKind is computed only to be dropped below; the lookup of stringToToken is left out.)
+        // (originalKeywordKind is not stored on the node; TypeScript computes it from the text and does not use it further.)
         _ = originalKeywordKind;
 
-        var node = CreateBaseIdentifier(UtilitiesPublic.EscapeLeadingUnderscores(text));
+        var node = CreateBaseIdentifier(UtilitiesPublic.EscapeLeadingUnderscores(store.Texts, text));
         if (hasExtendedUnicodeEscape == true)
         {
             store.SetFlags(node, store.Flags(node) | NodeFlags.IdentifierHasExtendedUnicodeEscape);
         }
 
         // NOTE: we do not include transform flags of typeArguments in an identifier as they do not contribute to transformations
-        if ((string)store.EscapedText(node)! == "await")
+        if (store.Texts.Equals(store.EscapedText(node), "await"))
         {
             store.SetTransformFlags(node, store.TransformFlags(node) | TransformFlags.ContainsPossibleTopLevelAwait);
         }
@@ -259,7 +252,13 @@ internal sealed partial class NodeFactory
         return node;
     }
 
-    private Node CreateBasePrivateIdentifier(string escapedText)
+    /// <summary>Track O (O5a): createIdentifier with a constant text (the factory's default tag names), put in the character arena.</summary>
+    internal Node CreateIdentifier(string text)
+    {
+        return CreateIdentifier(store.Texts.Add(text));
+    }
+
+    private Node CreateBasePrivateIdentifier(TextRef escapedText)
     {
         var node = baseFactory.CreateBasePrivateIdentifierNode(SyntaxKind.PrivateIdentifier);
         store.SetEscapedText(node, escapedText);
@@ -268,13 +267,13 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreatePrivateIdentifier(string text)
+    internal Node CreatePrivateIdentifier(TextRef text)
     {
-        if (!Core.StartsWith(text, "#"))
+        if (!store.Texts.Span(text).StartsWith("#"))
         {
-            Debug.Fail("First character of private identifier must be #: " + text);
+            Debug.Fail("First character of private identifier must be #: " + store.Texts.GetString(text));
         }
-        return CreateBasePrivateIdentifier(UtilitiesPublic.EscapeLeadingUnderscores(text));
+        return CreateBasePrivateIdentifier(UtilitiesPublic.EscapeLeadingUnderscores(store.Texts, text));
     }
 
     //

@@ -1337,7 +1337,21 @@ internal sealed partial class Scanner
     /// <summary>`String.fromCharCode(code)`: the code unit ToUint16(code) (NaN gives "\0").</summary>
     private static string FromCharCode(int code)
     {
-        return ((char)(code & 0xFFFF)).ToString();
+        // Track O (O5a): the strings of the ASCII code units are made once (escape sequences in literals).
+        var unit = code & 0xFFFF;
+        return unit < AsciiStrings.Length ? AsciiStrings[unit] : ((char)unit).ToString();
+    }
+
+    private static readonly string[] AsciiStrings = CreateAsciiStrings();
+
+    private static string[] CreateAsciiStrings()
+    {
+        var strings = new string[128];
+        for (var i = 0; i < strings.Length; i++)
+        {
+            strings[i] = ((char)i).ToString();
+        }
+        return strings;
     }
 
     /// <summary>JavaScript's String.prototype.substring(start, end): clamps to the string and swaps reversed bounds.</summary>
@@ -1374,6 +1388,8 @@ internal sealed partial class Scanner
             double d => d != 0 && !double.IsNaN(d),
             Node n => !n.IsNone, // Track O: a node handle; None is undefined
             NodeList l => !l.IsNone, // Track O (O7a): a list handle; None is undefined
+            TextRef t => t.Length > 0, // Track O (O5a): a text handle; None is undefined, Length 0 is ""
+            TextOrList c => c.IsList || c.Text.Length > 0, // Track O (O5a): string | NodeArray | undefined
             _ => true,
         };
     }

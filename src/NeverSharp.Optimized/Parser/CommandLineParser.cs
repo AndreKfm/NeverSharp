@@ -66,6 +66,9 @@ internal static partial class CommandLineParser
             return returnValue ? new Dictionary<string, object?>(StringComparer.Ordinal) : null;
         }
 
+        // Track O (O5a): the values are strings and numbers only if someone receives them (the result or the notifier);
+        // otherwise the conversion only reports errors and the literal texts stay text handles.
+        var needValues = returnValue || jsonConversionNotifier != null;
         return ConvertPropertyValueToJson(rootExpression, jsonConversionNotifier?.RootOptions);
 
         object? ConvertObjectLiteralExpressionToJson(
@@ -91,7 +94,7 @@ internal static partial class CommandLineParser
                     errors.Add(Utilities.CreateDiagnosticForNodeInSourceFile(store, sourceFile, store.Name(propertyAssignment), Diagnostics.String_literal_with_double_quotes_expected));
                 }
 
-                var textOfKey = Utilities.IsComputedNonLiteralName(store, store.Name(propertyAssignment)) ? null : Utilities.GetTextOfPropertyName(store, store.Name(propertyAssignment));
+                var textOfKey = !needValues || Utilities.IsComputedNonLiteralName(store, store.Name(propertyAssignment)) ? null : store.Texts.GetString(Utilities.GetTextOfPropertyName(store, store.Name(propertyAssignment)));
                 // `textOfKey && unescapeLeadingUnderscores(textOfKey)`: the empty string stays "".
                 var keyText = !string.IsNullOrEmpty(textOfKey) ? UtilitiesPublic.UnescapeLeadingUnderscores(textOfKey) : textOfKey;
                 CommandLineOption? option = null;
@@ -154,17 +157,17 @@ internal static partial class CommandLineParser
                     {
                         errors.Add(Utilities.CreateDiagnosticForNodeInSourceFile(store, sourceFile, valueExpression, Diagnostics.String_literal_with_double_quotes_expected));
                     }
-                    return store.Text(valueExpression);
+                    return needValues ? store.Texts.GetString(store.Text(valueExpression)) : null;
 
                 case SyntaxKind.NumericLiteral:
-                    return JsNumber.FromString(store.Text(valueExpression));
+                    return needValues ? JsNumber.FromString(store.Texts.GetString(store.Text(valueExpression))!) : null;
 
                 case SyntaxKind.PrefixUnaryExpression:
                     if (store.Operator(valueExpression) != SyntaxKind.MinusToken || store.Kind(store.Operand(valueExpression)) != SyntaxKind.NumericLiteral)
                     {
                         break; // not valid JSON syntax
                     }
-                    return -JsNumber.FromString(store.Text(store.Operand(valueExpression)));
+                    return needValues ? -JsNumber.FromString(store.Texts.GetString(store.Text(store.Operand(valueExpression)))!) : null;
 
                 case SyntaxKind.ObjectLiteralExpression:
                     var objectLiteralExpression = valueExpression;

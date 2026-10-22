@@ -201,7 +201,7 @@ internal sealed partial class Parser
 
         foreach (var range in (IReadOnlyList<CommentRange>?)Scanner.GetLeadingCommentRanges(sourceText, 0) ?? Core.EmptyArray<CommentRange>())
         {
-            var comment = sourceText[range.Pos..range.End];
+            var comment = sourceText.AsSpan(range.Pos, range.End - range.Pos); // (TypeScript: `sourceText.substring(range.pos, range.end)`)
             ExtractPragmas(pragmas, range, comment);
         }
 
@@ -343,22 +343,25 @@ internal sealed partial class Parser
         return entryOrList is List<PragmaEntry> list ? list : [(PragmaEntry)entryOrList];
     }
 
-    private static void ExtractPragmas(List<PragmaPseudoMapEntry> pragmas, CommentRange range, string text)
+    private static void ExtractPragmas(List<PragmaPseudoMapEntry> pragmas, CommentRange range, ReadOnlySpan<char> text)
     {
+        // (Track O, O5a: the matchers work on the comment's span of the source text and return ranges of it; strings are
+        // made only for a comment that holds a pragma.)
         var tripleSlash = range.Kind == SyntaxKind.SingleLineCommentTrivia ? MatchTripleSlashXMLCommentStart(text) : null;
         if (tripleSlash != null)
         {
-            var name = JsToLowerCase(tripleSlash); // Technically unsafe cast, but we do it so the below check to make it safe typechecks
-            if (!Types.CommentPragmas.TryGetValue(name, out var pragma) || ((pragma.Kind ?? 0) & PragmaKindFlags.TripleSlashXML) == 0)
+            var name = PragmaName(text.Slice(tripleSlash.Value.Start, tripleSlash.Value.Length), out var pragma); // Technically unsafe cast, but we do it so the below check to make it safe typechecks
+            if (name == null || ((pragma!.Kind ?? 0) & PragmaKindFlags.TripleSlashXML) == 0)
             {
                 return;
             }
             if (pragma.Args != null)
             {
+                var commentText = text.ToString();
                 var argument = new PragmaArguments();
                 foreach (var arg in pragma.Args)
                 {
-                    var matchResult = MatchNamedArg(arg.Name, text);
+                    var matchResult = MatchNamedArg(arg.Name, commentText);
                     if (matchResult == null && !arg.Optional)
                     {
                         return; // Missing required argument, don't parse
@@ -396,7 +399,8 @@ internal sealed partial class Parser
         var singleLine = range.Kind == SyntaxKind.SingleLineCommentTrivia ? MatchSingleLinePragma(text) : null;
         if (singleLine != null)
         {
-            AddPragmaForMatch(pragmas, range, PragmaKindFlags.SingleLine, singleLine.Value.Name, singleLine.Value.Arguments);
+            var match = singleLine.Value;
+            AddPragmaForMatch(pragmas, range, PragmaKindFlags.SingleLine, text, match.NameStart, match.NameLength, match.ArgumentsStart, match.ArgumentsLength);
             return;
         }
 
@@ -404,22 +408,25 @@ internal sealed partial class Parser
         {
             // multiLinePragmaRegEx = /@(\S+)(\s+(?:\S.*)?)?$/gm, iterated with exec (its lastIndex persists across matches).
             var lastIndex = 0;
-            while (MatchMultiLinePragma(text, ref lastIndex, out var name, out var arguments))
+            while (MatchMultiLinePragma(text, ref lastIndex, out var match))
             {
-                AddPragmaForMatch(pragmas, range, PragmaKindFlags.MultiLine, name, arguments);
+                AddPragmaForMatch(pragmas, range, PragmaKindFlags.MultiLine, text, match.NameStart, match.NameLength, match.ArgumentsStart, match.ArgumentsLength);
             }
         }
     }
 
-    /// <summary>TypeScript: `addPragmaForMatch(pragmas, range, kind, match)` with match[1] (name) and match[2] (args).</summary>
-    private static void AddPragmaForMatch(List<PragmaPseudoMapEntry> pragmas, CommentRange range, PragmaKindFlags kind, string matchName, string? matchArgs)
+    /// <summary>
+    /// TypeScript: `addPragmaForMatch(pragmas, range, kind, match)` with match[1] (name) and match[2] (args), given as ranges
+    /// of the comment text (Track O); an arguments length of -1 is undefined.
+    /// </summary>
+    private static void AddPragmaForMatch(List<PragmaPseudoMapEntry> pragmas, CommentRange range, PragmaKindFlags kind, ReadOnlySpan<char> text, int nameStart, int nameLength, int argumentsStart, int argumentsLength)
     {
-        var name = JsToLowerCase(matchName); // Technically unsafe cast, but we do it so they below check to make it safe typechecks
-        if (!Types.CommentPragmas.TryGetValue(name, out var pragma) || ((pragma.Kind ?? 0) & kind) == 0)
+        var name = PragmaName(text.Slice(nameStart, nameLength), out var pragma); // Technically unsafe cast, but we do it so they below check to make it safe typechecks
+        if (name == null || ((pragma!.Kind ?? 0) & kind) == 0)
         {
             return;
         }
-        var args = matchArgs; // Split on spaces and match up positionally with definition
+        var args = argumentsLength < 0 ? null : text.Slice(argumentsStart, argumentsLength).ToString(); // Split on spaces and match up positionally with definition
         var argument = GetNamedPragmaArguments(pragma, args);
         if (argument == null)
         {
@@ -427,6 +434,36 @@ internal sealed partial class Parser
         }
         pragmas.Add(new PragmaPseudoMapEntry { Name = name, Args = new PragmaEntry { Arguments = argument, Range = range } });
     }
+
+    /// <summary>
+    /// Track O (O5a): `commentPragmas[name.toLowerCase()]` for a name given as a span: the lower-cased name (the table's
+    /// key) and its definition, or null. An ASCII name is lower-cased on the stack and looked up by span; any other name
+    /// goes through JsToLowerCase as a string.
+    /// </summary>
+    private static string? PragmaName(ReadOnlySpan<char> name, out PragmaDefinition? pragma)
+    {
+        if (name.Length <= 64 && !name.ContainsAnyExceptInRange((char)0, (char)0x7F))
+        {
+            Span<char> lower = stackalloc char[name.Length];
+            for (var i = 0; i < name.Length; i++)
+            {
+                var c = name[i];
+                lower[i] = char.IsAsciiLetterUpper(c) ? (char)(c | 0x20) : c;
+            }
+            if (CommentPragmasBySpan.TryGetValue(lower, out var key, out var definition))
+            {
+                pragma = definition;
+                return key;
+            }
+            pragma = null;
+            return null;
+        }
+        var s = JsToLowerCase(name.ToString());
+        return Types.CommentPragmas.TryGetValue(s, out pragma) ? s : null;
+    }
+
+    private static readonly Dictionary<string, PragmaDefinition>.AlternateLookup<ReadOnlySpan<char>> CommentPragmasBySpan =
+        ((Dictionary<string, PragmaDefinition>)Types.CommentPragmas).GetAlternateLookup<ReadOnlySpan<char>>();
 
     /// <summary>TypeScript returns the string "fail" for a missing required argument; here that is null.</summary>
     private static PragmaArguments? GetNamedPragmaArguments(PragmaDefinition pragma, string? text)
@@ -467,7 +504,7 @@ internal sealed partial class Parser
 
         if (store.Kind(lhs) == SyntaxKind.Identifier)
         {
-            return (string)store.EscapedText(lhs)! == (string)store.EscapedText(rhs)!;
+            return store.Texts.Equals(store.EscapedText(lhs), store.EscapedText(rhs));
         }
 
         if (store.Kind(lhs) == SyntaxKind.ThisKeyword)
@@ -477,21 +514,21 @@ internal sealed partial class Parser
 
         if (store.Kind(lhs) == SyntaxKind.JsxNamespacedName)
         {
-            return (string)store.EscapedText(store.Namespace(lhs))! == (string)store.EscapedText(store.Namespace(rhs))! &&
-                (string)store.EscapedText(store.Name(lhs))! == (string)store.EscapedText(store.Name(rhs))!;
+            return store.Texts.Equals(store.EscapedText(store.Namespace(lhs)), store.EscapedText(store.Namespace(rhs))) &&
+                store.Texts.Equals(store.EscapedText(store.Name(lhs)), store.EscapedText(store.Name(rhs)));
         }
 
         // If we are at this statement then we must have PropertyAccessExpression and because tag name in Jsx element can only
         // take forms of JsxTagNameExpression which includes an identifier, "this" expression, or another propertyAccessExpression
         // it is safe to case the expression property as such. See parseJsxElementName for how we parse tag name in Jsx element
-        return EscapedTextOfMemberName(store, store.Name(lhs)) == EscapedTextOfMemberName(store, store.Name(rhs)) &&
+        return store.Texts.Equals(EscapedTextOfMemberName(store, store.Name(lhs)), EscapedTextOfMemberName(store, store.Name(rhs))) &&
             TagNamesAreEquivalent(store, store.Expression(lhs), store.Expression(rhs));
     }
 
     /// <summary>`(name as MemberName).escapedText` (Identifier or PrivateIdentifier).</summary>
-    private static string? EscapedTextOfMemberName(NodeStore store, Node name)
+    private static TextRef EscapedTextOfMemberName(NodeStore store, Node name)
     {
-        return (string?)((name is var identifier && store.IsIdentifier(identifier)) ? store.EscapedText(identifier) : store.EscapedText(name));
+        return (name is var identifier && store.IsIdentifier(identifier)) ? store.EscapedText(identifier) : store.EscapedText(name);
     }
 
     //// The regular expressions of pragma processing, written as matchers with exactly their semantics (Track F bans
@@ -504,15 +541,16 @@ internal sealed partial class Parser
     }
 
     /// <summary>Positions where `^` matches under the `m` flag: the start, and after each line terminator.</summary>
-    private static bool IsLineStart(string text, int p)
+    private static bool IsLineStart(ReadOnlySpan<char> text, int p)
     {
         return p == 0 || IsJsLineTerminator(text[p - 1]);
     }
 
     /// <summary>
-    /// tripleSlashXMLCommentStartRegEx = /^\/\/\/\s*&lt;(\S+)\s.*?\/&gt;/m: returns group 1 of the first match, or null.
+    /// tripleSlashXMLCommentStartRegEx = /^\/\/\/\s*&lt;(\S+)\s.*?\/&gt;/m: returns group 1 of the first match, or null
+    /// (Track O: as a range of the text).
     /// </summary>
-    private static string? MatchTripleSlashXMLCommentStart(string text)
+    private static (int Start, int Length)? MatchTripleSlashXMLCommentStart(ReadOnlySpan<char> text)
     {
         var len = text.Length;
         for (var p = 0; p <= len; p++)
@@ -545,7 +583,7 @@ internal sealed partial class Parser
             {
                 continue;
             }
-            var name = text[nameStart..q];
+            var name = (nameStart, q - nameStart);
             q++; // \s
             // .*?\/> : the first "/>" that no line terminator precedes.
             for (var r = q; r < len; r++)
@@ -563,10 +601,13 @@ internal sealed partial class Parser
         return null;
     }
 
+    /// <summary>A match of a pragma regular expression: groups 1 (name) and 2 (arguments; length -1 if it did not participate) as ranges of the text.</summary>
+    private readonly record struct PragmaMatch(int NameStart, int NameLength, int ArgumentsStart, int ArgumentsLength);
+
     /// <summary>
     /// singleLinePragmaRegEx = /^\/\/\/?\s*@([^\s:]+)((?:[^\S\r\n]|:).*)?$/m: returns groups 1 and 2 of the first match, or null.
     /// </summary>
-    private static (string Name, string? Arguments)? MatchSingleLinePragma(string text)
+    private static PragmaMatch? MatchSingleLinePragma(ReadOnlySpan<char> text)
     {
         var len = text.Length;
         for (var p = 0; p <= len; p++)
@@ -603,7 +644,6 @@ internal sealed partial class Parser
             {
                 continue;
             }
-            var name = text[nameStart..q];
             if (q < len && (text[q] == ':' || (Utilities.IsJsWhiteSpaceOrLineTerminator(text[q]) && text[q] != '\r' && text[q] != '\n')))
             {
                 // ((?:[^\S\r\n]|:).*) then $: `.*` stops at a line terminator or the end, where $ matches.
@@ -612,11 +652,11 @@ internal sealed partial class Parser
                 {
                     e++;
                 }
-                return (name, text[q..e]);
+                return new PragmaMatch(nameStart, q - nameStart, q, e - q);
             }
             if (q == len || IsJsLineTerminator(text[q]))
             {
-                return (name, null);
+                return new PragmaMatch(nameStart, q - nameStart, 0, -1);
             }
         }
         return null;
@@ -626,7 +666,7 @@ internal sealed partial class Parser
     /// One `exec` of multiLinePragmaRegEx = /@(\S+)(\s+(?:\S.*)?)?$/gm from lastIndex: the match's groups 1 and 2, and
     /// lastIndex moved to the match's end; false (and lastIndex reset to 0) when there is no further match.
     /// </summary>
-    private static bool MatchMultiLinePragma(string text, ref int lastIndex, out string name, out string? arguments)
+    private static bool MatchMultiLinePragma(ReadOnlySpan<char> text, ref int lastIndex, out PragmaMatch match)
     {
         var len = text.Length;
         for (var i = lastIndex; i < len; i++)
@@ -640,11 +680,10 @@ internal sealed partial class Parser
             {
                 e++;
             }
-            name = text[(i + 1)..e];
             if (e == len)
             {
                 // No room for group 2; $ matches at the end.
-                arguments = null;
+                match = new PragmaMatch(i + 1, e - (i + 1), 0, -1);
                 lastIndex = e;
                 return true;
             }
@@ -664,12 +703,11 @@ internal sealed partial class Parser
                     end++;
                 }
             }
-            arguments = text[e..end];
+            match = new PragmaMatch(i + 1, e - (i + 1), e, end - e);
             lastIndex = end;
             return true;
         }
-        name = "";
-        arguments = null;
+        match = default;
         lastIndex = 0;
         return false;
     }

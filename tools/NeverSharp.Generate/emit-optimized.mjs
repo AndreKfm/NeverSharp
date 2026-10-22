@@ -1,6 +1,6 @@
 // Copyright 2026 Andre Kaufmann
 // SPDX-License-Identifier: Apache-2.0
-// Original code (not ported): Track O emitter for the node store's field accessors and ForEachChild (steps O6a, O6b, O7a).
+// Original code (not ported): Track O emitter for the node store's field accessors and ForEachChild (steps O6a, O6b, O7a, O5a).
 //
 // Track O's nodes are int handles into a per-parse arena (pre-registration §5.4); the parser and the factory
 // read and write a node only through NodeStore (src/NeverSharp.Optimized/Arena/NodeStore.cs). This emitter writes
@@ -12,7 +12,8 @@
 //   the record's offset. The record holds the header (kind word, flags, pos, end, transform flags), the index of
 //   the node's first object slot (only for kinds with object slots), and one int slot per child handle or scalar
 //   field; boolean fields are bits of the kind word; node lists are list handles (NodeList, step O7a) in int slots;
-//   strings and other objects live in a block of object slots per node; rare fields (SIDE_FIELDS) live in the
+//   texts are text handles (TextRef, TextOrList, step O5a) in two int slots; the SourceFile node's strings and other
+//   objects live in a block of object slots per node; rare fields (SIDE_FIELDS) live in the
 //   store's side table. A field's word offset, bit
 //   or object slot depends on the node's class, looked up per SyntaxKind in a table.
 // - One getter and one setter per field name (`Expression(n)`, `SetExpression(n, v)`). A getter on a kind
@@ -61,12 +62,18 @@ const OBJECT_TYPES = {
     "Path": { type: "string", nullable: true },
     "readonly string[]": { type: "IReadOnlyList<string>", nullable: true },
     "readonly number[]": { type: "IReadOnlyList<int>", nullable: true },
-    "ReadonlyMap<string, string>": { type: "Dictionary<string, string>", nullable: true },
+    // SourceFile.identifiers: the parse's texts, whose interning table is TypeScript's map (step O5a).
+    "ReadonlyMap<string, string>": { type: "TextTable", nullable: true },
     "(file: SourceFile) => void": { type: "Action<Node>", nullable: true },
     "true | Node": { type: "object", nullable: true },
-    // __String (Identifier.escapedText, PrivateIdentifier.escapedText): the parser stores the escaped text.
-    "(string & { __escapedIdentifier: void; }) | InternalSymbolName": { type: "string", nullable: true },
 };
+// Text values (step O5a): handles into the parse's texts (TextRef: source span or character arena) in two int slots;
+// `string | NodeArray` (JSDoc comments) as TextOrList in two int slots. The SourceFile node keeps its strings (its
+// source text and file names) in object slots.
+const TEXT = { store: "slot", type: "TextRef", conv: "text", words: 2 };
+const TEXT_OR_LIST = { store: "slot", type: "TextOrList", conv: "textOrList", words: 2 };
+// __String (Identifier.escapedText, PrivateIdentifier.escapedText): the parser stores the escaped text.
+const ESCAPED_TEXT = "(string & { __escapedIdentifier: void; }) | InternalSymbolName";
 
 // The SourceFile members Track F declares by hand with their ported types (Parser/Types.cs, Parser.Pragmas.cs).
 const EXTRA_FIELDS = {
@@ -85,8 +92,10 @@ const EXTRA_FIELDS = {
     ],
 };
 
-// Field storage: { store: "slot" | "ref", type (C#, without `?`), nullable (refs), conv (slots: node|list|bool|int|enum) }.
-function storage(cs, optional, usedAs) {
+// Field storage: { store: "slot" | "ref", type (C#, without `?`), nullable (refs), conv (slots: node|list|bool|int|enum|text|textOrList),
+// words (slots of two ints) }.
+function storage(cls, cs, optional, usedAs) {
+    if (cls !== "SourceFile" && (cs.k === "string" || cs.ts === ESCAPED_TEXT)) return TEXT;
     switch (cs.k) {
         case "string": return { store: "ref", type: "string", nullable: optional };
         case "bool": return { store: "slot", type: "bool", conv: "bool" };
@@ -95,7 +104,7 @@ function storage(cs, optional, usedAs) {
         case "node": return { store: "slot", type: "Node", conv: "node" };
         case "nodes": return { store: "slot", type: "NodeList", conv: "list" };
         case "array": return { store: "ref", type: "Node[]", nullable: true };
-        case "stringOrNodes": return { store: "ref", type: "object", nullable: true };
+        case "stringOrNodes": return TEXT_OR_LIST;
         case "undefinedOnly":
             // Declared `?: undefined`; assigned for grammar errors where forEachChild visits it, never otherwise.
             return usedAs === "nodes" ? { store: "slot", type: "NodeList", conv: "list" }
@@ -175,7 +184,7 @@ export function emitOptimized(schema) {
     for (const cls of classes) {
         const list = [];
         for (const p of (schema.interfaces[cls] ?? []).filter(p => !BASE_FIELDS.has(p.name) && assigned.has(p.name))) {
-            const s = FIELD_OVERRIDES[`${cls}.${p.name}`] ?? storage(p.cs, p.optional, usage[cls]?.[p.name]);
+            const s = FIELD_OVERRIDES[`${cls}.${p.name}`] ?? storage(cls, p.cs, p.optional, usage[cls]?.[p.name]);
             if (!s) { (omitted[cls] ??= []).push(pascal(p.name)); continue; }
             list.push({ ts: p.name, name: pascal(p.name), ...s });
         }
@@ -185,13 +194,14 @@ export function emitOptimized(schema) {
         let slot = 0, ref = 0, bit = FIRST_BIT;
         for (const f of list) {
             f.layout = isSide(cls, f.ts) ? "side" : f.store === "ref" ? "ref" : f.conv === "bool" ? "bit" : "word";
+            if (f.layout === "side" && f.words === 2) throw new Error(`${cls}.${f.ts}: a two-int field cannot live in the side table`);
             if (f.layout === "side") f.offset = SIDE_OFFSET;
             if (f.layout === "ref") f.offset = ref++;
             if (f.layout === "bit") f.offset = bit++;
         }
         if (bit > LAST_BIT + 1) throw new Error(`${cls}: more boolean fields than free bits in the kind word`);
         const firstSlot = HEADER_WORDS + (ref > 0 ? 1 : 0);
-        for (const f of list) if (f.layout === "word") f.offset = firstSlot + slot++;
+        for (const f of list) if (f.layout === "word") { f.offset = firstSlot + slot; slot += f.words ?? 1; }
         if (firstSlot + slot >= SIDE_OFFSET || ref >= SIDE_OFFSET) throw new Error(`${cls}: record too large for sbyte offsets`);
         fields[cls] = { list, words: firstSlot + slot, refs: ref };
     }
@@ -277,8 +287,11 @@ export function emitOptimized(schema) {
         }
         const sideRead = isRef ? cast(`GetSideRef(h, ${a.sideId})`) : fromInt(`GetSideInt(h, ${a.sideId})`);
         const sideWrite = isRef ? `SetSideRef(h, ${a.sideId}, value);` : `SetSideInt(h, ${a.sideId}, ${toInt});`;
-        const recordRead = layout === "ref" ? cast("refs[d[h + RefBaseWord] + o]") : fromInt("d[h + o]");
-        const recordWrite = layout === "ref" ? "refs[d[h + RefBaseWord] + o] = value;" : `d[h + o] = ${toInt};`;
+        // Text values (two ints): TextRef (start, size) or TextOrList (a, b).
+        const pair = a.conv === "text" ? ["Start", "Size"] : a.conv === "textOrList" ? ["A", "B"] : null;
+        if (pair && side) throw new Error(`accessor ${name}: a two-int field in the side table`);
+        const recordRead = layout === "ref" ? cast("refs[d[h + RefBaseWord] + o]") : pair ? `new ${a.type}(d[h + o], d[h + o + 1])` : fromInt("d[h + o]");
+        const recordWrite = layout === "ref" ? "refs[d[h + RefBaseWord] + o] = value;" : pair ? `d[h + o] = value.${pair[0]};\n        d[h + o + 1] = value.${pair[1]};` : `d[h + o] = ${toInt};`;
         const head = ["        var d = data;", "        var h = node.Index;"];
         const throwIf = cond => [`        if (${cond})`, "        {", `            ThrowNoField(d[h], nameof(${name}));`, "        }"];
         let get, set;
@@ -324,7 +337,7 @@ export function emitOptimized(schema) {
             case "or": return ir.items.map(i => expr(i, cls)).join("\n                ?? ");
             case "none": return "null";
             case "node": { const f = field(cls, ir.prop); return f ? `VisitNode(cbNode, store.${f.accessor}(node))` : "null"; }
-            case "nodes": { const f = field(cls, ir.prop); return f ? `VisitNodes(store, cbNode, cbNodes, ${f.type === "object" ? `AsList(store.${f.accessor}(node))` : `store.${f.accessor}(node)`})` : "null"; }
+            case "nodes": { const f = field(cls, ir.prop); return f ? `VisitNodes(store, cbNode, cbNodes, ${f.conv === "textOrList" ? `store.${f.accessor}(node).List` : `store.${f.accessor}(node)`})` : "null"; }
             case "each": { const f = field(cls, ir.prop); return f ? `ForEachElement(store.${f.accessor}(node), cbNode)` : "null"; }
             case "cond": return `(${test(ir.test, cls)}\n                ? ${expr(ir.then, cls)}\n                : ${expr(ir.else, cls)})`;
             default: throw new Error(`unknown IR op ${ir.op}`);
@@ -334,8 +347,8 @@ export function emitOptimized(schema) {
         const f = t.op === "and" ? null : field(cls, t.prop);
         if (t.op !== "and" && !f) throw new Error(`${cls}.${t.prop} tested but not stored`);
         switch (t.op) {
-            case "isString": return `store.${f.accessor}(node) is string`;
-            case "bool": return f.type === "bool" ? `store.${f.accessor}(node)` : f.conv === "node" || f.conv === "list" ? `!store.${f.accessor}(node).IsNone` : `store.${f.accessor}(node) is not null`;
+            case "isString": return f.conv === "textOrList" ? `store.${f.accessor}(node).IsText` : `store.${f.accessor}(node) is string`;
+            case "bool": return f.type === "bool" ? `store.${f.accessor}(node)` : f.conv === "node" || f.conv === "list" || f.conv === "text" || f.conv === "textOrList" ? `!store.${f.accessor}(node).IsNone` : `store.${f.accessor}(node) is not null`;
             case "kindIs": return `store.Kind(store.${f.accessor}(node)) == SyntaxKind.${t.kind}`;
             case "and": return `(${test(t.left, cls)} && ${test(t.right, cls)})`;
             default: throw new Error(`unknown test ${t.op}`);
@@ -360,8 +373,6 @@ export function emitOptimized(schema) {
         "    private static T? VisitNodes<T>(NodeStore store, Func<Node, T?> cbNode, Func<NodeList, T?>? cbNodes, NodeList nodes) where T : class",
         "    {", "        if (!nodes.IsNone)", "        {", "            if (cbNodes is not null)", "            {", "                return cbNodes(nodes);", "            }",
         "            foreach (var node in store.Nodes(nodes))", "            {", "                var result = cbNode(node);", "                if (result is not null)", "                {", "                    return result;", "                }", "            }", "        }", "        return null;", "    }", "",
-        "    // A NodeArray held in an object slot (string | NodeArray)",
-        "    private static NodeList AsList(object? value) => value is NodeList list ? list : default;", "",
         "    // core.ts forEach(array, callback): every element through cbNode, also when cbNodes is given",
         "    private static T? ForEachElement<T>(IReadOnlyList<Node>? array, Func<Node, T?> cbNode) where T : class",
         "    {", "        if (array is not null)", "        {", "            for (var i = 0; i < array.Count; i++)", "            {", "                var result = cbNode(array[i]);", "                if (result is not null)", "                {", "                    return result;", "                }", "            }", "        }", "        return null;", "    }",

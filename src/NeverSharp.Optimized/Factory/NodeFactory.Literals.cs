@@ -16,7 +16,7 @@ namespace NeverSharp.Optimized;
 internal sealed partial class NodeFactory
 {
     // @api
-    internal Node CreateLiteralLikeNode(SyntaxKind kind, string text)
+    internal Node CreateLiteralLikeNode(SyntaxKind kind, TextRef text)
     {
         switch (kind)
         {
@@ -33,7 +33,7 @@ internal sealed partial class NodeFactory
             case SyntaxKind.RegularExpressionLiteral:
                 return CreateRegularExpressionLiteral(text);
             case SyntaxKind.NoSubstitutionTemplateLiteral:
-                return CreateTemplateLiteralLikeNode(kind, text, /*rawText*/ null, /*templateFlags*/ 0);
+                return CreateTemplateLiteralLikeNode(kind, text, /*rawText*/ default, /*templateFlags*/ 0);
         }
         // (TypeScript's switch covers every kind of its parameter type and returns undefined otherwise.)
         return default;
@@ -52,7 +52,7 @@ internal sealed partial class NodeFactory
     // NOTE: `createTemplateLiteralLikeToken` and `createTemplateLiteralLikeDeclaration` are identical except for
     //       the underlying nodes they create. To avoid polymorphism due to two different node shapes, these
     //       functions are intentionally duplicated.
-    private Node CreateTemplateLiteralLikeToken(SyntaxKind kind, string text, string? rawText, TokenFlags? templateFlags)
+    private Node CreateTemplateLiteralLikeToken(SyntaxKind kind, TextRef text, TextRef rawText, TokenFlags? templateFlags)
     {
         var node = CreateBaseToken(kind);
         // `templateFlags! & TokenFlags.TemplateLiteralLikeFlags` (undefined & x is 0)
@@ -81,7 +81,7 @@ internal sealed partial class NodeFactory
         return node;
     }
 
-    private Node CreateTemplateLiteralLikeDeclaration(SyntaxKind kind, string text, string? rawText, TokenFlags? templateFlags)
+    private Node CreateTemplateLiteralLikeDeclaration(SyntaxKind kind, TextRef text, TextRef rawText, TokenFlags? templateFlags)
     {
         var node = CreateBaseDeclaration(kind);
         store.SetText(node, text);
@@ -92,7 +92,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateTemplateLiteralLikeNode(SyntaxKind kind, string text, string? rawText, TokenFlags? templateFlags)
+    internal Node CreateTemplateLiteralLikeNode(SyntaxKind kind, TextRef text, TextRef rawText, TokenFlags? templateFlags)
     {
         if (kind == SyntaxKind.NoSubstitutionTemplateLiteral)
         {

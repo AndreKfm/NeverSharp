@@ -771,6 +771,8 @@ internal static partial class Core
             double d => d != 0 && !double.IsNaN(d),
             Node n => !n.IsNone, // Track O: a node handle; None is undefined
             NodeList l => !l.IsNone, // Track O (O7a): a list handle; None is undefined
+            TextRef t => t.Length > 0, // Track O (O5a): a text handle; None is undefined, Length 0 is ""
+            TextOrList c => c.IsList || c.Text.Length > 0, // Track O (O5a): string | NodeArray | undefined
             _ => true,
         };
     }

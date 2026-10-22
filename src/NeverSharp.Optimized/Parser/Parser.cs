@@ -113,7 +113,7 @@ internal sealed partial class Parser
 
     private static bool IsImportMeta(NodeStore store, Node node)
     {
-        return FactoryNodeTests.IsMetaProperty(store, node) && store.KeywordToken(node) == SyntaxKind.ImportKeyword && (string)store.EscapedText(store.Name(node))! == "meta";
+        return FactoryNodeTests.IsMetaProperty(store, node) && store.KeywordToken(node) == SyntaxKind.ImportKeyword && store.Texts.Equals(store.EscapedText(store.Name(node)), "meta");
     }
 
     /// <summary>
@@ -215,7 +215,7 @@ internal sealed partial class Parser
         Node result;
 
         // Track O: the nodes of this parse live in their own store, which the result keeps.
-        var store = new NodeStore(sourceText.Length);
+        var store = new NodeStore(sourceText);
         var languageVersion = languageVersionOrOptions.LanguageVersion;
         var overrideSetExternalModuleIndicator = languageVersionOrOptions.SetExternalModuleIndicator;
         var format = languageVersionOrOptions.ImpliedNodeFormat;
@@ -246,6 +246,7 @@ internal sealed partial class Parser
         }
         finally
         {
+            store.Texts.Seal(); // Track O (O5a): the texts move into exact arrays, the pooled arrays go back
             parser.UseStore(null!); // the result keeps the store, the pooled parser does not
             PutParser(parser);
         }
@@ -258,7 +259,7 @@ internal sealed partial class Parser
     /// </summary>
     internal static SourceFile ParseJsonText(string fileName, string sourceText)
     {
-        var store = new NodeStore(sourceText.Length);
+        var store = new NodeStore(sourceText);
         var parser = GetParser();
         try
         {
@@ -266,6 +267,7 @@ internal sealed partial class Parser
         }
         finally
         {
+            store.Texts.Seal();
             parser.UseStore(null!);
             PutParser(parser);
         }
@@ -297,6 +299,8 @@ internal sealed partial class Parser
             Tristate t => t != Tristate.False,
             Node n => !n.IsNone,
             NodeList l => !l.IsNone, // Track O (O7a): a list handle; None is undefined
+            TextRef t => t.Length > 0, // Track O (O5a): a text handle; None is undefined, Length 0 is ""
+            TextOrList c => c.IsList || c.Text.Length > 0, // Track O (O5a): string | NodeArray | undefined
             _ => true,
         };
     }

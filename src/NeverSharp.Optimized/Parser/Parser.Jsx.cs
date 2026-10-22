@@ -118,7 +118,7 @@ internal sealed partial class Parser
     private Node ParseJsxText()
     {
         var pos = GetNodePos();
-        var node = factory.CreateJsxText(scanner.GetTokenValue(), currentToken == SyntaxKind.JsxTextAllWhiteSpaces);
+        var node = factory.CreateJsxText(scanner.GetTokenValueRef(), currentToken == SyntaxKind.JsxTextAllWhiteSpaces);
         currentToken = scanner.ScanJsxToken();
         return FinishNode(node, pos);
     }

@@ -139,7 +139,7 @@ internal sealed class SourceFileNodeLike : ISourceFileLike
         this.sourceFile = sourceFile;
     }
 
-    public string Text => store.Text(sourceFile);
+    public string Text => store.SourceFileText(sourceFile);
 
     public IReadOnlyList<int>? LineMap
     {
