@@ -101,3 +101,11 @@ Events:
 
 - **Generator defect found by the attempts:** `JSDocSignature.parameters` is declared `readonly JSDocParameterTag[]` in types.ts, but the parser also stores other JSDoc tags there (`@this` inside `@callback`, unit 012584 callbackTag4.ts). Attempt 2 (finished first) patched the generated file to pass, against the brief's letter; the orchestrator fixed the generator (field `Node[]?`, 48464cc) and offered exactly this change to attempt 1 while it was running, which used it. Both attempts thus made the same, now sanctioned change; the merge takes the generated file from the generator.
 - Attempt 1's one optimization (setting `NodeFlags.JSDoc` in the context directly instead of `doInsideOfContext` with a closure) has its counterpart in typescript-go's `parseJSDocComment` (`internal/parser/jsdoc.go`, saves and sets `p.contextFlags`).
+
+## M6: measurement (Track F)
+
+**Verdict (2026-10-22, Windows only): no parity.** G = 6.31 [6.20, 6.41] for `cs-aot-ws` against `tsgo7-parse` (lower bound > 1.20): Track F parses about 6.3 × slower than typescript-go, about 1.9 × faster than tsc 6.0.3. Deciding run: [results/m6/2026-10-22T07-01-02-524Z/VERDICT.md](../results/m6/2026-10-22T07-01-02-524Z/VERDICT.md) (run 3, after prereg/v4).
+
+- Runs 1 and 2 (rig-compliant) failed the then-binding variance gate only in JIT/Server-GC "single-threaded" configurations; amendment prereg/v4 (decided after seeing both, disclosed) binds the gate to tsc6-parse, tsgo7-parse-single and cs-aot-ws-single. All three runs are archived in `results/m6/`; the primary ratio was 6.45, 6.28 and 6.31.
+- Main cost driver visible in every run: garbage collection (e.g. vscode, cs-aot-ws: about 7.5 s summed GC pauses in an 8.5 s run; Server GC halves the wall-clock). This is where Track O (arenas, NoAlloc) starts.
+- Development measurements from here on are short (module benchmarks, probes, `dotnet-trace` 10.0.750501 in `.tools/dotnet-trace`); the next protocol run is the Track O endpoint.
