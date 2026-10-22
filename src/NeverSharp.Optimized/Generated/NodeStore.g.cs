@@ -11,41 +11,49 @@
 
 #nullable enable
 
+using System.Runtime.CompilerServices;
 using NeverSharp.Generated;
 
 namespace NeverSharp.Optimized;
 
-/// <summary>The generated part of the node store: layout tables, field accessors and node class tests (O6a layout).</summary>
+/// <summary>The generated part of the node store: layout tables, field accessors and node class tests (O6b variant A layout).</summary>
 internal sealed partial class NodeStore
 {
     private const int KindCount = 359;
 
-    /// <summary>Int slots (child handles, scalar fields) per kind.</summary>
-    private static ReadOnlySpan<byte> SlotCounts =>
+    private const int HeaderWords = 5;
+
+    private const int RefBaseWord = 5;
+
+    /// <summary>The offset table value of a field kept in the side table.</summary>
+    private const int SideOffset = 127;
+
+    /// <summary>Record size in ints per kind: header, first object slot (kinds with object slots), int slots.</summary>
+    private static ReadOnlySpan<byte> RecordSizes =>
     [
-        0,0,0,0,0,0,0,0,0,3,2,4,3,0,2,3,3,3,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-        0,0,0,0,0,0,0,2,1,4,5,1,4,5,4,7,3,7,7,7,4,4,4,3,1,3,3,1,0,1,0,1,1,0,0,5,1,1,0,2,
-        2,6,1,4,1,2,4,0,0,4,1,1,3,3,2,1,3,2,1,7,7,1,1,1,1,2,2,3,5,1,2,1,1,0,1,2,1,2,2,2,
-        2,1,2,0,1,1,3,2,2,5,4,5,1,1,1,2,3,2,1,3,0,4,0,7,1,1,3,1,3,0,1,1,3,4,4,1,0,3,3,6,
-        0,1,3,1,1,2,2,2,1,2,0,0,2,0,2,2,2,1,0,1,3,2,2,2,4,5,2,2,12,0,1,1,2,0,0,2,2,1,3,1,
-        1,0,0,1,2,1,1,1,1,2,2,1,1,1,1,1,1,1,1,5,2,3,5,2,2,2,2,5,2,5,2,2,4,0,0,2,1,0,2,
+        5,5,5,5,5,5,5,5,5,6,6,6,6,5,6,6,6,6,6,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,
+        5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,
+        6,6,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,
+        5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,
+        5,5,5,5,5,5,5,7,6,8,8,6,9,9,9,9,8,7,9,8,7,7,7,8,7,7,7,6,6,6,6,6,6,6,6,9,6,6,5,7,
+        7,11,6,9,7,7,9,6,6,9,6,6,7,7,7,7,7,7,6,9,9,6,6,6,6,7,7,8,10,7,7,6,7,5,7,7,6,7,5,7,
+        7,6,6,5,7,6,8,7,7,9,8,9,6,6,6,7,7,7,6,8,5,8,6,9,7,7,8,7,8,6,6,7,8,7,8,6,6,6,6,7,
+        6,6,7,7,6,8,8,8,6,8,5,5,7,6,7,7,7,7,6,7,7,7,7,5,7,6,6,7,15,5,6,6,7,5,5,6,6,6,8,6,
+        6,6,6,6,7,7,7,7,7,8,8,7,7,7,7,7,7,7,7,10,8,8,9,8,8,8,8,10,8,9,8,8,10,5,5,7,6,6,6,
     ];
 
     /// <summary>Object slots (strings, node lists, other objects) per kind.</summary>
     private static ReadOnlySpan<byte> RefCounts =>
     [
-        0,1,0,0,0,0,0,0,0,1,1,1,1,0,1,2,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,1,1,1,1,0,1,2,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-        2,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-        0,0,0,0,0,0,0,0,0,2,2,0,2,2,5,5,2,5,5,5,4,4,5,0,1,5,5,1,1,0,1,0,0,1,1,0,0,0,0,0,
-        0,1,0,1,1,0,1,1,1,0,1,2,1,1,2,2,1,0,1,5,5,0,0,0,0,0,0,1,0,1,0,0,5,0,1,0,0,0,0,0,
-        0,1,2,1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,5,5,5,3,3,2,2,1,2,2,2,0,0,1,0,2,2,
-        1,0,1,2,0,1,1,1,0,1,0,0,0,1,0,0,0,2,1,1,0,1,0,0,2,2,1,1,26,1,0,0,0,0,0,0,0,0,4,0,
-        0,2,1,1,3,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,1,1,1,1,1,1,1,1,0,0,1,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,1,1,2,3,1,2,2,2,2,2,2,0,1,2,2,0,1,0,1,0,0,1,1,0,0,0,0,0,
+        0,1,0,0,1,0,1,1,1,0,1,1,0,0,1,2,0,0,0,3,1,0,0,0,0,0,0,0,0,1,0,0,4,0,1,0,0,0,0,0,
+        0,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,3,4,4,2,2,1,1,1,1,1,0,0,0,1,0,0,0,
+        1,0,0,1,0,1,1,1,0,1,0,0,0,1,0,0,0,1,1,1,0,1,0,0,0,0,0,0,26,0,0,0,0,0,0,0,0,0,2,0,
+        0,2,1,1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,1,1,1,1,1,1,0,0,0,0,1,0,
     ];
 
     /// <summary>The node class of each kind (index into the classes of types.ts, Token for kinds without one).</summary>
@@ -63,22 +71,26 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IReadOnlyList<string>? AmbientModuleNames(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = AmbientModuleNamesOffsets[(int)r.Kind];
-        return o < 0 ? null : (IReadOnlyList<string>?)refs[r.Refs + o];
+        var d = data;
+        var h = node.Index;
+        var o = AmbientModuleNamesOffsets[d[h] & KindMask];
+        return o < 0 ? null : Unsafe.As<IReadOnlyList<string>?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetAmbientModuleNames(Node node, IReadOnlyList<string>? value)
     {
-        ref var r = ref records[node.Index];
-        var o = AmbientModuleNamesOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = AmbientModuleNamesOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(AmbientModuleNames));
+            ThrowNoField(d[h], nameof(AmbientModuleNames));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> AmbientModuleNamesOffsets =>
@@ -95,22 +107,26 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IReadOnlyList<AmdDependency> AmdDependencies(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = AmdDependenciesOffsets[(int)r.Kind];
-        return o < 0 ? null! : (IReadOnlyList<AmdDependency>)refs[r.Refs + o]!;
+        var d = data;
+        var h = node.Index;
+        var o = AmdDependenciesOffsets[d[h] & KindMask];
+        return o < 0 ? null! : Unsafe.As<IReadOnlyList<AmdDependency>>(refs[d[h + RefBaseWord] + o])!;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetAmdDependencies(Node node, IReadOnlyList<AmdDependency> value)
     {
-        ref var r = ref records[node.Index];
-        var o = AmdDependenciesOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = AmdDependenciesOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(AmdDependencies));
+            ThrowNoField(d[h], nameof(AmdDependencies));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> AmdDependenciesOffsets =>
@@ -127,22 +143,26 @@ internal sealed partial class NodeStore
     ];
 
     // ImportTypeNode
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Argument(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ArgumentOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = ArgumentOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetArgument(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ArgumentOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = ArgumentOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Argument));
+            ThrowNoField(d[h], nameof(Argument));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ArgumentOffsets =>
@@ -152,29 +172,33 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // ElementAccessExpression
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ArgumentExpression(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ArgumentExpressionOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = ArgumentExpressionOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetArgumentExpression(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ArgumentExpressionOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = ArgumentExpressionOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ArgumentExpression));
+            ThrowNoField(d[h], nameof(ArgumentExpression));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ArgumentExpressionOffsets =>
@@ -184,29 +208,33 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // CallExpression, NewExpression
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public NodeArray? Arguments(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ArgumentsOffsets[(int)r.Kind];
-        return o < 0 ? null : (NodeArray?)refs[r.Refs + o];
+        var d = data;
+        var h = node.Index;
+        var o = ArgumentsOffsets[d[h] & KindMask];
+        return o < 0 ? null : Unsafe.As<NodeArray?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetArguments(Node node, NodeArray? value)
     {
-        ref var r = ref records[node.Index];
-        var o = ArgumentsOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = ArgumentsOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Arguments));
+            ThrowNoField(d[h], nameof(Arguments));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> ArgumentsOffsets =>
@@ -222,23 +250,26 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
-    // ExportDeclaration, ImportDeclaration, ImportTypeAssertionContainer
+    // ExportDeclaration, ImportDeclaration, ImportTypeAssertionContainer (side table)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node AssertClause(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = AssertClauseOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        return w >= 0 || AssertClauseOffsets[w & KindMask] < 0 ? default : new Node(GetSideInt(h, 4));
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetAssertClause(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = AssertClauseOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        if (AssertClauseOffsets[d[h] & KindMask] < 0)
         {
-            ThrowNoField(r.Kind, nameof(AssertClause));
+            ThrowNoField(d[h], nameof(AssertClause));
         }
-        slots[r.Slots + o] = value.Index;
+        SetSideInt(h, 4, value.Index);
     }
 
     private static ReadOnlySpan<sbyte> AssertClauseOffsets =>
@@ -249,28 +280,32 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,0,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,-1,-1,-1,-1,-1,127,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // TypePredicateNode
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node AssertsModifier(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = AssertsModifierOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = AssertsModifierOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetAssertsModifier(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = AssertsModifierOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = AssertsModifierOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(AssertsModifier));
+            ThrowNoField(d[h], nameof(AssertsModifier));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> AssertsModifierOffsets =>
@@ -279,30 +314,44 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
-    // ArrowFunction, ConstructorDeclaration, FunctionDeclaration, FunctionExpression, GetAccessorDeclaration, MethodDeclaration, … (8 classes)
+    // ArrowFunction, ConstructorDeclaration, FunctionDeclaration, FunctionExpression, GetAccessorDeclaration, MethodDeclaration, … (8 classes) (some in the side table)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node AsteriskToken(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = AsteriskTokenOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        var o = AsteriskTokenOffsets[w & KindMask];
+        if ((uint)o < SideOffset)
+        {
+            return new Node(d[h + o]);
+        }
+        return o == SideOffset && w < 0 ? new Node(GetSideInt(h, 5)) : default;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetAsteriskToken(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = AsteriskTokenOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        var o = AsteriskTokenOffsets[d[h] & KindMask];
+        if ((uint)o < SideOffset)
         {
-            ThrowNoField(r.Kind, nameof(AsteriskToken));
+            d[h + o] = value.Index;
+            return;
         }
-        slots[r.Slots + o] = value.Index;
+        if (o != SideOffset)
+        {
+            ThrowNoField(d[h], nameof(AsteriskToken));
+        }
+        SetSideInt(h, 5, value.Index);
     }
 
     private static ReadOnlySpan<sbyte> AsteriskTokenOffsets =>
@@ -311,30 +360,44 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,0,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,-1,127,127,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
-    // ExportDeclaration, ImportDeclaration, ImportTypeNode, JSDocImportTag, JsxOpeningElement, JsxSelfClosingElement
+    // ExportDeclaration, ImportDeclaration, ImportTypeNode, JSDocImportTag, JsxOpeningElement, JsxSelfClosingElement (some in the side table)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Attributes(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = AttributesOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        var o = AttributesOffsets[w & KindMask];
+        if ((uint)o < SideOffset)
+        {
+            return new Node(d[h + o]);
+        }
+        return o == SideOffset && w < 0 ? new Node(GetSideInt(h, 6)) : default;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetAttributes(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = AttributesOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        var o = AttributesOffsets[d[h] & KindMask];
+        if ((uint)o < SideOffset)
         {
-            ThrowNoField(r.Kind, nameof(Attributes));
+            d[h + o] = value.Index;
+            return;
         }
-        slots[r.Slots + o] = value.Index;
+        if (o != SideOffset)
+        {
+            ThrowNoField(d[h], nameof(Attributes));
+        }
+        SetSideInt(h, 6, value.Index);
     }
 
     private static ReadOnlySpan<sbyte> AttributesOffsets =>
@@ -344,29 +407,33 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,1,
-        -1,-1,-1,-1,-1,-1,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,7,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,-1,-1,-1,-1,-1,127,
+        -1,-1,-1,-1,-1,-1,6,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,6,-1,-1,-1,-1,-1,-1,
     ];
 
     // ForOfStatement
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node AwaitModifier(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = AwaitModifierOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = AwaitModifierOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetAwaitModifier(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = AwaitModifierOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = AwaitModifierOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(AwaitModifier));
+            ThrowNoField(d[h], nameof(AwaitModifier));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> AwaitModifierOffsets =>
@@ -377,28 +444,32 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // SourceFile
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public List<DiagnosticWithLocation>? BindDiagnostics(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = BindDiagnosticsOffsets[(int)r.Kind];
-        return o < 0 ? null : (List<DiagnosticWithLocation>?)refs[r.Refs + o];
+        var d = data;
+        var h = node.Index;
+        var o = BindDiagnosticsOffsets[d[h] & KindMask];
+        return o < 0 ? null : Unsafe.As<List<DiagnosticWithLocation>?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetBindDiagnostics(Node node, List<DiagnosticWithLocation>? value)
     {
-        ref var r = ref records[node.Index];
-        var o = BindDiagnosticsOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = BindDiagnosticsOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(BindDiagnostics));
+            ThrowNoField(d[h], nameof(BindDiagnostics));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> BindDiagnosticsOffsets =>
@@ -415,22 +486,26 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public List<DiagnosticWithLocation>? BindSuggestionDiagnostics(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = BindSuggestionDiagnosticsOffsets[(int)r.Kind];
-        return o < 0 ? null : (List<DiagnosticWithLocation>?)refs[r.Refs + o];
+        var d = data;
+        var h = node.Index;
+        var o = BindSuggestionDiagnosticsOffsets[d[h] & KindMask];
+        return o < 0 ? null : Unsafe.As<List<DiagnosticWithLocation>?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetBindSuggestionDiagnostics(Node node, List<DiagnosticWithLocation>? value)
     {
-        ref var r = ref records[node.Index];
-        var o = BindSuggestionDiagnosticsOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = BindSuggestionDiagnosticsOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(BindSuggestionDiagnostics));
+            ThrowNoField(d[h], nameof(BindSuggestionDiagnostics));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> BindSuggestionDiagnosticsOffsets =>
@@ -447,22 +522,26 @@ internal sealed partial class NodeStore
     ];
 
     // CatchClause
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Block(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = BlockOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = BlockOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetBlock(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = BlockOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = BlockOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Block));
+            ThrowNoField(d[h], nameof(Block));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> BlockOffsets =>
@@ -474,27 +553,31 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // ArrowFunction, ClassStaticBlockDeclaration, ConstructorDeclaration, FunctionDeclaration, FunctionExpression, GetAccessorDeclaration, … (9 classes)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Body(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = BodyOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = BodyOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetBody(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = BodyOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = BodyOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Body));
+            ThrowNoField(d[h], nameof(Body));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> BodyOffsets =>
@@ -503,30 +586,34 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,0,1,1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,6,6,6,6,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,6,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,6,-1,-1,-1,-1,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // SwitchStatement
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node CaseBlock(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = CaseBlockOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = CaseBlockOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetCaseBlock(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = CaseBlockOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = CaseBlockOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(CaseBlock));
+            ThrowNoField(d[h], nameof(CaseBlock));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> CaseBlockOffsets =>
@@ -537,28 +624,32 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // TryStatement
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node CatchClause(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = CatchClauseOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = CatchClauseOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetCatchClause(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = CatchClauseOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = CatchClauseOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(CatchClause));
+            ThrowNoField(d[h], nameof(CatchClause));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> CatchClauseOffsets =>
@@ -569,28 +660,32 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // SourceFile
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public CheckJsDirective? CheckJsDirective(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = CheckJsDirectiveOffsets[(int)r.Kind];
-        return o < 0 ? null : (CheckJsDirective?)refs[r.Refs + o];
+        var d = data;
+        var h = node.Index;
+        var o = CheckJsDirectiveOffsets[d[h] & KindMask];
+        return o < 0 ? null : Unsafe.As<CheckJsDirective?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetCheckJsDirective(Node node, CheckJsDirective? value)
     {
-        ref var r = ref records[node.Index];
-        var o = CheckJsDirectiveOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = CheckJsDirectiveOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(CheckJsDirective));
+            ThrowNoField(d[h], nameof(CheckJsDirective));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> CheckJsDirectiveOffsets =>
@@ -607,22 +702,26 @@ internal sealed partial class NodeStore
     ];
 
     // ConditionalTypeNode
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node CheckType(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = CheckTypeOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = CheckTypeOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetCheckType(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = CheckTypeOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = CheckTypeOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(CheckType));
+            ThrowNoField(d[h], nameof(CheckType));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> CheckTypeOffsets =>
@@ -631,7 +730,7 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,5,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
@@ -639,22 +738,26 @@ internal sealed partial class NodeStore
     ];
 
     // JsxElement, JsxFragment
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public NodeArray Children(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ChildrenOffsets[(int)r.Kind];
-        return o < 0 ? null! : (NodeArray)refs[r.Refs + o]!;
+        var d = data;
+        var h = node.Index;
+        var o = ChildrenOffsets[d[h] & KindMask];
+        return o < 0 ? null! : Unsafe.As<NodeArray>(refs[d[h + RefBaseWord] + o])!;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetChildren(Node node, NodeArray value)
     {
-        ref var r = ref records[node.Index];
-        var o = ChildrenOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = ChildrenOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Children));
+            ThrowNoField(d[h], nameof(Children));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> ChildrenOffsets =>
@@ -671,22 +774,26 @@ internal sealed partial class NodeStore
     ];
 
     // JSDocAugmentsTag, JSDocImplementsTag
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Class(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ClassOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = ClassOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetClass(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ClassOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = ClassOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Class));
+            ThrowNoField(d[h], nameof(Class));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ClassOffsets =>
@@ -699,26 +806,30 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,6,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // CaseBlock
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public NodeArray Clauses(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ClausesOffsets[(int)r.Kind];
-        return o < 0 ? null! : (NodeArray)refs[r.Refs + o]!;
+        var d = data;
+        var h = node.Index;
+        var o = ClausesOffsets[d[h] & KindMask];
+        return o < 0 ? null! : Unsafe.As<NodeArray>(refs[d[h + RefBaseWord] + o])!;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetClauses(Node node, NodeArray value)
     {
-        ref var r = ref records[node.Index];
-        var o = ClausesOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = ClausesOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Clauses));
+            ThrowNoField(d[h], nameof(Clauses));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> ClausesOffsets =>
@@ -735,22 +846,26 @@ internal sealed partial class NodeStore
     ];
 
     // JsxElement
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ClosingElement(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ClosingElementOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = ClosingElementOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetClosingElement(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ClosingElementOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = ClosingElementOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ClosingElement));
+            ThrowNoField(d[h], nameof(ClosingElement));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ClosingElementOffsets =>
@@ -762,27 +877,31 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // JsxFragment
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ClosingFragment(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ClosingFragmentOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = ClosingFragmentOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetClosingFragment(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ClosingFragmentOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = ClosingFragmentOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ClosingFragment));
+            ThrowNoField(d[h], nameof(ClosingFragment));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ClosingFragmentOffsets =>
@@ -794,27 +913,31 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // ConditionalExpression
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ColonToken(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ColonTokenOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = ColonTokenOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetColonToken(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ColonTokenOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = ColonTokenOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ColonToken));
+            ThrowNoField(d[h], nameof(ColonToken));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ColonTokenOffsets =>
@@ -824,29 +947,33 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // JSDoc, JSDocAugmentsTag, JSDocAuthorTag, JSDocCallbackTag, JSDocClassTag, JSDocDeprecatedTag, … (26 classes)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public object? Comment(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = CommentOffsets[(int)r.Kind];
-        return o < 0 ? null : (object?)refs[r.Refs + o];
+        var d = data;
+        var h = node.Index;
+        var o = CommentOffsets[d[h] & KindMask];
+        return o < 0 ? null : refs[d[h + RefBaseWord] + o];
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetComment(Node node, object? value)
     {
-        ref var r = ref records[node.Index];
-        var o = CommentOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = CommentOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Comment));
+            ThrowNoField(d[h], nameof(Comment));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> CommentOffsets =>
@@ -863,22 +990,26 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public List<CommentDirective>? CommentDirectives(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = CommentDirectivesOffsets[(int)r.Kind];
-        return o < 0 ? null : (List<CommentDirective>?)refs[r.Refs + o];
+        var d = data;
+        var h = node.Index;
+        var o = CommentDirectivesOffsets[d[h] & KindMask];
+        return o < 0 ? null : Unsafe.As<List<CommentDirective>?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetCommentDirectives(Node node, List<CommentDirective>? value)
     {
-        ref var r = ref records[node.Index];
-        var o = CommentDirectivesOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = CommentDirectivesOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(CommentDirectives));
+            ThrowNoField(d[h], nameof(CommentDirectives));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> CommentDirectivesOffsets =>
@@ -895,22 +1026,26 @@ internal sealed partial class NodeStore
     ];
 
     // ConditionalExpression, ForStatement
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Condition(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ConditionOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = ConditionOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetCondition(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ConditionOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = ConditionOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Condition));
+            ThrowNoField(d[h], nameof(Condition));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ConditionOffsets =>
@@ -920,29 +1055,33 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // JSDocTemplateTag, TypeParameterDeclaration
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Constraint(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ConstraintOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = ConstraintOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetConstraint(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ConstraintOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = ConstraintOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Constraint));
+            ThrowNoField(d[h], nameof(Constraint));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ConstraintOffsets =>
@@ -951,35 +1090,39 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // JsxText
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool ContainsOnlyTriviaWhiteSpaces(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ContainsOnlyTriviaWhiteSpacesOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var w = data[node.Index];
+        var b = ContainsOnlyTriviaWhiteSpacesBits[w & KindMask];
+        return b >= 0 && (w & (1 << b)) != 0;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetContainsOnlyTriviaWhiteSpaces(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = ContainsOnlyTriviaWhiteSpacesOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        var b = ContainsOnlyTriviaWhiteSpacesBits[w & KindMask];
+        if (b < 0)
         {
-            ThrowNoField(r.Kind, nameof(ContainsOnlyTriviaWhiteSpaces));
+            ThrowNoField(d[h], nameof(ContainsOnlyTriviaWhiteSpaces));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        d[h] = value ? w | (1 << b) : w & ~(1 << b);
     }
 
-    private static ReadOnlySpan<sbyte> ContainsOnlyTriviaWhiteSpacesOffsets =>
+    private static ReadOnlySpan<sbyte> ContainsOnlyTriviaWhiteSpacesBits =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,16,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
@@ -991,22 +1134,26 @@ internal sealed partial class NodeStore
     ];
 
     // VariableStatement
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node DeclarationList(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = DeclarationListOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = DeclarationListOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetDeclarationList(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = DeclarationListOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = DeclarationListOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(DeclarationList));
+            ThrowNoField(d[h], nameof(DeclarationList));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> DeclarationListOffsets =>
@@ -1017,28 +1164,32 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // VariableDeclarationList
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public NodeArray Declarations(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = DeclarationsOffsets[(int)r.Kind];
-        return o < 0 ? null! : (NodeArray)refs[r.Refs + o]!;
+        var d = data;
+        var h = node.Index;
+        var o = DeclarationsOffsets[d[h] & KindMask];
+        return o < 0 ? null! : Unsafe.As<NodeArray>(refs[d[h + RefBaseWord] + o])!;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetDeclarations(Node node, NodeArray value)
     {
-        ref var r = ref records[node.Index];
-        var o = DeclarationsOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = DeclarationsOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Declarations));
+            ThrowNoField(d[h], nameof(Declarations));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> DeclarationsOffsets =>
@@ -1055,22 +1206,26 @@ internal sealed partial class NodeStore
     ];
 
     // TypeParameterDeclaration
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Default(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = DefaultOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = DefaultOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetDefault(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = DefaultOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = DefaultOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Default));
+            ThrowNoField(d[h], nameof(Default));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> DefaultOffsets =>
@@ -1079,30 +1234,44 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
-    // BindingElement, JsxExpression, NamedTupleMember, ParameterDeclaration
+    // BindingElement, JsxExpression, NamedTupleMember, ParameterDeclaration (some in the side table)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node DotDotDotToken(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = DotDotDotTokenOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        var o = DotDotDotTokenOffsets[w & KindMask];
+        if ((uint)o < SideOffset)
+        {
+            return new Node(d[h + o]);
+        }
+        return o == SideOffset && w < 0 ? new Node(GetSideInt(h, 7)) : default;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetDotDotDotToken(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = DotDotDotTokenOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        var o = DotDotDotTokenOffsets[d[h] & KindMask];
+        if ((uint)o < SideOffset)
         {
-            ThrowNoField(r.Kind, nameof(DotDotDotToken));
+            d[h + o] = value.Index;
+            return;
         }
-        slots[r.Slots + o] = value.Index;
+        if (o != SideOffset)
+        {
+            ThrowNoField(d[h], nameof(DotDotDotToken));
+        }
+        SetSideInt(h, 7, value.Index);
     }
 
     private static ReadOnlySpan<sbyte> DotDotDotTokenOffsets =>
@@ -1111,30 +1280,34 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,0,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,5,-1,-1,-1,-1,-1,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // ArrayTypeNode
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ElementType(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ElementTypeOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = ElementTypeOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetElementType(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ElementTypeOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = ElementTypeOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ElementType));
+            ThrowNoField(d[h], nameof(ElementType));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ElementTypeOffsets =>
@@ -1143,7 +1316,7 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
@@ -1151,22 +1324,26 @@ internal sealed partial class NodeStore
     ];
 
     // ArrayBindingPattern, ArrayLiteralExpression, CommaListExpression, ImportAttributes, NamedExports, NamedImports, … (8 classes)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public NodeArray Elements(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ElementsOffsets[(int)r.Kind];
-        return o < 0 ? null! : (NodeArray)refs[r.Refs + o]!;
+        var d = data;
+        var h = node.Index;
+        var o = ElementsOffsets[d[h] & KindMask];
+        return o < 0 ? null! : Unsafe.As<NodeArray>(refs[d[h + RefBaseWord] + o])!;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetElements(Node node, NodeArray value)
     {
-        ref var r = ref records[node.Index];
-        var o = ElementsOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = ElementsOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Elements));
+            ThrowNoField(d[h], nameof(Elements));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> ElementsOffsets =>
@@ -1183,22 +1360,26 @@ internal sealed partial class NodeStore
     ];
 
     // IfStatement
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ElseStatement(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ElseStatementOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = ElseStatementOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetElseStatement(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ElseStatementOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = ElseStatementOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ElseStatement));
+            ThrowNoField(d[h], nameof(ElseStatement));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ElseStatementOffsets =>
@@ -1209,28 +1390,32 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // SourceFile
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node EndOfFileToken(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = EndOfFileTokenOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = EndOfFileTokenOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetEndOfFileToken(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = EndOfFileTokenOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = EndOfFileTokenOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(EndOfFileToken));
+            ThrowNoField(d[h], nameof(EndOfFileToken));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> EndOfFileTokenOffsets =>
@@ -1242,27 +1427,31 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // ArrowFunction
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node EqualsGreaterThanToken(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = EqualsGreaterThanTokenOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = EqualsGreaterThanTokenOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetEqualsGreaterThanToken(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = EqualsGreaterThanTokenOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = EqualsGreaterThanTokenOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(EqualsGreaterThanToken));
+            ThrowNoField(d[h], nameof(EqualsGreaterThanToken));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> EqualsGreaterThanTokenOffsets =>
@@ -1272,29 +1461,32 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,7,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
-    // ShorthandPropertyAssignment
+    // ShorthandPropertyAssignment (side table)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node EqualsToken(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = EqualsTokenOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        return w >= 0 || EqualsTokenOffsets[w & KindMask] < 0 ? default : new Node(GetSideInt(h, 8));
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetEqualsToken(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = EqualsTokenOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        if (EqualsTokenOffsets[d[h] & KindMask] < 0)
         {
-            ThrowNoField(r.Kind, nameof(EqualsToken));
+            ThrowNoField(d[h], nameof(EqualsToken));
         }
-        slots[r.Slots + o] = value.Index;
+        SetSideInt(h, 8, value.Index);
     }
 
     private static ReadOnlySpan<sbyte> EqualsTokenOffsets =>
@@ -1306,27 +1498,31 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // Identifier, PrivateIdentifier
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public string? EscapedText(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = EscapedTextOffsets[(int)r.Kind];
-        return o < 0 ? null : (string?)refs[r.Refs + o];
+        var d = data;
+        var h = node.Index;
+        var o = EscapedTextOffsets[d[h] & KindMask];
+        return o < 0 ? null : Unsafe.As<string?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetEscapedText(Node node, string? value)
     {
-        ref var r = ref records[node.Index];
-        var o = EscapedTextOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = EscapedTextOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(EscapedText));
+            ThrowNoField(d[h], nameof(EscapedText));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> EscapedTextOffsets =>
@@ -1342,23 +1538,26 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
-    // ArrowFunction, ConstructorDeclaration, FunctionDeclaration, FunctionExpression, GetAccessorDeclaration, MethodDeclaration, … (11 classes)
+    // ArrowFunction, ConstructorDeclaration, FunctionDeclaration, FunctionExpression, GetAccessorDeclaration, MethodDeclaration, … (11 classes) (side table)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ExclamationToken(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ExclamationTokenOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        return w >= 0 || ExclamationTokenOffsets[w & KindMask] < 0 ? default : new Node(GetSideInt(h, 9));
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetExclamationToken(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ExclamationTokenOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        if (ExclamationTokenOffsets[d[h] & KindMask] < 0)
         {
-            ThrowNoField(r.Kind, nameof(ExclamationToken));
+            ThrowNoField(d[h], nameof(ExclamationToken));
         }
-        slots[r.Slots + o] = value.Index;
+        SetSideInt(h, 9, value.Index);
     }
 
     private static ReadOnlySpan<sbyte> ExclamationTokenOffsets =>
@@ -1367,30 +1566,34 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,2,-1,2,2,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,-1,127,-1,127,127,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,-1,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // ExportDeclaration
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ExportClause(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ExportClauseOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = ExportClauseOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetExportClause(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ExportClauseOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = ExportClauseOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ExportClause));
+            ThrowNoField(d[h], nameof(ExportClause));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ExportClauseOffsets =>
@@ -1401,28 +1604,32 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,5,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // TypeQueryNode
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ExprName(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ExprNameOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = ExprNameOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetExprName(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ExprNameOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = ExprNameOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ExprName));
+            ThrowNoField(d[h], nameof(ExprName));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ExprNameOffsets =>
@@ -1431,30 +1638,44 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
-    // AsExpression, AwaitExpression, CallExpression, CaseClause, ComputedPropertyName, Decorator, … (38 classes)
+    // AsExpression, AwaitExpression, CallExpression, CaseClause, ComputedPropertyName, Decorator, … (38 classes) (some in the side table)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Expression(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ExpressionOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        var o = ExpressionOffsets[w & KindMask];
+        if ((uint)o < SideOffset)
+        {
+            return new Node(d[h + o]);
+        }
+        return o == SideOffset && w < 0 ? new Node(GetSideInt(h, 10)) : default;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetExpression(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ExpressionOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        var o = ExpressionOffsets[d[h] & KindMask];
+        if ((uint)o < SideOffset)
         {
-            ThrowNoField(r.Kind, nameof(Expression));
+            d[h + o] = value.Index;
+            return;
         }
-        slots[r.Slots + o] = value.Index;
+        if (o != SideOffset)
+        {
+            ThrowNoField(d[h], nameof(Expression));
+        }
+        SetSideInt(h, 10, value.Index);
     }
 
     private static ReadOnlySpan<sbyte> ExpressionOffsets =>
@@ -1463,30 +1684,34 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,0,2,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,1,0,0,-1,0,0,-1,-1,0,0,0,0,-1,-1,-1,-1,-1,1,0,-1,-1,0,0,0,-1,-1,0,
-        0,-1,-1,-1,-1,0,1,0,0,-1,0,1,-1,-1,0,0,1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,
-        -1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,0,
+        -1,-1,-1,-1,-1,-1,-1,-1,5,127,-1,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,5,6,6,6,-1,5,5,-1,-1,5,5,5,5,-1,-1,-1,-1,-1,6,5,-1,-1,6,5,5,-1,-1,5,
+        5,-1,-1,-1,-1,5,6,5,5,-1,5,6,-1,-1,5,5,6,-1,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,5,-1,
+        -1,-1,-1,-1,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,5,6,-1,6,-1,-1,-1,-1,-1,-1,-1,-1,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,5,-1,5,
     ];
 
     // ConditionalTypeNode
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ExtendsType(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ExtendsTypeOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = ExtendsTypeOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetExtendsType(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ExtendsTypeOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = ExtendsTypeOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ExtendsType));
+            ThrowNoField(d[h], nameof(ExtendsType));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ExtendsTypeOffsets =>
@@ -1495,7 +1720,7 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,6,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
@@ -1503,22 +1728,26 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public object? ExternalModuleIndicator(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ExternalModuleIndicatorOffsets[(int)r.Kind];
-        return o < 0 ? null : (object?)refs[r.Refs + o];
+        var d = data;
+        var h = node.Index;
+        var o = ExternalModuleIndicatorOffsets[d[h] & KindMask];
+        return o < 0 ? null : refs[d[h + RefBaseWord] + o];
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetExternalModuleIndicator(Node node, object? value)
     {
-        ref var r = ref records[node.Index];
-        var o = ExternalModuleIndicatorOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = ExternalModuleIndicatorOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ExternalModuleIndicator));
+            ThrowNoField(d[h], nameof(ExternalModuleIndicator));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> ExternalModuleIndicatorOffsets =>
@@ -1535,22 +1764,26 @@ internal sealed partial class NodeStore
     ];
 
     // ConditionalTypeNode
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node FalseType(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = FalseTypeOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = FalseTypeOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetFalseType(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = FalseTypeOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = FalseTypeOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(FalseType));
+            ThrowNoField(d[h], nameof(FalseType));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> FalseTypeOffsets =>
@@ -1559,7 +1792,7 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,7,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
@@ -1567,22 +1800,26 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public string FileName(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = FileNameOffsets[(int)r.Kind];
-        return o < 0 ? null! : (string)refs[r.Refs + o]!;
+        var d = data;
+        var h = node.Index;
+        var o = FileNameOffsets[d[h] & KindMask];
+        return o < 0 ? null! : Unsafe.As<string>(refs[d[h + RefBaseWord] + o])!;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetFileName(Node node, string value)
     {
-        ref var r = ref records[node.Index];
-        var o = FileNameOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = FileNameOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(FileName));
+            ThrowNoField(d[h], nameof(FileName));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> FileNameOffsets =>
@@ -1599,22 +1836,26 @@ internal sealed partial class NodeStore
     ];
 
     // TryStatement
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node FinallyBlock(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = FinallyBlockOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = FinallyBlockOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetFinallyBlock(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = FinallyBlockOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = FinallyBlockOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(FinallyBlock));
+            ThrowNoField(d[h], nameof(FinallyBlock));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> FinallyBlockOffsets =>
@@ -1625,28 +1866,32 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // JSDocCallbackTag, JSDocTypedefTag
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node FullName(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = FullNameOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = FullNameOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetFullName(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = FullNameOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = FullNameOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(FullName));
+            ThrowNoField(d[h], nameof(FullName));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> FullNameOffsets =>
@@ -1659,31 +1904,35 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,6,-1,-1,-1,-1,-1,-1,-1,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // BigIntLiteral, JsxText, NoSubstitutionTemplateLiteral, NumericLiteral, RegularExpressionLiteral, StringLiteral, … (9 classes)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool HasExtendedUnicodeEscape(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = HasExtendedUnicodeEscapeOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var w = data[node.Index];
+        var b = HasExtendedUnicodeEscapeBits[w & KindMask];
+        return b >= 0 && (w & (1 << b)) != 0;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetHasExtendedUnicodeEscape(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = HasExtendedUnicodeEscapeOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        var b = HasExtendedUnicodeEscapeBits[w & KindMask];
+        if (b < 0)
         {
-            ThrowNoField(r.Kind, nameof(HasExtendedUnicodeEscape));
+            ThrowNoField(d[h], nameof(HasExtendedUnicodeEscape));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        d[h] = value ? w | (1 << b) : w & ~(1 << b);
     }
 
-    private static ReadOnlySpan<sbyte> HasExtendedUnicodeEscapeOffsets =>
+    private static ReadOnlySpan<sbyte> HasExtendedUnicodeEscapeBits =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,0,0,0,1,-1,0,0,0,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,16,16,16,17,-1,16,16,16,16,16,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
@@ -1695,25 +1944,29 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool HasNoDefaultLib(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = HasNoDefaultLibOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var w = data[node.Index];
+        var b = HasNoDefaultLibBits[w & KindMask];
+        return b >= 0 && (w & (1 << b)) != 0;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetHasNoDefaultLib(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = HasNoDefaultLibOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        var b = HasNoDefaultLibBits[w & KindMask];
+        if (b < 0)
         {
-            ThrowNoField(r.Kind, nameof(HasNoDefaultLib));
+            ThrowNoField(d[h], nameof(HasNoDefaultLib));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        d[h] = value ? w | (1 << b) : w & ~(1 << b);
     }
 
-    private static ReadOnlySpan<sbyte> HasNoDefaultLibOffsets =>
+    private static ReadOnlySpan<sbyte> HasNoDefaultLibBits =>
     [
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
@@ -1722,27 +1975,31 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,16,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // TemplateExpression, TemplateLiteralTypeNode
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Head(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = HeadOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = HeadOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetHead(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = HeadOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = HeadOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Head));
+            ThrowNoField(d[h], nameof(Head));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> HeadOffsets =>
@@ -1752,29 +2009,33 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // ClassDeclaration, ClassExpression, InterfaceDeclaration
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public NodeArray? HeritageClauses(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = HeritageClausesOffsets[(int)r.Kind];
-        return o < 0 ? null : (NodeArray?)refs[r.Refs + o];
+        var d = data;
+        var h = node.Index;
+        var o = HeritageClausesOffsets[d[h] & KindMask];
+        return o < 0 ? null : Unsafe.As<NodeArray?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetHeritageClauses(Node node, NodeArray? value)
     {
-        ref var r = ref records[node.Index];
-        var o = HeritageClausesOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = HeritageClausesOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(HeritageClauses));
+            ThrowNoField(d[h], nameof(HeritageClauses));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> HeritageClausesOffsets =>
@@ -1791,22 +2052,26 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int IdentifierCount(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IdentifierCountOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o];
+        var d = data;
+        var h = node.Index;
+        var o = IdentifierCountOffsets[d[h] & KindMask];
+        return o < 0 ? default : d[h + o];
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetIdentifierCount(Node node, int value)
     {
-        ref var r = ref records[node.Index];
-        var o = IdentifierCountOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = IdentifierCountOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(IdentifierCount));
+            ThrowNoField(d[h], nameof(IdentifierCount));
         }
-        slots[r.Slots + o] = value;
+        d[h + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> IdentifierCountOffsets =>
@@ -1818,27 +2083,31 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,7,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // SourceFile
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Dictionary<string, string>? Identifiers(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IdentifiersOffsets[(int)r.Kind];
-        return o < 0 ? null : (Dictionary<string, string>?)refs[r.Refs + o];
+        var d = data;
+        var h = node.Index;
+        var o = IdentifiersOffsets[d[h] & KindMask];
+        return o < 0 ? null : Unsafe.As<Dictionary<string, string>?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetIdentifiers(Node node, Dictionary<string, string>? value)
     {
-        ref var r = ref records[node.Index];
-        var o = IdentifiersOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = IdentifiersOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Identifiers));
+            ThrowNoField(d[h], nameof(Identifiers));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> IdentifiersOffsets =>
@@ -1855,22 +2124,26 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ModuleKind ImpliedNodeFormat(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ImpliedNodeFormatOffsets[(int)r.Kind];
-        return o < 0 ? default : (ModuleKind)slots[r.Slots + o];
+        var d = data;
+        var h = node.Index;
+        var o = ImpliedNodeFormatOffsets[d[h] & KindMask];
+        return o < 0 ? default : (ModuleKind)d[h + o];
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetImpliedNodeFormat(Node node, ModuleKind value)
     {
-        ref var r = ref records[node.Index];
-        var o = ImpliedNodeFormatOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = ImpliedNodeFormatOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ImpliedNodeFormat));
+            ThrowNoField(d[h], nameof(ImpliedNodeFormat));
         }
-        slots[r.Slots + o] = (int)value;
+        d[h + o] = (int)value;
     }
 
     private static ReadOnlySpan<sbyte> ImpliedNodeFormatOffsets =>
@@ -1882,27 +2155,31 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,8,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // ImportDeclaration, JSDocImportTag
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ImportClause(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ImportClauseOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = ImportClauseOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetImportClause(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ImportClauseOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = ImportClauseOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ImportClause));
+            ThrowNoField(d[h], nameof(ImportClause));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ImportClauseOffsets =>
@@ -1913,28 +2190,32 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,5,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,7,-1,-1,-1,-1,-1,-1,
     ];
 
     // SourceFile
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node[]? Imports(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ImportsOffsets[(int)r.Kind];
-        return o < 0 ? null : (Node[]?)refs[r.Refs + o];
+        var d = data;
+        var h = node.Index;
+        var o = ImportsOffsets[d[h] & KindMask];
+        return o < 0 ? null : Unsafe.As<Node[]?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetImports(Node node, Node[]? value)
     {
-        ref var r = ref records[node.Index];
-        var o = ImportsOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = ImportsOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Imports));
+            ThrowNoField(d[h], nameof(Imports));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> ImportsOffsets =>
@@ -1951,22 +2232,26 @@ internal sealed partial class NodeStore
     ];
 
     // ForStatement
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Incrementor(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IncrementorOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = IncrementorOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetIncrementor(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = IncrementorOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = IncrementorOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Incrementor));
+            ThrowNoField(d[h], nameof(Incrementor));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> IncrementorOffsets =>
@@ -1977,28 +2262,32 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // IndexedAccessTypeNode
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node IndexType(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IndexTypeOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = IndexTypeOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetIndexType(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = IndexTypeOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = IndexTypeOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(IndexType));
+            ThrowNoField(d[h], nameof(IndexType));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> IndexTypeOffsets =>
@@ -2008,29 +2297,43 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
-    // BindingElement, EnumMember, ForInStatement, ForOfStatement, ForStatement, JsxAttribute, … (11 classes)
+    // BindingElement, EnumMember, ForInStatement, ForOfStatement, ForStatement, JsxAttribute, … (11 classes) (some in the side table)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Initializer(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = InitializerOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        var o = InitializerOffsets[w & KindMask];
+        if ((uint)o < SideOffset)
+        {
+            return new Node(d[h + o]);
+        }
+        return o == SideOffset && w < 0 ? new Node(GetSideInt(h, 11)) : default;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetInitializer(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = InitializerOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        var o = InitializerOffsets[d[h] & KindMask];
+        if ((uint)o < SideOffset)
         {
-            ThrowNoField(r.Kind, nameof(Initializer));
+            d[h + o] = value.Index;
+            return;
         }
-        slots[r.Slots + o] = value.Index;
+        if (o != SideOffset)
+        {
+            ThrowNoField(d[h], nameof(Initializer));
+        }
+        SetSideInt(h, 11, value.Index);
     }
 
     private static ReadOnlySpan<sbyte> InitializerOffsets =>
@@ -2039,33 +2342,37 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,0,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,2,1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,-1,127,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,7,6,7,-1,-1,-1,-1,-1,-1,-1,-1,-1,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,5,-1,-1,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // JSDocTypeLiteral
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool IsArrayType(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IsArrayTypeOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var w = data[node.Index];
+        var b = IsArrayTypeBits[w & KindMask];
+        return b >= 0 && (w & (1 << b)) != 0;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetIsArrayType(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = IsArrayTypeOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        var b = IsArrayTypeBits[w & KindMask];
+        if (b < 0)
         {
-            ThrowNoField(r.Kind, nameof(IsArrayType));
+            ThrowNoField(d[h], nameof(IsArrayType));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        d[h] = value ? w | (1 << b) : w & ~(1 << b);
     }
 
-    private static ReadOnlySpan<sbyte> IsArrayTypeOffsets =>
+    private static ReadOnlySpan<sbyte> IsArrayTypeBits =>
     [
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
@@ -2075,29 +2382,33 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,16,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // JSDocParameterTag, JSDocPropertyTag
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool IsBracketed(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IsBracketedOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var w = data[node.Index];
+        var b = IsBracketedBits[w & KindMask];
+        return b >= 0 && (w & (1 << b)) != 0;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetIsBracketed(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = IsBracketedOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        var b = IsBracketedBits[w & KindMask];
+        if (b < 0)
         {
-            ThrowNoField(r.Kind, nameof(IsBracketed));
+            ThrowNoField(d[h], nameof(IsBracketed));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        d[h] = value ? w | (1 << b) : w & ~(1 << b);
     }
 
-    private static ReadOnlySpan<sbyte> IsBracketedOffsets =>
+    private static ReadOnlySpan<sbyte> IsBracketedBits =>
     [
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
@@ -2107,29 +2418,33 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,16,-1,-1,-1,-1,-1,-1,16,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // SourceFile
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool IsDeclarationFile(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IsDeclarationFileOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var w = data[node.Index];
+        var b = IsDeclarationFileBits[w & KindMask];
+        return b >= 0 && (w & (1 << b)) != 0;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetIsDeclarationFile(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = IsDeclarationFileOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        var b = IsDeclarationFileBits[w & KindMask];
+        if (b < 0)
         {
-            ThrowNoField(r.Kind, nameof(IsDeclarationFile));
+            ThrowNoField(d[h], nameof(IsDeclarationFile));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        d[h] = value ? w | (1 << b) : w & ~(1 << b);
     }
 
-    private static ReadOnlySpan<sbyte> IsDeclarationFileOffsets =>
+    private static ReadOnlySpan<sbyte> IsDeclarationFileBits =>
     [
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
@@ -2138,30 +2453,34 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,4,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,17,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // ExportAssignment
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool IsExportEquals(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IsExportEqualsOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var w = data[node.Index];
+        var b = IsExportEqualsBits[w & KindMask];
+        return b >= 0 && (w & (1 << b)) != 0;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetIsExportEquals(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = IsExportEqualsOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        var b = IsExportEqualsBits[w & KindMask];
+        if (b < 0)
         {
-            ThrowNoField(r.Kind, nameof(IsExportEquals));
+            ThrowNoField(d[h], nameof(IsExportEquals));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        d[h] = value ? w | (1 << b) : w & ~(1 << b);
     }
 
-    private static ReadOnlySpan<sbyte> IsExportEqualsOffsets =>
+    private static ReadOnlySpan<sbyte> IsExportEqualsBits =>
     [
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
@@ -2169,31 +2488,35 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,16,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // JSDocParameterTag, JSDocPropertyTag
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool IsNameFirst(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IsNameFirstOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var w = data[node.Index];
+        var b = IsNameFirstBits[w & KindMask];
+        return b >= 0 && (w & (1 << b)) != 0;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetIsNameFirst(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = IsNameFirstOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        var b = IsNameFirstBits[w & KindMask];
+        if (b < 0)
         {
-            ThrowNoField(r.Kind, nameof(IsNameFirst));
+            ThrowNoField(d[h], nameof(IsNameFirst));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        d[h] = value ? w | (1 << b) : w & ~(1 << b);
     }
 
-    private static ReadOnlySpan<sbyte> IsNameFirstOffsets =>
+    private static ReadOnlySpan<sbyte> IsNameFirstBits =>
     [
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
@@ -2203,26 +2526,29 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,17,-1,-1,-1,-1,-1,-1,17,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
-    // SyntheticExpression
+    // SyntheticExpression (side table)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool IsSpread(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IsSpreadOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        return w >= 0 || IsSpreadOffsets[w & KindMask] < 0 ? default : GetSideInt(h, 12) != 0;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetIsSpread(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = IsSpreadOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        if (IsSpreadOffsets[d[h] & KindMask] < 0)
         {
-            ThrowNoField(r.Kind, nameof(IsSpread));
+            ThrowNoField(d[h], nameof(IsSpread));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        SetSideInt(h, 12, (value ? 1 : 0));
     }
 
     private static ReadOnlySpan<sbyte> IsSpreadOffsets =>
@@ -2232,64 +2558,72 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // ImportTypeNode
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool IsTypeOf(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IsTypeOfOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var w = data[node.Index];
+        var b = IsTypeOfBits[w & KindMask];
+        return b >= 0 && (w & (1 << b)) != 0;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetIsTypeOf(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = IsTypeOfOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        var b = IsTypeOfBits[w & KindMask];
+        if (b < 0)
         {
-            ThrowNoField(r.Kind, nameof(IsTypeOf));
+            ThrowNoField(d[h], nameof(IsTypeOf));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        d[h] = value ? w | (1 << b) : w & ~(1 << b);
     }
 
-    private static ReadOnlySpan<sbyte> IsTypeOfOffsets =>
+    private static ReadOnlySpan<sbyte> IsTypeOfBits =>
     [
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,16,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // ExportDeclaration, ExportSpecifier, ImportClause, ImportEqualsDeclaration, ImportSpecifier
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool IsTypeOnly(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IsTypeOnlyOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var w = data[node.Index];
+        var b = IsTypeOnlyBits[w & KindMask];
+        return b >= 0 && (w & (1 << b)) != 0;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetIsTypeOnly(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = IsTypeOnlyOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        var b = IsTypeOnlyBits[w & KindMask];
+        if (b < 0)
         {
-            ThrowNoField(r.Kind, nameof(IsTypeOnly));
+            ThrowNoField(d[h], nameof(IsTypeOnly));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        d[h] = value ? w | (1 << b) : w & ~(1 << b);
     }
 
-    private static ReadOnlySpan<sbyte> IsTypeOnlyOffsets =>
+    private static ReadOnlySpan<sbyte> IsTypeOnlyBits =>
     [
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
@@ -2297,33 +2631,37 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,0,-1,-1,0,-1,3,
-        -1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,16,-1,16,-1,-1,16,-1,16,
+        -1,-1,16,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // BigIntLiteral, JsxText, NoSubstitutionTemplateLiteral, NumericLiteral, RegularExpressionLiteral, StringLiteral, … (9 classes)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool IsUnterminated(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IsUnterminatedOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var w = data[node.Index];
+        var b = IsUnterminatedBits[w & KindMask];
+        return b >= 0 && (w & (1 << b)) != 0;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetIsUnterminated(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = IsUnterminatedOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        var b = IsUnterminatedBits[w & KindMask];
+        if (b < 0)
         {
-            ThrowNoField(r.Kind, nameof(IsUnterminated));
+            ThrowNoField(d[h], nameof(IsUnterminated));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        d[h] = value ? w | (1 << b) : w & ~(1 << b);
     }
 
-    private static ReadOnlySpan<sbyte> IsUnterminatedOffsets =>
+    private static ReadOnlySpan<sbyte> IsUnterminatedBits =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,1,1,1,2,-1,1,1,1,1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,17,17,17,18,-1,17,17,17,17,17,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
@@ -2335,22 +2673,26 @@ internal sealed partial class NodeStore
     ];
 
     // JSDocSignature
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node[]? JSDocSignatureParameters(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = JSDocSignatureParametersOffsets[(int)r.Kind];
-        return o < 0 ? null : (Node[]?)refs[r.Refs + o];
+        var d = data;
+        var h = node.Index;
+        var o = JSDocSignatureParametersOffsets[d[h] & KindMask];
+        return o < 0 ? null : Unsafe.As<Node[]?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetJSDocSignatureParameters(Node node, Node[]? value)
     {
-        ref var r = ref records[node.Index];
-        var o = JSDocSignatureParametersOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = JSDocSignatureParametersOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(JSDocSignatureParameters));
+            ThrowNoField(d[h], nameof(JSDocSignatureParameters));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> JSDocSignatureParametersOffsets =>
@@ -2363,26 +2705,30 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // JSDocSignature
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node[]? JSDocSignatureTypeParameters(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = JSDocSignatureTypeParametersOffsets[(int)r.Kind];
-        return o < 0 ? null : (Node[]?)refs[r.Refs + o];
+        var d = data;
+        var h = node.Index;
+        var o = JSDocSignatureTypeParametersOffsets[d[h] & KindMask];
+        return o < 0 ? null : Unsafe.As<Node[]?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetJSDocSignatureTypeParameters(Node node, Node[]? value)
     {
-        ref var r = ref records[node.Index];
-        var o = JSDocSignatureTypeParametersOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = JSDocSignatureTypeParametersOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(JSDocSignatureTypeParameters));
+            ThrowNoField(d[h], nameof(JSDocSignatureTypeParameters));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> JSDocSignatureTypeParametersOffsets =>
@@ -2395,58 +2741,65 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
-    // ArrowFunction, BinaryExpression, Block, BreakStatement, CallSignatureDeclaration, CaseClause, … (69 classes)
+    // ArrowFunction, BinaryExpression, Block, BreakStatement, CallSignatureDeclaration, CaseClause, … (69 classes) (side table)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public List<Node>? JsDoc(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = JsDocOffsets[(int)r.Kind];
-        return o < 0 ? null : (List<Node>?)refs[r.Refs + o];
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        return w >= 0 || JsDocOffsets[w & KindMask] < 0 ? null : Unsafe.As<List<Node>?>(GetSideRef(h, 13));
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetJsDoc(Node node, List<Node>? value)
     {
-        ref var r = ref records[node.Index];
-        var o = JsDocOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        if (JsDocOffsets[d[h] & KindMask] < 0)
         {
-            ThrowNoField(r.Kind, nameof(JsDoc));
+            ThrowNoField(d[h], nameof(JsDoc));
         }
-        refs[r.Refs + o] = value;
+        SetSideRef(h, 13, value);
     }
 
     private static ReadOnlySpan<sbyte> JsDocOffsets =>
     [
-        -1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        127,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,0,0,-1,0,0,0,0,0,0,0,0,0,0,0,-1,-1,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,0,0,0,-1,-1,-1,-1,0,0,0,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,
-        -1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,-1,0,1,1,0,0,0,0,-1,0,0,0,-1,-1,-1,-1,0,0,
-        -1,-1,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,0,0,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,
-        -1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,127,127,-1,127,127,127,127,127,127,127,127,127,127,127,-1,-1,127,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,127,-1,-1,-1,-1,-1,-1,-1,127,127,127,-1,-1,-1,-1,127,127,127,-1,-1,-1,-1,-1,-1,127,-1,-1,-1,-1,127,-1,-1,-1,-1,-1,-1,-1,
+        -1,127,127,127,127,127,127,127,127,127,127,127,127,127,127,127,127,127,127,127,127,127,-1,127,127,127,127,127,127,127,-1,127,127,127,-1,-1,-1,-1,127,127,
+        -1,-1,127,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,-1,-1,-1,-1,-1,-1,127,127,127,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,-1,
+        -1,-1,-1,-1,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,-1,-1,-1,-1,
     ];
 
     // SourceFile
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public List<DiagnosticWithLocation>? JsDocDiagnostics(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = JsDocDiagnosticsOffsets[(int)r.Kind];
-        return o < 0 ? null : (List<DiagnosticWithLocation>?)refs[r.Refs + o];
+        var d = data;
+        var h = node.Index;
+        var o = JsDocDiagnosticsOffsets[d[h] & KindMask];
+        return o < 0 ? null : Unsafe.As<List<DiagnosticWithLocation>?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetJsDocDiagnostics(Node node, List<DiagnosticWithLocation>? value)
     {
-        ref var r = ref records[node.Index];
-        var o = JsDocDiagnosticsOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = JsDocDiagnosticsOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(JsDocDiagnostics));
+            ThrowNoField(d[h], nameof(JsDocDiagnostics));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> JsDocDiagnosticsOffsets =>
@@ -2463,22 +2816,26 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public JSDocParsingMode JsDocParsingMode(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = JsDocParsingModeOffsets[(int)r.Kind];
-        return o < 0 ? default : (JSDocParsingMode)slots[r.Slots + o];
+        var d = data;
+        var h = node.Index;
+        var o = JsDocParsingModeOffsets[d[h] & KindMask];
+        return o < 0 ? default : (JSDocParsingMode)d[h + o];
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetJsDocParsingMode(Node node, JSDocParsingMode value)
     {
-        ref var r = ref records[node.Index];
-        var o = JsDocParsingModeOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = JsDocParsingModeOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(JsDocParsingMode));
+            ThrowNoField(d[h], nameof(JsDocParsingMode));
         }
-        slots[r.Slots + o] = (int)value;
+        d[h + o] = (int)value;
     }
 
     private static ReadOnlySpan<sbyte> JsDocParsingModeOffsets =>
@@ -2490,27 +2847,31 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,9,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // JSDocTypeLiteral
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node[]? JsDocPropertyTags(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = JsDocPropertyTagsOffsets[(int)r.Kind];
-        return o < 0 ? null : (Node[]?)refs[r.Refs + o];
+        var d = data;
+        var h = node.Index;
+        var o = JsDocPropertyTagsOffsets[d[h] & KindMask];
+        return o < 0 ? null : Unsafe.As<Node[]?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetJsDocPropertyTags(Node node, Node[]? value)
     {
-        ref var r = ref records[node.Index];
-        var o = JsDocPropertyTagsOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = JsDocPropertyTagsOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(JsDocPropertyTags));
+            ThrowNoField(d[h], nameof(JsDocPropertyTags));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> JsDocPropertyTagsOffsets =>
@@ -2527,22 +2888,26 @@ internal sealed partial class NodeStore
     ];
 
     // MetaProperty
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public SyntaxKind KeywordToken(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = KeywordTokenOffsets[(int)r.Kind];
-        return o < 0 ? default : (SyntaxKind)slots[r.Slots + o];
+        var d = data;
+        var h = node.Index;
+        var o = KeywordTokenOffsets[d[h] & KindMask];
+        return o < 0 ? default : (SyntaxKind)d[h + o];
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetKeywordToken(Node node, SyntaxKind value)
     {
-        ref var r = ref records[node.Index];
-        var o = KeywordTokenOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = KeywordTokenOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(KeywordToken));
+            ThrowNoField(d[h], nameof(KeywordToken));
         }
-        slots[r.Slots + o] = (int)value;
+        d[h + o] = (int)value;
     }
 
     private static ReadOnlySpan<sbyte> KeywordTokenOffsets =>
@@ -2552,29 +2917,33 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,5,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // BreakStatement, ContinueStatement, LabeledStatement
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Label(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = LabelOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = LabelOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetLabel(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = LabelOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = LabelOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Label));
+            ThrowNoField(d[h], nameof(Label));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> LabelOffsets =>
@@ -2585,28 +2954,32 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,0,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,5,5,-1,-1,-1,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // SourceFile
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public LanguageVariant LanguageVariant(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = LanguageVariantOffsets[(int)r.Kind];
-        return o < 0 ? default : (LanguageVariant)slots[r.Slots + o];
+        var d = data;
+        var h = node.Index;
+        var o = LanguageVariantOffsets[d[h] & KindMask];
+        return o < 0 ? default : (LanguageVariant)d[h + o];
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetLanguageVariant(Node node, LanguageVariant value)
     {
-        ref var r = ref records[node.Index];
-        var o = LanguageVariantOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = LanguageVariantOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(LanguageVariant));
+            ThrowNoField(d[h], nameof(LanguageVariant));
         }
-        slots[r.Slots + o] = (int)value;
+        d[h + o] = (int)value;
     }
 
     private static ReadOnlySpan<sbyte> LanguageVariantOffsets =>
@@ -2618,27 +2991,31 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,10,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // SourceFile
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ScriptTarget LanguageVersion(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = LanguageVersionOffsets[(int)r.Kind];
-        return o < 0 ? default : (ScriptTarget)slots[r.Slots + o];
+        var d = data;
+        var h = node.Index;
+        var o = LanguageVersionOffsets[d[h] & KindMask];
+        return o < 0 ? default : (ScriptTarget)d[h + o];
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetLanguageVersion(Node node, ScriptTarget value)
     {
-        ref var r = ref records[node.Index];
-        var o = LanguageVersionOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = LanguageVersionOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(LanguageVersion));
+            ThrowNoField(d[h], nameof(LanguageVersion));
         }
-        slots[r.Slots + o] = (int)value;
+        d[h + o] = (int)value;
     }
 
     private static ReadOnlySpan<sbyte> LanguageVersionOffsets =>
@@ -2650,27 +3027,31 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,7,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,11,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // BinaryExpression, JSDocMemberName, QualifiedName
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Left(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = LeftOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = LeftOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetLeft(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = LeftOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = LeftOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Left));
+            ThrowNoField(d[h], nameof(Left));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> LeftOffsets =>
@@ -2679,30 +3060,34 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,5,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // SourceFile
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IReadOnlyList<FileReference> LibReferenceDirectives(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = LibReferenceDirectivesOffsets[(int)r.Kind];
-        return o < 0 ? null! : (IReadOnlyList<FileReference>)refs[r.Refs + o]!;
+        var d = data;
+        var h = node.Index;
+        var o = LibReferenceDirectivesOffsets[d[h] & KindMask];
+        return o < 0 ? null! : Unsafe.As<IReadOnlyList<FileReference>>(refs[d[h + RefBaseWord] + o])!;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetLibReferenceDirectives(Node node, IReadOnlyList<FileReference> value)
     {
-        ref var r = ref records[node.Index];
-        var o = LibReferenceDirectivesOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = LibReferenceDirectivesOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(LibReferenceDirectives));
+            ThrowNoField(d[h], nameof(LibReferenceDirectives));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> LibReferenceDirectivesOffsets =>
@@ -2719,22 +3104,26 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IReadOnlyList<int>? LineMap(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = LineMapOffsets[(int)r.Kind];
-        return o < 0 ? null : (IReadOnlyList<int>?)refs[r.Refs + o];
+        var d = data;
+        var h = node.Index;
+        var o = LineMapOffsets[d[h] & KindMask];
+        return o < 0 ? null : Unsafe.As<IReadOnlyList<int>?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetLineMap(Node node, IReadOnlyList<int>? value)
     {
-        ref var r = ref records[node.Index];
-        var o = LineMapOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = LineMapOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(LineMap));
+            ThrowNoField(d[h], nameof(LineMap));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> LineMapOffsets =>
@@ -2751,22 +3140,26 @@ internal sealed partial class NodeStore
     ];
 
     // LiteralTypeNode, TemplateLiteralTypeSpan, TemplateSpan
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Literal(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = LiteralOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = LiteralOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetLiteral(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = LiteralOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = LiteralOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Literal));
+            ThrowNoField(d[h], nameof(Literal));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> LiteralOffsets =>
@@ -2776,29 +3169,33 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,0,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,5,-1,-1,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // ClassDeclaration, ClassExpression, EnumDeclaration, InterfaceDeclaration, MappedTypeNode, TypeLiteralNode
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public NodeArray? Members(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = MembersOffsets[(int)r.Kind];
-        return o < 0 ? null : (NodeArray?)refs[r.Refs + o];
+        var d = data;
+        var h = node.Index;
+        var o = MembersOffsets[d[h] & KindMask];
+        return o < 0 ? null : Unsafe.As<NodeArray?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetMembers(Node node, NodeArray? value)
     {
-        ref var r = ref records[node.Index];
-        var o = MembersOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = MembersOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Members));
+            ThrowNoField(d[h], nameof(Members));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> MembersOffsets =>
@@ -2808,29 +3205,43 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,2,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
-    // ArrowFunction, ClassDeclaration, ClassExpression, ClassStaticBlockDeclaration, ConstructorDeclaration, ConstructorTypeNode, … (31 classes)
+    // ArrowFunction, ClassDeclaration, ClassExpression, ClassStaticBlockDeclaration, ConstructorDeclaration, ConstructorTypeNode, … (31 classes) (some in the side table)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public NodeArray? Modifiers(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ModifiersOffsets[(int)r.Kind];
-        return o < 0 ? null : (NodeArray?)refs[r.Refs + o];
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        var o = ModifiersOffsets[w & KindMask];
+        if ((uint)o < SideOffset)
+        {
+            return Unsafe.As<NodeArray?>(refs[d[h + RefBaseWord] + o]);
+        }
+        return o == SideOffset && w < 0 ? Unsafe.As<NodeArray?>(GetSideRef(h, 14)) : null;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetModifiers(Node node, NodeArray? value)
     {
-        ref var r = ref records[node.Index];
-        var o = ModifiersOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        var o = ModifiersOffsets[d[h] & KindMask];
+        if ((uint)o < SideOffset)
         {
-            ThrowNoField(r.Kind, nameof(Modifiers));
+            refs[d[h + RefBaseWord] + o] = value;
+            return;
         }
-        refs[r.Refs + o] = value;
+        if (o != SideOffset)
+        {
+            ThrowNoField(d[h], nameof(Modifiers));
+        }
+        SetSideRef(h, 14, value);
     }
 
     private static ReadOnlySpan<sbyte> ModifiersOffsets =>
@@ -2839,30 +3250,34 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,1,1,-1,1,1,1,1,1,1,1,1,-1,-1,1,-1,-1,1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,3,3,1,2,1,-1,-1,1,1,1,-1,-1,-1,-1,1,1,
-        -1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,127,127,-1,0,0,127,0,0,0,0,0,-1,-1,0,-1,-1,127,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,2,2,0,1,0,-1,-1,0,0,127,-1,-1,-1,-1,127,127,
+        -1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // SourceFile
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node[]? ModuleAugmentations(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ModuleAugmentationsOffsets[(int)r.Kind];
-        return o < 0 ? null : (Node[]?)refs[r.Refs + o];
+        var d = data;
+        var h = node.Index;
+        var o = ModuleAugmentationsOffsets[d[h] & KindMask];
+        return o < 0 ? null : Unsafe.As<Node[]?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetModuleAugmentations(Node node, Node[]? value)
     {
-        ref var r = ref records[node.Index];
-        var o = ModuleAugmentationsOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = ModuleAugmentationsOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ModuleAugmentations));
+            ThrowNoField(d[h], nameof(ModuleAugmentations));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> ModuleAugmentationsOffsets =>
@@ -2879,22 +3294,26 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public string? ModuleName(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ModuleNameOffsets[(int)r.Kind];
-        return o < 0 ? null : (string?)refs[r.Refs + o];
+        var d = data;
+        var h = node.Index;
+        var o = ModuleNameOffsets[d[h] & KindMask];
+        return o < 0 ? null : Unsafe.As<string?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetModuleName(Node node, string? value)
     {
-        ref var r = ref records[node.Index];
-        var o = ModuleNameOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = ModuleNameOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ModuleName));
+            ThrowNoField(d[h], nameof(ModuleName));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> ModuleNameOffsets =>
@@ -2911,22 +3330,26 @@ internal sealed partial class NodeStore
     ];
 
     // ImportEqualsDeclaration
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ModuleReference(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ModuleReferenceOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = ModuleReferenceOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetModuleReference(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ModuleReferenceOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = ModuleReferenceOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ModuleReference));
+            ThrowNoField(d[h], nameof(ModuleReference));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ModuleReferenceOffsets =>
@@ -2937,28 +3360,32 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,6,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // ExportDeclaration, ImportDeclaration, JSDocImportTag
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ModuleSpecifier(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ModuleSpecifierOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = ModuleSpecifierOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetModuleSpecifier(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ModuleSpecifierOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = ModuleSpecifierOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ModuleSpecifier));
+            ThrowNoField(d[h], nameof(ModuleSpecifier));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ModuleSpecifierOffsets =>
@@ -2969,60 +3396,78 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,-1,-1,-1,-1,4,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,6,-1,-1,-1,-1,-1,6,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,8,-1,-1,-1,-1,-1,-1,
     ];
 
     // ArrayLiteralExpression, Block, ImportAttributes, ImportTypeAssertionContainer, ObjectLiteralExpression
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool MultiLine(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = MultiLineOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var w = data[node.Index];
+        var b = MultiLineBits[w & KindMask];
+        return b >= 0 && (w & (1 << b)) != 0;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetMultiLine(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = MultiLineOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        var b = MultiLineBits[w & KindMask];
+        if (b < 0)
         {
-            ThrowNoField(r.Kind, nameof(MultiLine));
+            ThrowNoField(d[h], nameof(MultiLine));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        d[h] = value ? w | (1 << b) : w & ~(1 << b);
     }
 
-    private static ReadOnlySpan<sbyte> MultiLineOffsets =>
+    private static ReadOnlySpan<sbyte> MultiLineBits =>
     [
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,16,16,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,16,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,16,-1,16,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
-    // BindingElement, CallSignatureDeclaration, ClassDeclaration, ClassExpression, ClassStaticBlockDeclaration, ConstructSignatureDeclaration, … (58 classes)
+    // BindingElement, CallSignatureDeclaration, ClassDeclaration, ClassExpression, ClassStaticBlockDeclaration, ConstructSignatureDeclaration, … (58 classes) (some in the side table)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Name(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = NameOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        var o = NameOffsets[w & KindMask];
+        if ((uint)o < SideOffset)
+        {
+            return new Node(d[h + o]);
+        }
+        return o == SideOffset && w < 0 ? new Node(GetSideInt(h, 15)) : default;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetName(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = NameOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        var o = NameOffsets[d[h] & KindMask];
+        if ((uint)o < SideOffset)
         {
-            ThrowNoField(r.Kind, nameof(Name));
+            d[h + o] = value.Index;
+            return;
         }
-        slots[r.Slots + o] = value.Index;
+        if (o != SideOffset)
+        {
+            ThrowNoField(d[h], nameof(Name));
+        }
+        SetSideInt(h, 15, value.Index);
     }
 
     private static ReadOnlySpan<sbyte> NameOffsets =>
@@ -3031,30 +3476,34 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,3,2,-1,1,2,0,3,1,3,3,3,0,0,0,-1,-1,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,1,-1,-1,-1,-1,-1,2,-1,-1,1,-1,-1,-1,-1,-1,-1,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,1,-1,-1,
-        -1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,3,0,0,0,0,1,-1,-1,0,2,-1,1,0,-1,1,2,5,
-        -1,0,1,0,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,1,-1,0,-1,-1,-1,-1,-1,0,-1,2,2,1,1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,0,-1,
-        -1,-1,-1,-1,-1,0,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,2,-1,-1,-1,-1,1,0,2,-1,-1,-1,-1,-1,0,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,7,5,-1,6,7,6,7,7,127,7,7,127,127,127,-1,-1,127,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,6,-1,-1,-1,-1,-1,7,-1,-1,6,-1,-1,-1,-1,-1,-1,7,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,6,-1,-1,-1,-1,6,-1,-1,
+        -1,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,6,-1,7,6,6,6,6,7,-1,-1,6,7,-1,5,5,-1,5,127,127,
+        -1,5,5,6,-1,-1,-1,-1,-1,-1,-1,-1,6,-1,6,-1,5,-1,-1,-1,-1,-1,5,-1,6,5,127,6,-1,-1,-1,5,-1,-1,-1,-1,-1,-1,6,-1,
+        -1,-1,-1,-1,-1,6,6,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,7,-1,-1,6,-1,-1,-1,-1,7,6,6,-1,-1,-1,-1,-1,5,-1,-1,-1,
     ];
 
     // MappedTypeNode
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node NameType(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = NameTypeOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = NameTypeOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetNameType(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = NameTypeOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = NameTypeOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(NameType));
+            ThrowNoField(d[h], nameof(NameType));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> NameTypeOffsets =>
@@ -3064,29 +3513,33 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // ImportClause
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node NamedBindings(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = NamedBindingsOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = NamedBindingsOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetNamedBindings(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = NamedBindingsOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = NamedBindingsOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(NamedBindings));
+            ThrowNoField(d[h], nameof(NamedBindings));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> NamedBindingsOffsets =>
@@ -3097,28 +3550,32 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,6,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // JsxNamespacedName
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Namespace(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = NamespaceOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = NamespaceOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetNamespace(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = NamespaceOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = NamespaceOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Namespace));
+            ThrowNoField(d[h], nameof(Namespace));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> NamespaceOffsets =>
@@ -3130,27 +3587,30 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
-    // ArrowFunction, Block, CallSignatureDeclaration, CaseBlock, CatchClause, ClassStaticBlockDeclaration, … (30 classes)
+    // ArrowFunction, Block, CallSignatureDeclaration, CaseBlock, CatchClause, ClassStaticBlockDeclaration, … (30 classes) (side table)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node NextContainer(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = NextContainerOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        return w >= 0 || NextContainerOffsets[w & KindMask] < 0 ? default : new Node(GetSideInt(h, 16));
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetNextContainer(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = NextContainerOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        if (NextContainerOffsets[d[h] & KindMask] < 0)
         {
-            ThrowNoField(r.Kind, nameof(NextContainer));
+            ThrowNoField(d[h], nameof(NextContainer));
         }
-        slots[r.Slots + o] = value.Index;
+        SetSideInt(h, 16, value.Index);
     }
 
     private static ReadOnlySpan<sbyte> NextContainerOffsets =>
@@ -3159,30 +3619,34 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,4,2,4,4,4,1,1,1,-1,-1,1,1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,-1,-1,-1,
-        -1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,4,4,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,1,-1,-1,-1,-1,-1,-1,3,2,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,4,-1,-1,1,-1,2,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,8,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,
-        -1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,0,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,127,127,127,127,127,127,127,127,-1,-1,127,127,-1,-1,-1,-1,-1,-1,-1,-1,127,-1,-1,-1,-1,
+        -1,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,127,-1,-1,-1,-1,-1,-1,127,127,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,-1,-1,127,-1,127,-1,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,-1,-1,-1,-1,-1,-1,-1,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,-1,
+        -1,-1,-1,-1,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,-1,127,-1,-1,-1,-1,-1,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // SourceFile
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int NodeCount(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = NodeCountOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o];
+        var d = data;
+        var h = node.Index;
+        var o = NodeCountOffsets[d[h] & KindMask];
+        return o < 0 ? default : d[h + o];
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetNodeCount(Node node, int value)
     {
-        ref var r = ref records[node.Index];
-        var o = NodeCountOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = NodeCountOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(NodeCount));
+            ThrowNoField(d[h], nameof(NodeCount));
         }
-        slots[r.Slots + o] = value;
+        d[h + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> NodeCountOffsets =>
@@ -3194,32 +3658,35 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,9,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,12,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
-    // NumericLiteral
+    // NumericLiteral (side table)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public TokenFlags NumericLiteralFlags(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = NumericLiteralFlagsOffsets[(int)r.Kind];
-        return o < 0 ? default : (TokenFlags)slots[r.Slots + o];
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        return w >= 0 || NumericLiteralFlagsOffsets[w & KindMask] < 0 ? default : (TokenFlags)GetSideInt(h, 17);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetNumericLiteralFlags(Node node, TokenFlags value)
     {
-        ref var r = ref records[node.Index];
-        var o = NumericLiteralFlagsOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        if (NumericLiteralFlagsOffsets[d[h] & KindMask] < 0)
         {
-            ThrowNoField(r.Kind, nameof(NumericLiteralFlags));
+            ThrowNoField(d[h], nameof(NumericLiteralFlags));
         }
-        slots[r.Slots + o] = (int)value;
+        SetSideInt(h, 17, (int)value);
     }
 
     private static ReadOnlySpan<sbyte> NumericLiteralFlagsOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
@@ -3230,23 +3697,26 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
-    // ShorthandPropertyAssignment
+    // ShorthandPropertyAssignment (side table)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ObjectAssignmentInitializer(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ObjectAssignmentInitializerOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        return w >= 0 || ObjectAssignmentInitializerOffsets[w & KindMask] < 0 ? default : new Node(GetSideInt(h, 18));
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetObjectAssignmentInitializer(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ObjectAssignmentInitializerOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        if (ObjectAssignmentInitializerOffsets[d[h] & KindMask] < 0)
         {
-            ThrowNoField(r.Kind, nameof(ObjectAssignmentInitializer));
+            ThrowNoField(d[h], nameof(ObjectAssignmentInitializer));
         }
-        slots[r.Slots + o] = value.Index;
+        SetSideInt(h, 18, value.Index);
     }
 
     private static ReadOnlySpan<sbyte> ObjectAssignmentInitializerOffsets =>
@@ -3258,27 +3728,31 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // IndexedAccessTypeNode
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ObjectType(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ObjectTypeOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = ObjectTypeOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetObjectType(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ObjectTypeOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = ObjectTypeOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ObjectType));
+            ThrowNoField(d[h], nameof(ObjectType));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ObjectTypeOffsets =>
@@ -3288,29 +3762,33 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // JsxElement
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node OpeningElement(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = OpeningElementOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = OpeningElementOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetOpeningElement(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = OpeningElementOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = OpeningElementOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(OpeningElement));
+            ThrowNoField(d[h], nameof(OpeningElement));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> OpeningElementOffsets =>
@@ -3322,27 +3800,31 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,7,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // JsxFragment
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node OpeningFragment(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = OpeningFragmentOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = OpeningFragmentOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetOpeningFragment(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = OpeningFragmentOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = OpeningFragmentOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(OpeningFragment));
+            ThrowNoField(d[h], nameof(OpeningFragment));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> OpeningFragmentOffsets =>
@@ -3354,27 +3836,31 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,7,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // PostfixUnaryExpression, PrefixUnaryExpression
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Operand(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = OperandOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = OperandOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetOperand(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = OperandOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = OperandOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Operand));
+            ThrowNoField(d[h], nameof(Operand));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> OperandOffsets =>
@@ -3384,29 +3870,33 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,5,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // PostfixUnaryExpression, PrefixUnaryExpression, TypeOperatorNode
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public SyntaxKind Operator(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = OperatorOffsets[(int)r.Kind];
-        return o < 0 ? default : (SyntaxKind)slots[r.Slots + o];
+        var d = data;
+        var h = node.Index;
+        var o = OperatorOffsets[d[h] & KindMask];
+        return o < 0 ? default : (SyntaxKind)d[h + o];
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetOperator(Node node, SyntaxKind value)
     {
-        ref var r = ref records[node.Index];
-        var o = OperatorOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = OperatorOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Operator));
+            ThrowNoField(d[h], nameof(Operator));
         }
-        slots[r.Slots + o] = (int)value;
+        d[h + o] = (int)value;
     }
 
     private static ReadOnlySpan<sbyte> OperatorOffsets =>
@@ -3415,30 +3905,34 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,5,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,6,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // BinaryExpression
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node OperatorToken(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = OperatorTokenOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = OperatorTokenOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetOperatorToken(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = OperatorTokenOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = OperatorTokenOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(OperatorToken));
+            ThrowNoField(d[h], nameof(OperatorToken));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> OperatorTokenOffsets =>
@@ -3448,29 +3942,33 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // SourceFile
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public string OriginalFileName(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = OriginalFileNameOffsets[(int)r.Kind];
-        return o < 0 ? null! : (string)refs[r.Refs + o]!;
+        var d = data;
+        var h = node.Index;
+        var o = OriginalFileNameOffsets[d[h] & KindMask];
+        return o < 0 ? null! : Unsafe.As<string>(refs[d[h + RefBaseWord] + o])!;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetOriginalFileName(Node node, string value)
     {
-        ref var r = ref records[node.Index];
-        var o = OriginalFileNameOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = OriginalFileNameOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(OriginalFileName));
+            ThrowNoField(d[h], nameof(OriginalFileName));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> OriginalFileNameOffsets =>
@@ -3487,22 +3985,26 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IReadOnlyList<string>? PackageJsonLocations(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = PackageJsonLocationsOffsets[(int)r.Kind];
-        return o < 0 ? null : (IReadOnlyList<string>?)refs[r.Refs + o];
+        var d = data;
+        var h = node.Index;
+        var o = PackageJsonLocationsOffsets[d[h] & KindMask];
+        return o < 0 ? null : Unsafe.As<IReadOnlyList<string>?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetPackageJsonLocations(Node node, IReadOnlyList<string>? value)
     {
-        ref var r = ref records[node.Index];
-        var o = PackageJsonLocationsOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = PackageJsonLocationsOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(PackageJsonLocations));
+            ThrowNoField(d[h], nameof(PackageJsonLocations));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> PackageJsonLocationsOffsets =>
@@ -3519,22 +4021,26 @@ internal sealed partial class NodeStore
     ];
 
     // TypePredicateNode
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ParameterName(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ParameterNameOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = ParameterNameOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetParameterName(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ParameterNameOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = ParameterNameOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ParameterName));
+            ThrowNoField(d[h], nameof(ParameterName));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ParameterNameOffsets =>
@@ -3543,7 +4049,7 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
@@ -3551,22 +4057,26 @@ internal sealed partial class NodeStore
     ];
 
     // ArrowFunction, CallSignatureDeclaration, ConstructSignatureDeclaration, ConstructorDeclaration, ConstructorTypeNode, FunctionDeclaration, … (14 classes)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public NodeArray Parameters(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ParametersOffsets[(int)r.Kind];
-        return o < 0 ? null! : (NodeArray)refs[r.Refs + o]!;
+        var d = data;
+        var h = node.Index;
+        var o = ParametersOffsets[d[h] & KindMask];
+        return o < 0 ? null! : Unsafe.As<NodeArray>(refs[d[h + RefBaseWord] + o])!;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetParameters(Node node, NodeArray value)
     {
-        ref var r = ref records[node.Index];
-        var o = ParametersOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = ParametersOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Parameters));
+            ThrowNoField(d[h], nameof(Parameters));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> ParametersOffsets =>
@@ -3575,30 +4085,34 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,2,-1,2,2,2,1,1,2,-1,-1,2,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,1,-1,1,1,1,0,0,1,-1,-1,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // SourceFile
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public List<DiagnosticWithLocation> ParseDiagnostics(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ParseDiagnosticsOffsets[(int)r.Kind];
-        return o < 0 ? null! : (List<DiagnosticWithLocation>)refs[r.Refs + o]!;
+        var d = data;
+        var h = node.Index;
+        var o = ParseDiagnosticsOffsets[d[h] & KindMask];
+        return o < 0 ? null! : Unsafe.As<List<DiagnosticWithLocation>>(refs[d[h + RefBaseWord] + o])!;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetParseDiagnostics(Node node, List<DiagnosticWithLocation> value)
     {
-        ref var r = ref records[node.Index];
-        var o = ParseDiagnosticsOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = ParseDiagnosticsOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ParseDiagnostics));
+            ThrowNoField(d[h], nameof(ParseDiagnostics));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> ParseDiagnosticsOffsets =>
@@ -3615,22 +4129,26 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public string? Path(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = PathOffsets[(int)r.Kind];
-        return o < 0 ? null : (string?)refs[r.Refs + o];
+        var d = data;
+        var h = node.Index;
+        var o = PathOffsets[d[h] & KindMask];
+        return o < 0 ? null : Unsafe.As<string?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetPath(Node node, string? value)
     {
-        ref var r = ref records[node.Index];
-        var o = PathOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = PathOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Path));
+            ThrowNoField(d[h], nameof(Path));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> PathOffsets =>
@@ -3647,22 +4165,26 @@ internal sealed partial class NodeStore
     ];
 
     // ImportClause
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public SyntaxKind PhaseModifier(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = PhaseModifierOffsets[(int)r.Kind];
-        return o < 0 ? default : (SyntaxKind)slots[r.Slots + o];
+        var d = data;
+        var h = node.Index;
+        var o = PhaseModifierOffsets[d[h] & KindMask];
+        return o < 0 ? default : (SyntaxKind)d[h + o];
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetPhaseModifier(Node node, SyntaxKind value)
     {
-        ref var r = ref records[node.Index];
-        var o = PhaseModifierOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = PhaseModifierOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(PhaseModifier));
+            ThrowNoField(d[h], nameof(PhaseModifier));
         }
-        slots[r.Slots + o] = (int)value;
+        d[h + o] = (int)value;
     }
 
     private static ReadOnlySpan<sbyte> PhaseModifierOffsets =>
@@ -3673,31 +4195,35 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,7,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // SwitchStatement
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool PossiblyExhaustive(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = PossiblyExhaustiveOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var w = data[node.Index];
+        var b = PossiblyExhaustiveBits[w & KindMask];
+        return b >= 0 && (w & (1 << b)) != 0;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetPossiblyExhaustive(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = PossiblyExhaustiveOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        var b = PossiblyExhaustiveBits[w & KindMask];
+        if (b < 0)
         {
-            ThrowNoField(r.Kind, nameof(PossiblyExhaustive));
+            ThrowNoField(d[h], nameof(PossiblyExhaustive));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        d[h] = value ? w | (1 << b) : w & ~(1 << b);
     }
 
-    private static ReadOnlySpan<sbyte> PossiblyExhaustiveOffsets =>
+    private static ReadOnlySpan<sbyte> PossiblyExhaustiveBits =>
     [
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
@@ -3705,31 +4231,35 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,16,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // JSDocNonNullableType, JSDocNullableType
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Postfix(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = PostfixOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var w = data[node.Index];
+        var b = PostfixBits[w & KindMask];
+        return b >= 0 && (w & (1 << b)) != 0;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetPostfix(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = PostfixOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        var b = PostfixBits[w & KindMask];
+        if (b < 0)
         {
-            ThrowNoField(r.Kind, nameof(Postfix));
+            ThrowNoField(d[h], nameof(Postfix));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        d[h] = value ? w | (1 << b) : w & ~(1 << b);
     }
 
-    private static ReadOnlySpan<sbyte> PostfixOffsets =>
+    private static ReadOnlySpan<sbyte> PostfixBits =>
     [
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
@@ -3738,27 +4268,31 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,0,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,16,16,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // SourceFile
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public PragmaMap Pragmas(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = PragmasOffsets[(int)r.Kind];
-        return o < 0 ? null! : (PragmaMap)refs[r.Refs + o]!;
+        var d = data;
+        var h = node.Index;
+        var o = PragmasOffsets[d[h] & KindMask];
+        return o < 0 ? null! : Unsafe.As<PragmaMap>(refs[d[h + RefBaseWord] + o])!;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetPragmas(Node node, PragmaMap value)
     {
-        ref var r = ref records[node.Index];
-        var o = PragmasOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = PragmasOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Pragmas));
+            ThrowNoField(d[h], nameof(Pragmas));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> PragmasOffsets =>
@@ -3775,22 +4309,26 @@ internal sealed partial class NodeStore
     ];
 
     // JsxAttributes, ObjectLiteralExpression
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public NodeArray Properties(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = PropertiesOffsets[(int)r.Kind];
-        return o < 0 ? null! : (NodeArray)refs[r.Refs + o]!;
+        var d = data;
+        var h = node.Index;
+        var o = PropertiesOffsets[d[h] & KindMask];
+        return o < 0 ? null! : Unsafe.As<NodeArray>(refs[d[h + RefBaseWord] + o])!;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetProperties(Node node, NodeArray value)
     {
-        ref var r = ref records[node.Index];
-        var o = PropertiesOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = PropertiesOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Properties));
+            ThrowNoField(d[h], nameof(Properties));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> PropertiesOffsets =>
@@ -3800,29 +4338,43 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
-    // BindingElement, ExportSpecifier, ImportSpecifier
+    // BindingElement, ExportSpecifier, ImportSpecifier (some in the side table)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node PropertyName(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = PropertyNameOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        var o = PropertyNameOffsets[w & KindMask];
+        if ((uint)o < SideOffset)
+        {
+            return new Node(d[h + o]);
+        }
+        return o == SideOffset && w < 0 ? new Node(GetSideInt(h, 19)) : default;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetPropertyName(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = PropertyNameOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        var o = PropertyNameOffsets[d[h] & KindMask];
+        if ((uint)o < SideOffset)
         {
-            ThrowNoField(r.Kind, nameof(PropertyName));
+            d[h + o] = value.Index;
+            return;
         }
-        slots[r.Slots + o] = value.Index;
+        if (o != SideOffset)
+        {
+            ThrowNoField(d[h], nameof(PropertyName));
+        }
+        SetSideInt(h, 19, value.Index);
     }
 
     private static ReadOnlySpan<sbyte> PropertyNameOffsets =>
@@ -3832,29 +4384,33 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,
-        -1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,8,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,-1,-1,
+        -1,-1,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // ImportTypeNode
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Qualifier(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = QualifierOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = QualifierOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetQualifier(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = QualifierOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = QualifierOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Qualifier));
+            ThrowNoField(d[h], nameof(Qualifier));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> QualifierOffsets =>
@@ -3864,29 +4420,32 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,8,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
-    // CallExpression, ElementAccessExpression, PropertyAccessExpression, TaggedTemplateExpression
+    // CallExpression, ElementAccessExpression, PropertyAccessExpression, TaggedTemplateExpression (side table)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node QuestionDotToken(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = QuestionDotTokenOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        return w >= 0 || QuestionDotTokenOffsets[w & KindMask] < 0 ? default : new Node(GetSideInt(h, 20));
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetQuestionDotToken(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = QuestionDotTokenOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        if (QuestionDotTokenOffsets[d[h] & KindMask] < 0)
         {
-            ThrowNoField(r.Kind, nameof(QuestionDotToken));
+            ThrowNoField(d[h], nameof(QuestionDotToken));
         }
-        slots[r.Slots + o] = value.Index;
+        SetSideInt(h, 20, value.Index);
     }
 
     private static ReadOnlySpan<sbyte> QuestionDotTokenOffsets =>
@@ -3896,29 +4455,43 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,2,1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,127,127,-1,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
-    // ArrowFunction, CallSignatureDeclaration, ConditionalExpression, ConstructSignatureDeclaration, ConstructorDeclaration, FunctionDeclaration, … (20 classes)
+    // ArrowFunction, CallSignatureDeclaration, ConditionalExpression, ConstructSignatureDeclaration, ConstructorDeclaration, FunctionDeclaration, … (20 classes) (some in the side table)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node QuestionToken(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = QuestionTokenOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        var o = QuestionTokenOffsets[w & KindMask];
+        if ((uint)o < SideOffset)
+        {
+            return new Node(d[h + o]);
+        }
+        return o == SideOffset && w < 0 ? new Node(GetSideInt(h, 21)) : default;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetQuestionToken(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = QuestionTokenOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        var o = QuestionTokenOffsets[d[h] & KindMask];
+        if ((uint)o < SideOffset)
         {
-            ThrowNoField(r.Kind, nameof(QuestionToken));
+            d[h + o] = value.Index;
+            return;
         }
-        slots[r.Slots + o] = value.Index;
+        if (o != SideOffset)
+        {
+            ThrowNoField(d[h], nameof(QuestionToken));
+        }
+        SetSideInt(h, 21, value.Index);
     }
 
     private static ReadOnlySpan<sbyte> QuestionTokenOffsets =>
@@ -3927,30 +4500,34 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,2,3,2,5,-1,5,5,5,2,2,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,2,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,5,5,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,4,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,6,-1,7,127,7,127,-1,127,127,127,127,127,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,7,-1,7,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,127,-1,-1,-1,-1,-1,-1,-1,7,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,6,-1,-1,-1,
     ];
 
     // NoSubstitutionTemplateLiteral, TemplateHead, TemplateMiddle, TemplateTail
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public string? RawText(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = RawTextOffsets[(int)r.Kind];
-        return o < 0 ? null : (string?)refs[r.Refs + o];
+        var d = data;
+        var h = node.Index;
+        var o = RawTextOffsets[d[h] & KindMask];
+        return o < 0 ? null : Unsafe.As<string?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetRawText(Node node, string? value)
     {
-        ref var r = ref records[node.Index];
-        var o = RawTextOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = RawTextOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(RawText));
+            ThrowNoField(d[h], nameof(RawText));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> RawTextOffsets =>
@@ -3967,22 +4544,26 @@ internal sealed partial class NodeStore
     ];
 
     // MappedTypeNode
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ReadonlyToken(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ReadonlyTokenOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = ReadonlyTokenOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetReadonlyToken(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ReadonlyTokenOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = ReadonlyTokenOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ReadonlyToken));
+            ThrowNoField(d[h], nameof(ReadonlyToken));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ReadonlyTokenOffsets =>
@@ -3992,29 +4573,33 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,8,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // SourceFile
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IReadOnlyList<FileReference> ReferencedFiles(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ReferencedFilesOffsets[(int)r.Kind];
-        return o < 0 ? null! : (IReadOnlyList<FileReference>)refs[r.Refs + o]!;
+        var d = data;
+        var h = node.Index;
+        var o = ReferencedFilesOffsets[d[h] & KindMask];
+        return o < 0 ? null! : Unsafe.As<IReadOnlyList<FileReference>>(refs[d[h + RefBaseWord] + o])!;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetReferencedFiles(Node node, IReadOnlyList<FileReference> value)
     {
-        ref var r = ref records[node.Index];
-        var o = ReferencedFilesOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = ReferencedFilesOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ReferencedFiles));
+            ThrowNoField(d[h], nameof(ReferencedFiles));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> ReferencedFilesOffsets =>
@@ -4031,22 +4616,26 @@ internal sealed partial class NodeStore
     ];
 
     // SourceFile
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public string? ResolvedPath(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ResolvedPathOffsets[(int)r.Kind];
-        return o < 0 ? null : (string?)refs[r.Refs + o];
+        var d = data;
+        var h = node.Index;
+        var o = ResolvedPathOffsets[d[h] & KindMask];
+        return o < 0 ? null : Unsafe.As<string?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetResolvedPath(Node node, string? value)
     {
-        ref var r = ref records[node.Index];
-        var o = ResolvedPathOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = ResolvedPathOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ResolvedPath));
+            ThrowNoField(d[h], nameof(ResolvedPath));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> ResolvedPathOffsets =>
@@ -4063,22 +4652,26 @@ internal sealed partial class NodeStore
     ];
 
     // BinaryExpression, JSDocMemberName, QualifiedName
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Right(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = RightOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = RightOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetRight(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = RightOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = RightOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Right));
+            ThrowNoField(d[h], nameof(Right));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> RightOffsets =>
@@ -4087,30 +4680,34 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,7,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,6,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // SourceFile
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ScriptKind ScriptKind(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ScriptKindOffsets[(int)r.Kind];
-        return o < 0 ? default : (ScriptKind)slots[r.Slots + o];
+        var d = data;
+        var h = node.Index;
+        var o = ScriptKindOffsets[d[h] & KindMask];
+        return o < 0 ? default : (ScriptKind)d[h + o];
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetScriptKind(Node node, ScriptKind value)
     {
-        ref var r = ref records[node.Index];
-        var o = ScriptKindOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = ScriptKindOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ScriptKind));
+            ThrowNoField(d[h], nameof(ScriptKind));
         }
-        slots[r.Slots + o] = (int)value;
+        d[h + o] = (int)value;
     }
 
     private static ReadOnlySpan<sbyte> ScriptKindOffsets =>
@@ -4122,27 +4719,31 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,10,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,13,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // SourceFile
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Action<Node>? SetExternalModuleIndicator(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = SetExternalModuleIndicatorOffsets[(int)r.Kind];
-        return o < 0 ? null : (Action<Node>?)refs[r.Refs + o];
+        var d = data;
+        var h = node.Index;
+        var o = SetExternalModuleIndicatorOffsets[d[h] & KindMask];
+        return o < 0 ? null : Unsafe.As<Action<Node>?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetSetExternalModuleIndicator(Node node, Action<Node>? value)
     {
-        ref var r = ref records[node.Index];
-        var o = SetExternalModuleIndicatorOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = SetExternalModuleIndicatorOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(SetExternalModuleIndicator));
+            ThrowNoField(d[h], nameof(SetExternalModuleIndicator));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> SetExternalModuleIndicatorOffsets =>
@@ -4159,27 +4760,31 @@ internal sealed partial class NodeStore
     ];
 
     // StringLiteral
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool SingleQuote(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = SingleQuoteOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var w = data[node.Index];
+        var b = SingleQuoteBits[w & KindMask];
+        return b >= 0 && (w & (1 << b)) != 0;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetSingleQuote(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = SingleQuoteOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        var b = SingleQuoteBits[w & KindMask];
+        if (b < 0)
         {
-            ThrowNoField(r.Kind, nameof(SingleQuote));
+            ThrowNoField(d[h], nameof(SingleQuote));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        d[h] = value ? w | (1 << b) : w & ~(1 << b);
     }
 
-    private static ReadOnlySpan<sbyte> SingleQuoteOffsets =>
+    private static ReadOnlySpan<sbyte> SingleQuoteBits =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,18,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
@@ -4190,23 +4795,26 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
-    // Bundle
+    // Bundle (side table)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node[]? SourceFiles(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = SourceFilesOffsets[(int)r.Kind];
-        return o < 0 ? null : (Node[]?)refs[r.Refs + o];
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        return w >= 0 || SourceFilesOffsets[w & KindMask] < 0 ? null : Unsafe.As<Node[]?>(GetSideRef(h, 22));
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetSourceFiles(Node node, Node[]? value)
     {
-        ref var r = ref records[node.Index];
-        var o = SourceFilesOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        if (SourceFilesOffsets[d[h] & KindMask] < 0)
         {
-            ThrowNoField(r.Kind, nameof(SourceFiles));
+            ThrowNoField(d[h], nameof(SourceFiles));
         }
-        refs[r.Refs + o] = value;
+        SetSideRef(h, 22, value);
     }
 
     private static ReadOnlySpan<sbyte> SourceFilesOffsets =>
@@ -4218,27 +4826,31 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // DoStatement, ForInStatement, ForOfStatement, ForStatement, LabeledStatement, WhileStatement, … (7 classes)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Statement(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = StatementOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = StatementOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetStatement(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = StatementOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = StatementOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Statement));
+            ThrowNoField(d[h], nameof(Statement));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> StatementOffsets =>
@@ -4249,28 +4861,32 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,1,1,4,3,4,-1,-1,-1,1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,6,6,8,7,8,-1,-1,-1,6,-1,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // Block, CaseClause, DefaultClause, ModuleBlock, SourceFile
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public NodeArray Statements(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = StatementsOffsets[(int)r.Kind];
-        return o < 0 ? null! : (NodeArray)refs[r.Refs + o]!;
+        var d = data;
+        var h = node.Index;
+        var o = StatementsOffsets[d[h] & KindMask];
+        return o < 0 ? null! : Unsafe.As<NodeArray>(refs[d[h + RefBaseWord] + o])!;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetStatements(Node node, NodeArray value)
     {
-        ref var r = ref records[node.Index];
-        var o = StatementsOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = StatementsOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Statements));
+            ThrowNoField(d[h], nameof(Statements));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> StatementsOffsets =>
@@ -4281,28 +4897,32 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,23,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,23,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // SourceFile
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int SymbolCount(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = SymbolCountOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o];
+        var d = data;
+        var h = node.Index;
+        var o = SymbolCountOffsets[d[h] & KindMask];
+        return o < 0 ? default : d[h + o];
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetSymbolCount(Node node, int value)
     {
-        ref var r = ref records[node.Index];
-        var o = SymbolCountOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = SymbolCountOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(SymbolCount));
+            ThrowNoField(d[h], nameof(SymbolCount));
         }
-        slots[r.Slots + o] = value;
+        d[h + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> SymbolCountOffsets =>
@@ -4314,27 +4934,31 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,11,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,14,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // TaggedTemplateExpression
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Tag(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TagOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = TagOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetTag(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = TagOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = TagOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Tag));
+            ThrowNoField(d[h], nameof(Tag));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> TagOffsets =>
@@ -4344,29 +4968,33 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // JSDocAugmentsTag, JSDocAuthorTag, JSDocCallbackTag, JSDocClassTag, JSDocDeprecatedTag, JSDocEnumTag, … (28 classes)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node TagName(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TagNameOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = TagNameOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetTagName(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = TagNameOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = TagNameOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(TagName));
+            ThrowNoField(d[h], nameof(TagName));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> TagNameOffsets =>
@@ -4378,27 +5006,31 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,1,1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,0,1,1,0,0,0,0,0,0,0,0,3,0,1,3,0,0,0,1,3,1,3,0,0,3,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,7,7,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,6,7,7,6,6,6,6,6,6,6,6,8,6,6,7,6,6,6,7,8,7,7,6,6,9,-1,-1,-1,-1,-1,-1,
     ];
 
     // JSDoc
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public NodeArray? Tags(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TagsOffsets[(int)r.Kind];
-        return o < 0 ? null : (NodeArray?)refs[r.Refs + o];
+        var d = data;
+        var h = node.Index;
+        var o = TagsOffsets[d[h] & KindMask];
+        return o < 0 ? null : Unsafe.As<NodeArray?>(refs[d[h + RefBaseWord] + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetTags(Node node, NodeArray? value)
     {
-        ref var r = ref records[node.Index];
-        var o = TagsOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = TagsOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Tags));
+            ThrowNoField(d[h], nameof(Tags));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> TagsOffsets =>
@@ -4415,22 +5047,26 @@ internal sealed partial class NodeStore
     ];
 
     // TaggedTemplateExpression
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Template(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TemplateOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = TemplateOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetTemplate(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = TemplateOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = TemplateOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Template));
+            ThrowNoField(d[h], nameof(Template));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> TemplateOffsets =>
@@ -4440,34 +5076,37 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
-    // NoSubstitutionTemplateLiteral, TemplateHead, TemplateMiddle, TemplateTail
+    // NoSubstitutionTemplateLiteral, TemplateHead, TemplateMiddle, TemplateTail (side table)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public TokenFlags TemplateFlags(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TemplateFlagsOffsets[(int)r.Kind];
-        return o < 0 ? default : (TokenFlags)slots[r.Slots + o];
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        return w >= 0 || TemplateFlagsOffsets[w & KindMask] < 0 ? default : (TokenFlags)GetSideInt(h, 23);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetTemplateFlags(Node node, TokenFlags value)
     {
-        ref var r = ref records[node.Index];
-        var o = TemplateFlagsOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        if (TemplateFlagsOffsets[d[h] & KindMask] < 0)
         {
-            ThrowNoField(r.Kind, nameof(TemplateFlags));
+            ThrowNoField(d[h], nameof(TemplateFlags));
         }
-        slots[r.Slots + o] = (int)value;
+        SetSideInt(h, 23, (int)value);
     }
 
     private static ReadOnlySpan<sbyte> TemplateFlagsOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,2,2,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,127,127,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
@@ -4479,22 +5118,26 @@ internal sealed partial class NodeStore
     ];
 
     // TemplateExpression, TemplateLiteralTypeNode
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public NodeArray TemplateSpans(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TemplateSpansOffsets[(int)r.Kind];
-        return o < 0 ? null! : (NodeArray)refs[r.Refs + o]!;
+        var d = data;
+        var h = node.Index;
+        var o = TemplateSpansOffsets[d[h] & KindMask];
+        return o < 0 ? null! : Unsafe.As<NodeArray>(refs[d[h + RefBaseWord] + o])!;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetTemplateSpans(Node node, NodeArray value)
     {
-        ref var r = ref records[node.Index];
-        var o = TemplateSpansOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = TemplateSpansOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(TemplateSpans));
+            ThrowNoField(d[h], nameof(TemplateSpans));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> TemplateSpansOffsets =>
@@ -4511,22 +5154,26 @@ internal sealed partial class NodeStore
     ];
 
     // BigIntLiteral, JSDocLink, JSDocLinkCode, JSDocLinkPlain, JSDocText, JsxText, … (14 classes)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public string Text(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TextOffsets[(int)r.Kind];
-        return o < 0 ? null! : (string)refs[r.Refs + o]!;
+        var d = data;
+        var h = node.Index;
+        var o = TextOffsets[d[h] & KindMask];
+        return o < 0 ? null! : Unsafe.As<string>(refs[d[h + RefBaseWord] + o])!;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetText(Node node, string value)
     {
-        ref var r = ref records[node.Index];
-        var o = TextOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = TextOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Text));
+            ThrowNoField(d[h], nameof(Text));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> TextOffsets =>
@@ -4542,28 +5189,31 @@ internal sealed partial class NodeStore
         -1,-1,0,-1,-1,0,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
-    // StringLiteral
+    // StringLiteral (side table)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node TextSourceNode(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TextSourceNodeOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        return w >= 0 || TextSourceNodeOffsets[w & KindMask] < 0 ? default : new Node(GetSideInt(h, 24));
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetTextSourceNode(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = TextSourceNodeOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        if (TextSourceNodeOffsets[d[h] & KindMask] < 0)
         {
-            ThrowNoField(r.Kind, nameof(TextSourceNode));
+            ThrowNoField(d[h], nameof(TextSourceNode));
         }
-        slots[r.Slots + o] = value.Index;
+        SetSideInt(h, 24, value.Index);
     }
 
     private static ReadOnlySpan<sbyte> TextSourceNodeOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
@@ -4575,22 +5225,26 @@ internal sealed partial class NodeStore
     ];
 
     // IfStatement
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ThenStatement(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ThenStatementOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = ThenStatementOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetThenStatement(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ThenStatementOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = ThenStatementOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ThenStatement));
+            ThrowNoField(d[h], nameof(ThenStatement));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ThenStatementOffsets =>
@@ -4601,28 +5255,31 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,7,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
-    // SyntheticReferenceExpression
+    // SyntheticReferenceExpression (side table)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node ThisArg(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ThisArgOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        return w >= 0 || ThisArgOffsets[w & KindMask] < 0 ? default : new Node(GetSideInt(h, 25));
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetThisArg(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ThisArgOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        if (ThisArgOffsets[d[h] & KindMask] < 0)
         {
-            ThrowNoField(r.Kind, nameof(ThisArg));
+            ThrowNoField(d[h], nameof(ThisArg));
         }
-        slots[r.Slots + o] = value.Index;
+        SetSideInt(h, 25, value.Index);
     }
 
     private static ReadOnlySpan<sbyte> ThisArgOffsets =>
@@ -4635,26 +5292,30 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,
     ];
 
     // HeritageClause, ImportAttributes
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public SyntaxKind Token(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TokenOffsets[(int)r.Kind];
-        return o < 0 ? default : (SyntaxKind)slots[r.Slots + o];
+        var d = data;
+        var h = node.Index;
+        var o = TokenOffsets[d[h] & KindMask];
+        return o < 0 ? default : (SyntaxKind)d[h + o];
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetToken(Node node, SyntaxKind value)
     {
-        ref var r = ref records[node.Index];
-        var o = TokenOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = TokenOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Token));
+            ThrowNoField(d[h], nameof(Token));
         }
-        slots[r.Slots + o] = (int)value;
+        d[h + o] = (int)value;
     }
 
     private static ReadOnlySpan<sbyte> TokenOffsets =>
@@ -4666,27 +5327,31 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,6,-1,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // ConditionalTypeNode
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node TrueType(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TrueTypeOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = TrueTypeOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetTrueType(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = TrueTypeOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = TrueTypeOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(TrueType));
+            ThrowNoField(d[h], nameof(TrueType));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> TrueTypeOffsets =>
@@ -4695,7 +5360,7 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,4,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,8,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
@@ -4703,22 +5368,26 @@ internal sealed partial class NodeStore
     ];
 
     // TryStatement
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node TryBlock(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TryBlockOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = TryBlockOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetTryBlock(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = TryBlockOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = TryBlockOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(TryBlock));
+            ThrowNoField(d[h], nameof(TryBlock));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> TryBlockOffsets =>
@@ -4729,28 +5398,31 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,7,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
-    // SyntheticExpression
+    // SyntheticExpression (side table)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node TupleNameSource(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TupleNameSourceOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        return w >= 0 || TupleNameSourceOffsets[w & KindMask] < 0 ? default : new Node(GetSideInt(h, 26));
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetTupleNameSource(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = TupleNameSourceOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        if (TupleNameSourceOffsets[d[h] & KindMask] < 0)
         {
-            ThrowNoField(r.Kind, nameof(TupleNameSource));
+            ThrowNoField(d[h], nameof(TupleNameSource));
         }
-        slots[r.Slots + o] = value.Index;
+        SetSideInt(h, 26, value.Index);
     }
 
     private static ReadOnlySpan<sbyte> TupleNameSourceOffsets =>
@@ -4760,29 +5432,43 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
-    // ArrowFunction, AsExpression, CallSignatureDeclaration, ConstructSignatureDeclaration, ConstructorDeclaration, ConstructorTypeNode, … (37 classes)
+    // ArrowFunction, AsExpression, CallSignatureDeclaration, ConstructSignatureDeclaration, ConstructorDeclaration, ConstructorTypeNode, … (37 classes) (some in the side table)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Type(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        var o = TypeOffsets[w & KindMask];
+        if ((uint)o < SideOffset)
+        {
+            return new Node(d[h + o]);
+        }
+        return o == SideOffset && w < 0 ? new Node(GetSideInt(h, 27)) : default;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetType(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        var o = TypeOffsets[d[h] & KindMask];
+        if ((uint)o < SideOffset)
         {
-            ThrowNoField(r.Kind, nameof(Type));
+            d[h + o] = value.Index;
+            return;
         }
-        slots[r.Slots + o] = value.Index;
+        if (o != SideOffset)
+        {
+            ThrowNoField(d[h], nameof(Type));
+        }
+        SetSideInt(h, 27, value.Index);
     }
 
     private static ReadOnlySpan<sbyte> TypeOffsets =>
@@ -4791,30 +5477,44 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,4,-1,3,4,3,6,-1,6,6,6,3,3,3,2,-1,2,2,-1,-1,-1,-1,0,0,-1,-1,-1,-1,0,-1,1,
-        -1,4,-1,3,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,6,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,6,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,1,1,0,2,0,
-        0,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,7,-1,8,8,8,8,-1,127,8,127,6,6,6,7,-1,6,6,-1,-1,-1,-1,5,5,-1,-1,-1,-1,5,-1,6,
+        -1,9,-1,8,-1,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,6,-1,8,8,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,6,-1,-1,-1,6,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,7,-1,8,-1,-1,7,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,5,-1,-1,-1,-1,5,5,5,7,5,
+        5,-1,-1,-1,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
-    // ArrowFunction, CallExpression, CallSignatureDeclaration, ConstructSignatureDeclaration, ConstructorDeclaration, ConstructorTypeNode, … (23 classes)
+    // ArrowFunction, CallExpression, CallSignatureDeclaration, ConstructSignatureDeclaration, ConstructorDeclaration, ConstructorTypeNode, … (23 classes) (some in the side table)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public NodeArray? TypeArguments(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeArgumentsOffsets[(int)r.Kind];
-        return o < 0 ? null : (NodeArray?)refs[r.Refs + o];
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        var o = TypeArgumentsOffsets[w & KindMask];
+        if ((uint)o < SideOffset)
+        {
+            return Unsafe.As<NodeArray?>(refs[d[h + RefBaseWord] + o]);
+        }
+        return o == SideOffset && w < 0 ? Unsafe.As<NodeArray?>(GetSideRef(h, 28)) : null;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetTypeArguments(Node node, NodeArray? value)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeArgumentsOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        var o = TypeArgumentsOffsets[d[h] & KindMask];
+        if ((uint)o < SideOffset)
         {
-            ThrowNoField(r.Kind, nameof(TypeArguments));
+            refs[d[h + RefBaseWord] + o] = value;
+            return;
         }
-        refs[r.Refs + o] = value;
+        if (o != SideOffset)
+        {
+            ThrowNoField(d[h], nameof(TypeArguments));
+        }
+        SetSideRef(h, 28, value);
     }
 
     private static ReadOnlySpan<sbyte> TypeArgumentsOffsets =>
@@ -4823,30 +5523,34 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,3,-1,3,3,3,2,2,3,-1,0,3,3,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,1,1,0,-1,-1,3,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,127,-1,127,127,127,127,127,127,-1,0,127,127,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,127,1,127,-1,-1,127,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // JSDocCallbackTag, JSDocEnumTag, JSDocOverloadTag, JSDocParameterTag, JSDocPropertyTag, JSDocReturnTag, … (11 classes)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node TypeExpression(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeExpressionOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = TypeExpressionOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetTypeExpression(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeExpressionOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = TypeExpressionOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(TypeExpression));
+            ThrowNoField(d[h], nameof(TypeExpression));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> TypeExpressionOffsets =>
@@ -4859,26 +5563,30 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,4,1,2,4,1,1,1,-1,4,-1,4,1,1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,9,7,7,8,7,7,7,-1,9,-1,8,7,7,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // TypeReferenceNode
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node TypeName(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeNameOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = TypeNameOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetTypeName(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeNameOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = TypeNameOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(TypeName));
+            ThrowNoField(d[h], nameof(TypeName));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> TypeNameOffsets =>
@@ -4887,7 +5595,7 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
@@ -4895,22 +5603,26 @@ internal sealed partial class NodeStore
     ];
 
     // InferTypeNode, MappedTypeNode
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node TypeParameter(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeParameterOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = TypeParameterOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetTypeParameter(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeParameterOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = TypeParameterOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(TypeParameter));
+            ThrowNoField(d[h], nameof(TypeParameter));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> TypeParameterOffsets =>
@@ -4919,30 +5631,44 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,
-        -1,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,5,-1,-1,-1,
+        -1,10,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
-    // ArrowFunction, CallSignatureDeclaration, ClassDeclaration, ClassExpression, ConstructSignatureDeclaration, ConstructorDeclaration, … (19 classes)
+    // ArrowFunction, CallSignatureDeclaration, ClassDeclaration, ClassExpression, ConstructSignatureDeclaration, ConstructorDeclaration, … (19 classes) (some in the side table)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public NodeArray? TypeParameters(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeParametersOffsets[(int)r.Kind];
-        return o < 0 ? null : (NodeArray?)refs[r.Refs + o];
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        var o = TypeParametersOffsets[w & KindMask];
+        if ((uint)o < SideOffset)
+        {
+            return Unsafe.As<NodeArray?>(refs[d[h + RefBaseWord] + o]);
+        }
+        return o == SideOffset && w < 0 ? Unsafe.As<NodeArray?>(GetSideRef(h, 29)) : null;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetTypeParameters(Node node, NodeArray? value)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeParametersOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        var o = TypeParametersOffsets[d[h] & KindMask];
+        if ((uint)o < SideOffset)
         {
-            ThrowNoField(r.Kind, nameof(TypeParameters));
+            refs[d[h + RefBaseWord] + o] = value;
+            return;
         }
-        refs[r.Refs + o] = value;
+        if (o != SideOffset)
+        {
+            ThrowNoField(d[h], nameof(TypeParameters));
+        }
+        SetSideRef(h, 29, value);
     }
 
     private static ReadOnlySpan<sbyte> TypeParametersOffsets =>
@@ -4951,30 +5677,34 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,4,4,-1,4,4,4,3,3,4,-1,-1,4,4,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,4,4,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,4,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,4,4,4,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,2,-1,127,127,127,1,1,127,-1,-1,1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,127,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,3,3,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // SourceFile
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IReadOnlyList<FileReference> TypeReferenceDirectives(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeReferenceDirectivesOffsets[(int)r.Kind];
-        return o < 0 ? null! : (IReadOnlyList<FileReference>)refs[r.Refs + o]!;
+        var d = data;
+        var h = node.Index;
+        var o = TypeReferenceDirectivesOffsets[d[h] & KindMask];
+        return o < 0 ? null! : Unsafe.As<IReadOnlyList<FileReference>>(refs[d[h + RefBaseWord] + o])!;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetTypeReferenceDirectives(Node node, IReadOnlyList<FileReference> value)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeReferenceDirectivesOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = TypeReferenceDirectivesOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(TypeReferenceDirectives));
+            ThrowNoField(d[h], nameof(TypeReferenceDirectives));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> TypeReferenceDirectivesOffsets =>
@@ -4991,22 +5721,26 @@ internal sealed partial class NodeStore
     ];
 
     // HeritageClause, IntersectionTypeNode, UnionTypeNode
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public NodeArray Types(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TypesOffsets[(int)r.Kind];
-        return o < 0 ? null! : (NodeArray)refs[r.Refs + o]!;
+        var d = data;
+        var h = node.Index;
+        var o = TypesOffsets[d[h] & KindMask];
+        return o < 0 ? null! : Unsafe.As<NodeArray>(refs[d[h + RefBaseWord] + o])!;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetTypes(Node node, NodeArray value)
     {
-        ref var r = ref records[node.Index];
-        var o = TypesOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = TypesOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Types));
+            ThrowNoField(d[h], nameof(Types));
         }
-        refs[r.Refs + o] = value;
+        refs[d[h + RefBaseWord] + o] = value;
     }
 
     private static ReadOnlySpan<sbyte> TypesOffsets =>
@@ -5023,22 +5757,26 @@ internal sealed partial class NodeStore
     ];
 
     // ImportAttribute
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node Value(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ValueOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = ValueOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetValue(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ValueOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = ValueOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Value));
+            ThrowNoField(d[h], nameof(Value));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ValueOffsets =>
@@ -5050,27 +5788,31 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // CatchClause
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node VariableDeclaration(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = VariableDeclarationOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = VariableDeclarationOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetVariableDeclaration(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = VariableDeclarationOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = VariableDeclarationOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(VariableDeclaration));
+            ThrowNoField(d[h], nameof(VariableDeclaration));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> VariableDeclarationOffsets =>
@@ -5082,27 +5824,31 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // ConditionalExpression
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node WhenFalse(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = WhenFalseOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = WhenFalseOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetWhenFalse(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = WhenFalseOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = WhenFalseOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(WhenFalse));
+            ThrowNoField(d[h], nameof(WhenFalse));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> WhenFalseOffsets =>
@@ -5112,29 +5858,33 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,8,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // ConditionalExpression
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node WhenTrue(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = WhenTrueOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var d = data;
+        var h = node.Index;
+        var o = WhenTrueOffsets[d[h] & KindMask];
+        return o < 0 ? default : new Node(d[h + o]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetWhenTrue(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = WhenTrueOffsets[(int)r.Kind];
+        var d = data;
+        var h = node.Index;
+        var o = WhenTrueOffsets[d[h] & KindMask];
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(WhenTrue));
+            ThrowNoField(d[h], nameof(WhenTrue));
         }
-        slots[r.Slots + o] = value.Index;
+        d[h + o] = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> WhenTrueOffsets =>
@@ -5144,29 +5894,32 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,4,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,9,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
-    // SyntaxList
+    // SyntaxList (side table)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Node[]? _children(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = _childrenOffsets[(int)r.Kind];
-        return o < 0 ? null : (Node[]?)refs[r.Refs + o];
+        var d = data;
+        var h = node.Index;
+        var w = d[h];
+        return w >= 0 || _childrenOffsets[w & KindMask] < 0 ? null : Unsafe.As<Node[]?>(GetSideRef(h, 30));
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Set_children(Node node, Node[]? value)
     {
-        ref var r = ref records[node.Index];
-        var o = _childrenOffsets[(int)r.Kind];
-        if (o < 0)
+        var d = data;
+        var h = node.Index;
+        if (_childrenOffsets[d[h] & KindMask] < 0)
         {
-            ThrowNoField(r.Kind, nameof(_children));
+            ThrowNoField(d[h], nameof(_children));
         }
-        refs[r.Refs + o] = value;
+        SetSideRef(h, 30, value);
     }
 
     private static ReadOnlySpan<sbyte> _childrenOffsets =>
@@ -5179,495 +5932,495 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,-1,-1,-1,-1,-1,
     ];
 
     // Node classes of types.ts: whether a node's kind is one of the class's kinds.
-    public bool IsAbstractKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 0;
+    public bool IsAbstractKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 0;
 
-    public bool IsAccessorKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 1;
+    public bool IsAccessorKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 1;
 
-    public bool IsAmpersandAmpersandEqualsToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 2;
+    public bool IsAmpersandAmpersandEqualsToken(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 2;
 
-    public bool IsArrayBindingPattern(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 3;
+    public bool IsArrayBindingPattern(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 3;
 
-    public bool IsArrayLiteralExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 4;
+    public bool IsArrayLiteralExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 4;
 
-    public bool IsArrayTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 5;
+    public bool IsArrayTypeNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 5;
 
-    public bool IsArrowFunction(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 6;
+    public bool IsArrowFunction(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 6;
 
-    public bool IsAsExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 7;
+    public bool IsAsExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 7;
 
-    public bool IsAssertKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 8;
+    public bool IsAssertKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 8;
 
-    public bool IsAssertsKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 9;
+    public bool IsAssertsKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 9;
 
-    public bool IsAsteriskToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 10;
+    public bool IsAsteriskToken(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 10;
 
-    public bool IsAsyncKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 11;
+    public bool IsAsyncKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 11;
 
-    public bool IsAwaitExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 12;
+    public bool IsAwaitExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 12;
 
-    public bool IsAwaitKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 13;
+    public bool IsAwaitKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 13;
 
-    public bool IsBarBarEqualsToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 14;
+    public bool IsBarBarEqualsToken(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 14;
 
-    public bool IsBigIntLiteral(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 15;
+    public bool IsBigIntLiteral(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 15;
 
-    public bool IsBinaryExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 16;
+    public bool IsBinaryExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 16;
 
-    public bool IsBindingElement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 17;
+    public bool IsBindingElement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 17;
 
-    public bool IsBlock(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 18;
+    public bool IsBlock(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 18;
 
-    public bool IsBreakStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 19;
+    public bool IsBreakStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 19;
 
-    public bool IsBundle(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 20;
+    public bool IsBundle(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 20;
 
-    public bool IsCallExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 21;
+    public bool IsCallExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 21;
 
-    public bool IsCallSignatureDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 22;
+    public bool IsCallSignatureDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 22;
 
-    public bool IsCaseBlock(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 23;
+    public bool IsCaseBlock(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 23;
 
-    public bool IsCaseClause(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 24;
+    public bool IsCaseClause(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 24;
 
-    public bool IsCaseKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 25;
+    public bool IsCaseKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 25;
 
-    public bool IsCatchClause(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 26;
+    public bool IsCatchClause(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 26;
 
-    public bool IsClassDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 27;
+    public bool IsClassDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 27;
 
-    public bool IsClassExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 28;
+    public bool IsClassExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 28;
 
-    public bool IsClassStaticBlockDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 29;
+    public bool IsClassStaticBlockDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 29;
 
-    public bool IsColonToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 30;
+    public bool IsColonToken(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 30;
 
-    public bool IsCommaListExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 31;
+    public bool IsCommaListExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 31;
 
-    public bool IsComputedPropertyName(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 32;
+    public bool IsComputedPropertyName(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 32;
 
-    public bool IsConditionalExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 33;
+    public bool IsConditionalExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 33;
 
-    public bool IsConditionalTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 34;
+    public bool IsConditionalTypeNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 34;
 
-    public bool IsConstKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 35;
+    public bool IsConstKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 35;
 
-    public bool IsConstructSignatureDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 36;
+    public bool IsConstructSignatureDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 36;
 
-    public bool IsConstructorDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 37;
+    public bool IsConstructorDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 37;
 
-    public bool IsConstructorTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 38;
+    public bool IsConstructorTypeNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 38;
 
-    public bool IsContinueStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 39;
+    public bool IsContinueStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 39;
 
-    public bool IsDebuggerStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 40;
+    public bool IsDebuggerStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 40;
 
-    public bool IsDeclareKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 41;
+    public bool IsDeclareKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 41;
 
-    public bool IsDecorator(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 42;
+    public bool IsDecorator(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 42;
 
-    public bool IsDefaultClause(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 43;
+    public bool IsDefaultClause(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 43;
 
-    public bool IsDefaultKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 44;
+    public bool IsDefaultKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 44;
 
-    public bool IsDeleteExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 45;
+    public bool IsDeleteExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 45;
 
-    public bool IsDoStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 46;
+    public bool IsDoStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 46;
 
-    public bool IsDotDotDotToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 47;
+    public bool IsDotDotDotToken(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 47;
 
-    public bool IsDotToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 48;
+    public bool IsDotToken(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 48;
 
-    public bool IsElementAccessExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 49;
+    public bool IsElementAccessExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 49;
 
-    public bool IsEmptyStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 50;
+    public bool IsEmptyStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 50;
 
-    public bool IsEndOfFileToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 51;
+    public bool IsEndOfFileToken(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 51;
 
-    public bool IsEnumDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 52;
+    public bool IsEnumDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 52;
 
-    public bool IsEnumMember(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 53;
+    public bool IsEnumMember(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 53;
 
-    public bool IsEqualsGreaterThanToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 54;
+    public bool IsEqualsGreaterThanToken(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 54;
 
-    public bool IsEqualsToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 55;
+    public bool IsEqualsToken(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 55;
 
-    public bool IsExclamationToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 56;
+    public bool IsExclamationToken(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 56;
 
-    public bool IsExportAssignment(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 57;
+    public bool IsExportAssignment(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 57;
 
-    public bool IsExportDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 58;
+    public bool IsExportDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 58;
 
-    public bool IsExportKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 59;
+    public bool IsExportKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 59;
 
-    public bool IsExportSpecifier(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 60;
+    public bool IsExportSpecifier(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 60;
 
-    public bool IsExpressionStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 61;
+    public bool IsExpressionStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 61;
 
-    public bool IsExpressionWithTypeArguments(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 62;
+    public bool IsExpressionWithTypeArguments(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 62;
 
-    public bool IsExternalModuleReference(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 63;
+    public bool IsExternalModuleReference(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 63;
 
-    public bool IsFalseLiteral(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 64;
+    public bool IsFalseLiteral(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 64;
 
-    public bool IsForInStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 65;
+    public bool IsForInStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 65;
 
-    public bool IsForOfStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 66;
+    public bool IsForOfStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 66;
 
-    public bool IsForStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 67;
+    public bool IsForStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 67;
 
-    public bool IsFunctionDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 68;
+    public bool IsFunctionDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 68;
 
-    public bool IsFunctionExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 69;
+    public bool IsFunctionExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 69;
 
-    public bool IsFunctionTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 70;
+    public bool IsFunctionTypeNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 70;
 
-    public bool IsGetAccessorDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 71;
+    public bool IsGetAccessorDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 71;
 
-    public bool IsHeritageClause(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 72;
+    public bool IsHeritageClause(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 72;
 
-    public bool IsIdentifier(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 73;
+    public bool IsIdentifier(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 73;
 
-    public bool IsIfStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 74;
+    public bool IsIfStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 74;
 
-    public bool IsImportAttribute(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 75;
+    public bool IsImportAttribute(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 75;
 
-    public bool IsImportAttributes(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 76;
+    public bool IsImportAttributes(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 76;
 
-    public bool IsImportClause(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 77;
+    public bool IsImportClause(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 77;
 
-    public bool IsImportDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 78;
+    public bool IsImportDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 78;
 
-    public bool IsImportEqualsDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 79;
+    public bool IsImportEqualsDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 79;
 
-    public bool IsImportExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 80;
+    public bool IsImportExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 80;
 
-    public bool IsImportSpecifier(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 81;
+    public bool IsImportSpecifier(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 81;
 
-    public bool IsImportTypeAssertionContainer(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 82;
+    public bool IsImportTypeAssertionContainer(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 82;
 
-    public bool IsImportTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 83;
+    public bool IsImportTypeNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 83;
 
-    public bool IsInKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 84;
+    public bool IsInKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 84;
 
-    public bool IsIndexSignatureDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 85;
+    public bool IsIndexSignatureDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 85;
 
-    public bool IsIndexedAccessTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 86;
+    public bool IsIndexedAccessTypeNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 86;
 
-    public bool IsInferTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 87;
+    public bool IsInferTypeNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 87;
 
-    public bool IsInterfaceDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 88;
+    public bool IsInterfaceDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 88;
 
-    public bool IsIntersectionTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 89;
+    public bool IsIntersectionTypeNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 89;
 
-    public bool IsJSDoc(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 90;
+    public bool IsJSDoc(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 90;
 
-    public bool IsJSDocAllType(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 91;
+    public bool IsJSDocAllType(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 91;
 
-    public bool IsJSDocAugmentsTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 92;
+    public bool IsJSDocAugmentsTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 92;
 
-    public bool IsJSDocAuthorTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 93;
+    public bool IsJSDocAuthorTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 93;
 
-    public bool IsJSDocCallbackTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 94;
+    public bool IsJSDocCallbackTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 94;
 
-    public bool IsJSDocClassTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 95;
+    public bool IsJSDocClassTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 95;
 
-    public bool IsJSDocDeprecatedTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 96;
+    public bool IsJSDocDeprecatedTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 96;
 
-    public bool IsJSDocEnumTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 97;
+    public bool IsJSDocEnumTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 97;
 
-    public bool IsJSDocFunctionType(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 98;
+    public bool IsJSDocFunctionType(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 98;
 
-    public bool IsJSDocImplementsTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 99;
+    public bool IsJSDocImplementsTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 99;
 
-    public bool IsJSDocImportTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 100;
+    public bool IsJSDocImportTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 100;
 
-    public bool IsJSDocLink(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 101;
+    public bool IsJSDocLink(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 101;
 
-    public bool IsJSDocLinkCode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 102;
+    public bool IsJSDocLinkCode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 102;
 
-    public bool IsJSDocLinkPlain(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 103;
+    public bool IsJSDocLinkPlain(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 103;
 
-    public bool IsJSDocMemberName(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 104;
+    public bool IsJSDocMemberName(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 104;
 
-    public bool IsJSDocNameReference(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 105;
+    public bool IsJSDocNameReference(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 105;
 
-    public bool IsJSDocNamepathType(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 106;
+    public bool IsJSDocNamepathType(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 106;
 
-    public bool IsJSDocNonNullableType(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 107;
+    public bool IsJSDocNonNullableType(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 107;
 
-    public bool IsJSDocNullableType(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 108;
+    public bool IsJSDocNullableType(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 108;
 
-    public bool IsJSDocOptionalType(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 109;
+    public bool IsJSDocOptionalType(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 109;
 
-    public bool IsJSDocOverloadTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 110;
+    public bool IsJSDocOverloadTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 110;
 
-    public bool IsJSDocOverrideTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 111;
+    public bool IsJSDocOverrideTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 111;
 
-    public bool IsJSDocParameterTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 112;
+    public bool IsJSDocParameterTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 112;
 
-    public bool IsJSDocPrivateTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 113;
+    public bool IsJSDocPrivateTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 113;
 
-    public bool IsJSDocPropertyTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 114;
+    public bool IsJSDocPropertyTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 114;
 
-    public bool IsJSDocProtectedTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 115;
+    public bool IsJSDocProtectedTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 115;
 
-    public bool IsJSDocPublicTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 116;
+    public bool IsJSDocPublicTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 116;
 
-    public bool IsJSDocReadonlyTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 117;
+    public bool IsJSDocReadonlyTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 117;
 
-    public bool IsJSDocReturnTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 118;
+    public bool IsJSDocReturnTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 118;
 
-    public bool IsJSDocSatisfiesTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 119;
+    public bool IsJSDocSatisfiesTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 119;
 
-    public bool IsJSDocSeeTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 120;
+    public bool IsJSDocSeeTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 120;
 
-    public bool IsJSDocSignature(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 121;
+    public bool IsJSDocSignature(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 121;
 
-    public bool IsJSDocTemplateTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 122;
+    public bool IsJSDocTemplateTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 122;
 
-    public bool IsJSDocText(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 123;
+    public bool IsJSDocText(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 123;
 
-    public bool IsJSDocThisTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 124;
+    public bool IsJSDocThisTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 124;
 
-    public bool IsJSDocThrowsTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 125;
+    public bool IsJSDocThrowsTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 125;
 
-    public bool IsJSDocTypeExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 126;
+    public bool IsJSDocTypeExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 126;
 
-    public bool IsJSDocTypeLiteral(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 127;
+    public bool IsJSDocTypeLiteral(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 127;
 
-    public bool IsJSDocTypeTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 128;
+    public bool IsJSDocTypeTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 128;
 
-    public bool IsJSDocTypedefTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 129;
+    public bool IsJSDocTypedefTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 129;
 
-    public bool IsJSDocUnknownTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 130;
+    public bool IsJSDocUnknownTag(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 130;
 
-    public bool IsJSDocUnknownType(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 131;
+    public bool IsJSDocUnknownType(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 131;
 
-    public bool IsJSDocVariadicType(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 132;
+    public bool IsJSDocVariadicType(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 132;
 
-    public bool IsJsxAttribute(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 133;
+    public bool IsJsxAttribute(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 133;
 
-    public bool IsJsxAttributes(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 134;
+    public bool IsJsxAttributes(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 134;
 
-    public bool IsJsxClosingElement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 135;
+    public bool IsJsxClosingElement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 135;
 
-    public bool IsJsxClosingFragment(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 136;
+    public bool IsJsxClosingFragment(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 136;
 
-    public bool IsJsxElement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 137;
+    public bool IsJsxElement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 137;
 
-    public bool IsJsxExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 138;
+    public bool IsJsxExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 138;
 
-    public bool IsJsxFragment(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 139;
+    public bool IsJsxFragment(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 139;
 
-    public bool IsJsxNamespacedName(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 140;
+    public bool IsJsxNamespacedName(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 140;
 
-    public bool IsJsxOpeningElement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 141;
+    public bool IsJsxOpeningElement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 141;
 
-    public bool IsJsxOpeningFragment(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 142;
+    public bool IsJsxOpeningFragment(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 142;
 
-    public bool IsJsxSelfClosingElement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 143;
+    public bool IsJsxSelfClosingElement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 143;
 
-    public bool IsJsxSpreadAttribute(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 144;
+    public bool IsJsxSpreadAttribute(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 144;
 
-    public bool IsJsxText(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 145;
+    public bool IsJsxText(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 145;
 
-    public bool IsLabeledStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 146;
+    public bool IsLabeledStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 146;
 
-    public bool IsLiteralTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 147;
+    public bool IsLiteralTypeNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 147;
 
-    public bool IsMappedTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 148;
+    public bool IsMappedTypeNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 148;
 
-    public bool IsMetaProperty(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 149;
+    public bool IsMetaProperty(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 149;
 
-    public bool IsMethodDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 150;
+    public bool IsMethodDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 150;
 
-    public bool IsMethodSignature(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 151;
+    public bool IsMethodSignature(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 151;
 
-    public bool IsMinusToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 152;
+    public bool IsMinusToken(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 152;
 
-    public bool IsMissingDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 153;
+    public bool IsMissingDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 153;
 
-    public bool IsModuleBlock(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 154;
+    public bool IsModuleBlock(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 154;
 
-    public bool IsModuleDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 155;
+    public bool IsModuleDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 155;
 
-    public bool IsNamedExports(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 156;
+    public bool IsNamedExports(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 156;
 
-    public bool IsNamedImports(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 157;
+    public bool IsNamedImports(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 157;
 
-    public bool IsNamedTupleMember(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 158;
+    public bool IsNamedTupleMember(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 158;
 
-    public bool IsNamespaceExport(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 159;
+    public bool IsNamespaceExport(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 159;
 
-    public bool IsNamespaceExportDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 160;
+    public bool IsNamespaceExportDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 160;
 
-    public bool IsNamespaceImport(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 161;
+    public bool IsNamespaceImport(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 161;
 
-    public bool IsNewExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 162;
+    public bool IsNewExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 162;
 
-    public bool IsNoSubstitutionTemplateLiteral(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 163;
+    public bool IsNoSubstitutionTemplateLiteral(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 163;
 
-    public bool IsNonNullExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 164;
+    public bool IsNonNullExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 164;
 
-    public bool IsNotEmittedStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 165;
+    public bool IsNotEmittedStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 165;
 
-    public bool IsNotEmittedTypeElement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 166;
+    public bool IsNotEmittedTypeElement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 166;
 
-    public bool IsNullLiteral(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 167;
+    public bool IsNullLiteral(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 167;
 
-    public bool IsNumericLiteral(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 168;
+    public bool IsNumericLiteral(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 168;
 
-    public bool IsObjectBindingPattern(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 169;
+    public bool IsObjectBindingPattern(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 169;
 
-    public bool IsObjectLiteralExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 170;
+    public bool IsObjectLiteralExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 170;
 
-    public bool IsOmittedExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 171;
+    public bool IsOmittedExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 171;
 
-    public bool IsOptionalTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 172;
+    public bool IsOptionalTypeNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 172;
 
-    public bool IsOutKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 173;
+    public bool IsOutKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 173;
 
-    public bool IsOverrideKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 174;
+    public bool IsOverrideKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 174;
 
-    public bool IsParameterDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 175;
+    public bool IsParameterDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 175;
 
-    public bool IsParenthesizedExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 176;
+    public bool IsParenthesizedExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 176;
 
-    public bool IsParenthesizedTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 177;
+    public bool IsParenthesizedTypeNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 177;
 
-    public bool IsPartiallyEmittedExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 178;
+    public bool IsPartiallyEmittedExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 178;
 
-    public bool IsPlusToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 179;
+    public bool IsPlusToken(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 179;
 
-    public bool IsPostfixUnaryExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 180;
+    public bool IsPostfixUnaryExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 180;
 
-    public bool IsPrefixUnaryExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 181;
+    public bool IsPrefixUnaryExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 181;
 
-    public bool IsPrivateIdentifier(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 182;
+    public bool IsPrivateIdentifier(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 182;
 
-    public bool IsPrivateKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 183;
+    public bool IsPrivateKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 183;
 
-    public bool IsPropertyAccessExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 184;
+    public bool IsPropertyAccessExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 184;
 
-    public bool IsPropertyAssignment(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 185;
+    public bool IsPropertyAssignment(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 185;
 
-    public bool IsPropertyDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 186;
+    public bool IsPropertyDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 186;
 
-    public bool IsPropertySignature(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 187;
+    public bool IsPropertySignature(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 187;
 
-    public bool IsProtectedKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 188;
+    public bool IsProtectedKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 188;
 
-    public bool IsPublicKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 189;
+    public bool IsPublicKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 189;
 
-    public bool IsQualifiedName(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 190;
+    public bool IsQualifiedName(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 190;
 
-    public bool IsQuestionDotToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 191;
+    public bool IsQuestionDotToken(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 191;
 
-    public bool IsQuestionQuestionEqualsToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 192;
+    public bool IsQuestionQuestionEqualsToken(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 192;
 
-    public bool IsQuestionToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 193;
+    public bool IsQuestionToken(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 193;
 
-    public bool IsReadonlyKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 194;
+    public bool IsReadonlyKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 194;
 
-    public bool IsRegularExpressionLiteral(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 195;
+    public bool IsRegularExpressionLiteral(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 195;
 
-    public bool IsRestTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 196;
+    public bool IsRestTypeNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 196;
 
-    public bool IsReturnStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 197;
+    public bool IsReturnStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 197;
 
-    public bool IsSatisfiesExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 198;
+    public bool IsSatisfiesExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 198;
 
-    public bool IsSemicolonClassElement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 199;
+    public bool IsSemicolonClassElement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 199;
 
-    public bool IsSetAccessorDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 200;
+    public bool IsSetAccessorDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 200;
 
-    public bool IsShorthandPropertyAssignment(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 201;
+    public bool IsShorthandPropertyAssignment(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 201;
 
-    public bool IsSourceFile(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 202;
+    public bool IsSourceFile(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 202;
 
-    public bool IsSpreadAssignment(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 203;
+    public bool IsSpreadAssignment(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 203;
 
-    public bool IsSpreadElement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 204;
+    public bool IsSpreadElement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 204;
 
-    public bool IsStaticKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 205;
+    public bool IsStaticKeyword(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 205;
 
-    public bool IsStringLiteral(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 206;
+    public bool IsStringLiteral(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 206;
 
-    public bool IsSuperExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 207;
+    public bool IsSuperExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 207;
 
-    public bool IsSwitchStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 208;
+    public bool IsSwitchStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 208;
 
-    public bool IsSyntaxList(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 209;
+    public bool IsSyntaxList(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 209;
 
-    public bool IsSyntheticExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 210;
+    public bool IsSyntheticExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 210;
 
-    public bool IsSyntheticReferenceExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 211;
+    public bool IsSyntheticReferenceExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 211;
 
-    public bool IsTaggedTemplateExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 212;
+    public bool IsTaggedTemplateExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 212;
 
-    public bool IsTemplateExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 213;
+    public bool IsTemplateExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 213;
 
-    public bool IsTemplateHead(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 214;
+    public bool IsTemplateHead(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 214;
 
-    public bool IsTemplateLiteralTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 215;
+    public bool IsTemplateLiteralTypeNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 215;
 
-    public bool IsTemplateLiteralTypeSpan(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 216;
+    public bool IsTemplateLiteralTypeSpan(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 216;
 
-    public bool IsTemplateMiddle(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 217;
+    public bool IsTemplateMiddle(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 217;
 
-    public bool IsTemplateSpan(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 218;
+    public bool IsTemplateSpan(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 218;
 
-    public bool IsTemplateTail(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 219;
+    public bool IsTemplateTail(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 219;
 
-    public bool IsThisExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 220;
+    public bool IsThisExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 220;
 
-    public bool IsThisTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 221;
+    public bool IsThisTypeNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 221;
 
-    public bool IsThrowStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 222;
+    public bool IsThrowStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 222;
 
-    public bool IsToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 223;
+    public bool IsToken(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 223;
 
-    public bool IsTrueLiteral(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 224;
+    public bool IsTrueLiteral(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 224;
 
-    public bool IsTryStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 225;
+    public bool IsTryStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 225;
 
-    public bool IsTupleTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 226;
+    public bool IsTupleTypeNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 226;
 
-    public bool IsTypeAliasDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 227;
+    public bool IsTypeAliasDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 227;
 
-    public bool IsTypeAssertion(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 228;
+    public bool IsTypeAssertion(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 228;
 
-    public bool IsTypeLiteralNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 229;
+    public bool IsTypeLiteralNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 229;
 
-    public bool IsTypeOfExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 230;
+    public bool IsTypeOfExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 230;
 
-    public bool IsTypeOperatorNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 231;
+    public bool IsTypeOperatorNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 231;
 
-    public bool IsTypeParameterDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 232;
+    public bool IsTypeParameterDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 232;
 
-    public bool IsTypePredicateNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 233;
+    public bool IsTypePredicateNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 233;
 
-    public bool IsTypeQueryNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 234;
+    public bool IsTypeQueryNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 234;
 
-    public bool IsTypeReferenceNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 235;
+    public bool IsTypeReferenceNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 235;
 
-    public bool IsUnionTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 236;
+    public bool IsUnionTypeNode(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 236;
 
-    public bool IsVariableDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 237;
+    public bool IsVariableDeclaration(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 237;
 
-    public bool IsVariableDeclarationList(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 238;
+    public bool IsVariableDeclarationList(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 238;
 
-    public bool IsVariableStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 239;
+    public bool IsVariableStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 239;
 
-    public bool IsVoidExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 240;
+    public bool IsVoidExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 240;
 
-    public bool IsWhileStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 241;
+    public bool IsWhileStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 241;
 
-    public bool IsWithStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 242;
+    public bool IsWithStatement(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 242;
 
-    public bool IsYieldExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 243;
+    public bool IsYieldExpression(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == 243;
 }

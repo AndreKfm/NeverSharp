@@ -1,6 +1,6 @@
 // Copyright 2026 Andre Kaufmann
 // SPDX-License-Identifier: Apache-2.0
-// Original code (not ported): Track O emitter for the node store's field accessors and ForEachChild (step O6a).
+// Original code (not ported): Track O emitter for the node store's field accessors and ForEachChild (steps O6a, O6b).
 //
 // Track O's nodes are int handles into a per-parse arena (pre-registration §5.4); the parser and the factory
 // read and write a node only through NodeStore (src/NeverSharp.Optimized/Arena/NodeStore.cs). This emitter writes
@@ -8,9 +8,12 @@
 // - The field set per node class is Track F's (a field exists when the interface declares the property and
 //   parser.ts, factory/nodeFactory.ts or utilities.ts assign it), without the binder and checker data the
 //   parser never touches, plus the SourceFile members Track F declares by hand (Parser/Types.cs, Parser.Pragmas.cs).
-// - Layout of O6a (the simplest that works; O6b compares layouts behind the same API): each node owns a block
-//   of int slots (child handles and scalar fields) and a block of object slots (strings, node lists, other
-//   objects); a field's offset in its block depends on the node's class, looked up per SyntaxKind in a table.
+// - Layout of O6b variant A (compact records): a node is a variable-length record in one int array, its handle
+//   the record's offset. The record holds the header (kind word, flags, pos, end, transform flags), the index of
+//   the node's first object slot (only for kinds with object slots), and one int slot per child handle or scalar
+//   field; boolean fields are bits of the kind word; strings, node lists and other objects live in a block of
+//   object slots per node; rare fields (SIDE_FIELDS) live in the store's side table. A field's word offset, bit
+//   or object slot depends on the node's class, looked up per SyntaxKind in a table.
 // - One getter and one setter per field name (`Expression(n)`, `SetExpression(n, v)`). A getter on a kind
 //   without the field reads as undefined (default), as the property does in TypeScript; a setter throws.
 //   Where one name has different types on different classes, the minority classes get `{Class}{Field}`.
@@ -100,6 +103,47 @@ function storage(cs, optional, usedAs) {
 // JSDocSignature.parameters: parseCallbackTagParameters (parser.ts) also keeps non-parameter tags there.
 const FIELD_OVERRIDES = { "JSDocSignature.parameters": { store: "ref", type: "Node[]", nullable: true } };
 
+// Record layout (O6b variant A). Words of the header; NodeStore.cs uses the same constants.
+const HEADER_WORDS = 5; // kind word, flags, pos, end, transform flags
+const REF_BASE_WORD = HEADER_WORDS; // index of the first object slot, only in records of kinds with object slots
+const FIRST_BIT = 16; // boolean fields: bits 16..30 of the kind word (kind in bits 0..15, bit 31: side table entries)
+const LAST_BIT = 30;
+// Fields that are undefined on almost every node: kept in the store's side table instead of the record. Chosen from
+// the tuning corpus (JSDocParsingMode.ParseForTypeErrors): set on fewer than about 3 % of the nodes of their class
+// (most never: jsDoc only on nodes with a JSDoc comment the parser keeps, nextContainer is binder data the factory
+// only clears, some members exist for grammar errors only). Classes with fewer than about 1,000 nodes in the corpus
+// are left alone. Reading a side field of a node without side entries costs a bit test of the kind word.
+// In every class, except the classes listed:
+const SIDE_FIELDS = {
+    jsDoc: [], nextContainer: [], textSourceNode: [], thisArg: [], tupleNameSource: [], isSpread: [], _children: [], sourceFiles: [],
+    exclamationToken: [], asteriskToken: ["YieldExpression"], questionDotToken: [], templateFlags: [], numericLiteralFlags: [], assertClause: [],
+    typeArguments: ["TypeReferenceNode", "NewExpression", "ExpressionWithTypeArguments", "ImportTypeNode", "JsxOpeningElement", "JsxSelfClosingElement"],
+};
+// Only in the classes listed:
+const SIDE_IN = {
+    modifiers: ["PropertyAssignment", "ParameterDeclaration", "TypeParameterDeclaration", "ShorthandPropertyAssignment", "MethodSignature",
+        "FunctionTypeNode", "ConstructorTypeNode", "ImportDeclaration", "ExportDeclaration", "ExportAssignment", "ArrowFunction"],
+    questionToken: ["PropertyAssignment", "ShorthandPropertyAssignment", "MethodDeclaration", "FunctionDeclaration", "FunctionExpression", "ArrowFunction",
+        "ConstructorDeclaration", "GetAccessorDeclaration", "SetAccessorDeclaration", "CallSignatureDeclaration", "ConstructSignatureDeclaration",
+        "IndexSignatureDeclaration", "PropertyDeclaration"],
+    initializer: ["ParameterDeclaration", "PropertySignature"],
+    dotDotDotToken: ["ParameterDeclaration"],
+    typeParameters: ["ArrowFunction", "ConstructorDeclaration", "GetAccessorDeclaration", "SetAccessorDeclaration", "IndexSignatureDeclaration"],
+    name: ["CallSignatureDeclaration", "ConstructSignatureDeclaration", "ConstructorDeclaration", "ConstructorTypeNode", "FunctionTypeNode",
+        "IndexSignatureDeclaration", "ExportDeclaration", "ExportAssignment", "SpreadAssignment"],
+    propertyName: ["ImportSpecifier"],
+    equalsToken: ["ShorthandPropertyAssignment"],
+    objectAssignmentInitializer: ["ShorthandPropertyAssignment"],
+    attributes: ["ImportDeclaration", "ExportDeclaration"],
+    expression: ["TypeParameterDeclaration"],
+    type: ["ConstructorDeclaration", "SetAccessorDeclaration"],
+};
+const isSide = (cls, field) => Object.hasOwn(SIDE_FIELDS, field) ? !SIDE_FIELDS[field].includes(cls) : !!SIDE_IN[field]?.includes(cls);
+// Offset tables: -1 absent, SIDE_OFFSET in the side table, otherwise the word offset, bit or object slot.
+const SIDE_OFFSET = 127;
+// Side table ids of the base fields NodeStore.cs keeps there (parent, original, modifierFlagsCache, emitNode).
+const FIRST_SIDE_ID = 4;
+
 export function emitOptimized(schema) {
     const assigned = assignedPropertyNames();
     const outDir = join(repoRoot, "src", "NeverSharp.Optimized", "Generated");
@@ -133,9 +177,19 @@ export function emitOptimized(schema) {
         }
         for (const [name, type, nullable] of EXTRA_FIELDS[cls] ?? []) list.push({ ts: name, name, store: "ref", type, nullable });
         list.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
-        let slot = 0, ref = 0;
-        for (const f of list) f.offset = f.store === "slot" ? slot++ : ref++;
-        fields[cls] = { list, slots: slot, refs: ref };
+        // Layout: side table, bit of the kind word, object slot, or int slot (word offset in the record).
+        let slot = 0, ref = 0, bit = FIRST_BIT;
+        for (const f of list) {
+            f.layout = isSide(cls, f.ts) ? "side" : f.store === "ref" ? "ref" : f.conv === "bool" ? "bit" : "word";
+            if (f.layout === "side") f.offset = SIDE_OFFSET;
+            if (f.layout === "ref") f.offset = ref++;
+            if (f.layout === "bit") f.offset = bit++;
+        }
+        if (bit > LAST_BIT + 1) throw new Error(`${cls}: more boolean fields than free bits in the kind word`);
+        const firstSlot = HEADER_WORDS + (ref > 0 ? 1 : 0);
+        for (const f of list) if (f.layout === "word") f.offset = firstSlot + slot++;
+        if (firstSlot + slot >= SIDE_OFFSET || ref >= SIDE_OFFSET) throw new Error(`${cls}: record too large for sbyte offsets`);
+        fields[cls] = { list, words: firstSlot + slot, refs: ref };
     }
 
     // Accessor names: one per field name and storage type; the type most classes use keeps the plain name.
@@ -158,8 +212,10 @@ export function emitOptimized(schema) {
                 if (i > 0) collisions.push(`${cls}.${name} -> ${accessor}`);
                 if (RESERVED.has(accessor)) throw new Error(`accessor ${accessor} collides with a hand-written NodeStore member`);
                 const f = fields[cls].list.find(x => x.name === name);
-                if (!accessors.has(accessor)) accessors.set(accessor, { store: f.store, type: f.type, nullable: false, conv: f.conv, offsets: new Map() });
+                if (!accessors.has(accessor)) accessors.set(accessor, { store: f.store, layouts: new Set(), type: f.type, nullable: false, conv: f.conv, offsets: new Map() });
                 const a = accessors.get(accessor);
+                a.layouts.add(f.layout);
+                if (a.layouts.has("bit") && a.layouts.size > 1) throw new Error(`accessor ${accessor}: a boolean field in a bit and elsewhere`);
                 a.nullable ||= !!f.nullable;
                 a.offsets.set(cls, f.offset);
                 accessorOf[`${cls}.${name}`] = accessor;
@@ -180,13 +236,17 @@ export function emitOptimized(schema) {
     for (const name of kindNames) kindClass[kindValue(name)] = schema.kindToClass[name];
 
     const lines = [header("src/compiler/types.ts (node interfaces) and src/compiler/parser.ts (forEachChildTable)"),
-        "#nullable enable", "", "using NeverSharp.Generated;", "", "namespace NeverSharp.Optimized;", "",
-        "/// <summary>The generated part of the node store: layout tables, field accessors and node class tests (O6a layout).</summary>",
+        "#nullable enable", "", "using System.Runtime.CompilerServices;", "using NeverSharp.Generated;", "", "namespace NeverSharp.Optimized;", "",
+        "/// <summary>The generated part of the node store: layout tables, field accessors and node class tests (O6b variant A layout).</summary>",
         "internal sealed partial class NodeStore", "{",
         `    private const int KindCount = ${kindCount};`, "",
-        "    /// <summary>Int slots (child handles, scalar fields) per kind.</summary>",
-        "    private static ReadOnlySpan<byte> SlotCounts =>", "    [",
-        ...tableOf(k => fields[kindClass[k]].slots), "    ];", "",
+        `    private const int HeaderWords = ${HEADER_WORDS};`, "",
+        `    private const int RefBaseWord = ${REF_BASE_WORD};`, "",
+        "    /// <summary>The offset table value of a field kept in the side table.</summary>",
+        `    private const int SideOffset = ${SIDE_OFFSET};`, "",
+        "    /// <summary>Record size in ints per kind: header, first object slot (kinds with object slots), int slots.</summary>",
+        "    private static ReadOnlySpan<byte> RecordSizes =>", "    [",
+        ...tableOf(k => fields[kindClass[k]].words), "    ];", "",
         "    /// <summary>Object slots (strings, node lists, other objects) per kind.</summary>",
         "    private static ReadOnlySpan<byte> RefCounts =>", "    [",
         ...tableOf(k => fields[kindClass[k]].refs), "    ];", "",
@@ -195,38 +255,60 @@ export function emitOptimized(schema) {
         ...tableOf(k => classId.get(kindClass[k])), "    ];", ""];
     if (classes.length > 255) throw new Error("more than 255 node classes");
 
+    let nextSideId = FIRST_SIDE_ID;
     const getter = (name, a) => {
-        const nullable = a.store === "ref" && a.nullable;
-        const ret = a.store === "ref" ? `${a.type}${nullable ? "?" : ""}` : a.type;
-        const read = a.store === "ref" ? (nullable ? `(${a.type}?)refs[r.Refs + o]` : `(${a.type})refs[r.Refs + o]!`)
-            : a.conv === "node" ? "new Node(slots[r.Slots + o])"
-            : a.conv === "bool" ? "slots[r.Slots + o] != 0"
-            : a.conv === "enum" ? `(${a.type})slots[r.Slots + o]` : "slots[r.Slots + o]";
-        const absent = a.store === "ref" ? (nullable ? "null" : "null!") : "default";
-        const write = a.store === "ref" ? "refs[r.Refs + o] = value;"
-            : a.conv === "node" ? "slots[r.Slots + o] = value.Index;"
-            : a.conv === "bool" ? "slots[r.Slots + o] = value ? 1 : 0;"
-            : a.conv === "enum" ? "slots[r.Slots + o] = (int)value;" : "slots[r.Slots + o] = value;";
+        const isRef = a.store === "ref";
+        const nullable = isRef && a.nullable;
+        const ret = isRef ? `${a.type}${nullable ? "?" : ""}` : a.type;
+        const absent = isRef ? (nullable ? "null" : "null!") : "default";
+        const fromInt = v => a.conv === "node" ? `new Node(${v})` : a.conv === "bool" ? `${v} != 0` : a.conv === "enum" ? `(${a.type})${v}` : v;
+        const toInt = a.conv === "node" ? "value.Index" : a.conv === "bool" ? "(value ? 1 : 0)" : a.conv === "enum" ? "(int)value" : "value";
+        const cast = v => a.type === "object" ? v : `Unsafe.As<${ret}>(${v})${nullable ? "" : "!"}`;
+        const side = a.layouts.has("side");
+        const layout = [...a.layouts].find(l => l !== "side") ?? "side"; // word, ref or bit; side if only there
+        const table = layout === "bit" ? `${name}Bits` : `${name}Offsets`;
+        if (side) {
+            a.sideId = nextSideId++;
+            if (a.sideId > 255) throw new Error("more than 256 side table fields");
+        }
+        const sideRead = isRef ? cast(`GetSideRef(h, ${a.sideId})`) : fromInt(`GetSideInt(h, ${a.sideId})`);
+        const sideWrite = isRef ? `SetSideRef(h, ${a.sideId}, value);` : `SetSideInt(h, ${a.sideId}, ${toInt});`;
+        const recordRead = layout === "ref" ? cast("refs[d[h + RefBaseWord] + o]") : fromInt("d[h + o]");
+        const recordWrite = layout === "ref" ? "refs[d[h + RefBaseWord] + o] = value;" : `d[h + o] = ${toInt};`;
+        const head = ["        var d = data;", "        var h = node.Index;"];
+        const throwIf = cond => [`        if (${cond})`, "        {", `            ThrowNoField(d[h], nameof(${name}));`, "        }"];
+        let get, set;
+        if (layout === "bit") {
+            get = ["        var w = data[node.Index];", `        var b = ${table}[w & KindMask];`, "        return b >= 0 && (w & (1 << b)) != 0;"];
+            set = [...head, "        var w = d[h];", `        var b = ${table}[w & KindMask];`, ...throwIf("b < 0"), "        d[h] = value ? w | (1 << b) : w & ~(1 << b);"];
+        } else if (layout === "side") {
+            // Only in the side table: the side bit of the kind word (bit 31) says whether to look there.
+            get = [...head, "        var w = d[h];", `        return w >= 0 || ${table}[w & KindMask] < 0 ? ${absent} : ${sideRead};`];
+            set = [...head, ...throwIf(`${table}[d[h] & KindMask] < 0`), `        ${sideWrite}`];
+        } else if (side) {
+            // In the record for most classes, in the side table for some.
+            get = [...head, "        var w = d[h];", `        var o = ${table}[w & KindMask];`, "        if ((uint)o < SideOffset)", "        {", `            return ${recordRead};`, "        }",
+                `        return o == SideOffset && w < 0 ? ${sideRead} : ${absent};`];
+            set = [...head, `        var o = ${table}[d[h] & KindMask];`, "        if ((uint)o < SideOffset)", "        {", `            ${recordWrite}`, "            return;", "        }",
+                ...throwIf("o != SideOffset"), `        ${sideWrite}`];
+        } else {
+            get = [...head, `        var o = ${table}[d[h] & KindMask];`, `        return o < 0 ? ${absent} : ${recordRead};`];
+            set = [...head, `        var o = ${table}[d[h] & KindMask];`, ...throwIf("o < 0"), `        ${recordWrite}`];
+        }
         return [
-            `    public ${ret} ${name}(Node node)`, "    {",
-            "        ref var r = ref records[node.Index];",
-            `        var o = ${name}Offsets[(int)r.Kind];`,
-            `        return o < 0 ? ${absent} : ${read};`, "    }", "",
-            `    public void Set${name}(Node node, ${ret} value)`, "    {",
-            "        ref var r = ref records[node.Index];",
-            `        var o = ${name}Offsets[(int)r.Kind];`,
-            "        if (o < 0)", "        {", `            ThrowNoField(r.Kind, nameof(${name}));`, "        }",
-            `        ${write}`, "    }", "",
-            `    private static ReadOnlySpan<sbyte> ${name}Offsets =>`, "    [",
+            "    [MethodImpl(MethodImplOptions.AggressiveInlining)]", `    public ${ret} ${name}(Node node)`, "    {", ...get, "    }", "",
+            "    [MethodImpl(MethodImplOptions.AggressiveInlining)]", `    public void Set${name}(Node node, ${ret} value)`, "    {", ...set, "    }", "",
+            `    private static ReadOnlySpan<sbyte> ${table} =>`, "    [",
             ...tableOf(k => a.offsets.has(kindClass[k]) ? a.offsets.get(kindClass[k]) : -1), "    ];", ""];
     };
     for (const [name, a] of [...accessors].sort((x, y) => x[0] < y[0] ? -1 : 1)) {
         const owners = [...a.offsets.keys()];
-        lines.push(`    // ${owners.length > 6 ? `${owners.slice(0, 6).join(", ")}, … (${owners.length} classes)` : owners.join(", ")}`);
+        const where = a.layouts.size === 1 && a.layouts.has("side") ? " (side table)" : a.layouts.has("side") ? " (some in the side table)" : "";
+        lines.push(`    // ${owners.length > 6 ? `${owners.slice(0, 6).join(", ")}, … (${owners.length} classes)` : owners.join(", ")}${where}`);
         lines.push(...getter(name, a));
     }
     lines.push("    // Node classes of types.ts: whether a node's kind is one of the class's kinds.");
-    for (const cls of classes) lines.push(`    public bool Is${cls}(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == ${classId.get(cls)};`, "");
+    for (const cls of classes) lines.push(`    public bool Is${cls}(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == ${classId.get(cls)};`, "");
     lines.pop();
     lines.push("}", "");
     writeFileSync(join(outDir, "NodeStore.g.cs"), lines.join("\n"));
@@ -280,7 +362,7 @@ export function emitOptimized(schema) {
     writeFileSync(join(outDir, "NodeVisitor.g.cs"), v.join("\n"));
 
     const map = { classes: {}, omitted };
-    for (const cls of classes) map.classes[cls] = Object.fromEntries(fields[cls].list.map(f => [f.name, { accessor: f.accessor, store: f.store, type: f.type, nullable: accessors.get(f.accessor).nullable }]));
+    for (const cls of classes) map.classes[cls] = Object.fromEntries(fields[cls].list.map(f => [f.name, { accessor: f.accessor, store: f.store, layout: f.layout, type: f.type, nullable: accessors.get(f.accessor).nullable }]));
     mkdirSync(join(repoRoot, "artifacts", "generate"), { recursive: true });
     writeFileSync(join(repoRoot, "artifacts", "generate", "optimized-fields.json"), JSON.stringify(map, null, 1));
     return { classes: classes.length, accessors: accessors.size, forEachChildEntries: entries, collisions };
