@@ -21,7 +21,8 @@ namespace NeverSharp.Optimized;
 /// </summary>
 internal sealed partial class Scanner
 {
-    private string text;
+    // Step O1: the text as an array of UTF-16 code units of the exact length (SourceText), not a string.
+    private char[] text;
 
     // Current position (end position of text of current token)
     private int pos;
@@ -42,7 +43,7 @@ internal sealed partial class Scanner
 
     // Track O (O5a): the texts token values refer to: the scanner's own table (reset with each text), or the table of
     // the parse that uses the scanner (UseTexts), so that the values outlive the token in the parse's nodes.
-    private readonly TextTable ownTexts = new("");
+    private readonly TextTable ownTexts = new(SourceText.EmptyChars);
     private TextTable texts;
 
     private List<CommentDirective>? commentDirectives;
@@ -61,7 +62,7 @@ internal sealed partial class Scanner
     // name `start` there to this parameter), which has no further effect.
     private int? start;
 
-    private Scanner(ScriptTarget languageVersion, bool skipTrivia, LanguageVariant languageVariant, string? textInitial, ErrorCallback? onError, int? start, int? length)
+    private Scanner(ScriptTarget languageVersion, bool skipTrivia, LanguageVariant languageVariant, char[]? textInitial, ErrorCallback? onError, int? start, int? length)
     {
         this.languageVersion = languageVersion;
         this.skipTrivia = skipTrivia;
@@ -78,12 +79,25 @@ internal sealed partial class Scanner
         ScriptTarget languageVersion,
         bool skipTrivia,
         LanguageVariant languageVariant = LanguageVariant.Standard,
-        string? textInitial = null,
+        char[]? textInitial = null,
         ErrorCallback? onError = null,
         int? start = null,
         int? length = null)
     {
         return new Scanner(languageVersion, skipTrivia, languageVariant, textInitial, onError, start, length);
+    }
+
+    /// <summary>Step O1: <see cref="CreateScanner(ScriptTarget, bool, LanguageVariant, char[], ErrorCallback, int?, int?)"/> over a text given as a string (the dump tool): its characters are copied.</summary>
+    internal static Scanner CreateScanner(
+        ScriptTarget languageVersion,
+        bool skipTrivia,
+        LanguageVariant languageVariant,
+        string? textInitial,
+        ErrorCallback? onError = null,
+        int? start = null,
+        int? length = null)
+    {
+        return new Scanner(languageVersion, skipTrivia, languageVariant, SourceText.FromString(textInitial).Array, onError, start, length);
     }
 
     /// <summary>
@@ -2917,7 +2931,7 @@ internal sealed partial class Scanner
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal string GetText()
+    internal char[] GetText()
     {
         return text;
     }
@@ -2929,9 +2943,9 @@ internal sealed partial class Scanner
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal void SetText(string? newText, int? start = null, int? length = null)
+    internal void SetText(char[]? newText, int? start = null, int? length = null)
     {
-        text = !string.IsNullOrEmpty(newText) ? newText : "";
+        text = newText ?? SourceText.EmptyChars;
         end = length == null ? text.Length : start!.Value + length.Value;
         // Track O (O5a): token values go to the scanner's own texts until a parse attaches its texts (UseTexts).
         texts = ownTexts;

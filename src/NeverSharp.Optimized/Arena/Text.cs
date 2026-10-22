@@ -209,7 +209,7 @@ internal sealed class TextTable
         public TextRef Text;
     }
 
-    private string source;
+    private char[] source;
     private char[] chars = [];
     private int charCount;
 
@@ -224,13 +224,13 @@ internal sealed class TextTable
     // Whether the arrays come from the pool (a parse's table until Seal).
     private bool pooled;
 
-    public TextTable(string source)
+    public TextTable(char[] source)
     {
         this.source = source;
     }
 
-    /// <summary>The source text of the parse.</summary>
-    internal string Source
+    /// <summary>The source text of the parse (step O1: an array of the exact length, see <see cref="SourceText"/>).</summary>
+    internal char[] Source
     {
         [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         get => source;
@@ -256,7 +256,7 @@ internal sealed class TextTable
 
     /// <summary>Starts over with another source text (a scanner's own table, reused from text to text).</summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal void Reset(string newSource)
+    internal void Reset(char[] newSource)
     {
         source = newSource;
         charCount = 0;
@@ -323,10 +323,6 @@ internal sealed class TextTable
         if (text.Size == 1)
         {
             return "";
-        }
-        if (text.Start == 0 && text.Size - 1 == source.Length)
-        {
-            return source;
         }
         return Span(text).ToString();
     }
@@ -671,7 +667,7 @@ internal struct TextBuilder
 
     /// <summary>`result += text.substring(from, to)`, <paramref name="text"/> being the table's source text.</summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    public void Append(string text, int from, int to)
+    public void Append(char[] text, int from, int to)
     {
         Debug.Assert(ReferenceEquals(text, table.Source), "A range of another string than the source text");
         AppendSource(from, to);

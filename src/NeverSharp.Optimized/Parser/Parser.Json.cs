@@ -15,7 +15,7 @@ namespace NeverSharp.Optimized;
 /// <summary>parser.ts: Parser.parseJsonText.</summary>
 internal sealed partial class Parser
 {
-    internal Node ParseJsonText(NodeStore nodeStore, string fileName, string sourceText, ScriptTarget languageVersion = ScriptTarget.ES2015, SyntaxCursor? syntaxCursor = null, bool setParentNodes = false)
+    internal Node ParseJsonText(NodeStore nodeStore, string fileName, char[] sourceText, ScriptTarget languageVersion = ScriptTarget.ES2015, SyntaxCursor? syntaxCursor = null, bool setParentNodes = false)
     {
         UseStore(nodeStore);
         InitializeState(fileName, sourceText, languageVersion, syntaxCursor, ScriptKind.JSON, JSDocParsingMode.ParseAll);

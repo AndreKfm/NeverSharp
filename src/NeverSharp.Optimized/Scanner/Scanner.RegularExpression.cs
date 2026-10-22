@@ -1132,7 +1132,9 @@ internal sealed partial class Scanner
 
         string ScanWordCharacters()
         {
-            var value = new StringParts(); // TypeScript: `let value = ""` (see StringParts)
+            // TypeScript: `let value = ""` and `value += String.fromCharCode(ch)` for each character, ch being text[pos]:
+            // the characters appended are consecutive characters of the text, so the value is the range they span.
+            var start = pos;
             while (true)
             {
                 var ch = CharCodeChecked(pos);
@@ -1140,10 +1142,9 @@ internal sealed partial class Scanner
                 {
                     break;
                 }
-                value.Append(text, pos, pos + 1); // TypeScript: `value += String.fromCharCode(ch)`, ch being text[pos]
                 pos++;
             }
-            return value.Result();
+            return Substring(text, start, pos);
         }
 
         string ScanSourceCharacter()

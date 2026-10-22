@@ -143,7 +143,7 @@ internal static partial class Utilities
 
     /// <summary>`s.charCodeAt(i)`; NaN (outside the string) is int.MinValue, which equals no character code.</summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private static int CharCodeAtOrNaN(string s, int i)
+    private static int CharCodeAtOrNaN(ReadOnlySpan<char> s, int i)
     {
         return (uint)i < (uint)s.Length ? s[i] : int.MinValue;
     }

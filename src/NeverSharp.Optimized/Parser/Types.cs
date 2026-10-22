@@ -153,7 +153,7 @@ internal sealed class SourceFileNodeLike : ISourceFileLike
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    public string Text => store.SourceFileText(sourceFile);
+    public ReadOnlySpan<char> Text => store.SourceFileText(sourceFile);
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public IReadOnlyList<int>? LineMap

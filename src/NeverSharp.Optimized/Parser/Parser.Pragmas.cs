@@ -196,7 +196,7 @@ internal sealed partial class Parser
         return null;
     }
 
-    internal static void ProcessCommentPragmas(NodeStore store, Node context, string sourceText)
+    internal static void ProcessCommentPragmas(NodeStore store, Node context, ReadOnlySpan<char> sourceText)
     {
         var pragmas = new List<PragmaPseudoMapEntry>();
 
@@ -205,7 +205,7 @@ internal sealed partial class Parser
         var ranges = new Scanner.CommentRangeIterator(sourceText, 0, /*trailing*/ false);
         while (ranges.MoveNext(out var range))
         {
-            var comment = sourceText.AsSpan(range.Pos, range.End - range.Pos); // (TypeScript: `sourceText.substring(range.pos, range.end)`)
+            var comment = sourceText.Slice(range.Pos, range.End - range.Pos); // (TypeScript: `sourceText.substring(range.pos, range.end)`)
             ExtractPragmas(pragmas, range, comment);
         }
 

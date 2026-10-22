@@ -113,7 +113,7 @@ internal sealed partial class NodeStore
     private int sideLogCount;
 
     /// <summary>A store for a source text (scratch arrays from the pool; exact arrays when the parse ends).</summary>
-    public NodeStore(string sourceText)
+    public NodeStore(char[] sourceText)
     {
         var textLength = sourceText.Length;
         Texts = new TextTable(sourceText);

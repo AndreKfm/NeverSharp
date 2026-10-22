@@ -326,7 +326,7 @@ internal static partial class Utilities
         return !UtilitiesPublic.FindAncestor(store, node, ((a0) => FactoryNodeTests.IsJSDocTypeExpression(store, a0))).IsNone;
     }
 
-    internal static string GetTextOfNodeFromSourceText(NodeStore store, string sourceText, Node node, bool includeTrivia = false)
+    internal static string GetTextOfNodeFromSourceText(NodeStore store, ReadOnlySpan<char> sourceText, Node node, bool includeTrivia = false)
     {
         if (NodeIsMissing(store, node))
         {
@@ -602,7 +602,7 @@ internal static partial class Utilities
 
     /// <summary>Track O (O-NA): the filter of getJSDocCommentRanges for one comment range of a node ending at <paramref name="nodeEnd"/>.</summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal static bool IsJSDocCommentRange(string text, CommentRange comment, int nodeEnd)
+    internal static bool IsJSDocCommentRange(ReadOnlySpan<char> text, CommentRange comment, int nodeEnd)
     {
         return comment.End <= nodeEnd && // Due to parse errors sometime empty parameter may get comments assigned to it that end up not in parameter range
             CharCodeAtOrNaN(text, comment.Pos + 1) == (int)CharacterCodes.asterisk &&
@@ -2002,7 +2002,7 @@ internal static partial class Utilities
     }
 
     /// <summary>JavaScript's String.prototype.substring(start, end): arguments are clamped and swapped if reversed.</summary>
-    private static string SubstringJs(string s, int start, int end)
+    private static string SubstringJs(ReadOnlySpan<char> s, int start, int end)
     {
         start = Math.Clamp(start, 0, s.Length);
         end = Math.Clamp(end, 0, s.Length);
@@ -2010,6 +2010,6 @@ internal static partial class Utilities
         {
             (start, end) = (end, start);
         }
-        return s.Substring(start, end - start);
+        return s.Slice(start, end - start).ToString();
     }
 }

@@ -92,7 +92,7 @@ internal sealed partial class Parser : BaseNodeFactory
 
     private string fileName = null!;
     private NodeFlags sourceFlags;
-    private string sourceText = null!;
+    private char[] sourceText = null!; // (step O1: the characters of the source text, SourceText)
     private ScriptTarget languageVersion;
     private ScriptKind scriptKind;
     private LanguageVariant languageVariant;
@@ -247,7 +247,7 @@ internal sealed partial class Parser : BaseNodeFactory
     internal Node ParseSourceFile(
         NodeStore nodeStore,
         string fileName,
-        string sourceText,
+        char[] sourceText,
         ScriptTarget languageVersion,
         SyntaxCursor? syntaxCursor,
         bool setParentNodes = false,
@@ -279,7 +279,7 @@ internal sealed partial class Parser : BaseNodeFactory
         return result;
     }
 
-    private void InitializeState(string fileName, string sourceText, ScriptTarget languageVersion, SyntaxCursor? syntaxCursor, ScriptKind scriptKind, JSDocParsingMode jsDocParsingMode)
+    private void InitializeState(string fileName, char[] sourceText, ScriptTarget languageVersion, SyntaxCursor? syntaxCursor, ScriptKind scriptKind, JSDocParsingMode jsDocParsingMode)
     {
         // (TypeScript first captures the node constructors of objectAllocator; NodeAllocator creates the nodes here.)
         this.fileName = TsPath.NormalizePath(fileName);
@@ -326,7 +326,7 @@ internal sealed partial class Parser : BaseNodeFactory
     {
         // Clear out the text the scanner is pointing at, so it doesn't keep anything alive unnecessarily.
         scanner.ClearCommentDirectives();
-        scanner.SetText("");
+        scanner.SetText(SourceText.EmptyChars);
         scanner.SetOnError(null);
         scanner.SetScriptKind(ScriptKind.Unknown);
         scanner.SetJSDocParsingMode(JSDocParsingMode.ParseAll);

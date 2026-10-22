@@ -247,7 +247,7 @@ internal sealed partial class Scanner
     /// over `text[start..end)`, returning capture group 1 (undefined when the regex does not match).
     /// </summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private static string? CommentDirectiveRegExSingleLine(string text, int start, int end)
+    private static string? CommentDirectiveRegExSingleLine(ReadOnlySpan<char> text, int start, int end)
     {
         var p = start;
         // ^\/\/
@@ -270,7 +270,7 @@ internal sealed partial class Scanner
     /// (hand-written matcher, see CommentDirectiveRegExSingleLine).
     /// </summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private static string? CommentDirectiveRegExMultiLine(string text, int start, int end)
+    private static string? CommentDirectiveRegExMultiLine(ReadOnlySpan<char> text, int start, int end)
     {
         var p = start;
         // ^(?:\/|\*)* (greedy; backtracking into it cannot help, since \s* and @ match neither '/' nor '*')
@@ -283,7 +283,7 @@ internal sealed partial class Scanner
 
     // \s*@(ts-expect-error|ts-ignore): the tail the two directive regexes share.
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private static string? MatchDirectiveAfterSlashes(string text, int p, int end)
+    private static string? MatchDirectiveAfterSlashes(ReadOnlySpan<char> text, int p, int end)
     {
         while (p < end && IsRegExpWhiteSpace(text[p]))
         {
@@ -294,11 +294,13 @@ internal sealed partial class Scanner
             return null;
         }
         p++;
-        if (string.CompareOrdinal(text, p, "ts-expect-error", 0, 15) == 0 && p + 15 <= end)
+        // (Step O1: string.CompareOrdinal(text, p, word, 0, n) == 0 on a span: the n characters from p, fewer at the end.)
+        var rest = text.Slice(p);
+        if (rest.StartsWith("ts-expect-error") && p + 15 <= end)
         {
             return "ts-expect-error";
         }
-        if (string.CompareOrdinal(text, p, "ts-ignore", 0, 9) == 0 && p + 9 <= end)
+        if (rest.StartsWith("ts-ignore") && p + 9 <= end)
         {
             return "ts-ignore";
         }
@@ -311,7 +313,7 @@ internal sealed partial class Scanner
     /// toUpperCase but never maps a non-ASCII character to an ASCII one, so only ASCII letters fold.
     /// </summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private static bool JsDocSeeOrLinkTest(string text, int start, int end)
+    private static bool JsDocSeeOrLinkTest(ReadOnlySpan<char> text, int start, int end)
     {
         for (var p = start; p < end; p++)
         {
@@ -328,7 +330,7 @@ internal sealed partial class Scanner
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private static bool MatchesAsciiIgnoreCase(string text, int p, int end, string lowerWord)
+    private static bool MatchesAsciiIgnoreCase(ReadOnlySpan<char> text, int p, int end, string lowerWord)
     {
         if (p + lowerWord.Length > end)
         {
@@ -512,7 +514,7 @@ internal sealed partial class Scanner
         return CharCodeToRegExpFlag.TryGetValue((CharacterCodes)ch, out var flag) ? flag : null;
     }
 
-    internal static List<int> ComputeLineStarts(string text)
+    internal static List<int> ComputeLineStarts(ReadOnlySpan<char> text)
     {
         var result = new List<int>();
         var pos = 0;
@@ -667,7 +669,7 @@ internal sealed partial class Scanner
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal static int SkipTrivia(string text, int pos, bool stopAfterLineBreak = false, bool stopAtComments = false, bool inJSDoc = false)
+    internal static int SkipTrivia(ReadOnlySpan<char> text, int pos, bool stopAfterLineBreak = false, bool stopAtComments = false, bool inJSDoc = false)
     {
         if (Utilities.PositionIsSynthesized(pos))
         {
@@ -784,7 +786,7 @@ internal sealed partial class Scanner
     private static readonly int MergeConflictMarkerLength = "<<<<<<<".Length;
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private static bool IsConflictMarkerTrivia(string text, int pos)
+    private static bool IsConflictMarkerTrivia(ReadOnlySpan<char> text, int pos)
     {
         Debug.Assert(pos >= 0);
 
@@ -814,7 +816,7 @@ internal sealed partial class Scanner
     // Track O (O-NA): TypeScript's `error` callback is the scanner's own error function or absent; the scanner is
     // passed instead of a closure over it.
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private static int ScanConflictMarkerTrivia(string text, int pos, Scanner? errorScanner = null)
+    private static int ScanConflictMarkerTrivia(ReadOnlySpan<char> text, int pos, Scanner? errorScanner = null)
     {
         errorScanner?.Error(Diagnostics.Merge_conflict_marker_encountered, pos, MergeConflictMarkerLength);
 
@@ -854,7 +856,7 @@ internal sealed partial class Scanner
     /// character up to a line terminator, which `.` does not match), or -1 when it does not match.
     /// </summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private static int ShebangTriviaRegexExec(string text)
+    private static int ShebangTriviaRegexExec(ReadOnlySpan<char> text)
     {
         if (!(text.Length >= 2 && text[0] == '#' && text[1] == '!'))
         {
@@ -869,7 +871,7 @@ internal sealed partial class Scanner
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private static bool IsShebangTrivia(string text, int pos)
+    private static bool IsShebangTrivia(ReadOnlySpan<char> text, int pos)
     {
         // Shebangs check must only be done at the start of the file
         Debug.Assert(pos == 0);
@@ -877,7 +879,7 @@ internal sealed partial class Scanner
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private static int ScanShebangTrivia(string text, int pos)
+    private static int ScanShebangTrivia(ReadOnlySpan<char> text, int pos)
     {
         var shebangLength = ShebangTriviaRegexExec(text);
         pos = pos + shebangLength;
@@ -906,7 +908,7 @@ internal sealed partial class Scanner
     /// <param name="initial">An initial value to pass when accumulating results (when "reduce" is true).</param>
     /// <returns>If "reduce" is true, the accumulated value. If "reduce" is false, the first truthy
     ///      return value of the callback.</returns>
-    private static TResult? IterateCommentRanges<TState, TResult>(bool reduce, string text, int pos, bool trailing, CommentRangeCallback<TState, TResult> cb, TState state, TResult? initial = default)
+    private static TResult? IterateCommentRanges<TState, TResult>(bool reduce, ReadOnlySpan<char> text, int pos, bool trailing, CommentRangeCallback<TState, TResult> cb, TState state, TResult? initial = default)
     {
         // Track O (O-NA): the loop of iterateCommentRanges is CommentRangeIterator, which yields the ranges one by one
         // (the callback gets each pending range when the next comment is found, and the last one at the end).
@@ -927,11 +929,11 @@ internal sealed partial class Scanner
     /// <summary>
     /// Track O (O-NA): the loop of iterateCommentRanges as an iterator over the comment ranges after a position, without a
     /// callback or a list: the leading (<c>trailing</c> false) or trailing comment ranges, in order. A mutable struct,
-    /// used as a local variable.
+    /// used as a local variable (step O1: a ref struct over a span of the text).
     /// </summary>
-    internal struct CommentRangeIterator
+    internal ref struct CommentRangeIterator
     {
-        private readonly string text;
+        private readonly ReadOnlySpan<char> text;
         private readonly bool trailing;
         private int pos;
         private bool collecting;
@@ -940,7 +942,7 @@ internal sealed partial class Scanner
         private CommentRange pending;
 
         [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-        internal CommentRangeIterator(string text, int pos, bool trailing)
+        internal CommentRangeIterator(ReadOnlySpan<char> text, int pos, bool trailing)
         {
             this.text = text;
             this.trailing = trailing;
@@ -1068,22 +1070,22 @@ internal sealed partial class Scanner
         }
     }
 
-    internal static TResult? ForEachLeadingCommentRange<TState, TResult>(string text, int pos, CommentRangeCallback<TState, TResult> cb, TState state)
+    internal static TResult? ForEachLeadingCommentRange<TState, TResult>(ReadOnlySpan<char> text, int pos, CommentRangeCallback<TState, TResult> cb, TState state)
     {
         return IterateCommentRanges(/*reduce*/ false, text, pos, /*trailing*/ false, cb, state);
     }
 
-    internal static TResult? ForEachTrailingCommentRange<TState, TResult>(string text, int pos, CommentRangeCallback<TState, TResult> cb, TState state)
+    internal static TResult? ForEachTrailingCommentRange<TState, TResult>(ReadOnlySpan<char> text, int pos, CommentRangeCallback<TState, TResult> cb, TState state)
     {
         return IterateCommentRanges(/*reduce*/ false, text, pos, /*trailing*/ true, cb, state);
     }
 
-    internal static TResult? ReduceEachLeadingCommentRange<TState, TResult>(string text, int pos, CommentRangeCallback<TState, TResult> cb, TState state, TResult? initial)
+    internal static TResult? ReduceEachLeadingCommentRange<TState, TResult>(ReadOnlySpan<char> text, int pos, CommentRangeCallback<TState, TResult> cb, TState state, TResult? initial)
     {
         return IterateCommentRanges(/*reduce*/ true, text, pos, /*trailing*/ false, cb, state, initial);
     }
 
-    internal static TResult? ReduceEachTrailingCommentRange<TState, TResult>(string text, int pos, CommentRangeCallback<TState, TResult> cb, TState state, TResult? initial)
+    internal static TResult? ReduceEachTrailingCommentRange<TState, TResult>(ReadOnlySpan<char> text, int pos, CommentRangeCallback<TState, TResult> cb, TState state, TResult? initial)
     {
         return IterateCommentRanges(/*reduce*/ true, text, pos, /*trailing*/ true, cb, state, initial);
     }
@@ -1095,23 +1097,23 @@ internal sealed partial class Scanner
         return comments;
     }
 
-    internal static List<CommentRange>? GetLeadingCommentRanges(string text, int pos)
+    internal static List<CommentRange>? GetLeadingCommentRanges(ReadOnlySpan<char> text, int pos)
     {
         return ReduceEachLeadingCommentRange<object?, List<CommentRange>>(text, pos, AppendCommentRange, /*state*/ null, /*initial*/ null);
     }
 
-    internal static List<CommentRange>? GetTrailingCommentRanges(string text, int pos)
+    internal static List<CommentRange>? GetTrailingCommentRanges(ReadOnlySpan<char> text, int pos)
     {
         return ReduceEachTrailingCommentRange<object?, List<CommentRange>>(text, pos, AppendCommentRange, /*state*/ null, /*initial*/ null);
     }
 
     /// <summary>Optionally, get the shebang</summary>
-    internal static string? GetShebang(string text)
+    internal static string? GetShebang(ReadOnlySpan<char> text)
     {
         var match = ShebangTriviaRegexExec(text);
         if (match >= 0)
         {
-            return text.Substring(0, match);
+            return text.Slice(0, match).ToString();
         }
         return null;
     }
@@ -1177,7 +1179,7 @@ internal sealed partial class Scanner
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private static int CodePointAt(string s, int i)
+    private static int CodePointAt(ReadOnlySpan<char> s, int i)
     {
         // TODO(jakebailey): this is wrong and should have ?? 0; but all users are okay with it
         // (String.prototype.codePointAt: undefined outside the string, a lone surrogate as itself.)
@@ -1343,90 +1345,9 @@ internal sealed partial class Scanner
         System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
 
-    /// <summary>
-    /// A string that TypeScript builds piece by piece with `+=` (`result += text.substring(start, pos)`).
-    /// JavaScript engines concatenate in constant time (ropes); a .NET string concatenation copies, which makes
-    /// such loops quadratic (e.g. a template literal with many CRLF lines). typescript-go collects the parts and
-    /// joins them once (`parts = append(parts, ...)`, `strings.Join(parts, "")` in scanTemplateAndSetTokenValue)
-    /// or uses a strings.Builder (scanString, scanNumberFragment, scanIdentifierParts, scanBinaryOrOctalDigits),
-    /// internal/scanner/scanner.go; this is the counterpart: the parts are ranges of strings, joined into a
-    /// string of the exact length at the end. Contiguous ranges of one text are merged, so a value that is a
-    /// single range of the source becomes one Substring, as TypeScript's `"" + text.substring(start, pos)` does.
-    /// Used as a local variable (a mutable struct, so that a value of at most one part allocates no list).
-    /// </summary>
-    private struct StringParts
-    {
-        private List<Part>? parts; // the earlier parts
-        private string? source; // the last part: source[start..end)
-        private int start;
-        private int end;
-        private int length; // the length of the earlier parts
-
-        /// <summary>`result += text.substring(from, to)`.</summary>
-        public void Append(string text, int from, int to)
-        {
-            // String.prototype.substring: clamp to the string, swap reversed bounds.
-            from = Math.Clamp(from, 0, text.Length);
-            to = Math.Clamp(to, 0, text.Length);
-            if (from > to)
-            {
-                (from, to) = (to, from);
-            }
-            if (from == to)
-            {
-                return;
-            }
-            if (source != null)
-            {
-                if (ReferenceEquals(source, text) && from == end)
-                {
-                    end = to;
-                    return;
-                }
-                parts ??= [];
-                parts.Add(new Part(source, start, end - start));
-                length += end - start;
-            }
-            source = text;
-            start = from;
-            end = to;
-        }
-
-        /// <summary>`result += value`.</summary>
-        public void Append(string value)
-        {
-            Append(value, 0, value.Length);
-        }
-
-        /// <summary>The accumulated string.</summary>
-        public readonly string Result()
-        {
-            if (source == null)
-            {
-                return "";
-            }
-            if (parts == null)
-            {
-                return start == 0 && end == source.Length ? source : source.Substring(start, end - start);
-            }
-            return string.Create(length + (end - start), this, static (span, self) =>
-            {
-                var at = 0;
-                foreach (var part in self.parts!)
-                {
-                    part.Source.AsSpan(part.Start, part.Length).CopyTo(span.Slice(at));
-                    at += part.Length;
-                }
-                self.source.AsSpan(self.start, self.end - self.start).CopyTo(span.Slice(at));
-            });
-        }
-
-        private readonly record struct Part(string Source, int Start, int Length);
-    }
-
     /// <summary>`text.charCodeAt(pos)`: NaN outside the string.</summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private static int CharCodeAt(string text, int pos)
+    private static int CharCodeAt(ReadOnlySpan<char> text, int pos)
     {
         return (uint)pos < (uint)text.Length ? text[pos] : NaN;
     }
@@ -1452,7 +1373,7 @@ internal sealed partial class Scanner
     }
 
     /// <summary>JavaScript's String.prototype.substring(start, end): clamps to the string and swaps reversed bounds.</summary>
-    private static string Substring(string text, int start, int end)
+    private static string Substring(ReadOnlySpan<char> text, int start, int end)
     {
         var length = text.Length;
         start = Math.Clamp(start, 0, length);
@@ -1461,16 +1382,16 @@ internal sealed partial class Scanner
         {
             (start, end) = (end, start);
         }
-        return text.Substring(start, end - start);
+        return text.Slice(start, end - start).ToString();
     }
 
     /// <summary>JavaScript's String.prototype.slice(start, end) for non-negative bounds: clamps; reversed bounds give "".</summary>
-    private static string Slice(string text, int start, int end)
+    private static string Slice(ReadOnlySpan<char> text, int start, int end)
     {
         var length = text.Length;
         start = Math.Min(start, length);
         end = Math.Min(end, length);
-        return start < end ? text.Substring(start, end - start) : "";
+        return start < end ? text.Slice(start, end - start).ToString() : "";
     }
 
     /// <summary>JavaScript truthiness of a value (`if (value)`): undefined, null, false, 0, NaN and "" are falsy.</summary>
@@ -1497,7 +1418,8 @@ internal sealed partial class Scanner
 /// </summary>
 internal interface ISourceFileLike
 {
-    string Text { get; }
+    /// <summary>The text (step O1: the characters of the source text, no string).</summary>
+    ReadOnlySpan<char> Text { get; }
 
     IReadOnlyList<int>? LineMap { get; set; }
 }

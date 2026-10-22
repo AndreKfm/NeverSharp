@@ -199,7 +199,13 @@ internal sealed partial class Parser
         int? margin = null;
         // + 4 for leading '/** '
         // + 1 because the last index of \n is always one index before the first character in the line and coincidentally, if there is no \n before start, it is -1, which is also one index before the first character
-        var indent = start - (content.LastIndexOf('\n', start) + 1) + 4;
+        // (Step O1: `content.lastIndexOf("\n", start)` on the characters: the last line feed at or before start.)
+        var lastLineFeed = start;
+        while (lastLineFeed >= 0 && content[lastLineFeed] != '\n')
+        {
+            lastLineFeed--;
+        }
+        var indent = start - (lastLineFeed + 1) + 4;
 
         NextTokenJSDoc();
         while (ParseOptionalJsdoc(SyntaxKind.WhitespaceTrivia))
