@@ -13,6 +13,7 @@ internal readonly struct Node : IEquatable<Node>
 {
     internal readonly int Index;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node(int index)
     {
         Index = index;
@@ -21,19 +22,24 @@ internal readonly struct Node : IEquatable<Node>
     /// <summary>No node (TypeScript: undefined).</summary>
     public static Node None => default;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool IsNone => Index == 0;
 
     /// <summary>A node held as an object (TypeScript's union-typed parameters such as string | Node); null is <see cref="None"/>.</summary>
     internal static Node FromObject(object? value) => value is Node node ? node : default;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public static bool operator ==(Node left, Node right) => left.Index == right.Index;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public static bool operator !=(Node left, Node right) => left.Index != right.Index;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public bool Equals(Node other) => Index == other.Index;
 
     public override bool Equals(object? obj) => obj is Node other && Index == other.Index;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public override int GetHashCode() => Index;
 
     public override string ToString() => IsNone ? "None" : "Node#" + Index.ToString(System.Globalization.CultureInfo.InvariantCulture);
