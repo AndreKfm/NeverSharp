@@ -19,7 +19,8 @@
     <PackageReference Include="BenchmarkDotNet" />
   </ItemGroup>
   <ItemGroup>
-    <!-- -p:NeverSharpTrack=Optimized measures Track O (its variants) with the same workloads. -->
+    <!-- NeverSharpTrack=Optimized measures Track O with the same workloads. Set it as an environment variable:
+         BenchmarkDotNet builds its own project for NativeAOT and does not pass -p: properties on. -->
     <Compile Include="$(RepoRoot)src/NeverSharp.$(NeverSharpTrack)/**/*.cs" Exclude="$(RepoRoot)src/NeverSharp.$(NeverSharpTrack)/bin/**;$(RepoRoot)src/NeverSharp.$(NeverSharpTrack)/obj/**" LinkBase="$(NeverSharpTrack)" />
     <Compile Include="$(RepoRoot)src/Generated/*.g.cs" LinkBase="Generated" />
   </ItemGroup>

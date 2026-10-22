@@ -5,7 +5,7 @@ The list the Track O endpoint is reported with (pre-registration §8, A9). Each 
 | Step | What | Status | Winning variant | Record |
 |---|---|---|---|---|
 | O0 | Seed: Track O starts as a copy of Track F (`tools/NeverSharp.Generate/seed-optimized.mjs`, node classes from the generator) | done 2026-10-22; full gate passes (Gate 2 with NoAlloc analyzer, unit tests, G1a, G1 ParseNone, Gate 1) | — (no variants) | phase1-progress.md |
-| O6a | Handle-based node API with one simple storage (no variants; brief [modules/O6a.md](modules/O6a.md)) | running | — | |
+| O6a | Handle-based node API with one simple storage (no variants; brief [modules/O6a.md](modules/O6a.md)) | done 2026-10-22; full gate passes; M5 workload 1,649 ms vs Track F 2,495 ms (−34 %), 823.5 vs 737.8 MB allocated | — (no variants) | phase1-progress.md, results/track-o/O6a/ |
 | O6b | Node arena layout: up to 3 storage layouts behind the O6a API | not started | | |
 | O5 | Text spans and identifier interning | not started | | |
 | O7 | Node lists | not started | | |
