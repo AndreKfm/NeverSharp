@@ -196,7 +196,7 @@ internal sealed partial class Parser
         return null;
     }
 
-    internal static void ProcessCommentPragmas(NodeStore store, Node context, string sourceText)
+    internal static void ProcessCommentPragmas(NodeStore store, Node context, SourceChars sourceText)
     {
         var pragmas = new List<PragmaPseudoMapEntry>();
 

@@ -21,7 +21,10 @@ namespace NeverSharp.Optimized;
 /// </summary>
 internal sealed partial class Scanner
 {
-    private string text;
+    // Track O (step O1, variant C): the characters of the text (native memory, or a pinned string), and their owner,
+    // which this field keeps alive while the scanner reads them.
+    private SourceChars text;
+    private NativeText textOwner = NativeText.Empty;
 
     // Current position (end position of text of current token)
     private int pos;
@@ -42,7 +45,7 @@ internal sealed partial class Scanner
 
     // Track O (O5a): the texts token values refer to: the scanner's own table (reset with each text), or the table of
     // the parse that uses the scanner (UseTexts), so that the values outlive the token in the parse's nodes.
-    private readonly TextTable ownTexts = new("");
+    private readonly TextTable ownTexts = new(NativeText.Empty);
     private TextTable texts;
 
     private List<CommentDirective>? commentDirectives;
@@ -61,16 +64,15 @@ internal sealed partial class Scanner
     // name `start` there to this parameter), which has no further effect.
     private int? start;
 
-    private Scanner(ScriptTarget languageVersion, bool skipTrivia, LanguageVariant languageVariant, string? textInitial, ErrorCallback? onError, int? start, int? length)
+    private Scanner(ScriptTarget languageVersion, bool skipTrivia, LanguageVariant languageVariant, NativeText textInitial, ErrorCallback? onError, int? start, int? length)
     {
         this.languageVersion = languageVersion;
         this.skipTrivia = skipTrivia;
         this.languageVariant = languageVariant;
         this.onError = onError;
         this.start = start;
-        text = textInitial!;
         texts = ownTexts;
-        SetText(text, this.start, length);
+        SetText(textInitial, this.start, length);
     }
 
     // Creates a scanner over a (possibly unspecified) range of a piece of text.
@@ -79,6 +81,19 @@ internal sealed partial class Scanner
         bool skipTrivia,
         LanguageVariant languageVariant = LanguageVariant.Standard,
         string? textInitial = null,
+        ErrorCallback? onError = null,
+        int? start = null,
+        int? length = null)
+    {
+        return new Scanner(languageVersion, skipTrivia, languageVariant, NativeText.FromString(textInitial), onError, start, length);
+    }
+
+    /// <summary>Track O (step O1): <see cref="CreateScanner(ScriptTarget, bool, LanguageVariant, string?, ErrorCallback?, int?, int?)"/> over the text of a parse.</summary>
+    internal static Scanner CreateScanner(
+        ScriptTarget languageVersion,
+        bool skipTrivia,
+        LanguageVariant languageVariant,
+        NativeText textInitial,
         ErrorCallback? onError = null,
         int? start = null,
         int? length = null)
@@ -94,7 +109,6 @@ internal sealed partial class Scanner
     {
         get
         {
-            var text = GetText();
             return string.Concat(text.AsSpan(0, GetTokenFullStart()), "║", text.AsSpan(GetTokenFullStart()));
         }
     }
@@ -146,7 +160,7 @@ internal sealed partial class Scanner
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal void UseTexts(TextTable table)
     {
-        Debug.Assert(ReferenceEquals(table.Source, text) || (table.Source.Length == 0 && text.Length == 0), "The texts of another source text");
+        Debug.Assert(table.Source.SameAs(text) || (table.Source.Length == 0 && text.Length == 0), "The texts of another source text");
         texts = table;
     }
 
@@ -2916,10 +2930,10 @@ internal sealed partial class Scanner
         return SpeculationHelper<TCallback, T>(callback, /*isLookahead*/ false);
     }
 
-    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    /// <summary>The text as a string (Track O, step O1: materialized from the native text; nothing in the parse calls it).</summary>
     internal string GetText()
     {
-        return text;
+        return textOwner.GetString();
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
@@ -2928,14 +2942,22 @@ internal sealed partial class Scanner
         commentDirectives = null;
     }
 
-    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    /// <summary>setText for a string (pinned while the scanner reads it; Track O's parse passes its <see cref="NativeText"/>).</summary>
     internal void SetText(string? newText, int? start = null, int? length = null)
     {
-        text = !string.IsNullOrEmpty(newText) ? newText : "";
+        SetText(NativeText.FromString(newText), start, length);
+    }
+
+    /// <summary>Track O (step O1): setText for the text of a parse (native memory the parse result owns).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal void SetText(NativeText newText, int? start = null, int? length = null)
+    {
+        textOwner = newText;
+        text = newText.Chars;
         end = length == null ? text.Length : start!.Value + length.Value;
         // Track O (O5a): token values go to the scanner's own texts until a parse attaches its texts (UseTexts).
         texts = ownTexts;
-        ownTexts.Reset(text);
+        ownTexts.Reset(newText);
         ResetTokenState(start ?? 0);
     }
 

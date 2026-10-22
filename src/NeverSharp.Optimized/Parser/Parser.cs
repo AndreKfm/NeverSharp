@@ -65,7 +65,7 @@ internal sealed partial class Parser
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal static bool IsJSDocLikeText(string text, int start)
+    internal static bool IsJSDocLikeText(ReadOnlySpan<char> text, int start)
     {
         return CharCodeAt(text, start + 1) == (int)CharacterCodes.asterisk &&
             CharCodeAt(text, start + 2) == (int)CharacterCodes.asterisk &&
@@ -257,13 +257,22 @@ internal sealed partial class Parser
     }
 
     /// <summary>
-    /// Track O (step O1 seam): reads the file at <paramref name="path"/> through <see cref="SourceText.Read"/> and
-    /// parses it, as tsc's compiler host does (read, then createSourceFile). The parse-only driver calls this.
+    /// Track O (step O1): reads the file at <paramref name="path"/> through <see cref="SourceText.ReadNative"/> (native
+    /// memory, which the result owns) and parses it, as tsc's compiler host does (read, then createSourceFile). The
+    /// parse-only driver calls this.
     /// </summary>
     internal static SourceFile ParseFile(string path, string fileName, CreateSourceFileOptions options, bool setParentNodes = false, ScriptKind? scriptKind = null)
     {
-        var text = SourceText.Read(path);
-        return CreateSourceFile(fileName, text.Text, options, setParentNodes, scriptKind);
+        var text = SourceText.ReadNative(path);
+        try
+        {
+            return CreateSourceFile(fileName, text, options, setParentNodes, scriptKind);
+        }
+        catch
+        {
+            text.Release();
+            throw;
+        }
     }
 
     internal static SourceFile CreateSourceFile(string fileName, string sourceText, ScriptTarget languageVersion, bool setParentNodes = false, ScriptKind? scriptKind = null)
@@ -271,7 +280,13 @@ internal sealed partial class Parser
         return CreateSourceFile(fileName, sourceText, new CreateSourceFileOptions { LanguageVersion = languageVersion }, setParentNodes, scriptKind);
     }
 
+    /// <summary>createSourceFile for a string (Track O, step O1: the string is pinned as the parse's text, not copied).</summary>
     internal static SourceFile CreateSourceFile(string fileName, string sourceText, CreateSourceFileOptions languageVersionOrOptions, bool setParentNodes = false, ScriptKind? scriptKind = null)
+    {
+        return CreateSourceFile(fileName, NativeText.FromString(sourceText), languageVersionOrOptions, setParentNodes, scriptKind);
+    }
+
+    internal static SourceFile CreateSourceFile(string fileName, NativeText sourceText, CreateSourceFileOptions languageVersionOrOptions, bool setParentNodes = false, ScriptKind? scriptKind = null)
     {
         // (tracing and performance marks are instrumentation and left out.)
         Node result;
@@ -328,6 +343,11 @@ internal sealed partial class Parser
     /// </summary>
     internal static SourceFile ParseJsonText(string fileName, string sourceText)
     {
+        return ParseJsonText(fileName, NativeText.FromString(sourceText));
+    }
+
+    private static SourceFile ParseJsonText(string fileName, NativeText sourceText)
+    {
         var store = new NodeStore(sourceText);
         var parser = GetParser();
         try
@@ -353,7 +373,7 @@ internal sealed partial class Parser
 
     /// <summary>`text.charCodeAt(index)`; NaN (outside the string) is -1, which equals no character code.</summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private static int CharCodeAt(string text, int index)
+    private static int CharCodeAt(ReadOnlySpan<char> text, int index)
     {
         return (uint)index < (uint)text.Length ? text[index] : -1;
     }

@@ -199,7 +199,13 @@ internal sealed partial class Parser
         int? margin = null;
         // + 4 for leading '/** '
         // + 1 because the last index of \n is always one index before the first character in the line and coincidentally, if there is no \n before start, it is -1, which is also one index before the first character
-        var indent = start - (content.LastIndexOf('\n', start) + 1) + 4;
+        // (TypeScript: `content.lastIndexOf("\n", start)`; Track O, step O1: the loop over the characters of the text.)
+        var newLine = start;
+        while (newLine >= 0 && content[newLine] != '\n')
+        {
+            newLine--;
+        }
+        var indent = start - (newLine + 1) + 4;
 
         NextTokenJSDoc();
         while (ParseOptionalJsdoc(SyntaxKind.WhitespaceTrivia))

@@ -209,7 +209,9 @@ internal sealed class TextTable
         public TextRef Text;
     }
 
-    private string source;
+    // The source text (step O1, variant C: native memory the parse result owns) and its characters.
+    private NativeText owner;
+    private SourceChars source;
     private char[] chars = [];
     private int charCount;
 
@@ -224,16 +226,24 @@ internal sealed class TextTable
     // Whether the arrays come from the pool (a parse's table until Seal).
     private bool pooled;
 
-    public TextTable(string source)
+    public TextTable(NativeText source)
     {
-        this.source = source;
+        owner = source;
+        this.source = source.Chars;
     }
 
-    /// <summary>The source text of the parse.</summary>
-    internal string Source
+    /// <summary>The characters of the source text of the parse.</summary>
+    internal SourceChars Source
     {
         [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         get => source;
+    }
+
+    /// <summary>The source text of the parse (its owner: the parse result releases it).</summary>
+    internal NativeText Owner
+    {
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+        get => owner;
     }
 
     /// <summary>The fill level of the character arena (for <see cref="NodeStore.Mark"/>).</summary>
@@ -256,9 +266,10 @@ internal sealed class TextTable
 
     /// <summary>Starts over with another source text (a scanner's own table, reused from text to text).</summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal void Reset(string newSource)
+    internal void Reset(NativeText newSource)
     {
-        source = newSource;
+        owner = newSource;
+        source = newSource.Chars;
         charCount = 0;
         if (entryCount != 0)
         {
@@ -326,7 +337,7 @@ internal sealed class TextTable
         }
         if (text.Start == 0 && text.Size - 1 == source.Length)
         {
-            return source;
+            return owner.GetString();
         }
         return Span(text).ToString();
     }
@@ -671,9 +682,9 @@ internal struct TextBuilder
 
     /// <summary>`result += text.substring(from, to)`, <paramref name="text"/> being the table's source text.</summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    public void Append(string text, int from, int to)
+    public void Append(SourceChars text, int from, int to)
     {
-        Debug.Assert(ReferenceEquals(text, table.Source), "A range of another string than the source text");
+        Debug.Assert(text.SameAs(table.Source), "A range of another string than the source text");
         AppendSource(from, to);
     }
 

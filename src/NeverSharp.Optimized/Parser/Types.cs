@@ -132,6 +132,13 @@ internal sealed class SourceFile
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal int TextLength => Store.Texts.Source.Length;
 
+    /// <summary>
+    /// Track O (step O1, variant C): frees the source text (native memory) now, when the caller is done with the tree;
+    /// text values that are spans of it read as empty afterwards. Without this call, the text's finalizer frees it
+    /// once the result is unreachable.
+    /// </summary>
+    internal void Release() => Store.Texts.Owner.Release();
+
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal List<DiagnosticWithLocation> ParseDiagnostics => Store.ParseDiagnostics(Root);
 
@@ -153,7 +160,7 @@ internal sealed class SourceFileNodeLike : ISourceFileLike
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    public string Text => store.SourceFileText(sourceFile);
+    public ReadOnlySpan<char> Text => store.SourceFileText(sourceFile).Chars;
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public IReadOnlyList<int>? LineMap

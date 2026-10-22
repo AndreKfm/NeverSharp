@@ -92,7 +92,9 @@ internal sealed partial class Parser : BaseNodeFactory
 
     private string fileName = null!;
     private NodeFlags sourceFlags;
-    private string sourceText = null!;
+    // Track O (step O1, variant C): the source text (native memory the result owns) and its characters.
+    private NativeText sourceTextOwner = NativeText.Empty;
+    private SourceChars sourceText;
     private ScriptTarget languageVersion;
     private ScriptKind scriptKind;
     private LanguageVariant languageVariant;
@@ -247,7 +249,7 @@ internal sealed partial class Parser : BaseNodeFactory
     internal Node ParseSourceFile(
         NodeStore nodeStore,
         string fileName,
-        string sourceText,
+        NativeText sourceText,
         ScriptTarget languageVersion,
         SyntaxCursor? syntaxCursor,
         bool setParentNodes = false,
@@ -279,11 +281,12 @@ internal sealed partial class Parser : BaseNodeFactory
         return result;
     }
 
-    private void InitializeState(string fileName, string sourceText, ScriptTarget languageVersion, SyntaxCursor? syntaxCursor, ScriptKind scriptKind, JSDocParsingMode jsDocParsingMode)
+    private void InitializeState(string fileName, NativeText sourceText, ScriptTarget languageVersion, SyntaxCursor? syntaxCursor, ScriptKind scriptKind, JSDocParsingMode jsDocParsingMode)
     {
         // (TypeScript first captures the node constructors of objectAllocator; NodeAllocator creates the nodes here.)
         this.fileName = TsPath.NormalizePath(fileName);
-        this.sourceText = sourceText;
+        sourceTextOwner = sourceText;
+        this.sourceText = sourceText.Chars;
         this.languageVersion = languageVersion;
         this.syntaxCursor = syntaxCursor;
         this.scriptKind = scriptKind;
@@ -312,7 +315,7 @@ internal sealed partial class Parser : BaseNodeFactory
         parseErrorBeforeNextFinishedNode = false;
 
         // Initialize and prime the scanner before parsing the source elements.
-        scanner.SetText(this.sourceText);
+        scanner.SetText(sourceTextOwner);
         scanner.UseTexts(texts); // Track O: token values go to the parse's texts
         scanner.SetOnError(scanErrorCallback);
         scanner.SetScriptTarget(this.languageVersion);
@@ -326,13 +329,14 @@ internal sealed partial class Parser : BaseNodeFactory
     {
         // Clear out the text the scanner is pointing at, so it doesn't keep anything alive unnecessarily.
         scanner.ClearCommentDirectives();
-        scanner.SetText("");
+        scanner.SetText(NativeText.Empty);
         scanner.SetOnError(null);
         scanner.SetScriptKind(ScriptKind.Unknown);
         scanner.SetJSDocParsingMode(JSDocParsingMode.ParseAll);
 
         // Clear any data.  We don't want to accidentally hold onto it for too long.
-        sourceText = null!;
+        sourceTextOwner = NativeText.Empty;
+        sourceText = default;
         languageVersion = default;
         syntaxCursor = null;
         scriptKind = default;
@@ -494,7 +498,7 @@ internal sealed partial class Parser : BaseNodeFactory
 
         void SetFields(Node sourceFile)
         {
-            store.SetSourceFileText(sourceFile, sourceText);
+            store.SetSourceFileText(sourceFile, sourceTextOwner);
             store.SetBindDiagnostics(sourceFile, []);
             store.SetBindSuggestionDiagnostics(sourceFile, null);
             store.SetLanguageVersion(sourceFile, languageVersion);

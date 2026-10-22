@@ -5061,17 +5061,17 @@ internal sealed partial class NodeStore
     // SourceFile
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public string SourceFileText(Node node)
+    public NativeText SourceFileText(Node node)
     {
         var d = data;
         var h = node.Index;
         var o = SourceFileTextOffsets[d[h] & KindMask];
-        return o < 0 ? null! : Unsafe.As<string>(refs[d[h + RefBaseWord] + o])!;
+        return o < 0 ? null! : Unsafe.As<NativeText>(refs[d[h + RefBaseWord] + o])!;
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void SetSourceFileText(Node node, string value)
+    public void SetSourceFileText(Node node, NativeText value)
     {
         var d = data;
         var h = node.Index;

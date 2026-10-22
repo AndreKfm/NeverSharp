@@ -318,7 +318,7 @@ internal static partial class Utilities
 
     internal static string GetSourceTextOfNodeFromSourceFile(NodeStore store, Node sourceFile, Node node, bool includeTrivia = false)
     {
-        return GetTextOfNodeFromSourceText(store, store.SourceFileText(sourceFile), node, includeTrivia);
+        return GetTextOfNodeFromSourceText(store, store.SourceFileText(sourceFile).Chars, node, includeTrivia);
     }
 
     private static bool IsJSDocTypeExpressionOrChild(NodeStore store, Node node)
@@ -326,7 +326,7 @@ internal static partial class Utilities
         return !UtilitiesPublic.FindAncestor(store, node, ((a0) => FactoryNodeTests.IsJSDocTypeExpression(store, a0))).IsNone;
     }
 
-    internal static string GetTextOfNodeFromSourceText(NodeStore store, string sourceText, Node node, bool includeTrivia = false)
+    internal static string GetTextOfNodeFromSourceText(NodeStore store, ReadOnlySpan<char> sourceText, Node node, bool includeTrivia = false)
     {
         if (NodeIsMissing(store, node))
         {
@@ -465,7 +465,7 @@ internal static partial class Utilities
 
     private static TextSpan GetErrorSpanForArrowFunction(NodeStore store, Node sourceFile, Node node)
     {
-        var pos = Scanner.SkipTrivia(store.SourceFileText(sourceFile), store.Pos(node));
+        var pos = Scanner.SkipTrivia(store.SourceFileText(sourceFile).Chars, store.Pos(node));
         if (!store.Body(node).IsNone && store.Kind(store.Body(node)) == SyntaxKind.Block)
         {
             var sourceFileLike = new SourceFileNodeLike(store, sourceFile);
@@ -488,7 +488,7 @@ internal static partial class Utilities
         {
             case SyntaxKind.SourceFile:
             {
-                var pos = Scanner.SkipTrivia(store.SourceFileText(sourceFile), 0, /*stopAfterLineBreak*/ false);
+                var pos = Scanner.SkipTrivia(store.SourceFileText(sourceFile).Chars, 0, /*stopAfterLineBreak*/ false);
                 if (pos == store.SourceFileText(sourceFile).Length)
                 {
                     // file is empty - return span for the beginning of the file
@@ -523,30 +523,30 @@ internal static partial class Utilities
             case SyntaxKind.DefaultClause:
             {
                 var statements = (node is var caseClause && store.IsCaseClause(caseClause)) ? store.Statements(caseClause) : store.Statements(node);
-                var start = Scanner.SkipTrivia(store.SourceFileText(sourceFile), store.Pos(node));
+                var start = Scanner.SkipTrivia(store.SourceFileText(sourceFile).Chars, store.Pos(node));
                 var end = store.Length(statements) > 0 ? store.Pos(store.Element(statements, 0)) : store.End(node);
                 return UtilitiesPublic.CreateTextSpanFromBounds(start, end);
             }
             case SyntaxKind.ReturnStatement:
             case SyntaxKind.YieldExpression:
             {
-                var pos = Scanner.SkipTrivia(store.SourceFileText(sourceFile), store.Pos(node));
+                var pos = Scanner.SkipTrivia(store.SourceFileText(sourceFile).Chars, store.Pos(node));
                 return GetSpanOfTokenAtPosition(store, sourceFile, pos);
             }
             case SyntaxKind.SatisfiesExpression:
             {
-                var pos = Scanner.SkipTrivia(store.SourceFileText(sourceFile), store.End(store.Expression(node)));
+                var pos = Scanner.SkipTrivia(store.SourceFileText(sourceFile).Chars, store.End(store.Expression(node)));
                 return GetSpanOfTokenAtPosition(store, sourceFile, pos);
             }
             case SyntaxKind.JSDocSatisfiesTag:
             {
-                var pos = Scanner.SkipTrivia(store.SourceFileText(sourceFile), store.Pos(store.TagName(node)));
+                var pos = Scanner.SkipTrivia(store.SourceFileText(sourceFile).Chars, store.Pos(store.TagName(node)));
                 return GetSpanOfTokenAtPosition(store, sourceFile, pos);
             }
             case SyntaxKind.Constructor:
             {
                 var constructorDeclaration = node;
-                var start = Scanner.SkipTrivia(store.SourceFileText(sourceFile), store.Pos(constructorDeclaration));
+                var start = Scanner.SkipTrivia(store.SourceFileText(sourceFile).Chars, store.Pos(constructorDeclaration));
                 var scanner = Scanner.CreateScanner(store.LanguageVersion(sourceFile), /*skipTrivia*/ true, store.LanguageVariant(sourceFile), store.SourceFileText(sourceFile), /*onError*/ null, start);
                 var token = scanner.Scan();
                 while (token != SyntaxKind.ConstructorKeyword && token != SyntaxKind.EndOfFileToken)
@@ -570,7 +570,7 @@ internal static partial class Utilities
         var isMissing = NodeIsMissing(store, errorNode);
         var errorPos = isMissing || FactoryNodeTests.IsJsxText(store, node)
             ? store.Pos(errorNode)
-            : Scanner.SkipTrivia(store.SourceFileText(sourceFile), store.Pos(errorNode));
+            : Scanner.SkipTrivia(store.SourceFileText(sourceFile).Chars, store.Pos(errorNode));
 
         // These asserts should all be satisfied for a properly constructed `errorNode`.
         if (isMissing)
@@ -602,7 +602,7 @@ internal static partial class Utilities
 
     /// <summary>Track O (O-NA): the filter of getJSDocCommentRanges for one comment range of a node ending at <paramref name="nodeEnd"/>.</summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal static bool IsJSDocCommentRange(string text, CommentRange comment, int nodeEnd)
+    internal static bool IsJSDocCommentRange(ReadOnlySpan<char> text, CommentRange comment, int nodeEnd)
     {
         return comment.End <= nodeEnd && // Due to parse errors sometime empty parameter may get comments assigned to it that end up not in parameter range
             CharCodeAtOrNaN(text, comment.Pos + 1) == (int)CharacterCodes.asterisk &&
@@ -610,8 +610,9 @@ internal static partial class Utilities
             CharCodeAtOrNaN(text, comment.Pos + 3) != (int)CharacterCodes.slash;
     }
 
-    internal static List<CommentRange>? GetJSDocCommentRanges(NodeStore store, Node node, string text)
+    internal static List<CommentRange>? GetJSDocCommentRanges(NodeStore store, Node node, NativeText sourceText)
     {
+        var text = sourceText.Chars;
         var commentRanges = (store.Kind(node) == SyntaxKind.Parameter ||
                 store.Kind(node) == SyntaxKind.TypeParameter ||
                 store.Kind(node) == SyntaxKind.FunctionExpression ||
@@ -677,7 +678,7 @@ internal static partial class Utilities
         // without the substring, unless the node is missing or the JSDoc rewrite of the text applies.
         if (!NodeIsMissing(store, str) && !IsJSDocTypeExpressionOrChild(store, str))
         {
-            var sourceText = store.SourceFileText(sourceFile);
+            var sourceText = store.SourceFileText(sourceFile).Chars;
             var start = Math.Clamp(Scanner.SkipTrivia(sourceText, store.Pos(str)), 0, sourceText.Length);
             var end = Math.Clamp(store.End(str), 0, sourceText.Length);
             var from = Math.Min(start, end);
@@ -2002,7 +2003,7 @@ internal static partial class Utilities
     }
 
     /// <summary>JavaScript's String.prototype.substring(start, end): arguments are clamped and swapped if reversed.</summary>
-    private static string SubstringJs(string s, int start, int end)
+    private static string SubstringJs(ReadOnlySpan<char> s, int start, int end)
     {
         start = Math.Clamp(start, 0, s.Length);
         end = Math.Clamp(end, 0, s.Length);
@@ -2010,6 +2011,6 @@ internal static partial class Utilities
         {
             (start, end) = (end, start);
         }
-        return s.Substring(start, end - start);
+        return s.Slice(start, end - start).ToString();
     }
 }

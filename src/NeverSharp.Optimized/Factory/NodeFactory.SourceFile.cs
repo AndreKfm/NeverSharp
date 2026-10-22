@@ -30,7 +30,7 @@ internal sealed partial class NodeFactory
         store.SetStatements(node, CreateNodeArray(store, statements));
         store.SetEndOfFileToken(node, endOfFileToken);
         store.SetFlags(node, store.Flags(node) | flags);
-        store.SetSourceFileText(node, "");
+        store.SetSourceFileText(node, NativeText.Empty); // TypeScript: `node.text = ""` (Track O, step O1: the empty native text)
         store.SetFileName(node, "");
         store.SetPath(node, "");
         store.SetResolvedPath(node, "");

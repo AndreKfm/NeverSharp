@@ -79,7 +79,7 @@ internal static partial class Utilities
         return message.Message;
     }
 
-    internal static DiagnosticWithDetachedLocation CreateDetachedDiagnostic(string fileName, string sourceText, int start, int length, DiagnosticMessage message, params object?[] args)
+    internal static DiagnosticWithDetachedLocation CreateDetachedDiagnostic(string fileName, ReadOnlySpan<char> sourceText, int start, int length, DiagnosticMessage message, params object?[] args)
     {
         if ((start + length) > sourceText.Length)
         {
@@ -167,7 +167,7 @@ internal static partial class Utilities
 
     internal static DiagnosticWithLocation CreateFileDiagnostic(NodeStore store, Node file, int start, int length, DiagnosticMessage message, params object?[] args)
     {
-        AssertDiagnosticLocation(store.SourceFileText(file), start, length);
+        AssertDiagnosticLocation(store.SourceFileText(file).Chars, start, length);
 
         var text = GetLocaleSpecificMessage(message);
 
@@ -191,7 +191,7 @@ internal static partial class Utilities
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private static void AssertDiagnosticLocation(string sourceText, int start, int length)
+    private static void AssertDiagnosticLocation(ReadOnlySpan<char> sourceText, int start, int length)
     {
         Debug.AssertGreaterThanOrEqual(start, 0);
         Debug.AssertGreaterThanOrEqual(length, 0);

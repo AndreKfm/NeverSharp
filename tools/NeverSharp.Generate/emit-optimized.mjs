@@ -114,7 +114,11 @@ function storage(cls, cs, optional, usedAs) {
 }
 
 // JSDocSignature.parameters: parseCallbackTagParameters (parser.ts) also keeps non-parameter tags there.
-const FIELD_OVERRIDES = { "JSDocSignature.parameters": { store: "ref", type: "Node[]", nullable: true } };
+// SourceFile.text (step O1, variant C): the parse's source text as NativeText (native memory the result owns), not a string.
+const FIELD_OVERRIDES = {
+    "JSDocSignature.parameters": { store: "ref", type: "Node[]", nullable: true },
+    "SourceFile.text": { store: "ref", type: "NativeText", nullable: false },
+};
 
 // Record layout (O6b variant A). Words of the header; NodeStore.cs uses the same constants.
 const HEADER_WORDS = 5; // kind word, flags, pos, end, transform flags
