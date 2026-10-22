@@ -9,4 +9,13 @@
     <!-- Generated data shared by both tracks (tools/NeverSharp.Generate): diagnostic messages, enums. -->
     <Compile Include="$(RepoRoot)src/Generated/*.g.cs" LinkBase="Generated" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Ported code is internal; the gates, the dump tool, the drivers and the benchmarks reach it as for Track F. -->
+    <InternalsVisibleTo Include="NeverSharp.Optimized.Tests" />
+    <InternalsVisibleTo Include="NeverSharp.Dump.Optimized" />
+    <InternalsVisibleTo Include="parse-cs-optimized-aot-ws" />
+    <InternalsVisibleTo Include="parse-cs-optimized-aot-srv" />
+    <InternalsVisibleTo Include="parse-cs-optimized-jit-ws" />
+    <InternalsVisibleTo Include="parse-cs-optimized-jit-srv" />
+  </ItemGroup>
 </Project>

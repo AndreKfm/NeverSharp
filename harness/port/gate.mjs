@@ -22,6 +22,9 @@
 // (they are not in git): pass --main <path>, default: this checkout.
 //
 // Usage: node harness/port/gate.mjs --module M1|M2|M34|M5 [--main D:/.../NeverSharp]
+//        node harness/port/gate.mjs --track optimized [--main ...]   (Track O: all gates; Gate 2 with
+//        the Track O ruleset incl. the NoAlloc analyzer; tests/NeverSharp.Optimized.Tests and
+//        tools/NeverSharp.Dump.Optimized, i.e. the same tests and dump writers built against Track O)
 // Exit code 0 only if every gate passes; prints one line per gate and a JSON summary.
 
 import { spawnSync } from "node:child_process";
@@ -32,8 +35,14 @@ import { fileURLToPath } from "node:url";
 const arg = (n, f) => process.argv.includes(n) ? process.argv[process.argv.indexOf(n) + 1] : f;
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const main = arg("--main", root);
-const moduleId = arg("--module", "M1");
+const track = arg("--track", "faithful");
+if (track !== "faithful" && track !== "optimized") throw new Error("--track must be faithful or optimized");
+// Track O is always checked completely (it starts from the finished Track F): every gate of M5.
+const moduleId = track === "optimized" ? "M5" : arg("--module", "M1");
 if (!["M1", "M2", "M34", "M5"].includes(moduleId)) throw new Error(`no gate defined for ${moduleId}`);
+const Track = track === "optimized" ? "Optimized" : "Faithful";
+const dumpProject = track === "optimized" ? "tools/NeverSharp.Dump.Optimized" : "tools/NeverSharp.Dump";
+const testProject = track === "optimized" ? "tests/NeverSharp.Optimized.Tests" : "tests/NeverSharp.Faithful.Tests";
 
 // Worktrees lack the untracked inputs: copy the unit-test vectors in (read-only use).
 for (const m of ["M1", "M2"]) {
@@ -58,32 +67,32 @@ function gate(name, command, args, { showOutput = false, ...opts } = {}) {
 }
 
 const node = process.execPath;
-gate("gate2-build", "dotnet", ["build", "src/NeverSharp.Faithful", "-c", "Release", "-nologo", "-v", "q", "-p:RunAnalyzersDuringBuild=true"]);
+gate("gate2-build", "dotnet", ["build", `src/NeverSharp.${Track}`, "-c", "Release", "-nologo", "-v", "q", "-p:RunAnalyzersDuringBuild=true"]);
 gate("gate2-headers", node, ["scripts/check-headers.mjs"]);
-gate("unit-tests", "dotnet", ["test", "--project", "tests/NeverSharp.Faithful.Tests", "-c", "Release"]);
+gate("unit-tests", "dotnet", ["test", "--project", testProject, "-c", "Release"]);
 if (moduleId !== "M1") {
     const corpus = join(main, "artifacts", "equivalence");
-    const actual = join(root, "artifacts", "dumps", "cs-faithful-tokens");
-    const dumped = gate("g1a-dump", "dotnet", ["run", "-c", "Release", "--project", "tools/NeverSharp.Dump", "--", "tokens", "--corpus", corpus, "--out", actual],
+    const actual = join(root, "artifacts", "dumps", `cs-${track}-tokens`);
+    const dumped = gate("g1a-dump", "dotnet", ["run", "-c", "Release", "--project", dumpProject, "--", "tokens", "--corpus", corpus, "--out", actual],
         { timeout: 20 * 60 * 1000, showOutput: true });
     if (dumped) gate("g1a-compare", node, ["harness/astdump/compare-tokens.mjs", "--corpus", corpus, "--actual", actual, "--show", "15"], { showOutput: true });
 }
 if (moduleId === "M34" || moduleId === "M5") {
     // AST dump of every unit with JSDocParsingMode.ParseNone, byte-identical to tsc 6.0.3's (dumps/ts-parsenone).
     const corpus = join(main, "artifacts", "equivalence");
-    const actual = join(root, "artifacts", "dumps", "cs-faithful-parsenone");
-    const dumped = gate("g1-none-dump", "dotnet", ["run", "-c", "Release", "--project", "tools/NeverSharp.Dump", "--", "ast", "--jsdoc-mode", "none", "--corpus", corpus, "--out", actual],
+    const actual = join(root, "artifacts", "dumps", `cs-${track}-parsenone`);
+    const dumped = gate("g1-none-dump", "dotnet", ["run", "-c", "Release", "--project", dumpProject, "--", "ast", "--jsdoc-mode", "none", "--corpus", corpus, "--out", actual],
         { timeout: 30 * 60 * 1000, showOutput: true });
     if (dumped) gate("g1-none-compare", node, ["harness/astdump/compare-ast.mjs", "--jsdoc-mode", "none", "--corpus", corpus, "--actual", actual, "--show", "15"], { showOutput: true });
 }
 if (moduleId === "M5") {
     // Gate 1 proper: AST dump with JSDocParsingMode.ParseAll, including the JSDoc section, byte-identical to tsc 6.0.3's (dumps/ts).
     const corpus = join(main, "artifacts", "equivalence");
-    const actual = join(root, "artifacts", "dumps", "cs-faithful");
-    const dumped = gate("g1-dump", "dotnet", ["run", "-c", "Release", "--project", "tools/NeverSharp.Dump", "--", "ast", "--jsdoc-mode", "all", "--corpus", corpus, "--out", actual],
+    const actual = join(root, "artifacts", "dumps", `cs-${track}`);
+    const dumped = gate("g1-dump", "dotnet", ["run", "-c", "Release", "--project", dumpProject, "--", "ast", "--jsdoc-mode", "all", "--corpus", corpus, "--out", actual],
         { timeout: 30 * 60 * 1000, showOutput: true });
     if (dumped) gate("g1-compare", node, ["harness/astdump/compare-ast.mjs", "--jsdoc-mode", "all", "--corpus", corpus, "--actual", actual, "--show", "15"], { showOutput: true });
 }
 const pass = results.every(r => r.pass);
-console.log(JSON.stringify({ module: moduleId, pass, results }));
+console.log(JSON.stringify({ track, module: moduleId, pass, results }));
 process.exit(pass ? 0 : 1);

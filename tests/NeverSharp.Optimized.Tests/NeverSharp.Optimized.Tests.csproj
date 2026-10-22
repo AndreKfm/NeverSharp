@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The module unit tests (tests/NeverSharp.Faithful.Tests, the same sources) against Track O. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <Using Include="Xunit" />
+    <Using Include="NeverSharp.Optimized" />
+    <Compile Include="$(RepoRoot)tests/NeverSharp.Faithful.Tests/*.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="$(RepoRoot)src/NeverSharp.Optimized/NeverSharp.Optimized.csproj" />
+  </ItemGroup>
+</Project>

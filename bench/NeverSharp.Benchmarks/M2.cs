@@ -6,7 +6,11 @@
 // :1772-1775 setText, setOnError, setLanguageVariant per file).
 
 using BenchmarkDotNet.Attributes;
+#if TRACK_OPTIMIZED
+using NeverSharp.Optimized;
+#else
 using NeverSharp.Faithful;
+#endif
 using NeverSharp.Generated;
 
 namespace NeverSharp.Benchmarks;

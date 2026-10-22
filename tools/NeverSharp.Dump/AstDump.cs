@@ -16,7 +16,9 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
-#if !NO_PARSER
+#if !NO_PARSER && TRACK_OPTIMIZED
+using NeverSharp.Optimized;
+#elif !NO_PARSER
 using NeverSharp.Faithful;
 #endif
 using NeverSharp.Generated;
@@ -107,7 +109,7 @@ internal static class AstDump
             "none" => JSDocParsingMode.ParseNone,
             _ => throw new InvalidOperationException("--jsdoc-mode must be all or none"),
         };
-        var outDir = options.Get("--out", Path.Combine(corpus, "dumps", mode == JSDocParsingMode.ParseAll ? "cs-faithful" : "cs-faithful-parsenone"));
+        var outDir = options.Get("--out", Path.Combine(corpus, "dumps", mode == JSDocParsingMode.ParseAll ? $"cs-{Track.Name}" : $"cs-{Track.Name}-parsenone"));
         var timeoutMs = int.Parse(options.Get("--timeout-ms", "10000"), CultureInfo.InvariantCulture);
         Common.ResetDirectory(outDir);
         var units = Common.ReadUnits(corpus);
@@ -173,7 +175,7 @@ internal static class AstDump
             error = error.ConvertAll(e => new { id = e.Id, error = e.Error }),
         };
         File.WriteAllText(Path.Combine(Path.GetDirectoryName(outDir)!, Path.GetFileName(outDir) + ".outcomes.json"), JsonSerializer.Serialize(outcomes), Common.Utf8);
-        Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"cs-faithful: ok {ok.Count}, timeout {timeout.Count}, error {error.Count} in {(DateTime.UtcNow - started).TotalSeconds:0.0} s"));
+        Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"cs-{Track.Name}: ok {ok.Count}, timeout {timeout.Count}, error {error.Count} in {(DateTime.UtcNow - started).TotalSeconds:0.0} s"));
         for (var i = 0; i < Math.Min(5, error.Count); i++)
         {
             Console.WriteLine($"error {error[i].Id}: {error[i].Error}");

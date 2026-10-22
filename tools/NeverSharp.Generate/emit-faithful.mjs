@@ -13,7 +13,9 @@
 // - ForEachChild translates forEachChildTable entry by entry, with the semantics
 //   of visitNode, visitNodes and forEach in parser.ts / core.ts.
 //
-// Writes src/NeverSharp.Faithful/Generated/Nodes.g.cs and NodeVisitor.g.cs.
+// Writes src/NeverSharp.Faithful/Generated/Nodes.g.cs and NodeVisitor.g.cs. With track "Optimized"
+// it writes the same classes for Track O's seed (step O0) to src/NeverSharp.Optimized/Generated/,
+// until Track O's node arena (step O6) replaces them.
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -88,9 +90,9 @@ const OBJECT_TYPES = {
     "ReadonlyPragmaMap": "omit",
 };
 
-export function emitFaithful(schema) {
+export function emitFaithful(schema, track = "Faithful") {
     const assigned = assignedPropertyNames();
-    const outDir = join(repoRoot, "src", "NeverSharp.Faithful", "Generated");
+    const outDir = join(repoRoot, "src", `NeverSharp.${track}`, "Generated");
     mkdirSync(outDir, { recursive: true });
 
     const classes = [...new Set(Object.values(schema.kindToClass))].filter(c => c !== "Token").sort();
@@ -98,7 +100,7 @@ export function emitFaithful(schema) {
     const report = { classes: classes.length + 1, fields: 0, collisions: [] };
 
     const lines = [header("src/compiler/types.ts (node interfaces) and src/compiler/utilities.ts (function Node)"),
-        "#nullable enable", "", "using NeverSharp.Generated;", "", "namespace NeverSharp.Faithful;", "",
+        "#nullable enable", "", "using NeverSharp.Generated;", "", `namespace NeverSharp.${track};`, "",
         "/// <summary>Base of every node: the fields TypeScript's Node constructor sets (utilities.ts).</summary>",
         "public abstract partial class Node",
         "{",
@@ -194,7 +196,7 @@ export function emitFaithful(schema) {
         }
     }
     const v = [header("src/compiler/parser.ts (forEachChild, forEachChildTable, visitNode, visitNodes) and src/compiler/core.ts (forEach)"),
-        "#nullable enable", "", "using NeverSharp.Generated;", "", "namespace NeverSharp.Faithful;", "",
+        "#nullable enable", "", "using NeverSharp.Generated;", "", `namespace NeverSharp.${track};`, "",
         "public static partial class NodeVisitor", "{",
         "    /// <summary>parser.ts forEachChild: visits the children of a node in TypeScript's order; returns the first non-null callback result.</summary>",
         "    public static T? ForEachChild<T>(Node? node, Func<Node, T?> cbNode, Func<NodeArray, T?>? cbNodes = null) where T : class",

@@ -6,7 +6,11 @@
 // getDeclarationFileExtension).
 
 using BenchmarkDotNet.Attributes;
+#if TRACK_OPTIMIZED
+using NeverSharp.Optimized;
+#else
 using NeverSharp.Faithful;
+#endif
 
 namespace NeverSharp.Benchmarks;
 

@@ -7,7 +7,11 @@
 // the end of the iteration. JSDocParsingMode.ParseNone: the JSDoc parser is module M5.
 
 using BenchmarkDotNet.Attributes;
+#if TRACK_OPTIMIZED
+using NeverSharp.Optimized;
+#else
 using NeverSharp.Faithful;
+#endif
 using NeverSharp.Generated;
 
 namespace NeverSharp.Benchmarks;

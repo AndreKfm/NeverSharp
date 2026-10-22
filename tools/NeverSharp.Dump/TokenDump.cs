@@ -10,7 +10,11 @@
 
 using System.Globalization;
 using System.Text;
+#if TRACK_OPTIMIZED
+using NeverSharp.Optimized;
+#else
 using NeverSharp.Faithful;
+#endif
 using NeverSharp.Generated;
 
 namespace NeverSharp.Dump;
@@ -30,7 +34,7 @@ internal static class TokenDump
     public static int Run(Options options)
     {
         var corpus = options.Corpus;
-        var outDir = options.Get("--out", Path.Combine(corpus, "dumps", "cs-faithful-tokens"));
+        var outDir = options.Get("--out", Path.Combine(corpus, "dumps", $"cs-{Track.Name}-tokens"));
         Common.ResetDirectory(outDir);
         var units = Common.ReadUnits(corpus);
         var started = DateTime.UtcNow;
@@ -42,7 +46,7 @@ internal static class TokenDump
             File.WriteAllText(Path.Combine(outDir, unit.Id + ".txt"), dump, Common.Utf8);
             Interlocked.Add(ref tokens, count);
         });
-        Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"cs-faithful tokens: {units.Count} units, {tokens} tokens in {(DateTime.UtcNow - started).TotalSeconds:0.0} s"));
+        Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"cs-{Track.Name} tokens: {units.Count} units, {tokens} tokens in {(DateTime.UtcNow - started).TotalSeconds:0.0} s"));
         return 0;
     }
 

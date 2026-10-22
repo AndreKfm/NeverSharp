@@ -18,6 +18,16 @@ internal sealed class Options(string[] args)
     public string Corpus => Get("--corpus", Path.Combine(Common.FindRoot(), "artifacts", "equivalence"));
 }
 
+/// <summary>The track this build of the dump writers checks (NeverSharp.Dump: Track F; NeverSharp.Dump.Optimized: Track O).</summary>
+internal static class Track
+{
+#if TRACK_OPTIMIZED
+    public const string Name = "optimized";
+#else
+    public const string Name = "faithful";
+#endif
+}
+
 internal sealed record Unit(string Id, string Kind, string FileName);
 
 internal static class Common

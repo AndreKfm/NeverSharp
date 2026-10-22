@@ -6,6 +6,8 @@
     Usage: dotnet run -c Release, with the BenchmarkDotNet argument filter *M1* after the separator (see Program.cs)
   -->
   <PropertyGroup>
+    <NeverSharpTrack Condition="'$(NeverSharpTrack)' == ''">Faithful</NeverSharpTrack>
+    <DefineConstants Condition="'$(NeverSharpTrack)' == 'Optimized'">$(DefineConstants);TRACK_OPTIMIZED</DefineConstants>
     <OutputType>Exe</OutputType>
     <IsPackable>false</IsPackable>
     <!-- Ported code is compiled in; its analyzers run in its own project (Gate 2), not here. -->
@@ -17,7 +19,8 @@
     <PackageReference Include="BenchmarkDotNet" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="$(RepoRoot)src/NeverSharp.Faithful/**/*.cs" Exclude="$(RepoRoot)src/NeverSharp.Faithful/bin/**;$(RepoRoot)src/NeverSharp.Faithful/obj/**" LinkBase="Faithful" />
+    <!-- -p:NeverSharpTrack=Optimized measures Track O (its variants) with the same workloads. -->
+    <Compile Include="$(RepoRoot)src/NeverSharp.$(NeverSharpTrack)/**/*.cs" Exclude="$(RepoRoot)src/NeverSharp.$(NeverSharpTrack)/bin/**;$(RepoRoot)src/NeverSharp.$(NeverSharpTrack)/obj/**" LinkBase="$(NeverSharpTrack)" />
     <Compile Include="$(RepoRoot)src/Generated/*.g.cs" LinkBase="Generated" />
   </ItemGroup>
   <!--

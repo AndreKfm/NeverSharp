@@ -19,9 +19,10 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 #if TRACK_OPTIMIZED
-#error Track O has no parser yet
-#endif
+using NeverSharp.Optimized;
+#else
 using NeverSharp.Faithful;
+#endif
 using NeverSharp.Generated;
 
 var single = args.Length > 0 && args[0] == "--single";

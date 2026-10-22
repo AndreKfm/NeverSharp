@@ -18,5 +18,8 @@ import { extractSchema } from "./schema.mjs";
 mkdirSync(outDir, { recursive: true });
 console.log(`diagnostic messages: ${generateDiagnostics()}`);
 console.log(`enums: ${generateEnums()}`);
-const faithful = emitFaithful(extractSchema());
+const schema = extractSchema();
+const faithful = emitFaithful(schema);
+// Track O seed (step O0): the same node classes in Track O's namespace, until step O6 (node arena) replaces them.
+emitFaithful(schema, "Optimized");
 console.log(`track F nodes: ${faithful.classes} classes, ${faithful.fields} fields (${faithful.omitted ?? 0} left to the port), ${faithful.jsDocContainers} JSDoc containers, ${faithful.forEachChildEntries} forEachChild entries${faithful.collisions.length ? `, renamed (name = class): ${faithful.collisions.join(", ")}` : ""}`);

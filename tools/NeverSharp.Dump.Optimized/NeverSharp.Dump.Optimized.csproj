@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The canonical dump writers (tools/NeverSharp.Dump, the same sources) compiled against Track O,
+    so both tracks are checked by one writer. Default outputs: dumps/cs-optimized, cs-optimized-parsenone,
+    cs-optimized-tokens.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <DefineConstants>$(DefineConstants);TRACK_OPTIMIZED</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(RepoRoot)tools/NeverSharp.Dump/*.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="$(RepoRoot)src/NeverSharp.Optimized/NeverSharp.Optimized.csproj" />
+  </ItemGroup>
+</Project>

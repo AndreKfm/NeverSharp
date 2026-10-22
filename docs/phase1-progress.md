@@ -109,3 +109,14 @@ Events:
 - Runs 1 and 2 (rig-compliant) failed the then-binding variance gate only in JIT/Server-GC "single-threaded" configurations; amendment prereg/v4 (decided after seeing both, disclosed) binds the gate to tsc6-parse, tsgo7-parse-single and cs-aot-ws-single. All three runs are archived in `results/m6/`; the primary ratio was 6.45, 6.28 and 6.31.
 - Main cost driver visible in every run: garbage collection (e.g. vscode, cs-aot-ws: about 7.5 s summed GC pauses in an 8.5 s run; Server GC halves the wall-clock). This is where Track O (arenas, NoAlloc) starts.
 - Development measurements from here on are short (module benchmarks, probes, `dotnet-trace` 10.0.750501 in `.tools/dotnet-trace`); the next protocol run is the Track O endpoint.
+
+## Track O
+
+Profile of Track F and the resulting step order: [track-o-profile.md](track-o-profile.md). Steps evaluated and not evaluated (A9): [track-o-steps.md](track-o-steps.md).
+
+**Infrastructure (2026-10-22):**
+
+- **Seed (step O0):** `tools/NeverSharp.Generate/seed-optimized.mjs` copied the hand-written Track F modules (49 files) into `src/NeverSharp.Optimized/` with the namespace changed; the generator emits the node classes for both tracks until step O6. Track O builds clean under its own Gate 2 (Track O banned list, NoAlloc analyzer NS001–NS015 as errors).
+- **One set of tools for both tracks:** `tools/NeverSharp.Dump.Optimized` and `tests/NeverSharp.Optimized.Tests` compile the same dump writers and unit tests against Track O; the parse driver (`build-cs.mjs --tracks optimized`, the `cs-o-*` configurations) and the benchmarks (`-p:NeverSharpTrack=Optimized`) take Track O as well.
+- **Gate:** `gate.mjs --track optimized` runs everything (Gate 2, unit tests, G1a, G1 ParseNone, Gate 1). The seed passes: 50,177 of 50,177 units in every dump comparison. Track F still passes its full gate.
+- **NoAlloc coverage:** `harness/port/noalloc-report.mjs` counts annotated methods, lifted constraints and `[NoAllocUnchecked]` exceptions; the seed: 0 of 1,555 methods annotated.
