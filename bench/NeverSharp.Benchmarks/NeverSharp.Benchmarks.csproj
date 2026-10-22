@@ -8,6 +8,8 @@
   <PropertyGroup>
     <NeverSharpTrack Condition="'$(NeverSharpTrack)' == ''">Faithful</NeverSharpTrack>
     <DefineConstants Condition="'$(NeverSharpTrack)' == 'Optimized'">$(DefineConstants);TRACK_OPTIMIZED</DefineConstants>
+    <!-- Track O's source text lives in native memory (step O1, eng/Gate2.Optimized.props). -->
+    <AllowUnsafeBlocks Condition="'$(NeverSharpTrack)' == 'Optimized'">true</AllowUnsafeBlocks>
     <OutputType>Exe</OutputType>
     <IsPackable>false</IsPackable>
     <!-- Ported code is compiled in; its analyzers run in its own project (Gate 2), not here. -->
