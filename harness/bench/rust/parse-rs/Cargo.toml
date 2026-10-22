@@ -1,0 +1,27 @@
+# Parse-only driver for tsrs (secondary reference, pre-registration amendment v5).
+# Built against the pinned tsrs checkout (external/tsrs, v0.18.0) by harness/bench/build-rs.mjs,
+# with tsrs's own release profile and allocator, and the dependency versions of its Cargo.lock.
+
+[package]
+name = "parse-rs"
+version = "0.0.0"
+edition = "2024"
+publish = false
+license = "Apache-2.0"
+
+[dependencies]
+tsrs_parser = { path = "../../../../external/tsrs/crates/tsrs_parser" }
+tsrs_ast = { path = "../../../../external/tsrs/crates/tsrs_ast" }
+tsrs_core = { path = "../../../../external/tsrs/crates/tsrs_core" }
+tsrs_vfs = { path = "../../../../external/tsrs/crates/tsrs_vfs" }
+rayon = "1"
+mimalloc-safe = { version = "0.1.67", features = ["v3", "no_thp"] }
+
+# tsrs's [profile.release] (external/tsrs/Cargo.toml), as the tsrs CLI is built.
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = "symbols"
+debug = false
+panic = "unwind"
