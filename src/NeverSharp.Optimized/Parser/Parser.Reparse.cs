@@ -18,7 +18,7 @@ namespace NeverSharp.Optimized;
 /// </summary>
 internal sealed class SyntaxCursor
 {
-    public required Func<int, Node?> CurrentNode;
+    public required Func<int, Node> CurrentNode;
 }
 
 /// <summary>
@@ -31,25 +31,26 @@ internal sealed partial class Parser
     // reparseTopLevelAwait marks nodes, and only the parser's currentNode asks, while that reparse runs with its syntax
     // cursor; a set per parser instance, emptied when the reparse ends, answers every query as the module-level set
     // does (nodes of other parses are never asked about), without keeping nodes alive or sharing state across threads.
-    private readonly HashSet<object> intersectingChangeSet = new(ReferenceEqualityComparer.Instance);
+    // (Track O: only nodes are marked; a node handle is its identity within the parse.)
+    private readonly HashSet<Node> intersectingChangeSet = [];
 
     // A non-null result for NodeVisitor.ForEachChild: `return true` from a visitor ends the iteration.
     private static readonly object StopVisiting = new();
 
-    private bool IntersectsIncrementalChange(object node)
+    private bool IntersectsIncrementalChange(Node node)
     {
         return intersectingChangeSet.Contains(node);
     }
 
-    private void MarkAsIntersectingIncrementalChange(object node)
+    private void MarkAsIntersectingIncrementalChange(Node node)
     {
         intersectingChangeSet.Add(node);
     }
 
-    private SourceFile ReparseTopLevelAwait(SourceFile sourceFile)
+    private Node ReparseTopLevelAwait(Node sourceFile)
     {
         var savedSyntaxCursor = syntaxCursor;
-        var baseSyntaxCursor = CreateSyntaxCursor(sourceFile);
+        var baseSyntaxCursor = CreateSyntaxCursor(store, sourceFile);
         syntaxCursor = new SyntaxCursor { CurrentNode = ReparseCurrentNode };
 
         var statements = new NodeArray();
@@ -58,18 +59,18 @@ internal sealed partial class Parser
         parseDiagnostics = [];
 
         var pos = 0;
-        var start = FindNextStatementWithAwait(sourceFile.Statements, 0);
+        var start = FindNextStatementWithAwait(store.Statements(sourceFile), 0);
         while (start != -1)
         {
             // append all statements between pos and start
-            var prevStatement = sourceFile.Statements[pos];
-            var nextStatement = sourceFile.Statements[start];
-            Core.AddRange(statements, sourceFile.Statements, pos, start);
-            pos = FindNextStatementWithoutAwait(sourceFile.Statements, start);
+            var prevStatement = store.Statements(sourceFile)[pos];
+            var nextStatement = store.Statements(sourceFile)[start];
+            Core.AddRange(statements, store.Statements(sourceFile), pos, start);
+            pos = FindNextStatementWithoutAwait(store.Statements(sourceFile), start);
 
             // append all diagnostics associated with the copied range
-            var diagnosticStart = Core.FindIndex(savedParseDiagnostics, (diagnostic, _) => diagnostic.Start >= prevStatement.Pos);
-            var diagnosticEnd = diagnosticStart >= 0 ? Core.FindIndex(savedParseDiagnostics, (diagnostic, _) => diagnostic.Start >= nextStatement.Pos, diagnosticStart) : -1;
+            var diagnosticStart = Core.FindIndex(savedParseDiagnostics, (diagnostic, _) => diagnostic.Start >= store.Pos(prevStatement));
+            var diagnosticEnd = diagnosticStart >= 0 ? Core.FindIndex(savedParseDiagnostics, (diagnostic, _) => diagnostic.Start >= store.Pos(nextStatement), diagnosticStart) : -1;
             if (diagnosticStart >= 0)
             {
                 Core.AddRange(parseDiagnostics, savedParseDiagnostics, diagnosticStart, diagnosticEnd >= 0 ? diagnosticEnd : null);
@@ -80,7 +81,7 @@ internal sealed partial class Parser
             {
                 var savedContextFlags = contextFlags;
                 contextFlags |= NodeFlags.AwaitContext;
-                scanner.ResetTokenState(nextStatement.Pos);
+                scanner.ResetTokenState(store.Pos(nextStatement));
                 NextToken();
 
                 while (Token() != SyntaxKind.EndOfFileToken)
@@ -95,16 +96,16 @@ internal sealed partial class Parser
 
                     if (pos >= 0)
                     {
-                        var nonAwaitStatement = sourceFile.Statements[pos];
-                        if (statement.End == nonAwaitStatement.Pos)
+                        var nonAwaitStatement = store.Statements(sourceFile)[pos];
+                        if (store.End(statement) == store.Pos(nonAwaitStatement))
                         {
                             // done reparsing this section
                             break;
                         }
-                        if (statement.End > nonAwaitStatement.Pos)
+                        if (store.End(statement) > store.Pos(nonAwaitStatement))
                         {
                             // we ate into the next statement, so we must reparse it.
-                            pos = FindNextStatementWithoutAwait(sourceFile.Statements, pos + 1);
+                            pos = FindNextStatementWithoutAwait(store.Statements(sourceFile), pos + 1);
                         }
                     }
                 }
@@ -115,17 +116,17 @@ internal sealed partial class Parser
             }, SpeculationKind.Reparse);
 
             // find the next statement containing an `await`
-            start = pos >= 0 ? FindNextStatementWithAwait(sourceFile.Statements, pos) : -1;
+            start = pos >= 0 ? FindNextStatementWithAwait(store.Statements(sourceFile), pos) : -1;
         }
 
         // append all statements between pos and the end of the list
         if (pos >= 0)
         {
-            var prevStatement = sourceFile.Statements[pos];
-            Core.AddRange(statements, sourceFile.Statements, pos);
+            var prevStatement = store.Statements(sourceFile)[pos];
+            Core.AddRange(statements, store.Statements(sourceFile), pos);
 
             // append all diagnostics associated with the copied range
-            var diagnosticStart = Core.FindIndex(savedParseDiagnostics, (diagnostic, _) => diagnostic.Start >= prevStatement.Pos);
+            var diagnosticStart = Core.FindIndex(savedParseDiagnostics, (diagnostic, _) => diagnostic.Start >= store.Pos(prevStatement));
             if (diagnosticStart >= 0)
             {
                 Core.AddRange(parseDiagnostics, savedParseDiagnostics, diagnosticStart);
@@ -134,15 +135,15 @@ internal sealed partial class Parser
 
         syntaxCursor = savedSyntaxCursor;
         intersectingChangeSet.Clear();
-        return factory.UpdateSourceFile(sourceFile, FactoryUtilitiesPublic.SetTextRange(NodeFactory.CreateNodeArray(statements), sourceFile.Statements));
+        return factory.UpdateSourceFile(sourceFile, FactoryUtilitiesPublic.SetTextRange(NodeFactory.CreateNodeArray(store, statements), store.Statements(sourceFile)));
 
-        static bool ContainsPossibleTopLevelAwait(Node node)
+        bool ContainsPossibleTopLevelAwait(Node node)
         {
-            return (node.Flags & NodeFlags.AwaitContext) == 0
-                && (node.TransformFlags & TransformFlags.ContainsPossibleTopLevelAwait) != 0;
+            return (store.Flags(node) & NodeFlags.AwaitContext) == 0
+                && (store.TransformFlags(node) & TransformFlags.ContainsPossibleTopLevelAwait) != 0;
         }
 
-        static int FindNextStatementWithAwait(NodeArray statements, int start)
+        int FindNextStatementWithAwait(NodeArray statements, int start)
         {
             for (var i = start; i < statements.Count; i++)
             {
@@ -154,7 +155,7 @@ internal sealed partial class Parser
             return -1;
         }
 
-        static int FindNextStatementWithoutAwait(NodeArray statements, int start)
+        int FindNextStatementWithoutAwait(NodeArray statements, int start)
         {
             for (var i = start; i < statements.Count; i++)
             {
@@ -167,10 +168,10 @@ internal sealed partial class Parser
         }
 
         // TypeScript: the inner function currentNode, the syntax cursor of the reparse.
-        Node? ReparseCurrentNode(int position)
+        Node ReparseCurrentNode(int position)
         {
             var node = baseSyntaxCursor.CurrentNode(position);
-            if (topLevel && node != null && ContainsPossibleTopLevelAwait(node))
+            if (topLevel && !node.IsNone && ContainsPossibleTopLevelAwait(node))
             {
                 MarkAsIntersectingIncrementalChange(node);
             }
@@ -182,13 +183,13 @@ internal sealed partial class Parser
     /// parser.ts: IncrementalParser.createSyntaxCursor. Not otherwise part of this module (no incremental parsing in
     /// Phase 1), but reparseTopLevelAwait reuses the unchanged statements through it.
     /// </summary>
-    internal static SyntaxCursor CreateSyntaxCursor(SourceFile sourceFile)
+    internal static SyntaxCursor CreateSyntaxCursor(NodeStore store, Node sourceFile)
     {
-        NodeArray currentArray = sourceFile.Statements;
+        NodeArray currentArray = store.Statements(sourceFile);
         var currentArrayIndex = 0;
 
         Debug.Assert(currentArrayIndex < currentArray.Count);
-        Node? current = currentArray[currentArrayIndex];
+        Node current = currentArray[currentArrayIndex];
         var lastQueriedPosition = (int)InvalidPosition.Value;
 
         return new SyntaxCursor
@@ -204,7 +205,7 @@ internal sealed partial class Parser
                     // Much of the time the parser will need the very next node in the array that
                     // we just returned a node from.So just simply check for that case and move
                     // forward in the array instead of searching for the node again.
-                    if (current != null && current.End == position && currentArrayIndex < (currentArray.Count - 1))
+                    if (!current.IsNone && store.End(current) == position && currentArrayIndex < (currentArray.Count - 1))
                     {
                         currentArrayIndex++;
                         current = currentArray[currentArrayIndex];
@@ -212,7 +213,7 @@ internal sealed partial class Parser
 
                     // If we don't have a node, or the node we have isn't in the right position,
                     // then try to find a viable node at the position requested.
-                    if (current == null || current.Pos != position)
+                    if (current.IsNone || store.Pos(current) != position)
                     {
                         FindHighestListElementThatStartsAtPosition(position);
                     }
@@ -226,7 +227,7 @@ internal sealed partial class Parser
                 lastQueriedPosition = position;
 
                 // Either we don'd have a node, or we have a node at the position being asked for.
-                Debug.Assert(current == null || current.Pos == position);
+                Debug.Assert(current.IsNone || store.Pos(current) == position);
                 return current;
             },
         };
@@ -239,18 +240,18 @@ internal sealed partial class Parser
             // Clear out any cached state about the last node we found.
             currentArray = null!;
             currentArrayIndex = (int)InvalidPosition.Value;
-            current = null;
+            current = default;
 
             // Recurse into the source file to find the highest node at this position.
-            NodeVisitor.ForEachChild<object>(sourceFile, VisitNode, VisitArray);
+            NodeVisitor.ForEachChild<object>(store, sourceFile, VisitNode, VisitArray);
             return;
 
             object? VisitNode(Node node)
             {
-                if (position >= node.Pos && position < node.End)
+                if (position >= store.Pos(node) && position < store.End(node))
                 {
                     // Position was within this node.  Keep searching deeper to find the node.
-                    NodeVisitor.ForEachChild<object>(node, VisitNode, VisitArray);
+                    NodeVisitor.ForEachChild<object>(store, node, VisitNode, VisitArray);
 
                     // don't proceed any further in the search.
                     return StopVisiting;
@@ -269,9 +270,9 @@ internal sealed partial class Parser
                     for (var i = 0; i < array.Count; i++)
                     {
                         var child = array[i];
-                        if (child != null)
+                        if (!child.IsNone)
                         {
-                            if (child.Pos == position)
+                            if (store.Pos(child) == position)
                             {
                                 // Found the right node.  We're done.
                                 currentArray = array;
@@ -281,11 +282,11 @@ internal sealed partial class Parser
                             }
                             else
                             {
-                                if (child.Pos < position && position < child.End)
+                                if (store.Pos(child) < position && position < store.End(child))
                                 {
                                     // Position in somewhere within this child.  Search in it and
                                     // stop searching in this array.
-                                    NodeVisitor.ForEachChild<object>(child, VisitNode, VisitArray);
+                                    NodeVisitor.ForEachChild<object>(store, child, VisitNode, VisitArray);
                                     return StopVisiting;
                                 }
                             }

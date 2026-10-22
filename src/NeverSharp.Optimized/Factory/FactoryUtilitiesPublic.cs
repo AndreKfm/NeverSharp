@@ -15,9 +15,9 @@ namespace NeverSharp.Optimized;
 /// <summary>factory/utilitiesPublic.ts (canHaveModifiers; setTextRange is in Core/).</summary>
 internal static partial class FactoryUtilitiesPublic
 {
-    internal static bool CanHaveModifiers(Node node)
+    internal static bool CanHaveModifiers(NodeStore store, Node node)
     {
-        var kind = node.Kind;
+        var kind = store.Kind(node);
         return kind == SyntaxKind.TypeParameter
             || kind == SyntaxKind.Parameter
             || kind == SyntaxKind.PropertySignature

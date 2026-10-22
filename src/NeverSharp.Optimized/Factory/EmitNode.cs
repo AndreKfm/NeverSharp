@@ -42,17 +42,17 @@ internal sealed class EmitNode
     public TextRange? SourceMapRange;                // The text range to use when emitting leading or trailing source mappings (TypeScript: SourceMapRange)
     public List<TextRange?>? TokenSourceMapRanges;   // The text range to use when emitting source mappings for tokens
     public object? ConstantValue;                    // The constant value of an expression (string | number)
-    public Identifier? ExternalHelpersModuleName;    // The local name for an imported helpers module
+    public Node ExternalHelpersModuleName;    // The local name for an imported helpers module
     public bool? ExternalHelpers;
     public List<object>? Helpers;                    // Emit helpers for the node (TypeScript: EmitHelper[])
     public bool? StartsOnNewLine;                    // If the node should begin on a new line
     public object? SnippetElement;                   // Snippet element of the node (TypeScript: SnippetElement)
-    public Node? TypeNode;                           // VariableDeclaration type
-    public Identifier? ClassThis;                    // Identifier that points to a captured static `this` for a class which may be updated after decorators are applied
-    public Node? AssignedName;                       // Expression used as the assigned name of a class or function
+    public Node TypeNode;                           // VariableDeclaration type
+    public Node ClassThis;                    // Identifier that points to a captured static `this` for a class which may be updated after decorators are applied
+    public Node AssignedName;                       // Expression used as the assigned name of a class or function
     public NodeArray? IdentifierTypeArguments;       // Only defined on synthesized identifiers.
     public object? AutoGenerate;                     // Used for auto-generated identifiers and private identifiers (TypeScript: AutoGenerateInfo)
-    public ImportSpecifier? GeneratedImportReference; // Reference to the generated import specifier this identifier refers to
+    public Node GeneratedImportReference; // Reference to the generated import specifier this identifier refers to
 }
 
 /// <summary>factory/emitNode.ts.</summary>
@@ -62,80 +62,79 @@ internal static class FactoryEmitNode
     /// Associates a node with the current transformation, initializing
     /// various transient transformation properties.
     /// </summary>
-    internal static EmitNode GetOrCreateEmitNode(Node node)
+    internal static EmitNode GetOrCreateEmitNode(NodeStore store, Node node)
     {
-        if (node.EmitNode == null)
+        if (store.EmitNode(node) == null)
         {
-            if (UtilitiesPublic.IsParseTreeNode(node))
+            if (UtilitiesPublic.IsParseTreeNode(store, node))
             {
                 // To avoid holding onto transformation artifacts, we keep track of any
                 // parse tree node we are annotating. This allows us to clean them up after
                 // all transformations have completed.
-                if (node.Kind == SyntaxKind.SourceFile)
+                if (store.Kind(node) == SyntaxKind.SourceFile)
                 {
                     var created = new EmitNode { AnnotatedNodes = [node] };
-                    node.EmitNode = created;
+                    store.SetEmitNode(node, created);
                     return created;
                 }
 
-                var sourceFile = Utilities.GetSourceFileOfNode(UtilitiesPublic.GetParseTreeNode(Utilities.GetSourceFileOfNode(node)));
-                if (sourceFile == null)
+                var sourceFile = Utilities.GetSourceFileOfNode(store, UtilitiesPublic.GetParseTreeNode(store, Utilities.GetSourceFileOfNode(store, node)));
+                if (sourceFile.IsNone)
                 {
                     Debug.Fail("Could not determine parsed source file.");
                 }
-                GetOrCreateEmitNode(sourceFile).AnnotatedNodes!.Add(node);
+                GetOrCreateEmitNode(store, sourceFile).AnnotatedNodes!.Add(node);
             }
 
-            node.EmitNode = new EmitNode();
+            store.SetEmitNode(node, new EmitNode());
         }
         else
         {
-            Debug.Assert((((EmitNode)node.EmitNode).InternalFlags & InternalEmitFlags.Immutable) == 0, "Invalid attempt to mutate an immutable node.");
+            Debug.Assert((((EmitNode)store.EmitNode(node)!).InternalFlags & InternalEmitFlags.Immutable) == 0, "Invalid attempt to mutate an immutable node.");
         }
-        return (EmitNode)node.EmitNode;
+        return (EmitNode)store.EmitNode(node)!;
     }
 
     /// <summary>
     /// Gets a custom text range to use when emitting source maps.
     /// </summary>
-    internal static TextRange GetSourceMapRange(Node node)
+    internal static TextRange GetSourceMapRange(NodeStore store, Node node)
     {
-        return (node.EmitNode as EmitNode)?.SourceMapRange ?? node;
+        return (store.EmitNode(node) as EmitNode)?.SourceMapRange ?? new ObjectTextRange { Pos = store.Pos(node), End = store.End(node) };
     }
 
     /// <summary>
     /// Gets a custom text range to use when emitting comments.
     /// </summary>
-    internal static bool? GetStartsOnNewLine(Node node)
+    internal static bool? GetStartsOnNewLine(NodeStore store, Node node)
     {
-        return (node.EmitNode as EmitNode)?.StartsOnNewLine;
+        return (store.EmitNode(node) as EmitNode)?.StartsOnNewLine;
     }
 
     /// <summary>
     /// Sets a custom text range to use when emitting comments.
     /// </summary>
-    internal static T SetStartsOnNewLine<T>(T node, bool newLine)
-        where T : Node
+    internal static Node SetStartsOnNewLine(NodeStore store, Node node, bool newLine)
     {
-        GetOrCreateEmitNode(node).StartsOnNewLine = newLine;
+        GetOrCreateEmitNode(store, node).StartsOnNewLine = newLine;
         return node;
     }
 
     /// <summary>
     /// Gets a custom text range to use when emitting comments.
     /// </summary>
-    internal static TextRange GetCommentRange(Node node)
+    internal static TextRange GetCommentRange(NodeStore store, Node node)
     {
-        return (node.EmitNode as EmitNode)?.CommentRange ?? node;
+        return (store.EmitNode(node) as EmitNode)?.CommentRange ?? new ObjectTextRange { Pos = store.Pos(node), End = store.End(node) };
     }
 
-    internal static List<SynthesizedComment>? GetSyntheticLeadingComments(Node node)
+    internal static List<SynthesizedComment>? GetSyntheticLeadingComments(NodeStore store, Node node)
     {
-        return (node.EmitNode as EmitNode)?.LeadingComments;
+        return (store.EmitNode(node) as EmitNode)?.LeadingComments;
     }
 
-    internal static List<SynthesizedComment>? GetSyntheticTrailingComments(Node node)
+    internal static List<SynthesizedComment>? GetSyntheticTrailingComments(NodeStore store, Node node)
     {
-        return (node.EmitNode as EmitNode)?.TrailingComments;
+        return (store.EmitNode(node) as EmitNode)?.TrailingComments;
     }
 }

@@ -95,7 +95,7 @@ internal static partial class Utilities
 
         return new DiagnosticWithDetachedLocation
         {
-            File = null,
+            File = default,
             Start = start,
             Length = length,
 
@@ -109,16 +109,16 @@ internal static partial class Utilities
 
     private static bool IsDiagnosticWithDetachedLocation(DiagnosticRelatedInformation diagnostic)
     {
-        return diagnostic.File == null
+        return diagnostic.File.IsNone
             && diagnostic.StartOrUndefined != null
             && diagnostic.LengthOrUndefined != null
             && diagnostic is DiagnosticWithDetachedLocation;
     }
 
-    private static DiagnosticWithLocation AttachFileToDiagnostic(DiagnosticWithDetachedLocation diagnostic, SourceFile file)
+    private static DiagnosticWithLocation AttachFileToDiagnostic(NodeStore store, DiagnosticWithDetachedLocation diagnostic, Node file)
     {
-        var fileName = !string.IsNullOrEmpty(file.FileName) ? file.FileName : "";
-        var length = file.Text.Length;
+        var fileName = !string.IsNullOrEmpty(store.FileName(file)) ? store.FileName(file) : "";
+        var length = store.Text(file).Length;
         Debug.AssertEqual(diagnostic.FileName, fileName);
         Debug.AssertLessThanOrEqual(diagnostic.Start, length);
         Debug.AssertLessThanOrEqual(diagnostic.Start + diagnostic.Length, length);
@@ -142,7 +142,7 @@ internal static partial class Utilities
                     var detached = (DiagnosticWithDetachedLocation)related;
                     Debug.AssertLessThanOrEqual(detached.Start, length);
                     Debug.AssertLessThanOrEqual(detached.Start + detached.Length, length);
-                    diagnosticWithLocation.RelatedInformation.Add(AttachFileToDiagnostic(detached, file));
+                    diagnosticWithLocation.RelatedInformation.Add(AttachFileToDiagnostic(store, detached, file));
                 }
                 else
                 {
@@ -153,19 +153,19 @@ internal static partial class Utilities
         return diagnosticWithLocation;
     }
 
-    internal static List<DiagnosticWithLocation> AttachFileToDiagnostics(List<DiagnosticWithDetachedLocation> diagnostics, SourceFile file)
+    internal static List<DiagnosticWithLocation> AttachFileToDiagnostics(NodeStore store, List<DiagnosticWithDetachedLocation> diagnostics, Node file)
     {
         var diagnosticsWithLocation = new List<DiagnosticWithLocation>();
         foreach (var diagnostic in diagnostics)
         {
-            diagnosticsWithLocation.Add(AttachFileToDiagnostic(diagnostic, file));
+            diagnosticsWithLocation.Add(AttachFileToDiagnostic(store, diagnostic, file));
         }
         return diagnosticsWithLocation;
     }
 
-    internal static DiagnosticWithLocation CreateFileDiagnostic(SourceFile file, int start, int length, DiagnosticMessage message, params object?[] args)
+    internal static DiagnosticWithLocation CreateFileDiagnostic(NodeStore store, Node file, int start, int length, DiagnosticMessage message, params object?[] args)
     {
-        AssertDiagnosticLocation(file.Text, start, length);
+        AssertDiagnosticLocation(store.Text(file), start, length);
 
         var text = GetLocaleSpecificMessage(message);
 

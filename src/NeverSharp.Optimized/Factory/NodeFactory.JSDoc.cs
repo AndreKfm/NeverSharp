@@ -27,23 +27,23 @@ internal sealed partial class NodeFactory
     // createJSDocUnknownType
     private Node CreateJSDocPrimaryTypeWorker(SyntaxKind kind)
     {
-        return CreateBaseNode<Node>(kind);
+        return CreateBaseNode(kind);
     }
 
     // createJSDocNullableType
     // createJSDocNonNullableType
-    private Node CreateJSDocPrePostfixUnaryTypeWorker(SyntaxKind kind, Node? type, bool postfix = false)
+    private Node CreateJSDocPrePostfixUnaryTypeWorker(SyntaxKind kind, Node type, bool postfix = false)
     {
         var node = CreateJSDocUnaryTypeWorker(
             kind,
-            postfix ? type != null ? Parenthesizer.ParenthesizeNonArrayTypeOfPostfixType(type) : null : type);
+            postfix ? !type.IsNone ? Parenthesizer.ParenthesizeNonArrayTypeOfPostfixType(type) : default : type);
         switch (node)
         {
-            case JSDocNullableType nullable:
-                nullable.Postfix = postfix;
+            case var nullable when store.IsJSDocNullableType(nullable):
+                store.SetPostfix(nullable, postfix);
                 break;
-            case JSDocNonNullableType nonNullable:
-                nonNullable.Postfix = postfix;
+            case var nonNullable when store.IsJSDocNonNullableType(nonNullable):
+                store.SetPostfix(nonNullable, postfix);
                 break;
         }
         return node;
@@ -52,100 +52,100 @@ internal sealed partial class NodeFactory
     // createJSDocOptionalType
     // createJSDocVariadicType
     // createJSDocNamepathType
-    private Node CreateJSDocUnaryTypeWorker(SyntaxKind kind, Node? type)
+    private Node CreateJSDocUnaryTypeWorker(SyntaxKind kind, Node type)
     {
-        var node = CreateBaseNode<Node>(kind);
-        SetJSDocUnaryType(node, type);
+        var node = CreateBaseNode(kind);
+        SetJSDocUnaryType(store, node, type);
         return node;
     }
 
     // updateJSDocNonNullableType
     // updateJSDocNullableType
-    private Node UpdateJSDocPrePostfixUnaryTypeWorker(SyntaxKind kind, Node node, Node? type)
+    private Node UpdateJSDocPrePostfixUnaryTypeWorker(SyntaxKind kind, Node node, Node type)
     {
-        return GetJSDocUnaryType(node) != type
-            ? Update(CreateJSDocPrePostfixUnaryTypeWorker(kind, type, node is JSDocNullableType n ? n.Postfix : ((JSDocNonNullableType)node).Postfix), node)
+        return GetJSDocUnaryType(store, node) != type
+            ? Update(CreateJSDocPrePostfixUnaryTypeWorker(kind, type, (node is var n && store.IsJSDocNullableType(n)) ? store.Postfix(n) : store.Postfix(node)), node)
             : node;
     }
 
     // updateJSDocOptionalType
     // updateJSDocVariadicType
     // updateJSDocNamepathType
-    private Node UpdateJSDocUnaryTypeWorker(SyntaxKind kind, Node node, Node? type)
+    private Node UpdateJSDocUnaryTypeWorker(SyntaxKind kind, Node node, Node type)
     {
-        return GetJSDocUnaryType(node) != type
+        return GetJSDocUnaryType(store, node) != type
             ? Update(CreateJSDocUnaryTypeWorker(kind, type), node)
             : node;
     }
 
     /// <summary>`node.type = type` on the JSDoc unary type nodes.</summary>
-    private static void SetJSDocUnaryType(Node node, Node? type)
+    private static void SetJSDocUnaryType(NodeStore store, Node node, Node type)
     {
         switch (node)
         {
-            case JSDocNullableType n:
-                n.Type = type!;
+            case var n when store.IsJSDocNullableType(n):
+                store.SetType(n, type);
                 break;
-            case JSDocNonNullableType n:
-                n.Type = type!;
+            case var n when store.IsJSDocNonNullableType(n):
+                store.SetType(n, type);
                 break;
-            case JSDocOptionalType n:
-                n.Type = type!;
+            case var n when store.IsJSDocOptionalType(n):
+                store.SetType(n, type);
                 break;
-            case JSDocVariadicType n:
-                n.Type = type!;
+            case var n when store.IsJSDocVariadicType(n):
+                store.SetType(n, type);
                 break;
-            case JSDocNamepathType n:
-                n.Type = type!;
+            case var n when store.IsJSDocNamepathType(n):
+                store.SetType(n, type);
                 break;
             default:
-                throw new InvalidOperationException($"{node.Kind} is not a JSDoc unary type");
+                throw new InvalidOperationException($"{store.Kind(node)} is not a JSDoc unary type");
         }
     }
 
     /// <summary>`node.type` on the JSDoc unary type nodes.</summary>
-    private static Node? GetJSDocUnaryType(Node node)
+    private static Node GetJSDocUnaryType(NodeStore store, Node node)
     {
         return node switch
         {
-            JSDocNullableType n => n.Type,
-            JSDocNonNullableType n => n.Type,
-            JSDocOptionalType n => n.Type,
-            JSDocVariadicType n => n.Type,
-            JSDocNamepathType n => n.Type,
-            _ => throw new InvalidOperationException($"{node.Kind} is not a JSDoc unary type"),
+            var n when store.IsJSDocNullableType(n) => store.Type(n),
+            var n when store.IsJSDocNonNullableType(n) => store.Type(n),
+            var n when store.IsJSDocOptionalType(n) => store.Type(n),
+            var n when store.IsJSDocVariadicType(n) => store.Type(n),
+            var n when store.IsJSDocNamepathType(n) => store.Type(n),
+            _ => throw new InvalidOperationException($"{store.Kind(node)} is not a JSDoc unary type"),
         };
     }
 
     // @api
-    internal JSDocAllType CreateJSDocAllType() => (JSDocAllType)CreateJSDocPrimaryTypeWorker(SyntaxKind.JSDocAllType);
+    internal Node CreateJSDocAllType() => CreateJSDocPrimaryTypeWorker(SyntaxKind.JSDocAllType);
 
     // @api
-    internal JSDocUnknownType CreateJSDocUnknownType() => (JSDocUnknownType)CreateJSDocPrimaryTypeWorker(SyntaxKind.JSDocUnknownType);
+    internal Node CreateJSDocUnknownType() => CreateJSDocPrimaryTypeWorker(SyntaxKind.JSDocUnknownType);
 
     // @api
-    internal JSDocNonNullableType CreateJSDocNonNullableType(Node? type, bool postfix = false) => (JSDocNonNullableType)CreateJSDocPrePostfixUnaryTypeWorker(SyntaxKind.JSDocNonNullableType, type, postfix);
+    internal Node CreateJSDocNonNullableType(Node type, bool postfix = false) => CreateJSDocPrePostfixUnaryTypeWorker(SyntaxKind.JSDocNonNullableType, type, postfix);
 
     // @api
-    internal JSDocNullableType CreateJSDocNullableType(Node? type, bool postfix = false) => (JSDocNullableType)CreateJSDocPrePostfixUnaryTypeWorker(SyntaxKind.JSDocNullableType, type, postfix);
+    internal Node CreateJSDocNullableType(Node type, bool postfix = false) => CreateJSDocPrePostfixUnaryTypeWorker(SyntaxKind.JSDocNullableType, type, postfix);
 
     // @api
-    internal JSDocOptionalType CreateJSDocOptionalType(Node? type) => (JSDocOptionalType)CreateJSDocUnaryTypeWorker(SyntaxKind.JSDocOptionalType, type);
+    internal Node CreateJSDocOptionalType(Node type) => CreateJSDocUnaryTypeWorker(SyntaxKind.JSDocOptionalType, type);
 
     // @api
-    internal JSDocVariadicType CreateJSDocVariadicType(Node? type) => (JSDocVariadicType)CreateJSDocUnaryTypeWorker(SyntaxKind.JSDocVariadicType, type);
+    internal Node CreateJSDocVariadicType(Node type) => CreateJSDocUnaryTypeWorker(SyntaxKind.JSDocVariadicType, type);
 
     // @api
-    internal JSDocNamepathType CreateJSDocNamepathType(Node? type) => (JSDocNamepathType)CreateJSDocUnaryTypeWorker(SyntaxKind.JSDocNamepathType, type);
+    internal Node CreateJSDocNamepathType(Node type) => CreateJSDocUnaryTypeWorker(SyntaxKind.JSDocNamepathType, type);
 
     // @api
-    internal JSDocFunctionType CreateJSDocFunctionType(IReadOnlyList<Node> parameters, Node? type)
+    internal Node CreateJSDocFunctionType(IReadOnlyList<Node> parameters, Node type)
     {
-        var node = CreateBaseDeclaration<JSDocFunctionType>(SyntaxKind.JSDocFunctionType);
-        node.Parameters = AsNodeArray(parameters)!;
-        node.Type = type;
-        node.TransformFlags = PropagateChildrenFlags(node.Parameters) |
-            (node.Type != null ? TransformFlags.ContainsTypeScript : TransformFlags.None);
+        var node = CreateBaseDeclaration(SyntaxKind.JSDocFunctionType);
+        store.SetParameters(node, AsNodeArray(store, parameters)!);
+        store.SetType(node, type);
+        store.SetTransformFlags(node, PropagateChildrenFlags(store.Parameters(node)) |
+            (!store.Type(node).IsNone ? TransformFlags.ContainsTypeScript : TransformFlags.None));
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         // node.locals = undefined; // initialized by binder (LocalsContainer)
         // node.nextContainer = undefined; // initialized by binder (LocalsContainer)
@@ -154,339 +154,338 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal JSDocTypeLiteral CreateJSDocTypeLiteral(IReadOnlyList<Node>? propertyTags = null, bool isArrayType = false)
+    internal Node CreateJSDocTypeLiteral(IReadOnlyList<Node>? propertyTags = null, bool isArrayType = false)
     {
-        var node = CreateBaseDeclaration<JSDocTypeLiteral>(SyntaxKind.JSDocTypeLiteral);
+        var node = CreateBaseDeclaration(SyntaxKind.JSDocTypeLiteral);
         // TypeScript assigns `asNodeArray(propertyTags)`; the generated field is an array (Node[]), so the NodeArray's
         // elements are stored.
-        var array = AsNodeArray(propertyTags);
-        node.JsDocPropertyTags = array?.ToArray();
-        node.IsArrayType = isArrayType;
+        var array = AsNodeArray(store, propertyTags);
+        store.SetJsDocPropertyTags(node, array?.ToArray());
+        store.SetIsArrayType(node, isArrayType);
         return node;
     }
 
     // @api
-    internal JSDocTypeExpression CreateJSDocTypeExpression(Node type)
+    internal Node CreateJSDocTypeExpression(Node type)
     {
-        var node = CreateBaseNode<JSDocTypeExpression>(SyntaxKind.JSDocTypeExpression);
-        node.Type = type;
+        var node = CreateBaseNode(SyntaxKind.JSDocTypeExpression);
+        store.SetType(node, type);
         return node;
     }
 
     // @api
-    internal JSDocSignature CreateJSDocSignature(IReadOnlyList<Node>? typeParameters, IReadOnlyList<Node> parameters, JSDocReturnTag? type = null)
+    internal Node CreateJSDocSignature(IReadOnlyList<Node>? typeParameters, IReadOnlyList<Node> parameters, Node type = default)
     {
-        var node = CreateBaseDeclaration<JSDocSignature>(SyntaxKind.JSDocSignature);
+        var node = CreateBaseDeclaration(SyntaxKind.JSDocSignature);
         // TypeScript assigns NodeArrays (asNodeArray / createNodeArray); the generated fields are typed arrays, so the
         // NodeArrays' elements are stored.
-        var typeParametersArray = AsNodeArray(typeParameters);
-        node.TypeParameters = typeParametersArray != null ? ToArray<JSDocTemplateTag>(typeParametersArray) : null;
+        var typeParametersArray = AsNodeArray(store, typeParameters);
+        store.SetJSDocSignatureTypeParameters(node, typeParametersArray != null ? ToArray(typeParametersArray) : null);
         // (Node[]: besides JSDocParameterTags the parser stores other tags here, e.g. a `@this` tag inside `@callback`.)
-        node.Parameters = ToArray<Node>(CreateNodeArray(parameters));
-        node.Type = type!;
+        store.SetJSDocSignatureParameters(node, ToArray(CreateNodeArray(store, parameters)));
+        store.SetType(node, type);
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         // node.locals = undefined; // initialized by binder (LocalsContainer)
         // node.nextContainer = undefined; // initialized by binder (LocalsContainer)
         return node;
     }
 
-    private static T[] ToArray<T>(NodeArray array)
-        where T : Node
+    private static Node[] ToArray(NodeArray array)
     {
-        var result = new T[array.Count];
+        var result = new Node[array.Count];
         for (var i = 0; i < array.Count; i++)
         {
-            result[i] = (T)array[i];
+            result[i] = array[i];
         }
         return result;
     }
 
-    private Identifier GetDefaultTagName(Node node)
+    private Node GetDefaultTagName(Node node)
     {
-        var defaultTagName = GetDefaultTagNameForKind(node.Kind);
-        var tagName = GetJSDocTagName(node);
-        return (string)tagName.EscapedText! == UtilitiesPublic.EscapeLeadingUnderscores(defaultTagName)
+        var defaultTagName = GetDefaultTagNameForKind(store.Kind(node));
+        var tagName = GetJSDocTagName(store, node);
+        return (string)store.EscapedText(tagName)! == UtilitiesPublic.EscapeLeadingUnderscores(defaultTagName)
             ? tagName
             : CreateIdentifier(defaultTagName);
     }
 
     /// <summary>`createBaseJSDocTag(kind, tagName, comment: string | NodeArray&lt;JSDocComment&gt; | undefined)`.</summary>
-    private Node CreateBaseJSDocTag(SyntaxKind kind, Identifier tagName, object? comment)
+    private Node CreateBaseJSDocTag(SyntaxKind kind, Node tagName, object? comment)
     {
-        var node = CreateBaseNode<Node>(kind);
-        SetJSDocTagNameAndComment(node, tagName, comment);
+        var node = CreateBaseNode(kind);
+        SetJSDocTagNameAndComment(store, node, tagName, comment);
         return node;
     }
 
-    private Node CreateBaseJSDocTagDeclaration(SyntaxKind kind, Identifier tagName, object? comment)
+    private Node CreateBaseJSDocTagDeclaration(SyntaxKind kind, Node tagName, object? comment)
     {
-        var node = CreateBaseDeclaration<Node>(kind);
-        SetJSDocTagNameAndComment(node, tagName, comment);
+        var node = CreateBaseDeclaration(kind);
+        SetJSDocTagNameAndComment(store, node, tagName, comment);
         return node;
     }
 
     /// <summary>`node.tagName = tagName; node.comment = comment;` on the JSDoc tag nodes.</summary>
-    private static void SetJSDocTagNameAndComment(Node node, Identifier tagName, object? comment)
+    private static void SetJSDocTagNameAndComment(NodeStore store, Node node, Node tagName, object? comment)
     {
         switch (node)
         {
-            case JSDocAugmentsTag n: n.TagName = tagName; n.Comment = comment; break;
-            case JSDocAuthorTag n: n.TagName = tagName; n.Comment = comment; break;
-            case JSDocCallbackTag n: n.TagName = tagName; n.Comment = comment; break;
-            case JSDocClassTag n: n.TagName = tagName; n.Comment = comment; break;
-            case JSDocDeprecatedTag n: n.TagName = tagName; n.Comment = comment; break;
-            case JSDocEnumTag n: n.TagName = tagName; n.Comment = comment; break;
-            case JSDocImplementsTag n: n.TagName = tagName; n.Comment = comment; break;
-            case JSDocImportTag n: n.TagName = tagName; n.Comment = comment; break;
-            case JSDocOverloadTag n: n.TagName = tagName; n.Comment = comment; break;
-            case JSDocOverrideTag n: n.TagName = tagName; n.Comment = comment; break;
-            case JSDocParameterTag n: n.TagName = tagName; n.Comment = comment; break;
-            case JSDocPrivateTag n: n.TagName = tagName; n.Comment = comment; break;
-            case JSDocPropertyTag n: n.TagName = tagName; n.Comment = comment; break;
-            case JSDocProtectedTag n: n.TagName = tagName; n.Comment = comment; break;
-            case JSDocPublicTag n: n.TagName = tagName; n.Comment = comment; break;
-            case JSDocReadonlyTag n: n.TagName = tagName; n.Comment = comment; break;
-            case JSDocReturnTag n: n.TagName = tagName; n.Comment = comment; break;
-            case JSDocSatisfiesTag n: n.TagName = tagName; n.Comment = comment; break;
-            case JSDocSeeTag n: n.TagName = tagName; n.Comment = comment; break;
-            case JSDocTemplateTag n: n.TagName = tagName; n.Comment = comment; break;
-            case JSDocThisTag n: n.TagName = tagName; n.Comment = comment; break;
-            case JSDocThrowsTag n: n.TagName = tagName; n.Comment = comment; break;
-            case JSDocTypeTag n: n.TagName = tagName; n.Comment = comment; break;
-            case JSDocTypedefTag n: n.TagName = tagName; n.Comment = comment; break;
-            case JSDocUnknownTag n: n.TagName = tagName; n.Comment = comment; break;
-            default: throw new InvalidOperationException($"{node.Kind} is not a JSDoc tag");
+            case var n when store.IsJSDocAugmentsTag(n): store.SetTagName(n, tagName); store.SetComment(n, comment); break;
+            case var n when store.IsJSDocAuthorTag(n): store.SetTagName(n, tagName); store.SetComment(n, comment); break;
+            case var n when store.IsJSDocCallbackTag(n): store.SetTagName(n, tagName); store.SetComment(n, comment); break;
+            case var n when store.IsJSDocClassTag(n): store.SetTagName(n, tagName); store.SetComment(n, comment); break;
+            case var n when store.IsJSDocDeprecatedTag(n): store.SetTagName(n, tagName); store.SetComment(n, comment); break;
+            case var n when store.IsJSDocEnumTag(n): store.SetTagName(n, tagName); store.SetComment(n, comment); break;
+            case var n when store.IsJSDocImplementsTag(n): store.SetTagName(n, tagName); store.SetComment(n, comment); break;
+            case var n when store.IsJSDocImportTag(n): store.SetTagName(n, tagName); store.SetComment(n, comment); break;
+            case var n when store.IsJSDocOverloadTag(n): store.SetTagName(n, tagName); store.SetComment(n, comment); break;
+            case var n when store.IsJSDocOverrideTag(n): store.SetTagName(n, tagName); store.SetComment(n, comment); break;
+            case var n when store.IsJSDocParameterTag(n): store.SetTagName(n, tagName); store.SetComment(n, comment); break;
+            case var n when store.IsJSDocPrivateTag(n): store.SetTagName(n, tagName); store.SetComment(n, comment); break;
+            case var n when store.IsJSDocPropertyTag(n): store.SetTagName(n, tagName); store.SetComment(n, comment); break;
+            case var n when store.IsJSDocProtectedTag(n): store.SetTagName(n, tagName); store.SetComment(n, comment); break;
+            case var n when store.IsJSDocPublicTag(n): store.SetTagName(n, tagName); store.SetComment(n, comment); break;
+            case var n when store.IsJSDocReadonlyTag(n): store.SetTagName(n, tagName); store.SetComment(n, comment); break;
+            case var n when store.IsJSDocReturnTag(n): store.SetTagName(n, tagName); store.SetComment(n, comment); break;
+            case var n when store.IsJSDocSatisfiesTag(n): store.SetTagName(n, tagName); store.SetComment(n, comment); break;
+            case var n when store.IsJSDocSeeTag(n): store.SetTagName(n, tagName); store.SetComment(n, comment); break;
+            case var n when store.IsJSDocTemplateTag(n): store.SetTagName(n, tagName); store.SetComment(n, comment); break;
+            case var n when store.IsJSDocThisTag(n): store.SetTagName(n, tagName); store.SetComment(n, comment); break;
+            case var n when store.IsJSDocThrowsTag(n): store.SetTagName(n, tagName); store.SetComment(n, comment); break;
+            case var n when store.IsJSDocTypeTag(n): store.SetTagName(n, tagName); store.SetComment(n, comment); break;
+            case var n when store.IsJSDocTypedefTag(n): store.SetTagName(n, tagName); store.SetComment(n, comment); break;
+            case var n when store.IsJSDocUnknownTag(n): store.SetTagName(n, tagName); store.SetComment(n, comment); break;
+            default: throw new InvalidOperationException($"{store.Kind(node)} is not a JSDoc tag");
         }
     }
 
     /// <summary>`node.tagName` on the JSDoc tag nodes.</summary>
-    private static Identifier GetJSDocTagName(Node node)
+    private static Node GetJSDocTagName(NodeStore store, Node node)
     {
         return node switch
         {
-            JSDocAugmentsTag n => n.TagName,
-            JSDocAuthorTag n => n.TagName,
-            JSDocCallbackTag n => n.TagName,
-            JSDocClassTag n => n.TagName,
-            JSDocDeprecatedTag n => n.TagName,
-            JSDocEnumTag n => n.TagName,
-            JSDocImplementsTag n => n.TagName,
-            JSDocImportTag n => n.TagName,
-            JSDocOverloadTag n => n.TagName,
-            JSDocOverrideTag n => n.TagName,
-            JSDocParameterTag n => n.TagName,
-            JSDocPrivateTag n => n.TagName,
-            JSDocPropertyTag n => n.TagName,
-            JSDocProtectedTag n => n.TagName,
-            JSDocPublicTag n => n.TagName,
-            JSDocReadonlyTag n => n.TagName,
-            JSDocReturnTag n => n.TagName,
-            JSDocSatisfiesTag n => n.TagName,
-            JSDocSeeTag n => n.TagName,
-            JSDocTemplateTag n => n.TagName,
-            JSDocThisTag n => n.TagName,
-            JSDocThrowsTag n => n.TagName,
-            JSDocTypeTag n => n.TagName,
-            JSDocTypedefTag n => n.TagName,
-            JSDocUnknownTag n => n.TagName,
-            _ => throw new InvalidOperationException($"{node.Kind} is not a JSDoc tag"),
+            var n when store.IsJSDocAugmentsTag(n) => store.TagName(n),
+            var n when store.IsJSDocAuthorTag(n) => store.TagName(n),
+            var n when store.IsJSDocCallbackTag(n) => store.TagName(n),
+            var n when store.IsJSDocClassTag(n) => store.TagName(n),
+            var n when store.IsJSDocDeprecatedTag(n) => store.TagName(n),
+            var n when store.IsJSDocEnumTag(n) => store.TagName(n),
+            var n when store.IsJSDocImplementsTag(n) => store.TagName(n),
+            var n when store.IsJSDocImportTag(n) => store.TagName(n),
+            var n when store.IsJSDocOverloadTag(n) => store.TagName(n),
+            var n when store.IsJSDocOverrideTag(n) => store.TagName(n),
+            var n when store.IsJSDocParameterTag(n) => store.TagName(n),
+            var n when store.IsJSDocPrivateTag(n) => store.TagName(n),
+            var n when store.IsJSDocPropertyTag(n) => store.TagName(n),
+            var n when store.IsJSDocProtectedTag(n) => store.TagName(n),
+            var n when store.IsJSDocPublicTag(n) => store.TagName(n),
+            var n when store.IsJSDocReadonlyTag(n) => store.TagName(n),
+            var n when store.IsJSDocReturnTag(n) => store.TagName(n),
+            var n when store.IsJSDocSatisfiesTag(n) => store.TagName(n),
+            var n when store.IsJSDocSeeTag(n) => store.TagName(n),
+            var n when store.IsJSDocTemplateTag(n) => store.TagName(n),
+            var n when store.IsJSDocThisTag(n) => store.TagName(n),
+            var n when store.IsJSDocThrowsTag(n) => store.TagName(n),
+            var n when store.IsJSDocTypeTag(n) => store.TagName(n),
+            var n when store.IsJSDocTypedefTag(n) => store.TagName(n),
+            var n when store.IsJSDocUnknownTag(n) => store.TagName(n),
+            _ => throw new InvalidOperationException($"{store.Kind(node)} is not a JSDoc tag"),
         };
     }
 
     /// <summary>`node.comment` on the JSDoc tag nodes.</summary>
-    private static object? GetJSDocTagComment(Node node)
+    private static object? GetJSDocTagComment(NodeStore store, Node node)
     {
         return node switch
         {
-            JSDocAugmentsTag n => n.Comment,
-            JSDocAuthorTag n => n.Comment,
-            JSDocCallbackTag n => n.Comment,
-            JSDocClassTag n => n.Comment,
-            JSDocDeprecatedTag n => n.Comment,
-            JSDocEnumTag n => n.Comment,
-            JSDocImplementsTag n => n.Comment,
-            JSDocImportTag n => n.Comment,
-            JSDocOverloadTag n => n.Comment,
-            JSDocOverrideTag n => n.Comment,
-            JSDocParameterTag n => n.Comment,
-            JSDocPrivateTag n => n.Comment,
-            JSDocPropertyTag n => n.Comment,
-            JSDocProtectedTag n => n.Comment,
-            JSDocPublicTag n => n.Comment,
-            JSDocReadonlyTag n => n.Comment,
-            JSDocReturnTag n => n.Comment,
-            JSDocSatisfiesTag n => n.Comment,
-            JSDocSeeTag n => n.Comment,
-            JSDocTemplateTag n => n.Comment,
-            JSDocThisTag n => n.Comment,
-            JSDocThrowsTag n => n.Comment,
-            JSDocTypeTag n => n.Comment,
-            JSDocTypedefTag n => n.Comment,
-            JSDocUnknownTag n => n.Comment,
-            _ => throw new InvalidOperationException($"{node.Kind} is not a JSDoc tag"),
+            var n when store.IsJSDocAugmentsTag(n) => store.Comment(n),
+            var n when store.IsJSDocAuthorTag(n) => store.Comment(n),
+            var n when store.IsJSDocCallbackTag(n) => store.Comment(n),
+            var n when store.IsJSDocClassTag(n) => store.Comment(n),
+            var n when store.IsJSDocDeprecatedTag(n) => store.Comment(n),
+            var n when store.IsJSDocEnumTag(n) => store.Comment(n),
+            var n when store.IsJSDocImplementsTag(n) => store.Comment(n),
+            var n when store.IsJSDocImportTag(n) => store.Comment(n),
+            var n when store.IsJSDocOverloadTag(n) => store.Comment(n),
+            var n when store.IsJSDocOverrideTag(n) => store.Comment(n),
+            var n when store.IsJSDocParameterTag(n) => store.Comment(n),
+            var n when store.IsJSDocPrivateTag(n) => store.Comment(n),
+            var n when store.IsJSDocPropertyTag(n) => store.Comment(n),
+            var n when store.IsJSDocProtectedTag(n) => store.Comment(n),
+            var n when store.IsJSDocPublicTag(n) => store.Comment(n),
+            var n when store.IsJSDocReadonlyTag(n) => store.Comment(n),
+            var n when store.IsJSDocReturnTag(n) => store.Comment(n),
+            var n when store.IsJSDocSatisfiesTag(n) => store.Comment(n),
+            var n when store.IsJSDocSeeTag(n) => store.Comment(n),
+            var n when store.IsJSDocTemplateTag(n) => store.Comment(n),
+            var n when store.IsJSDocThisTag(n) => store.Comment(n),
+            var n when store.IsJSDocThrowsTag(n) => store.Comment(n),
+            var n when store.IsJSDocTypeTag(n) => store.Comment(n),
+            var n when store.IsJSDocTypedefTag(n) => store.Comment(n),
+            var n when store.IsJSDocUnknownTag(n) => store.Comment(n),
+            _ => throw new InvalidOperationException($"{store.Kind(node)} is not a JSDoc tag"),
         };
     }
 
     /// <summary>`node.typeExpression = typeExpression` on the type-like JSDoc tags.</summary>
-    private static void SetJSDocTypeLikeTagTypeExpression(Node node, JSDocTypeExpression? typeExpression)
+    private static void SetJSDocTypeLikeTagTypeExpression(NodeStore store, Node node, Node typeExpression)
     {
         switch (node)
         {
-            case JSDocTypeTag n: n.TypeExpression = typeExpression!; break;
-            case JSDocReturnTag n: n.TypeExpression = typeExpression; break;
-            case JSDocThisTag n: n.TypeExpression = typeExpression!; break;
-            case JSDocThrowsTag n: n.TypeExpression = typeExpression; break;
-            case JSDocSatisfiesTag n: n.TypeExpression = typeExpression!; break;
-            case JSDocEnumTag n: n.TypeExpression = typeExpression!; break;
-            default: throw new InvalidOperationException($"{node.Kind} is not a type-like JSDoc tag");
+            case var n when store.IsJSDocTypeTag(n): store.SetTypeExpression(n, typeExpression); break;
+            case var n when store.IsJSDocReturnTag(n): store.SetTypeExpression(n, typeExpression); break;
+            case var n when store.IsJSDocThisTag(n): store.SetTypeExpression(n, typeExpression); break;
+            case var n when store.IsJSDocThrowsTag(n): store.SetTypeExpression(n, typeExpression); break;
+            case var n when store.IsJSDocSatisfiesTag(n): store.SetTypeExpression(n, typeExpression); break;
+            case var n when store.IsJSDocEnumTag(n): store.SetTypeExpression(n, typeExpression); break;
+            default: throw new InvalidOperationException($"{store.Kind(node)} is not a type-like JSDoc tag");
         }
     }
 
     /// <summary>`node.typeExpression` on the type-like JSDoc tags.</summary>
-    private static JSDocTypeExpression? GetJSDocTypeLikeTagTypeExpression(Node node)
+    private static Node GetJSDocTypeLikeTagTypeExpression(NodeStore store, Node node)
     {
         return node switch
         {
-            JSDocTypeTag n => n.TypeExpression,
-            JSDocReturnTag n => n.TypeExpression,
-            JSDocThisTag n => n.TypeExpression,
-            JSDocThrowsTag n => n.TypeExpression,
-            JSDocSatisfiesTag n => n.TypeExpression,
-            JSDocEnumTag n => n.TypeExpression,
-            _ => throw new InvalidOperationException($"{node.Kind} is not a type-like JSDoc tag"),
+            var n when store.IsJSDocTypeTag(n) => store.TypeExpression(n),
+            var n when store.IsJSDocReturnTag(n) => store.TypeExpression(n),
+            var n when store.IsJSDocThisTag(n) => store.TypeExpression(n),
+            var n when store.IsJSDocThrowsTag(n) => store.TypeExpression(n),
+            var n when store.IsJSDocSatisfiesTag(n) => store.TypeExpression(n),
+            var n when store.IsJSDocEnumTag(n) => store.TypeExpression(n),
+            _ => throw new InvalidOperationException($"{store.Kind(node)} is not a type-like JSDoc tag"),
         };
     }
 
     // @api
-    internal JSDocTemplateTag CreateJSDocTemplateTag(Identifier? tagName, JSDocTypeExpression? constraint, IReadOnlyList<Node> typeParameters, object? comment = null)
+    internal Node CreateJSDocTemplateTag(Node tagName, Node constraint, IReadOnlyList<Node> typeParameters, object? comment = null)
     {
-        var node = (JSDocTemplateTag)CreateBaseJSDocTag(SyntaxKind.JSDocTemplateTag, tagName ?? CreateIdentifier("template"), comment);
-        node.Constraint = constraint!;
-        node.TypeParameters = CreateNodeArray(typeParameters);
+        var node = CreateBaseJSDocTag(SyntaxKind.JSDocTemplateTag, (tagName.IsNone ? CreateIdentifier("template") : tagName), comment);
+        store.SetConstraint(node, constraint);
+        store.SetTypeParameters(node, CreateNodeArray(store, typeParameters));
         return node;
     }
 
     // @api
-    internal JSDocTypedefTag CreateJSDocTypedefTag(Identifier? tagName, Node? typeExpression = null, Node? fullName = null, object? comment = null)
+    internal Node CreateJSDocTypedefTag(Node tagName, Node typeExpression = default, Node fullName = default, object? comment = null)
     {
-        var node = (JSDocTypedefTag)CreateBaseJSDocTagDeclaration(SyntaxKind.JSDocTypedefTag, tagName ?? CreateIdentifier("typedef"), comment);
-        node.TypeExpression = typeExpression;
-        node.FullName = fullName;
-        node.Name = FactoryUtilities.GetJSDocTypeAliasName(fullName);
+        var node = CreateBaseJSDocTagDeclaration(SyntaxKind.JSDocTypedefTag, (tagName.IsNone ? CreateIdentifier("typedef") : tagName), comment);
+        store.SetTypeExpression(node, typeExpression);
+        store.SetFullName(node, fullName);
+        store.SetName(node, FactoryUtilities.GetJSDocTypeAliasName(store, fullName));
         // node.locals = undefined; // initialized by binder (LocalsContainer)
         // node.nextContainer = undefined; // initialized by binder (LocalsContainer)
         return node;
     }
 
     // @api
-    internal JSDocParameterTag CreateJSDocParameterTag(Identifier? tagName, Node name, bool isBracketed, JSDocTypeExpression? typeExpression = null, bool? isNameFirst = null, object? comment = null)
+    internal Node CreateJSDocParameterTag(Node tagName, Node name, bool isBracketed, Node typeExpression = default, bool? isNameFirst = null, object? comment = null)
     {
-        var node = (JSDocParameterTag)CreateBaseJSDocTagDeclaration(SyntaxKind.JSDocParameterTag, tagName ?? CreateIdentifier("param"), comment);
-        node.TypeExpression = typeExpression;
-        node.Name = name;
-        node.IsNameFirst = isNameFirst == true;
-        node.IsBracketed = isBracketed;
+        var node = CreateBaseJSDocTagDeclaration(SyntaxKind.JSDocParameterTag, (tagName.IsNone ? CreateIdentifier("param") : tagName), comment);
+        store.SetTypeExpression(node, typeExpression);
+        store.SetName(node, name);
+        store.SetIsNameFirst(node, isNameFirst == true);
+        store.SetIsBracketed(node, isBracketed);
         return node;
     }
 
     // @api
-    internal JSDocPropertyTag CreateJSDocPropertyTag(Identifier? tagName, Node name, bool isBracketed, JSDocTypeExpression? typeExpression = null, bool? isNameFirst = null, object? comment = null)
+    internal Node CreateJSDocPropertyTag(Node tagName, Node name, bool isBracketed, Node typeExpression = default, bool? isNameFirst = null, object? comment = null)
     {
-        var node = (JSDocPropertyTag)CreateBaseJSDocTagDeclaration(SyntaxKind.JSDocPropertyTag, tagName ?? CreateIdentifier("prop"), comment);
-        node.TypeExpression = typeExpression;
-        node.Name = name;
-        node.IsNameFirst = isNameFirst == true;
-        node.IsBracketed = isBracketed;
+        var node = CreateBaseJSDocTagDeclaration(SyntaxKind.JSDocPropertyTag, (tagName.IsNone ? CreateIdentifier("prop") : tagName), comment);
+        store.SetTypeExpression(node, typeExpression);
+        store.SetName(node, name);
+        store.SetIsNameFirst(node, isNameFirst == true);
+        store.SetIsBracketed(node, isBracketed);
         return node;
     }
 
     // @api
-    internal JSDocCallbackTag CreateJSDocCallbackTag(Identifier? tagName, JSDocSignature typeExpression, Node? fullName = null, object? comment = null)
+    internal Node CreateJSDocCallbackTag(Node tagName, Node typeExpression, Node fullName = default, object? comment = null)
     {
-        var node = (JSDocCallbackTag)CreateBaseJSDocTagDeclaration(SyntaxKind.JSDocCallbackTag, tagName ?? CreateIdentifier("callback"), comment);
-        node.TypeExpression = typeExpression;
-        node.FullName = fullName;
-        node.Name = FactoryUtilities.GetJSDocTypeAliasName(fullName);
+        var node = CreateBaseJSDocTagDeclaration(SyntaxKind.JSDocCallbackTag, (tagName.IsNone ? CreateIdentifier("callback") : tagName), comment);
+        store.SetTypeExpression(node, typeExpression);
+        store.SetFullName(node, fullName);
+        store.SetName(node, FactoryUtilities.GetJSDocTypeAliasName(store, fullName));
         // node.locals = undefined; // initialized by binder (LocalsContainer)
         // node.nextContainer = undefined; // initialized by binder (LocalsContainer)
         return node;
     }
 
     // @api
-    internal JSDocOverloadTag CreateJSDocOverloadTag(Identifier? tagName, JSDocSignature typeExpression, object? comment = null)
+    internal Node CreateJSDocOverloadTag(Node tagName, Node typeExpression, object? comment = null)
     {
-        var node = (JSDocOverloadTag)CreateBaseJSDocTag(SyntaxKind.JSDocOverloadTag, tagName ?? CreateIdentifier("overload"), comment);
-        node.TypeExpression = typeExpression;
+        var node = CreateBaseJSDocTag(SyntaxKind.JSDocOverloadTag, (tagName.IsNone ? CreateIdentifier("overload") : tagName), comment);
+        store.SetTypeExpression(node, typeExpression);
         return node;
     }
 
     // @api
-    internal JSDocAugmentsTag CreateJSDocAugmentsTag(Identifier? tagName, Node className, object? comment = null)
+    internal Node CreateJSDocAugmentsTag(Node tagName, Node className, object? comment = null)
     {
-        var node = (JSDocAugmentsTag)CreateBaseJSDocTag(SyntaxKind.JSDocAugmentsTag, tagName ?? CreateIdentifier("augments"), comment);
-        node.Class = className;
+        var node = CreateBaseJSDocTag(SyntaxKind.JSDocAugmentsTag, (tagName.IsNone ? CreateIdentifier("augments") : tagName), comment);
+        store.SetClass(node, className);
         return node;
     }
 
     // @api
-    internal JSDocImplementsTag CreateJSDocImplementsTag(Identifier? tagName, Node className, object? comment = null)
+    internal Node CreateJSDocImplementsTag(Node tagName, Node className, object? comment = null)
     {
-        var node = (JSDocImplementsTag)CreateBaseJSDocTag(SyntaxKind.JSDocImplementsTag, tagName ?? CreateIdentifier("implements"), comment);
-        node.Class = className;
+        var node = CreateBaseJSDocTag(SyntaxKind.JSDocImplementsTag, (tagName.IsNone ? CreateIdentifier("implements") : tagName), comment);
+        store.SetClass(node, className);
         return node;
     }
 
     // @api
-    internal JSDocSeeTag CreateJSDocSeeTag(Identifier? tagName, JSDocNameReference? name, object? comment = null)
+    internal Node CreateJSDocSeeTag(Node tagName, Node name, object? comment = null)
     {
-        var node = (JSDocSeeTag)CreateBaseJSDocTag(SyntaxKind.JSDocSeeTag, tagName ?? CreateIdentifier("see"), comment);
-        node.Name = name;
+        var node = CreateBaseJSDocTag(SyntaxKind.JSDocSeeTag, (tagName.IsNone ? CreateIdentifier("see") : tagName), comment);
+        store.SetName(node, name);
         return node;
     }
 
     // @api
-    internal JSDocNameReference CreateJSDocNameReference(Node name)
+    internal Node CreateJSDocNameReference(Node name)
     {
-        var node = CreateBaseNode<JSDocNameReference>(SyntaxKind.JSDocNameReference);
-        node.Name = name;
+        var node = CreateBaseNode(SyntaxKind.JSDocNameReference);
+        store.SetName(node, name);
         return node;
     }
 
     // @api
-    internal JSDocMemberName CreateJSDocMemberName(Node left, Identifier right)
+    internal Node CreateJSDocMemberName(Node left, Node right)
     {
-        var node = CreateBaseNode<JSDocMemberName>(SyntaxKind.JSDocMemberName);
-        node.Left = left;
-        node.Right = right;
-        node.TransformFlags |= PropagateChildFlags(node.Left) |
-            PropagateChildFlags(node.Right);
+        var node = CreateBaseNode(SyntaxKind.JSDocMemberName);
+        store.SetLeft(node, left);
+        store.SetRight(node, right);
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.Left(node)) |
+            PropagateChildFlags(store, store.Right(node))));
         return node;
     }
 
     // @api
-    internal JSDocLink CreateJSDocLink(Node? name, string text)
+    internal Node CreateJSDocLink(Node name, string text)
     {
-        var node = CreateBaseNode<JSDocLink>(SyntaxKind.JSDocLink);
-        node.Name = name;
-        node.Text = text;
+        var node = CreateBaseNode(SyntaxKind.JSDocLink);
+        store.SetName(node, name);
+        store.SetText(node, text);
         return node;
     }
 
     // @api
-    internal JSDocLinkCode CreateJSDocLinkCode(Node? name, string text)
+    internal Node CreateJSDocLinkCode(Node name, string text)
     {
-        var node = CreateBaseNode<JSDocLinkCode>(SyntaxKind.JSDocLinkCode);
-        node.Name = name;
-        node.Text = text;
+        var node = CreateBaseNode(SyntaxKind.JSDocLinkCode);
+        store.SetName(node, name);
+        store.SetText(node, text);
         return node;
     }
 
     // @api
-    internal JSDocLinkPlain CreateJSDocLinkPlain(Node? name, string text)
+    internal Node CreateJSDocLinkPlain(Node name, string text)
     {
-        var node = CreateBaseNode<JSDocLinkPlain>(SyntaxKind.JSDocLinkPlain);
-        node.Name = name;
-        node.Text = text;
+        var node = CreateBaseNode(SyntaxKind.JSDocLinkPlain);
+        store.SetName(node, name);
+        store.SetText(node, text);
         return node;
     }
 
@@ -497,9 +496,9 @@ internal sealed partial class NodeFactory
     // createJSDocProtectedTag
     // createJSDocReadonlyTag
     // createJSDocDeprecatedTag
-    private Node CreateJSDocSimpleTagWorker(SyntaxKind kind, Identifier? tagName, object? comment = null)
+    private Node CreateJSDocSimpleTagWorker(SyntaxKind kind, Node tagName, object? comment = null)
     {
-        var node = CreateBaseJSDocTag(kind, tagName ?? CreateIdentifier(GetDefaultTagNameForKind(kind)), comment);
+        var node = CreateBaseJSDocTag(kind, (tagName.IsNone ? CreateIdentifier(GetDefaultTagNameForKind(kind)) : tagName), comment);
         return node;
     }
 
@@ -510,11 +509,11 @@ internal sealed partial class NodeFactory
     // updateJSDocProtectedTag
     // updateJSDocReadonlyTag
     // updateJSDocDeprecatedTag
-    private Node UpdateJSDocSimpleTagWorker(SyntaxKind kind, Node node, Identifier? tagName, object? comment)
+    private Node UpdateJSDocSimpleTagWorker(SyntaxKind kind, Node node, Node tagName, object? comment)
     {
-        tagName ??= GetDefaultTagName(node);
-        return GetJSDocTagName(node) != tagName
-                || !Equals(GetJSDocTagComment(node), comment) // `!==`: strings by value, NodeArrays by reference
+        tagName = tagName.IsNone ? GetDefaultTagName(node) : tagName;
+        return GetJSDocTagName(store, node) != tagName
+                || !Equals(GetJSDocTagComment(store, node), comment) // `!==`: strings by value, NodeArrays by reference
             ? Update(CreateJSDocSimpleTagWorker(kind, tagName, comment), node) :
             node;
     }
@@ -524,10 +523,10 @@ internal sealed partial class NodeFactory
     // createJSDocThisTag
     // createJSDocEnumTag
     // createJSDocSatisfiesTag
-    private Node CreateJSDocTypeLikeTagWorker(SyntaxKind kind, Identifier? tagName, JSDocTypeExpression? typeExpression = null, object? comment = null)
+    private Node CreateJSDocTypeLikeTagWorker(SyntaxKind kind, Node tagName, Node typeExpression = default, object? comment = null)
     {
-        var node = CreateBaseJSDocTag(kind, tagName ?? CreateIdentifier(GetDefaultTagNameForKind(kind)), comment);
-        SetJSDocTypeLikeTagTypeExpression(node, typeExpression);
+        var node = CreateBaseJSDocTag(kind, (tagName.IsNone ? CreateIdentifier(GetDefaultTagNameForKind(kind)) : tagName), comment);
+        SetJSDocTypeLikeTagTypeExpression(store, node, typeExpression);
         return node;
     }
 
@@ -536,97 +535,97 @@ internal sealed partial class NodeFactory
     // updateJSDocThisTag
     // updateJSDocEnumTag
     // updateJSDocSatisfiesTag
-    private Node UpdateJSDocTypeLikeTagWorker(SyntaxKind kind, Node node, Identifier? tagName, JSDocTypeExpression? typeExpression, object? comment)
+    private Node UpdateJSDocTypeLikeTagWorker(SyntaxKind kind, Node node, Node tagName, Node typeExpression, object? comment)
     {
-        tagName ??= GetDefaultTagName(node);
-        return GetJSDocTagName(node) != tagName
-                || GetJSDocTypeLikeTagTypeExpression(node) != typeExpression
-                || !Equals(GetJSDocTagComment(node), comment) // `!==`: strings by value, NodeArrays by reference
+        tagName = tagName.IsNone ? GetDefaultTagName(node) : tagName;
+        return GetJSDocTagName(store, node) != tagName
+                || GetJSDocTypeLikeTagTypeExpression(store, node) != typeExpression
+                || !Equals(GetJSDocTagComment(store, node), comment) // `!==`: strings by value, NodeArrays by reference
             ? Update(CreateJSDocTypeLikeTagWorker(kind, tagName, typeExpression, comment), node)
             : node;
     }
 
     // @api
-    internal JSDocTypeTag CreateJSDocTypeTag(Identifier? tagName, JSDocTypeExpression? typeExpression = null, object? comment = null) => (JSDocTypeTag)CreateJSDocTypeLikeTagWorker(SyntaxKind.JSDocTypeTag, tagName, typeExpression, comment);
+    internal Node CreateJSDocTypeTag(Node tagName, Node typeExpression = default, object? comment = null) => CreateJSDocTypeLikeTagWorker(SyntaxKind.JSDocTypeTag, tagName, typeExpression, comment);
 
     // @api
-    internal JSDocReturnTag CreateJSDocReturnTag(Identifier? tagName, JSDocTypeExpression? typeExpression = null, object? comment = null) => (JSDocReturnTag)CreateJSDocTypeLikeTagWorker(SyntaxKind.JSDocReturnTag, tagName, typeExpression, comment);
+    internal Node CreateJSDocReturnTag(Node tagName, Node typeExpression = default, object? comment = null) => CreateJSDocTypeLikeTagWorker(SyntaxKind.JSDocReturnTag, tagName, typeExpression, comment);
 
     // @api
-    internal JSDocThisTag CreateJSDocThisTag(Identifier? tagName, JSDocTypeExpression? typeExpression = null, object? comment = null) => (JSDocThisTag)CreateJSDocTypeLikeTagWorker(SyntaxKind.JSDocThisTag, tagName, typeExpression, comment);
+    internal Node CreateJSDocThisTag(Node tagName, Node typeExpression = default, object? comment = null) => CreateJSDocTypeLikeTagWorker(SyntaxKind.JSDocThisTag, tagName, typeExpression, comment);
 
     // @api
-    internal JSDocThrowsTag CreateJSDocThrowsTag(Identifier? tagName, JSDocTypeExpression? typeExpression = null, object? comment = null) => (JSDocThrowsTag)CreateJSDocTypeLikeTagWorker(SyntaxKind.JSDocThrowsTag, tagName, typeExpression, comment);
+    internal Node CreateJSDocThrowsTag(Node tagName, Node typeExpression = default, object? comment = null) => CreateJSDocTypeLikeTagWorker(SyntaxKind.JSDocThrowsTag, tagName, typeExpression, comment);
 
     // @api
-    internal JSDocSatisfiesTag CreateJSDocSatisfiesTag(Identifier? tagName, JSDocTypeExpression? typeExpression = null, object? comment = null) => (JSDocSatisfiesTag)CreateJSDocTypeLikeTagWorker(SyntaxKind.JSDocSatisfiesTag, tagName, typeExpression, comment);
+    internal Node CreateJSDocSatisfiesTag(Node tagName, Node typeExpression = default, object? comment = null) => CreateJSDocTypeLikeTagWorker(SyntaxKind.JSDocSatisfiesTag, tagName, typeExpression, comment);
 
     // @api
-    internal JSDocAuthorTag CreateJSDocAuthorTag(Identifier? tagName, object? comment = null) => (JSDocAuthorTag)CreateJSDocSimpleTagWorker(SyntaxKind.JSDocAuthorTag, tagName, comment);
+    internal Node CreateJSDocAuthorTag(Node tagName, object? comment = null) => CreateJSDocSimpleTagWorker(SyntaxKind.JSDocAuthorTag, tagName, comment);
 
     // @api
-    internal JSDocClassTag CreateJSDocClassTag(Identifier? tagName, object? comment = null) => (JSDocClassTag)CreateJSDocSimpleTagWorker(SyntaxKind.JSDocClassTag, tagName, comment);
+    internal Node CreateJSDocClassTag(Node tagName, object? comment = null) => CreateJSDocSimpleTagWorker(SyntaxKind.JSDocClassTag, tagName, comment);
 
     // @api
-    internal JSDocPublicTag CreateJSDocPublicTag(Identifier? tagName, object? comment = null) => (JSDocPublicTag)CreateJSDocSimpleTagWorker(SyntaxKind.JSDocPublicTag, tagName, comment);
+    internal Node CreateJSDocPublicTag(Node tagName, object? comment = null) => CreateJSDocSimpleTagWorker(SyntaxKind.JSDocPublicTag, tagName, comment);
 
     // @api
-    internal JSDocPrivateTag CreateJSDocPrivateTag(Identifier? tagName, object? comment = null) => (JSDocPrivateTag)CreateJSDocSimpleTagWorker(SyntaxKind.JSDocPrivateTag, tagName, comment);
+    internal Node CreateJSDocPrivateTag(Node tagName, object? comment = null) => CreateJSDocSimpleTagWorker(SyntaxKind.JSDocPrivateTag, tagName, comment);
 
     // @api
-    internal JSDocProtectedTag CreateJSDocProtectedTag(Identifier? tagName, object? comment = null) => (JSDocProtectedTag)CreateJSDocSimpleTagWorker(SyntaxKind.JSDocProtectedTag, tagName, comment);
+    internal Node CreateJSDocProtectedTag(Node tagName, object? comment = null) => CreateJSDocSimpleTagWorker(SyntaxKind.JSDocProtectedTag, tagName, comment);
 
     // @api
-    internal JSDocReadonlyTag CreateJSDocReadonlyTag(Identifier? tagName, object? comment = null) => (JSDocReadonlyTag)CreateJSDocSimpleTagWorker(SyntaxKind.JSDocReadonlyTag, tagName, comment);
+    internal Node CreateJSDocReadonlyTag(Node tagName, object? comment = null) => CreateJSDocSimpleTagWorker(SyntaxKind.JSDocReadonlyTag, tagName, comment);
 
     // @api
-    internal JSDocOverrideTag CreateJSDocOverrideTag(Identifier? tagName, object? comment = null) => (JSDocOverrideTag)CreateJSDocSimpleTagWorker(SyntaxKind.JSDocOverrideTag, tagName, comment);
+    internal Node CreateJSDocOverrideTag(Node tagName, object? comment = null) => CreateJSDocSimpleTagWorker(SyntaxKind.JSDocOverrideTag, tagName, comment);
 
     // @api
-    internal JSDocDeprecatedTag CreateJSDocDeprecatedTag(Identifier? tagName, object? comment = null) => (JSDocDeprecatedTag)CreateJSDocSimpleTagWorker(SyntaxKind.JSDocDeprecatedTag, tagName, comment);
+    internal Node CreateJSDocDeprecatedTag(Node tagName, object? comment = null) => CreateJSDocSimpleTagWorker(SyntaxKind.JSDocDeprecatedTag, tagName, comment);
 
     // @api
-    internal JSDocUnknownTag CreateJSDocUnknownTag(Identifier tagName, object? comment = null)
+    internal Node CreateJSDocUnknownTag(Node tagName, object? comment = null)
     {
-        var node = (JSDocUnknownTag)CreateBaseJSDocTag(SyntaxKind.JSDocTag, tagName, comment);
+        var node = CreateBaseJSDocTag(SyntaxKind.JSDocTag, tagName, comment);
         return node;
     }
 
     // @api
-    internal JSDocEnumTag CreateJSDocEnumTag(Identifier? tagName, JSDocTypeExpression typeExpression, object? comment = null)
+    internal Node CreateJSDocEnumTag(Node tagName, Node typeExpression, object? comment = null)
     {
-        var node = (JSDocEnumTag)CreateBaseJSDocTagDeclaration(SyntaxKind.JSDocEnumTag, tagName ?? CreateIdentifier(GetDefaultTagNameForKind(SyntaxKind.JSDocEnumTag)), comment);
-        node.TypeExpression = typeExpression;
+        var node = CreateBaseJSDocTagDeclaration(SyntaxKind.JSDocEnumTag, (tagName.IsNone ? CreateIdentifier(GetDefaultTagNameForKind(SyntaxKind.JSDocEnumTag)) : tagName), comment);
+        store.SetTypeExpression(node, typeExpression);
         // node.locals = undefined; // initialized by binder (LocalsContainer)
         // node.nextContainer = undefined; // initialized by binder (LocalsContainer)
         return node;
     }
 
     // @api
-    internal JSDocImportTag CreateJSDocImportTag(Identifier? tagName, ImportClause? importClause, Node moduleSpecifier, ImportAttributes? attributes = null, object? comment = null)
+    internal Node CreateJSDocImportTag(Node tagName, Node importClause, Node moduleSpecifier, Node attributes = default, object? comment = null)
     {
-        var node = (JSDocImportTag)CreateBaseJSDocTag(SyntaxKind.JSDocImportTag, tagName ?? CreateIdentifier("import"), comment);
-        node.ImportClause = importClause;
-        node.ModuleSpecifier = moduleSpecifier;
-        node.Attributes = attributes;
-        node.Comment = comment;
+        var node = CreateBaseJSDocTag(SyntaxKind.JSDocImportTag, (tagName.IsNone ? CreateIdentifier("import") : tagName), comment);
+        store.SetImportClause(node, importClause);
+        store.SetModuleSpecifier(node, moduleSpecifier);
+        store.SetAttributes(node, attributes);
+        store.SetComment(node, comment);
         return node;
     }
 
     // @api
-    internal JSDocText CreateJSDocText(string text)
+    internal Node CreateJSDocText(string text)
     {
-        var node = CreateBaseNode<JSDocText>(SyntaxKind.JSDocText);
-        node.Text = text;
+        var node = CreateBaseNode(SyntaxKind.JSDocText);
+        store.SetText(node, text);
         return node;
     }
 
     // @api
-    internal JSDoc CreateJSDocComment(object? comment = null, IReadOnlyList<Node>? tags = null)
+    internal Node CreateJSDocComment(object? comment = null, IReadOnlyList<Node>? tags = null)
     {
-        var node = CreateBaseNode<JSDoc>(SyntaxKind.JSDoc);
-        node.Comment = comment;
-        node.Tags = AsNodeArray(tags);
+        var node = CreateBaseNode(SyntaxKind.JSDoc);
+        store.SetComment(node, comment);
+        store.SetTags(node, AsNodeArray(store, tags));
         return node;
     }
 }

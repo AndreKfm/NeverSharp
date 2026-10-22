@@ -230,7 +230,7 @@ internal static partial class Core
             for (var i = 0; i < array.Count; i++)
             {
                 var mapped = mapFn(array[i], i);
-                if (mapped != null)
+                if (IsDefined(mapped))
                 {
                     result.Add(mapped);
                 }
@@ -307,7 +307,7 @@ internal static partial class Core
     internal static List<T>? Append<T>(List<T>? to, T? value)
         where T : notnull
     {
-        if (value == null)
+        if (!IsDefined(value))
         {
             return to;
         }
@@ -352,7 +352,7 @@ internal static partial class Core
         var endIndex = end == null ? from.Count : ToOffset(from, end.Value);
         for (var i = startIndex; i < endIndex && i < from.Count; i++)
         {
-            if (from[i] != null)
+            if (IsDefined(from[i]))
             {
                 to.Add(from[i]);
             }
@@ -489,7 +489,7 @@ internal static partial class Core
     internal static TOut Cast<TOut, TIn>(TIn? value, Func<TIn, bool> test)
         where TOut : TIn
     {
-        if (value != null && test(value))
+        if (IsDefined(value) && test(value))
         {
             return (TOut)(object)value;
         }
@@ -753,6 +753,12 @@ internal static partial class Core
 
     //// JavaScript semantics the ported functions rely on.
 
+    /// <summary>`value !== undefined` (and not null) for a generic value; Track O: a node handle is undefined when it is None.</summary>
+    private static bool IsDefined<T>([NotNullWhen(true)] T? value)
+    {
+        return value is not null && !(value is Node node && node.IsNone);
+    }
+
     /// <summary>JavaScript truthiness of a value (`if (value)`): undefined, null, false, 0, NaN and "" are falsy.</summary>
     private static bool IsTruthy<T>(T value)
     {
@@ -763,6 +769,7 @@ internal static partial class Core
             string s => s.Length != 0,
             int i => i != 0,
             double d => d != 0 && !double.IsNaN(d),
+            Node n => !n.IsNone, // Track O: a node handle; None is undefined
             _ => true,
         };
     }

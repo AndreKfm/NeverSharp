@@ -24,23 +24,23 @@ internal sealed partial class Parser
         {
             return FinishNode(factory.CreateOmittedExpression(), pos);
         }
-        var dotDotDotToken = ParseOptionalToken<DotDotDotToken>(SyntaxKind.DotDotDotToken);
+        var dotDotDotToken = ParseOptionalToken(SyntaxKind.DotDotDotToken);
         var name = ParseIdentifierOrPattern();
         var initializer = ParseInitializer();
         return FinishNode(factory.CreateBindingElement(dotDotDotToken, /*propertyName*/ null, name, initializer), pos);
     }
 
-    private BindingElement ParseObjectBindingElement()
+    private Node ParseObjectBindingElement()
     {
         var pos = GetNodePos();
-        var dotDotDotToken = ParseOptionalToken<DotDotDotToken>(SyntaxKind.DotDotDotToken);
+        var dotDotDotToken = ParseOptionalToken(SyntaxKind.DotDotDotToken);
         var tokenIsIdentifier = IsBindingIdentifier();
-        Node? propertyName = ParsePropertyName();
+        Node propertyName = ParsePropertyName();
         Node name;
         if (tokenIsIdentifier && Token() != SyntaxKind.ColonToken)
         {
             name = propertyName;
-            propertyName = null;
+            propertyName = default;
         }
         else
         {
@@ -51,7 +51,7 @@ internal sealed partial class Parser
         return FinishNode(factory.CreateBindingElement(dotDotDotToken, propertyName, name, initializer), pos);
     }
 
-    private ObjectBindingPattern ParseObjectBindingPattern()
+    private Node ParseObjectBindingPattern()
     {
         var pos = GetNodePos();
         ParseExpected(SyntaxKind.OpenBraceToken);
@@ -60,7 +60,7 @@ internal sealed partial class Parser
         return FinishNode(factory.CreateObjectBindingPattern(elements), pos);
     }
 
-    private ArrayBindingPattern ParseArrayBindingPattern()
+    private Node ParseArrayBindingPattern()
     {
         var pos = GetNodePos();
         ParseExpected(SyntaxKind.OpenBracketToken);
@@ -90,30 +90,30 @@ internal sealed partial class Parser
         return ParseBindingIdentifier(privateIdentifierDiagnosticMessage);
     }
 
-    private VariableDeclaration ParseVariableDeclarationAllowExclamation()
+    private Node ParseVariableDeclarationAllowExclamation()
     {
         return ParseVariableDeclaration(/*allowExclamation*/ true);
     }
 
-    private VariableDeclaration ParseVariableDeclaration(bool? allowExclamation = null)
+    private Node ParseVariableDeclaration(bool? allowExclamation = null)
     {
         var pos = GetNodePos();
         var hasJSDoc = HasPrecedingJSDocComment();
         var name = ParseIdentifierOrPattern(Diagnostics.Private_identifiers_are_not_allowed_in_variable_declarations);
-        ExclamationToken? exclamationToken = null;
+        Node exclamationToken = default;
         if (
-            allowExclamation == true && name.Kind == SyntaxKind.Identifier &&
+            allowExclamation == true && store.Kind(name) == SyntaxKind.Identifier &&
             Token() == SyntaxKind.ExclamationToken && !scanner.HasPrecedingLineBreak())
         {
-            exclamationToken = ParseTokenNode<ExclamationToken>();
+            exclamationToken = ParseTokenNode();
         }
         var type = ParseTypeAnnotation();
-        var initializer = IsInOrOfKeyword(Token()) ? null : ParseInitializer();
+        var initializer = IsInOrOfKeyword(Token()) ? default : ParseInitializer();
         var node = factory.CreateVariableDeclaration(name, exclamationToken, type, initializer);
         return WithJSDoc(FinishNode(node, pos), hasJSDoc);
     }
 
-    private VariableDeclarationList ParseVariableDeclarationList(bool inForStatementInitializer)
+    private Node ParseVariableDeclarationList(bool inForStatementInitializer)
     {
         var pos = GetNodePos();
 
@@ -180,7 +180,7 @@ internal sealed partial class Parser
         return NextTokenIsIdentifier() && NextToken() == SyntaxKind.CloseParenToken;
     }
 
-    private VariableStatement ParseVariableStatement(int pos, bool hasJSDoc, NodeArray? modifiers)
+    private Node ParseVariableStatement(int pos, bool hasJSDoc, NodeArray? modifiers)
     {
         var declarationList = ParseVariableDeclarationList(/*inForStatementInitializer*/ false);
         ParseSemicolon();
@@ -188,15 +188,15 @@ internal sealed partial class Parser
         return WithJSDoc(FinishNode(node, pos), hasJSDoc);
     }
 
-    private FunctionDeclaration ParseFunctionDeclaration(int pos, bool hasJSDoc, NodeArray? modifiers)
+    private Node ParseFunctionDeclaration(int pos, bool hasJSDoc, NodeArray? modifiers)
     {
         var savedAwaitContext = InAwaitContext();
-        var modifierFlags = Utilities.ModifiersToFlags(modifiers);
+        var modifierFlags = Utilities.ModifiersToFlags(store, modifiers);
         ParseExpected(SyntaxKind.FunctionKeyword);
-        var asteriskToken = ParseOptionalToken<AsteriskToken>(SyntaxKind.AsteriskToken);
+        var asteriskToken = ParseOptionalToken(SyntaxKind.AsteriskToken);
         // We don't parse the name here in await context, instead we will report a grammar error in the checker.
         var name = (modifierFlags & ModifierFlags.Default) != 0 ? ParseOptionalBindingIdentifier() : ParseBindingIdentifier();
-        var isGenerator = asteriskToken != null ? SignatureFlags.Yield : SignatureFlags.None;
+        var isGenerator = !asteriskToken.IsNone ? SignatureFlags.Yield : SignatureFlags.None;
         var isAsync = (modifierFlags & ModifierFlags.Async) != 0 ? SignatureFlags.Await : SignatureFlags.None;
         var typeParameters = ParseTypeParameters();
         if ((modifierFlags & ModifierFlags.Export) != 0)
@@ -223,13 +223,13 @@ internal sealed partial class Parser
             return TryParse(p =>
             {
                 var literalNode = ParseLiteralNode();
-                return ((StringLiteral)literalNode).Text == "constructor" ? literalNode : null;
+                return store.Text(literalNode) == "constructor" ? literalNode : default;
             });
         }
         return null;
     }
 
-    private ConstructorDeclaration? TryParseConstructorDeclaration(int pos, bool hasJSDoc, NodeArray? modifiers)
+    private Node TryParseConstructorDeclaration(int pos, bool hasJSDoc, NodeArray? modifiers)
     {
         return TryParse(p =>
         {
@@ -242,26 +242,26 @@ internal sealed partial class Parser
                 var node = factory.CreateConstructorDeclaration(modifiers, parameters, body);
 
                 // Attach invalid nodes if they exist so that we can report them in the grammar checker.
-                node.TypeParameters = typeParameters;
-                node.Type = type;
+                store.SetTypeParameters(node, typeParameters);
+                store.SetType(node, type);
                 return WithJSDoc(FinishNode(node, pos), hasJSDoc);
             }
-            return null;
+            return default;
         });
     }
 
-    private MethodDeclaration ParseMethodDeclaration(
+    private Node ParseMethodDeclaration(
         int pos,
         bool hasJSDoc,
         NodeArray? modifiers,
-        AsteriskToken? asteriskToken,
+        Node asteriskToken,
         Node name,
-        QuestionToken? questionToken,
-        ExclamationToken? exclamationToken,
+        Node questionToken,
+        Node exclamationToken,
         DiagnosticMessage? diagnosticMessage = null)
     {
-        var isGenerator = asteriskToken != null ? SignatureFlags.Yield : SignatureFlags.None;
-        var isAsync = Core.Some(modifiers, FactoryNodeTests.IsAsyncModifier) ? SignatureFlags.Await : SignatureFlags.None;
+        var isGenerator = !asteriskToken.IsNone ? SignatureFlags.Yield : SignatureFlags.None;
+        var isAsync = Core.Some(modifiers, ((a0) => FactoryNodeTests.IsAsyncModifier(store, a0))) ? SignatureFlags.Await : SignatureFlags.None;
         var typeParameters = ParseTypeParameters();
         var parameters = ParseParameters(isGenerator | isAsync);
         var type = ParseReturnType(SyntaxKind.ColonToken, /*isType*/ false);
@@ -277,25 +277,25 @@ internal sealed partial class Parser
             body);
 
         // An exclamation token on a method is invalid syntax and will be handled by the grammar checker
-        node.ExclamationToken = exclamationToken;
+        store.SetExclamationToken(node, exclamationToken);
         return WithJSDoc(FinishNode(node, pos), hasJSDoc);
     }
 
-    private PropertyDeclaration ParsePropertyDeclaration(
+    private Node ParsePropertyDeclaration(
         int pos,
         bool hasJSDoc,
         NodeArray? modifiers,
         Node name,
-        QuestionToken? questionToken)
+        Node questionToken)
     {
-        var exclamationToken = questionToken == null && !scanner.HasPrecedingLineBreak() ? ParseOptionalToken<ExclamationToken>(SyntaxKind.ExclamationToken) : null;
+        var exclamationToken = questionToken.IsNone && !scanner.HasPrecedingLineBreak() ? ParseOptionalToken(SyntaxKind.ExclamationToken) : default;
         var type = ParseTypeAnnotation();
         var initializer = DoOutsideOfContext(NodeFlags.YieldContext | NodeFlags.AwaitContext | NodeFlags.DisallowInContext, static p => p.ParseInitializer());
         ParseSemicolonAfterPropertyName(name, type, initializer);
         var node = factory.CreatePropertyDeclaration(
             modifiers,
             name,
-            (Node?)questionToken ?? exclamationToken,
+            (questionToken is { IsNone: false } __t1 ? __t1 : exclamationToken),
             type,
             initializer);
         return WithJSDoc(FinishNode(node, pos), hasJSDoc);
@@ -306,14 +306,14 @@ internal sealed partial class Parser
         bool hasJSDoc,
         NodeArray? modifiers)
     {
-        var asteriskToken = ParseOptionalToken<AsteriskToken>(SyntaxKind.AsteriskToken);
+        var asteriskToken = ParseOptionalToken(SyntaxKind.AsteriskToken);
         var name = ParsePropertyName();
         // Note: this is not legal as per the grammar.  But we allow it in the parser and
         // report an error in the grammar checker.
-        var questionToken = ParseOptionalToken<QuestionToken>(SyntaxKind.QuestionToken);
-        if (asteriskToken != null || Token() == SyntaxKind.OpenParenToken || Token() == SyntaxKind.LessThanToken)
+        var questionToken = ParseOptionalToken(SyntaxKind.QuestionToken);
+        if (!asteriskToken.IsNone || Token() == SyntaxKind.OpenParenToken || Token() == SyntaxKind.LessThanToken)
         {
-            return ParseMethodDeclaration(pos, hasJSDoc, modifiers, asteriskToken, name, questionToken, /*exclamationToken*/ null, Diagnostics.or_expected);
+            return ParseMethodDeclaration(pos, hasJSDoc, modifiers, asteriskToken, name, questionToken, /*exclamationToken*/ default, Diagnostics.or_expected);
         }
         return ParsePropertyDeclaration(pos, hasJSDoc, modifiers, name, questionToken);
     }
@@ -326,20 +326,20 @@ internal sealed partial class Parser
         var type = ParseReturnType(SyntaxKind.ColonToken, /*isType*/ false);
         var body = ParseFunctionBlockOrSemicolon(flags);
         var node = kind == SyntaxKind.GetAccessor
-            ? (Node)factory.CreateGetAccessorDeclaration(modifiers, name, parameters, type, body)
+            ? factory.CreateGetAccessorDeclaration(modifiers, name, parameters, type, body)
             : factory.CreateSetAccessorDeclaration(modifiers, name, parameters, body);
         // Keep track of `typeParameters` (for both) and `type` (for setters) if they were parsed those indicate grammar errors
-        if (node is GetAccessorDeclaration getAccessor)
+        if ((node is var getAccessor && store.IsGetAccessorDeclaration(getAccessor)))
         {
-            getAccessor.TypeParameters = typeParameters;
+            store.SetTypeParameters(getAccessor, typeParameters);
         }
         else
         {
-            ((SetAccessorDeclaration)node).TypeParameters = typeParameters;
+            store.SetTypeParameters(node, typeParameters);
         }
-        if (FactoryNodeTests.IsSetAccessorDeclaration(node))
+        if (FactoryNodeTests.IsSetAccessorDeclaration(store, node))
         {
-            ((SetAccessorDeclaration)node).Type = type;
+            store.SetType(node, type);
         }
         return WithJSDoc(FinishNode(node, pos), hasJSDoc);
     }
@@ -423,16 +423,16 @@ internal sealed partial class Parser
         return false;
     }
 
-    private ClassStaticBlockDeclaration ParseClassStaticBlockDeclaration(int pos, bool hasJSDoc, NodeArray? modifiers)
+    private Node ParseClassStaticBlockDeclaration(int pos, bool hasJSDoc, NodeArray? modifiers)
     {
         ParseExpectedToken(SyntaxKind.StaticKeyword);
         var body = ParseClassStaticBlockBody();
         var node = WithJSDoc(FinishNode(factory.CreateClassStaticBlockDeclaration(body), pos), hasJSDoc);
-        node.Modifiers = modifiers;
+        store.SetModifiers(node, modifiers);
         return node;
     }
 
-    private Block ParseClassStaticBlockBody()
+    private Node ParseClassStaticBlockBody()
     {
         var savedYieldContext = InYieldContext();
         var savedAwaitContext = InAwaitContext();
@@ -463,18 +463,18 @@ internal sealed partial class Parser
         return ParseLeftHandSideExpressionOrHigher();
     }
 
-    private Decorator? TryParseDecorator()
+    private Node TryParseDecorator()
     {
         var pos = GetNodePos();
         if (!ParseOptional(SyntaxKind.AtToken))
         {
-            return null;
+            return default;
         }
         var expression = DoInDecoratorContext(static p => p.ParseDecoratorExpression());
         return FinishNode(factory.CreateDecorator(expression), pos);
     }
 
-    private Node? TryParseModifier(bool hasSeenStaticModifier, bool? permitConstAsModifier = null, bool? stopOnStartOfClassStaticBlock = null)
+    private Node TryParseModifier(bool hasSeenStaticModifier, bool? permitConstAsModifier = null, bool? stopOnStartOfClassStaticBlock = null)
     {
         var pos = GetNodePos();
         var kind = Token();
@@ -485,22 +485,22 @@ internal sealed partial class Parser
             // so that when 'const' is a standalone declaration, we don't issue an error.
             if (!TryParse(static p => p.NextTokenIsOnSameLineAndCanFollowModifier()))
             {
-                return null;
+                return default;
             }
         }
         else if (stopOnStartOfClassStaticBlock == true && Token() == SyntaxKind.StaticKeyword && LookAhead(static p => p.NextTokenIsOpenBrace()))
         {
-            return null;
+            return default;
         }
         else if (hasSeenStaticModifier && Token() == SyntaxKind.StaticKeyword)
         {
-            return null;
+            return default;
         }
         else
         {
             if (!ParseAnyContextualModifier())
             {
-                return null;
+                return default;
             }
         }
 
@@ -519,7 +519,7 @@ internal sealed partial class Parser
         var pos = GetNodePos();
         // TypeScript: `let list: ModifierLike[] | undefined` (a plain array, see CreateNodeArray), grown by `append`.
         NodeArray? list = null;
-        Node? decorator, modifier;
+        Node decorator, modifier;
         bool hasSeenStaticModifier = false, hasLeadingModifier = false, hasTrailingDecorator = false;
 
         // Decorators should be contiguous in a list of modifiers but can potentially appear in two places (i.e., `[...leadingDecorators, ...leadingModifiers, ...trailingDecorators, ...trailingModifiers]`).
@@ -529,7 +529,7 @@ internal sealed partial class Parser
         // parse leading decorators
         if (allowDecorators && Token() == SyntaxKind.AtToken)
         {
-            while ((decorator = TryParseDecorator()) != null)
+            while (!(decorator = TryParseDecorator()).IsNone)
             {
                 list ??= new NodeArray();
                 list.Add(decorator);
@@ -537,9 +537,9 @@ internal sealed partial class Parser
         }
 
         // parse leading modifiers
-        while ((modifier = TryParseModifier(hasSeenStaticModifier, permitConstAsModifier, stopOnStartOfClassStaticBlock)) != null)
+        while (!(modifier = TryParseModifier(hasSeenStaticModifier, permitConstAsModifier, stopOnStartOfClassStaticBlock)).IsNone)
         {
-            if (modifier.Kind == SyntaxKind.StaticKeyword)
+            if (store.Kind(modifier) == SyntaxKind.StaticKeyword)
             {
                 hasSeenStaticModifier = true;
             }
@@ -551,7 +551,7 @@ internal sealed partial class Parser
         // parse trailing decorators, but only if we parsed any leading modifiers
         if (hasLeadingModifier && allowDecorators && Token() == SyntaxKind.AtToken)
         {
-            while ((decorator = TryParseDecorator()) != null)
+            while (!(decorator = TryParseDecorator()).IsNone)
             {
                 list ??= new NodeArray();
                 list.Add(decorator);
@@ -562,9 +562,9 @@ internal sealed partial class Parser
         // parse trailing modifiers, but only if we parsed any trailing decorators
         if (hasTrailingDecorator)
         {
-            while ((modifier = TryParseModifier(hasSeenStaticModifier, permitConstAsModifier, stopOnStartOfClassStaticBlock)) != null)
+            while (!(modifier = TryParseModifier(hasSeenStaticModifier, permitConstAsModifier, stopOnStartOfClassStaticBlock)).IsNone)
             {
-                if (modifier.Kind == SyntaxKind.StaticKeyword)
+                if (store.Kind(modifier) == SyntaxKind.StaticKeyword)
                 {
                     hasSeenStaticModifier = true;
                 }
@@ -618,7 +618,7 @@ internal sealed partial class Parser
         if (Token() == SyntaxKind.ConstructorKeyword || Token() == SyntaxKind.StringLiteral)
         {
             var constructorDeclaration = TryParseConstructorDeclaration(pos, hasJSDoc, modifiers);
-            if (constructorDeclaration != null)
+            if (!constructorDeclaration.IsNone)
             {
                 return constructorDeclaration;
             }
@@ -639,12 +639,12 @@ internal sealed partial class Parser
             Token() == SyntaxKind.AsteriskToken ||
             Token() == SyntaxKind.OpenBracketToken)
         {
-            var isAmbient = Core.Some(modifiers, IsDeclareModifier);
+            var isAmbient = Core.Some(modifiers, ((a0) => IsDeclareModifier(store, a0)));
             if (isAmbient)
             {
                 foreach (var m in modifiers!)
                 {
-                    m.Flags |= NodeFlags.Ambient;
+                    store.SetFlags(m, store.Flags(m) | NodeFlags.Ambient);
                 }
                 // (C#: the closure captures copies declared in this block, so it is allocated only when this branch runs.)
                 {
@@ -663,13 +663,13 @@ internal sealed partial class Parser
         if (modifiers != null)
         {
             // treat this as a property declaration with a missing name.
-            var name = CreateMissingNode<Identifier>(SyntaxKind.Identifier, /*reportAtCurrentPosition*/ true, Diagnostics.Declaration_expected);
-            return ParsePropertyDeclaration(pos, hasJSDoc, modifiers, name, /*questionToken*/ null);
+            var name = CreateMissingNode(SyntaxKind.Identifier, /*reportAtCurrentPosition*/ true, Diagnostics.Declaration_expected);
+            return ParsePropertyDeclaration(pos, hasJSDoc, modifiers, name, /*questionToken*/ default);
         }
 
         // 'isClassMemberStart' should have hinted not to attempt parsing.
         Debug.Fail("Should not have attempted to parse class member declaration.");
-        return null!;
+        return default;
     }
 
     private Node ParseDecoratedExpression()
@@ -682,20 +682,20 @@ internal sealed partial class Parser
             return ParseClassDeclarationOrExpression(pos, hasJSDoc, modifiers, SyntaxKind.ClassExpression);
         }
 
-        var missing = CreateMissingNode<MissingDeclaration>(SyntaxKind.MissingDeclaration, /*reportAtCurrentPosition*/ true, Diagnostics.Expression_expected);
-        Utilities.SetTextRangePos(missing, pos);
-        missing.Modifiers = modifiers;
+        var missing = CreateMissingNode(SyntaxKind.MissingDeclaration, /*reportAtCurrentPosition*/ true, Diagnostics.Expression_expected);
+        Utilities.SetTextRangePos(store, missing, pos);
+        store.SetModifiers(missing, modifiers);
         return missing;
     }
 
-    private ClassExpression ParseClassExpression()
+    private Node ParseClassExpression()
     {
-        return (ClassExpression)ParseClassDeclarationOrExpression(GetNodePos(), HasPrecedingJSDocComment(), /*modifiers*/ null, SyntaxKind.ClassExpression);
+        return ParseClassDeclarationOrExpression(GetNodePos(), HasPrecedingJSDocComment(), /*modifiers*/ null, SyntaxKind.ClassExpression);
     }
 
-    private ClassDeclaration ParseClassDeclaration(int pos, bool hasJSDoc, NodeArray? modifiers)
+    private Node ParseClassDeclaration(int pos, bool hasJSDoc, NodeArray? modifiers)
     {
-        return (ClassDeclaration)ParseClassDeclarationOrExpression(pos, hasJSDoc, modifiers, SyntaxKind.ClassDeclaration);
+        return ParseClassDeclarationOrExpression(pos, hasJSDoc, modifiers, SyntaxKind.ClassDeclaration);
     }
 
     private Node ParseClassDeclarationOrExpression(int pos, bool hasJSDoc, NodeArray? modifiers, SyntaxKind kind)
@@ -706,7 +706,7 @@ internal sealed partial class Parser
         // We don't parse the name here in await context, instead we will report a grammar error in the checker.
         var name = ParseNameOfClassDeclarationOrExpression();
         var typeParameters = ParseTypeParameters();
-        if (Core.Some(modifiers, FactoryNodeTests.IsExportModifier))
+        if (Core.Some(modifiers, ((a0) => FactoryNodeTests.IsExportModifier(store, a0))))
         {
             SetAwaitContext(/*value*/ true);
         }
@@ -726,12 +726,12 @@ internal sealed partial class Parser
         }
         SetAwaitContext(savedAwaitContext);
         var node = kind == SyntaxKind.ClassDeclaration
-            ? (Node)factory.CreateClassDeclaration(modifiers, name, typeParameters, heritageClauses, members)
+            ? factory.CreateClassDeclaration(modifiers, name, typeParameters, heritageClauses, members)
             : factory.CreateClassExpression(modifiers, name, typeParameters, heritageClauses, members);
         return WithJSDoc(FinishNode(node, pos), hasJSDoc);
     }
 
-    private Identifier? ParseNameOfClassDeclarationOrExpression()
+    private Node ParseNameOfClassDeclarationOrExpression()
     {
         // implements is a future reserved word so
         // 'class implements' might mean either
@@ -740,7 +740,7 @@ internal sealed partial class Parser
         // 'isImplementsClause' helps to disambiguate between these two cases
         return IsBindingIdentifier() && !IsImplementsClause()
             ? CreateIdentifier(IsBindingIdentifier())
-            : null;
+            : default;
     }
 
     private bool IsImplementsClause()
@@ -761,7 +761,7 @@ internal sealed partial class Parser
         return null;
     }
 
-    private HeritageClause ParseHeritageClause()
+    private Node ParseHeritageClause()
     {
         var pos = GetNodePos();
         var tok = Token();
@@ -771,13 +771,13 @@ internal sealed partial class Parser
         return FinishNode(factory.CreateHeritageClause(tok, types), pos);
     }
 
-    private ExpressionWithTypeArguments ParseExpressionWithTypeArguments()
+    private Node ParseExpressionWithTypeArguments()
     {
         var pos = GetNodePos();
         var expression = ParseLeftHandSideExpressionOrHigher();
-        if (expression.Kind == SyntaxKind.ExpressionWithTypeArguments)
+        if (store.Kind(expression) == SyntaxKind.ExpressionWithTypeArguments)
         {
-            return (ExpressionWithTypeArguments)expression;
+            return expression;
         }
         var typeArguments = TryParseTypeArguments();
         return FinishNode(factory.CreateExpressionWithTypeArguments(expression, typeArguments), pos);
@@ -799,7 +799,7 @@ internal sealed partial class Parser
         return ParseList(ParsingContext.ClassMembers, static p => p.ParseClassElement());
     }
 
-    private InterfaceDeclaration ParseInterfaceDeclaration(int pos, bool hasJSDoc, NodeArray? modifiers)
+    private Node ParseInterfaceDeclaration(int pos, bool hasJSDoc, NodeArray? modifiers)
     {
         ParseExpected(SyntaxKind.InterfaceKeyword);
         var name = ParseIdentifier();
@@ -810,7 +810,7 @@ internal sealed partial class Parser
         return WithJSDoc(FinishNode(node, pos), hasJSDoc);
     }
 
-    private TypeAliasDeclaration ParseTypeAliasDeclaration(int pos, bool hasJSDoc, NodeArray? modifiers)
+    private Node ParseTypeAliasDeclaration(int pos, bool hasJSDoc, NodeArray? modifiers)
     {
         ParseExpected(SyntaxKind.TypeKeyword);
         if (scanner.HasPrecedingLineBreak())
@@ -820,7 +820,7 @@ internal sealed partial class Parser
         var name = ParseIdentifier();
         var typeParameters = ParseTypeParameters();
         ParseExpected(SyntaxKind.EqualsToken);
-        var type = (Token() == SyntaxKind.IntrinsicKeyword ? TryParse(static p => p.ParseKeywordAndNoDot()) : null) ?? ParseType();
+        var type = ((Token() == SyntaxKind.IntrinsicKeyword ? TryParse(static p => p.ParseKeywordAndNoDot()) : default) is { IsNone: false } __t2 ? __t2 : ParseType());
         ParseSemicolon();
         var node = factory.CreateTypeAliasDeclaration(modifiers, name, typeParameters, type);
         return WithJSDoc(FinishNode(node, pos), hasJSDoc);
@@ -830,7 +830,7 @@ internal sealed partial class Parser
     // In a non-ambient declaration, the grammar allows uninitialized members only in a
     // ConstantEnumMemberSection, which starts at the beginning of an enum declaration
     // or any time an integer literal initializer is encountered.
-    private EnumMember ParseEnumMember()
+    private Node ParseEnumMember()
     {
         var pos = GetNodePos();
         var hasJSDoc = HasPrecedingJSDocComment();
@@ -839,7 +839,7 @@ internal sealed partial class Parser
         return WithJSDoc(FinishNode(factory.CreateEnumMember(name, initializer), pos), hasJSDoc);
     }
 
-    private EnumDeclaration ParseEnumDeclaration(int pos, bool hasJSDoc, NodeArray? modifiers)
+    private Node ParseEnumDeclaration(int pos, bool hasJSDoc, NodeArray? modifiers)
     {
         ParseExpected(SyntaxKind.EnumKeyword);
         var name = ParseIdentifier();
@@ -857,7 +857,7 @@ internal sealed partial class Parser
         return WithJSDoc(FinishNode(node, pos), hasJSDoc);
     }
 
-    private ModuleBlock ParseModuleBlock()
+    private Node ParseModuleBlock()
     {
         var pos = GetNodePos();
         NodeArray statements;
@@ -873,20 +873,20 @@ internal sealed partial class Parser
         return FinishNode(factory.CreateModuleBlock(statements), pos);
     }
 
-    private ModuleDeclaration ParseModuleOrNamespaceDeclaration(int pos, bool hasJSDoc, NodeArray? modifiers, NodeFlags flags)
+    private Node ParseModuleOrNamespaceDeclaration(int pos, bool hasJSDoc, NodeArray? modifiers, NodeFlags flags)
     {
         // If we are parsing a dotted namespace name, we want to
         // propagate the 'Namespace' flag across the names if set.
         var namespaceFlag = flags & NodeFlags.Namespace;
         var name = (flags & NodeFlags.NestedNamespace) != 0 ? ParseIdentifierName() : ParseIdentifier();
         var body = ParseOptional(SyntaxKind.DotToken)
-            ? (Node)ParseModuleOrNamespaceDeclaration(GetNodePos(), /*hasJSDoc*/ false, /*modifiers*/ null, NodeFlags.NestedNamespace | namespaceFlag)
+            ? ParseModuleOrNamespaceDeclaration(GetNodePos(), /*hasJSDoc*/ false, /*modifiers*/ null, NodeFlags.NestedNamespace | namespaceFlag)
             : ParseModuleBlock();
         var node = factory.CreateModuleDeclaration(modifiers, name, body, flags);
         return WithJSDoc(FinishNode(node, pos), hasJSDoc);
     }
 
-    private ModuleDeclaration ParseAmbientExternalModuleDeclaration(int pos, bool hasJSDoc, NodeArray? modifiersIn)
+    private Node ParseAmbientExternalModuleDeclaration(int pos, bool hasJSDoc, NodeArray? modifiersIn)
     {
         NodeFlags flags = 0;
         Node name;
@@ -898,11 +898,11 @@ internal sealed partial class Parser
         }
         else
         {
-            var literal = (StringLiteral)ParseLiteralNode();
-            literal.Text = InternIdentifier(literal.Text);
+            var literal = ParseLiteralNode();
+            store.SetText(literal, InternIdentifier(store.Text(literal)));
             name = literal;
         }
-        ModuleBlock? body = null;
+        Node body = default;
         if (Token() == SyntaxKind.OpenBraceToken)
         {
             body = ParseModuleBlock();
@@ -915,7 +915,7 @@ internal sealed partial class Parser
         return WithJSDoc(FinishNode(node, pos), hasJSDoc);
     }
 
-    private ModuleDeclaration ParseModuleDeclaration(int pos, bool hasJSDoc, NodeArray? modifiersIn)
+    private Node ParseModuleDeclaration(int pos, bool hasJSDoc, NodeArray? modifiersIn)
     {
         NodeFlags flags = 0;
         if (Token() == SyntaxKind.GlobalKeyword)
@@ -959,7 +959,7 @@ internal sealed partial class Parser
         return NextToken() == SyntaxKind.SlashToken;
     }
 
-    private NamespaceExportDeclaration ParseNamespaceExportDeclaration(int pos, bool hasJSDoc, NodeArray? modifiers)
+    private Node ParseNamespaceExportDeclaration(int pos, bool hasJSDoc, NodeArray? modifiers)
     {
         ParseExpected(SyntaxKind.AsKeyword);
         ParseExpected(SyntaxKind.NamespaceKeyword);
@@ -967,7 +967,7 @@ internal sealed partial class Parser
         ParseSemicolon();
         var node = factory.CreateNamespaceExportDeclaration(name);
         // NamespaceExportDeclaration nodes cannot have decorators or modifiers, so we attach them here so we can report them in the grammar checker
-        node.Modifiers = modifiers;
+        store.SetModifiers(node, modifiers);
         return WithJSDoc(FinishNode(node, pos), hasJSDoc);
     }
 
@@ -978,7 +978,7 @@ internal sealed partial class Parser
         var afterImportPos = scanner.GetTokenFullStart();
 
         // We don't parse the identifier here in await context, instead we will report a grammar error in the checker.
-        Identifier? identifier = null;
+        Node identifier = default;
         if (IsIdentifier())
         {
             identifier = ParseIdentifier();
@@ -986,22 +986,22 @@ internal sealed partial class Parser
 
         SyntaxKind? phaseModifier = null;
         if (
-            identifier != null && (string)identifier.EscapedText! == "type" &&
+            !identifier.IsNone && (string)store.EscapedText(identifier)! == "type" &&
             (Token() != SyntaxKind.FromKeyword || IsIdentifier() && LookAhead(static p => p.NextTokenIsFromKeywordOrEqualsToken())) &&
             (IsIdentifier() || TokenAfterImportDefinitelyProducesImportDeclaration()))
         {
             phaseModifier = SyntaxKind.TypeKeyword;
-            identifier = IsIdentifier() ? ParseIdentifier() : null;
+            identifier = IsIdentifier() ? ParseIdentifier() : default;
         }
         else if (
-            identifier != null && (string)identifier.EscapedText! == "defer" &&
+            !identifier.IsNone && (string)store.EscapedText(identifier)! == "defer" &&
             (Token() == SyntaxKind.FromKeyword ? !LookAhead(static p => p.NextTokenIsStringLiteral()) : Token() != SyntaxKind.CommaToken && Token() != SyntaxKind.EqualsToken))
         {
             phaseModifier = SyntaxKind.DeferKeyword;
-            identifier = IsIdentifier() ? ParseIdentifier() : null;
+            identifier = IsIdentifier() ? ParseIdentifier() : default;
         }
 
-        if (identifier != null && !TokenAfterImportedIdentifierDefinitelyProducesImportDeclaration() && phaseModifier != SyntaxKind.DeferKeyword)
+        if (!identifier.IsNone && !TokenAfterImportedIdentifierDefinitelyProducesImportDeclaration() && phaseModifier != SyntaxKind.DeferKeyword)
         {
             return ParseImportEqualsDeclaration(pos, hasJSDoc, modifiers, identifier, phaseModifier == SyntaxKind.TypeKeyword);
         }
@@ -1015,14 +1015,14 @@ internal sealed partial class Parser
         return WithJSDoc(FinishNode(node, pos), hasJSDoc);
     }
 
-    private ImportClause? TryParseImportClause(Identifier? identifier, int pos, SyntaxKind? phaseModifier, bool skipJsDocLeadingAsterisks = false)
+    private Node TryParseImportClause(Node identifier, int pos, SyntaxKind? phaseModifier, bool skipJsDocLeadingAsterisks = false)
     {
         // ImportDeclaration:
         //  import ImportClause from ModuleSpecifier ;
         //  import ModuleSpecifier;
-        ImportClause? importClause = null;
+        Node importClause = default;
         if (
-            identifier != null || // import id
+            !identifier.IsNone || // import id
             Token() == SyntaxKind.AsteriskToken || // import *
             Token() == SyntaxKind.OpenBraceToken) // import {
         {
@@ -1032,7 +1032,7 @@ internal sealed partial class Parser
         return importClause;
     }
 
-    private ImportAttributes? TryParseImportAttributes()
+    private Node TryParseImportAttributes()
     {
         // (TypeScript names this local `currentToken`, shadowing the parser variable.)
         var currentTokenLocal = Token();
@@ -1040,10 +1040,10 @@ internal sealed partial class Parser
         {
             return ParseImportAttributes(currentTokenLocal);
         }
-        return null;
+        return default;
     }
 
-    private ImportAttribute ParseImportAttribute()
+    private Node ParseImportAttribute()
     {
         var pos = GetNodePos();
         var name = Scanner.TokenIsIdentifierOrKeyword(Token()) ? ParseIdentifierName() : ParseLiteralLikeNode(SyntaxKind.StringLiteral);
@@ -1052,7 +1052,7 @@ internal sealed partial class Parser
         return FinishNode(factory.CreateImportAttribute(name, value), pos);
     }
 
-    private ImportAttributes ParseImportAttributes(SyntaxKind token, bool? skipKeyword = null)
+    private Node ParseImportAttributes(SyntaxKind token, bool? skipKeyword = null)
     {
         var pos = GetNodePos();
         if (skipKeyword != true)
@@ -1095,7 +1095,7 @@ internal sealed partial class Parser
         return Token() == SyntaxKind.CommaToken || Token() == SyntaxKind.FromKeyword;
     }
 
-    private ImportEqualsDeclaration ParseImportEqualsDeclaration(int pos, bool hasJSDoc, NodeArray? modifiers, Identifier identifier, bool isTypeOnly)
+    private Node ParseImportEqualsDeclaration(int pos, bool hasJSDoc, NodeArray? modifiers, Node identifier, bool isTypeOnly)
     {
         ParseExpected(SyntaxKind.EqualsToken);
         var moduleReference = ParseModuleReference();
@@ -1105,7 +1105,7 @@ internal sealed partial class Parser
         return finished;
     }
 
-    private ImportClause ParseImportClause(Identifier? identifier, int pos, SyntaxKind? phaseModifier, bool skipJsDocLeadingAsterisks)
+    private Node ParseImportClause(Node identifier, int pos, SyntaxKind? phaseModifier, bool skipJsDocLeadingAsterisks)
     {
         // ImportClause:
         //  ImportedDefaultBinding
@@ -1116,9 +1116,9 @@ internal sealed partial class Parser
 
         // If there was no default import or if there is comma token after default import
         // parse namespace or named imports
-        Node? namedBindings = null;
+        Node namedBindings = default;
         if (
-            identifier == null ||
+            identifier.IsNone ||
             ParseOptional(SyntaxKind.CommaToken))
         {
             if (skipJsDocLeadingAsterisks)
@@ -1149,7 +1149,7 @@ internal sealed partial class Parser
             : ParseEntityName(/*allowReservedWords*/ false);
     }
 
-    private ExternalModuleReference ParseExternalModuleReference()
+    private Node ParseExternalModuleReference()
     {
         var pos = GetNodePos();
         ParseExpected(SyntaxKind.RequireKeyword);
@@ -1163,8 +1163,8 @@ internal sealed partial class Parser
     {
         if (Token() == SyntaxKind.StringLiteral)
         {
-            var result = (StringLiteral)ParseLiteralNode();
-            result.Text = InternIdentifier(result.Text);
+            var result = ParseLiteralNode();
+            store.SetText(result, InternIdentifier(store.Text(result)));
             return result;
         }
         else
@@ -1176,7 +1176,7 @@ internal sealed partial class Parser
         }
     }
 
-    private NamespaceImport ParseNamespaceImport()
+    private Node ParseNamespaceImport()
     {
         // NameSpaceImport:
         //  * as ImportedBinding
@@ -1192,7 +1192,7 @@ internal sealed partial class Parser
         return Scanner.TokenIsIdentifierOrKeyword(Token()) || Token() == SyntaxKind.StringLiteral;
     }
 
-    private Node ParseModuleExportName(Func<Identifier> parseName)
+    private Node ParseModuleExportName(Func<Node> parseName)
     {
         return Token() == SyntaxKind.StringLiteral ? ParseLiteralNode() : parseName();
     }
@@ -1210,20 +1210,20 @@ internal sealed partial class Parser
         //  ImportSpecifier
         //  ImportsList, ImportSpecifier
         var node = kind == SyntaxKind.NamedImports
-            ? (Node)factory.CreateNamedImports(ParseBracketedList(ParsingContext.ImportOrExportSpecifiers, static p => p.ParseImportSpecifier(), SyntaxKind.OpenBraceToken, SyntaxKind.CloseBraceToken))
+            ? factory.CreateNamedImports(ParseBracketedList(ParsingContext.ImportOrExportSpecifiers, static p => p.ParseImportSpecifier(), SyntaxKind.OpenBraceToken, SyntaxKind.CloseBraceToken))
             : factory.CreateNamedExports(ParseBracketedList(ParsingContext.ImportOrExportSpecifiers, static p => p.ParseExportSpecifier(), SyntaxKind.OpenBraceToken, SyntaxKind.CloseBraceToken));
         return FinishNode(node, pos);
     }
 
-    private ExportSpecifier ParseExportSpecifier()
+    private Node ParseExportSpecifier()
     {
         var hasJSDoc = HasPrecedingJSDocComment();
-        return WithJSDoc((ExportSpecifier)ParseImportOrExportSpecifier(SyntaxKind.ExportSpecifier), hasJSDoc);
+        return WithJSDoc(ParseImportOrExportSpecifier(SyntaxKind.ExportSpecifier), hasJSDoc);
     }
 
-    private ImportSpecifier ParseImportSpecifier()
+    private Node ParseImportSpecifier()
     {
-        return (ImportSpecifier)ParseImportOrExportSpecifier(SyntaxKind.ImportSpecifier);
+        return ParseImportOrExportSpecifier(SyntaxKind.ImportSpecifier);
     }
 
     private Node ParseImportOrExportSpecifier(SyntaxKind kind)
@@ -1239,10 +1239,10 @@ internal sealed partial class Parser
         var checkIdentifierStart = scanner.GetTokenStart();
         var checkIdentifierEnd = scanner.GetTokenEnd();
         var isTypeOnly = false;
-        Node? propertyName = null;
+        Node propertyName = default;
         var canParseAsKeyword = true;
         var name = ParseModuleExportName(() => ParseIdentifierName());
-        if (name.Kind == SyntaxKind.Identifier && (string)((Identifier)name).EscapedText! == "type")
+        if (store.Kind(name) == SyntaxKind.Identifier && (string)store.EscapedText(name)! == "type")
         {
             // If the first token of an import specifier is 'type', there are a lot of possibilities,
             // especially if we see 'as' afterwards:
@@ -1308,11 +1308,11 @@ internal sealed partial class Parser
         }
         if (kind == SyntaxKind.ImportSpecifier)
         {
-            if (name.Kind != SyntaxKind.Identifier)
+            if (store.Kind(name) != SyntaxKind.Identifier)
             {
                 // ImportSpecifier casts "name" to Identifier below, so make sure it's an identifier
-                ParseErrorAt(Scanner.SkipTrivia(sourceText, name.Pos), name.End, Diagnostics.Identifier_expected);
-                name = Utilities.SetTextRangePosEnd(CreateMissingNode<Identifier>(SyntaxKind.Identifier, /*reportAtCurrentPosition*/ false), name.Pos, name.Pos);
+                ParseErrorAt(Scanner.SkipTrivia(sourceText, store.Pos(name)), store.End(name), Diagnostics.Identifier_expected);
+                name = Utilities.SetTextRangePosEnd(store, CreateMissingNode(SyntaxKind.Identifier, /*reportAtCurrentPosition*/ false), store.Pos(name), store.Pos(name));
             }
             else if (checkIdentifierIsKeyword)
             {
@@ -1320,11 +1320,11 @@ internal sealed partial class Parser
             }
         }
         var node = kind == SyntaxKind.ImportSpecifier
-            ? (Node)factory.CreateImportSpecifier(isTypeOnly, propertyName, (Identifier)name)
+            ? factory.CreateImportSpecifier(isTypeOnly, propertyName, name)
             : factory.CreateExportSpecifier(isTypeOnly, propertyName, name);
         return FinishNode(node, pos);
 
-        Identifier ParseNameWithKeywordCheck()
+        Node ParseNameWithKeywordCheck()
         {
             checkIdentifierIsKeyword = Utilities.IsKeyword(Token()) && !IsIdentifier();
             checkIdentifierStart = scanner.GetTokenStart();
@@ -1333,18 +1333,18 @@ internal sealed partial class Parser
         }
     }
 
-    private NamespaceExport ParseNamespaceExport(int pos)
+    private Node ParseNamespaceExport(int pos)
     {
         return FinishNode(factory.CreateNamespaceExport(ParseModuleExportName(() => ParseIdentifierName())), pos);
     }
 
-    private ExportDeclaration ParseExportDeclaration(int pos, bool hasJSDoc, NodeArray? modifiers)
+    private Node ParseExportDeclaration(int pos, bool hasJSDoc, NodeArray? modifiers)
     {
         var savedAwaitContext = InAwaitContext();
         SetAwaitContext(/*value*/ true);
-        Node? exportClause = null;
-        Node? moduleSpecifier = null;
-        ImportAttributes? attributes = null;
+        Node exportClause = default;
+        Node moduleSpecifier = default;
+        Node attributes = default;
         var isTypeOnly = ParseOptional(SyntaxKind.TypeKeyword);
         var namespaceExportPos = GetNodePos();
         if (ParseOptional(SyntaxKind.AsteriskToken))
@@ -1370,7 +1370,7 @@ internal sealed partial class Parser
         }
         // (TypeScript names this local `currentToken`, shadowing the parser variable.)
         var currentTokenLocal = Token();
-        if (moduleSpecifier != null && (currentTokenLocal == SyntaxKind.WithKeyword || currentTokenLocal == SyntaxKind.AssertKeyword) && !scanner.HasPrecedingLineBreak())
+        if (!moduleSpecifier.IsNone && (currentTokenLocal == SyntaxKind.WithKeyword || currentTokenLocal == SyntaxKind.AssertKeyword) && !scanner.HasPrecedingLineBreak())
         {
             attributes = ParseImportAttributes(currentTokenLocal);
         }
@@ -1380,7 +1380,7 @@ internal sealed partial class Parser
         return WithJSDoc(FinishNode(node, pos), hasJSDoc);
     }
 
-    private ExportAssignment ParseExportAssignment(int pos, bool hasJSDoc, NodeArray? modifiers)
+    private Node ParseExportAssignment(int pos, bool hasJSDoc, NodeArray? modifiers)
     {
         var savedAwaitContext = InAwaitContext();
         SetAwaitContext(/*value*/ true);

@@ -223,47 +223,47 @@ internal static partial class Utilities
     // class, and Parser.NewNode gives it TypeScript's (kind, pos 0, end 0); there is no object to allocate the
     // constructors from, so objectAllocator has no C# counterpart.
 
-    internal static int GetFullWidth(Node node)
+    internal static int GetFullWidth(NodeStore store, Node node)
     {
-        return node.End - node.Pos;
+        return store.End(node) - store.Pos(node);
     }
 
-    internal static bool ContainsParseError(Node node)
+    internal static bool ContainsParseError(NodeStore store, Node node)
     {
-        AggregateChildData(node);
-        return (node.Flags & NodeFlags.ThisNodeOrAnySubNodesHasError) != 0;
+        AggregateChildData(store, node);
+        return (store.Flags(node) & NodeFlags.ThisNodeOrAnySubNodesHasError) != 0;
     }
 
-    private static void AggregateChildData(Node node)
+    private static void AggregateChildData(NodeStore store, Node node)
     {
-        if ((node.Flags & NodeFlags.HasAggregatedChildData) == 0)
+        if ((store.Flags(node) & NodeFlags.HasAggregatedChildData) == 0)
         {
             // A node is considered to contain a parse error if:
             //  a) the parser explicitly marked that it had an error
             //  b) any of it's children reported that it had an error.
-            var thisNodeOrAnySubNodesHasError = ((node.Flags & NodeFlags.ThisNodeHasError) != 0) ||
-                NodeVisitor.ForEachChild<object>(node, child => ContainsParseError(child) ? true : null) != null;
+            var thisNodeOrAnySubNodesHasError = ((store.Flags(node) & NodeFlags.ThisNodeHasError) != 0) ||
+                NodeVisitor.ForEachChild<object>(store, node, child => ContainsParseError(store, child) ? true : null) != null;
 
             // If so, mark ourselves accordingly.
             if (thisNodeOrAnySubNodesHasError)
             {
-                node.Flags |= NodeFlags.ThisNodeOrAnySubNodesHasError;
+                store.SetFlags(node, store.Flags(node) | NodeFlags.ThisNodeOrAnySubNodesHasError);
             }
 
             // Also mark that we've propagated the child information to this node.  This way we can
             // always consult the bit directly on this node without needing to check its children
             // again.
-            node.Flags |= NodeFlags.HasAggregatedChildData;
+            store.SetFlags(node, store.Flags(node) | NodeFlags.HasAggregatedChildData);
         }
     }
 
-    internal static SourceFile? GetSourceFileOfNode(Node? node)
+    internal static Node GetSourceFileOfNode(NodeStore store, Node node)
     {
-        while (node != null && node.Kind != SyntaxKind.SourceFile)
+        while (!node.IsNone && store.Kind(node) != SyntaxKind.SourceFile)
         {
-            node = node.Parent;
+            node = store.Parent(node);
         }
-        return (SourceFile?)node;
+        return node;
     }
 
     internal static int GetEndLinePosition(int line, ISourceFileLike sourceFile)
@@ -297,42 +297,42 @@ internal static partial class Utilities
         }
     }
 
-    internal static bool NodeIsMissing(Node? node)
+    internal static bool NodeIsMissing(NodeStore store, Node node)
     {
-        if (node == null)
+        if (node.IsNone)
         {
             return true;
         }
 
-        return node.Pos == node.End && node.Pos >= 0 && node.Kind != SyntaxKind.EndOfFileToken;
+        return store.Pos(node) == store.End(node) && store.Pos(node) >= 0 && store.Kind(node) != SyntaxKind.EndOfFileToken;
     }
 
-    internal static bool NodeIsPresent(Node? node)
+    internal static bool NodeIsPresent(NodeStore store, Node node)
     {
-        return !NodeIsMissing(node);
+        return !NodeIsMissing(store, node);
     }
 
-    internal static string GetSourceTextOfNodeFromSourceFile(SourceFile sourceFile, Node node, bool includeTrivia = false)
+    internal static string GetSourceTextOfNodeFromSourceFile(NodeStore store, Node sourceFile, Node node, bool includeTrivia = false)
     {
-        return GetTextOfNodeFromSourceText(sourceFile.Text, node, includeTrivia);
+        return GetTextOfNodeFromSourceText(store, store.Text(sourceFile), node, includeTrivia);
     }
 
-    private static bool IsJSDocTypeExpressionOrChild(Node node)
+    private static bool IsJSDocTypeExpressionOrChild(NodeStore store, Node node)
     {
-        return UtilitiesPublic.FindAncestor(node, FactoryNodeTests.IsJSDocTypeExpression) != null;
+        return !UtilitiesPublic.FindAncestor(store, node, ((a0) => FactoryNodeTests.IsJSDocTypeExpression(store, a0))).IsNone;
     }
 
-    internal static string GetTextOfNodeFromSourceText(string sourceText, Node node, bool includeTrivia = false)
+    internal static string GetTextOfNodeFromSourceText(NodeStore store, string sourceText, Node node, bool includeTrivia = false)
     {
-        if (NodeIsMissing(node))
+        if (NodeIsMissing(store, node))
         {
             return "";
         }
 
-        var start = includeTrivia ? node.Pos : Scanner.SkipTrivia(sourceText, node.Pos);
-        var text = SubstringJs(sourceText, start, node.End);
+        var start = includeTrivia ? store.Pos(node) : Scanner.SkipTrivia(sourceText, store.Pos(node));
+        var text = SubstringJs(sourceText, start, store.End(node));
 
-        if (IsJSDocTypeExpressionOrChild(node))
+        if (IsJSDocTypeExpressionOrChild(store, node))
         {
             // strip space + asterisk at line start
             // (`text.split(/\r\n|\n|\r/).map(line => line.replace(/^\s*\*/, "").trimStart()).join("\n")`, written as loops)
@@ -381,38 +381,38 @@ internal static partial class Utilities
         return text.Substring(start, end - start);
     }
 
-    internal static EmitFlags GetEmitFlags(Node node)
+    internal static EmitFlags GetEmitFlags(NodeStore store, Node node)
     {
-        var emitNode = (EmitNode?)node.EmitNode;
+        var emitNode = (EmitNode?)store.EmitNode(node);
         return emitNode != null ? emitNode.Flags : 0;
     }
 
-    internal static bool IsComputedNonLiteralName(Node name)
+    internal static bool IsComputedNonLiteralName(NodeStore store, Node name)
     {
-        return name.Kind == SyntaxKind.ComputedPropertyName && !IsStringOrNumericLiteralLike(((ComputedPropertyName)name).Expression);
+        return store.Kind(name) == SyntaxKind.ComputedPropertyName && !IsStringOrNumericLiteralLike(store, store.Expression(name));
     }
 
-    internal static string? TryGetTextOfPropertyName(Node name)
+    internal static string? TryGetTextOfPropertyName(NodeStore store, Node name)
     {
-        switch (name.Kind)
+        switch (store.Kind(name))
         {
             case SyntaxKind.Identifier:
             case SyntaxKind.PrivateIdentifier:
-                return ((EmitNode?)name.EmitNode)?.AutoGenerate != null ? null : (string)(name is Identifier id ? id.EscapedText! : ((PrivateIdentifier)name).EscapedText!);
+                return ((EmitNode?)store.EmitNode(name))?.AutoGenerate != null ? null : (string)((name is var id && store.IsIdentifier(id)) ? store.EscapedText(id)! : store.EscapedText(name)!);
             case SyntaxKind.StringLiteral:
             case SyntaxKind.NumericLiteral:
             case SyntaxKind.BigIntLiteral:
             case SyntaxKind.NoSubstitutionTemplateLiteral:
-                return UtilitiesPublic.EscapeLeadingUnderscores(GetLiteralText(name));
+                return UtilitiesPublic.EscapeLeadingUnderscores(GetLiteralText(store, name));
             case SyntaxKind.ComputedPropertyName:
-                var expression = ((ComputedPropertyName)name).Expression;
-                if (IsStringOrNumericLiteralLike(expression))
+                var expression = store.Expression(name);
+                if (IsStringOrNumericLiteralLike(store, expression))
                 {
-                    return UtilitiesPublic.EscapeLeadingUnderscores(GetLiteralText(expression));
+                    return UtilitiesPublic.EscapeLeadingUnderscores(GetLiteralText(store, expression));
                 }
                 return null;
             case SyntaxKind.JsxNamespacedName:
-                return GetEscapedTextOfJsxNamespacedName((JsxNamespacedName)name);
+                return GetEscapedTextOfJsxNamespacedName(store, name);
             default:
                 Debug.AssertNever(name);
                 return null;
@@ -420,68 +420,69 @@ internal static partial class Utilities
     }
 
     /// <summary>`(name as LiteralLikeNode).text` for the literal kinds read above.</summary>
-    private static string GetLiteralText(Node node)
+    private static string GetLiteralText(NodeStore store, Node node)
     {
         return node switch
         {
-            StringLiteral n => n.Text,
-            NumericLiteral n => n.Text,
-            BigIntLiteral n => n.Text,
-            NoSubstitutionTemplateLiteral n => n.Text,
-            _ => throw new InvalidCastException(node.Kind.ToString()),
+            var n when store.IsStringLiteral(n) => store.Text(n),
+            var n when store.IsNumericLiteral(n) => store.Text(n),
+            var n when store.IsBigIntLiteral(n) => store.Text(n),
+            var n when store.IsNoSubstitutionTemplateLiteral(n) => store.Text(n),
+            _ => throw new InvalidCastException(store.Kind(node).ToString()),
         };
     }
 
-    internal static string GetTextOfPropertyName(Node name)
+    internal static string GetTextOfPropertyName(NodeStore store, Node name)
     {
-        return Debug.CheckDefined(TryGetTextOfPropertyName(name));
+        return Debug.CheckDefined(TryGetTextOfPropertyName(store, name));
     }
 
-    internal static DiagnosticWithLocation CreateDiagnosticForNodeInSourceFile(SourceFile sourceFile, Node node, DiagnosticMessage message, params object?[] args)
+    internal static DiagnosticWithLocation CreateDiagnosticForNodeInSourceFile(NodeStore store, Node sourceFile, Node node, DiagnosticMessage message, params object?[] args)
     {
-        var span = GetErrorSpanForNode(sourceFile, node);
-        return CreateFileDiagnostic(sourceFile, span.Start, span.Length, message, args);
+        var span = GetErrorSpanForNode(store, sourceFile, node);
+        return CreateFileDiagnostic(store, sourceFile, span.Start, span.Length, message, args);
     }
 
-    internal static TextSpan GetSpanOfTokenAtPosition(SourceFile sourceFile, int pos)
+    internal static TextSpan GetSpanOfTokenAtPosition(NodeStore store, Node sourceFile, int pos)
     {
-        var scanner = Scanner.CreateScanner(sourceFile.LanguageVersion, /*skipTrivia*/ true, sourceFile.LanguageVariant, sourceFile.Text, /*onError*/ null, pos);
+        var scanner = Scanner.CreateScanner(store.LanguageVersion(sourceFile), /*skipTrivia*/ true, store.LanguageVariant(sourceFile), store.Text(sourceFile), /*onError*/ null, pos);
         scanner.Scan();
         var start = scanner.GetTokenStart();
         return UtilitiesPublic.CreateTextSpanFromBounds(start, scanner.GetTokenEnd());
     }
 
-    private static TextSpan GetErrorSpanForArrowFunction(SourceFile sourceFile, ArrowFunction node)
+    private static TextSpan GetErrorSpanForArrowFunction(NodeStore store, Node sourceFile, Node node)
     {
-        var pos = Scanner.SkipTrivia(sourceFile.Text, node.Pos);
-        if (node.Body != null && node.Body.Kind == SyntaxKind.Block)
+        var pos = Scanner.SkipTrivia(store.Text(sourceFile), store.Pos(node));
+        if (!store.Body(node).IsNone && store.Kind(store.Body(node)) == SyntaxKind.Block)
         {
-            var startLine = Scanner.GetLineAndCharacterOfPosition(sourceFile, node.Body.Pos).Line;
-            var endLine = Scanner.GetLineAndCharacterOfPosition(sourceFile, node.Body.End).Line;
+            var sourceFileLike = new SourceFileNodeLike(store, sourceFile);
+            var startLine = Scanner.GetLineAndCharacterOfPosition(sourceFileLike, store.Pos(store.Body(node))).Line;
+            var endLine = Scanner.GetLineAndCharacterOfPosition(sourceFileLike, store.End(store.Body(node))).Line;
             if (startLine < endLine)
             {
                 // The arrow function spans multiple lines,
                 // make the error span be the first line, inclusive.
-                return UtilitiesPublic.CreateTextSpan(pos, GetEndLinePosition(startLine, sourceFile) - pos + 1);
+                return UtilitiesPublic.CreateTextSpan(pos, GetEndLinePosition(startLine, sourceFileLike) - pos + 1);
             }
         }
-        return UtilitiesPublic.CreateTextSpanFromBounds(pos, node.End);
+        return UtilitiesPublic.CreateTextSpanFromBounds(pos, store.End(node));
     }
 
-    internal static TextSpan GetErrorSpanForNode(SourceFile sourceFile, Node node)
+    internal static TextSpan GetErrorSpanForNode(NodeStore store, Node sourceFile, Node node)
     {
-        Node? errorNode = node;
-        switch (node.Kind)
+        Node errorNode = node;
+        switch (store.Kind(node))
         {
             case SyntaxKind.SourceFile:
             {
-                var pos = Scanner.SkipTrivia(sourceFile.Text, 0, /*stopAfterLineBreak*/ false);
-                if (pos == sourceFile.Text.Length)
+                var pos = Scanner.SkipTrivia(store.Text(sourceFile), 0, /*stopAfterLineBreak*/ false);
+                if (pos == store.Text(sourceFile).Length)
                 {
                     // file is empty - return span for the beginning of the file
                     return UtilitiesPublic.CreateTextSpan(0, 0);
                 }
-                return GetSpanOfTokenAtPosition(sourceFile, pos);
+                return GetSpanOfTokenAtPosition(store, sourceFile, pos);
             }
             // This list is a work in progress. Add missing node kinds to improve their error
             // spans.
@@ -502,39 +503,39 @@ internal static partial class Utilities
             case SyntaxKind.PropertyDeclaration:
             case SyntaxKind.PropertySignature:
             case SyntaxKind.NamespaceImport:
-                errorNode = NodeAccessors.GetName(node);
+                errorNode = store.Name(node);
                 break;
             case SyntaxKind.ArrowFunction:
-                return GetErrorSpanForArrowFunction(sourceFile, (ArrowFunction)node);
+                return GetErrorSpanForArrowFunction(store, sourceFile, node);
             case SyntaxKind.CaseClause:
             case SyntaxKind.DefaultClause:
             {
-                var statements = node is CaseClause caseClause ? caseClause.Statements : ((DefaultClause)node).Statements;
-                var start = Scanner.SkipTrivia(sourceFile.Text, node.Pos);
-                var end = statements.Count > 0 ? statements[0].Pos : node.End;
+                var statements = (node is var caseClause && store.IsCaseClause(caseClause)) ? store.Statements(caseClause) : store.Statements(node);
+                var start = Scanner.SkipTrivia(store.Text(sourceFile), store.Pos(node));
+                var end = statements.Count > 0 ? store.Pos(statements[0]) : store.End(node);
                 return UtilitiesPublic.CreateTextSpanFromBounds(start, end);
             }
             case SyntaxKind.ReturnStatement:
             case SyntaxKind.YieldExpression:
             {
-                var pos = Scanner.SkipTrivia(sourceFile.Text, node.Pos);
-                return GetSpanOfTokenAtPosition(sourceFile, pos);
+                var pos = Scanner.SkipTrivia(store.Text(sourceFile), store.Pos(node));
+                return GetSpanOfTokenAtPosition(store, sourceFile, pos);
             }
             case SyntaxKind.SatisfiesExpression:
             {
-                var pos = Scanner.SkipTrivia(sourceFile.Text, ((SatisfiesExpression)node).Expression.End);
-                return GetSpanOfTokenAtPosition(sourceFile, pos);
+                var pos = Scanner.SkipTrivia(store.Text(sourceFile), store.End(store.Expression(node)));
+                return GetSpanOfTokenAtPosition(store, sourceFile, pos);
             }
             case SyntaxKind.JSDocSatisfiesTag:
             {
-                var pos = Scanner.SkipTrivia(sourceFile.Text, ((JSDocSatisfiesTag)node).TagName.Pos);
-                return GetSpanOfTokenAtPosition(sourceFile, pos);
+                var pos = Scanner.SkipTrivia(store.Text(sourceFile), store.Pos(store.TagName(node)));
+                return GetSpanOfTokenAtPosition(store, sourceFile, pos);
             }
             case SyntaxKind.Constructor:
             {
-                var constructorDeclaration = (ConstructorDeclaration)node;
-                var start = Scanner.SkipTrivia(sourceFile.Text, constructorDeclaration.Pos);
-                var scanner = Scanner.CreateScanner(sourceFile.LanguageVersion, /*skipTrivia*/ true, sourceFile.LanguageVariant, sourceFile.Text, /*onError*/ null, start);
+                var constructorDeclaration = node;
+                var start = Scanner.SkipTrivia(store.Text(sourceFile), store.Pos(constructorDeclaration));
+                var scanner = Scanner.CreateScanner(store.LanguageVersion(sourceFile), /*skipTrivia*/ true, store.LanguageVariant(sourceFile), store.Text(sourceFile), /*onError*/ null, start);
                 var token = scanner.Scan();
                 while (token != SyntaxKind.ConstructorKeyword && token != SyntaxKind.EndOfFileToken)
                 {
@@ -545,59 +546,59 @@ internal static partial class Utilities
             }
         }
 
-        if (errorNode == null)
+        if (errorNode.IsNone)
         {
             // If we don't have a better node, then just set the error on the first token of
             // construct.
-            return GetSpanOfTokenAtPosition(sourceFile, node.Pos);
+            return GetSpanOfTokenAtPosition(store, sourceFile, store.Pos(node));
         }
 
-        Debug.Assert(!FactoryNodeTests.IsJSDoc(errorNode));
+        Debug.Assert(!FactoryNodeTests.IsJSDoc(store, errorNode));
 
-        var isMissing = NodeIsMissing(errorNode);
-        var errorPos = isMissing || FactoryNodeTests.IsJsxText(node)
-            ? errorNode.Pos
-            : Scanner.SkipTrivia(sourceFile.Text, errorNode.Pos);
+        var isMissing = NodeIsMissing(store, errorNode);
+        var errorPos = isMissing || FactoryNodeTests.IsJsxText(store, node)
+            ? store.Pos(errorNode)
+            : Scanner.SkipTrivia(store.Text(sourceFile), store.Pos(errorNode));
 
         // These asserts should all be satisfied for a properly constructed `errorNode`.
         if (isMissing)
         {
-            Debug.Assert(errorPos == errorNode.Pos, "This failure could trigger https://github.com/Microsoft/TypeScript/issues/20809");
-            Debug.Assert(errorPos == errorNode.End, "This failure could trigger https://github.com/Microsoft/TypeScript/issues/20809");
+            Debug.Assert(errorPos == store.Pos(errorNode), "This failure could trigger https://github.com/Microsoft/TypeScript/issues/20809");
+            Debug.Assert(errorPos == store.End(errorNode), "This failure could trigger https://github.com/Microsoft/TypeScript/issues/20809");
         }
         else
         {
-            Debug.Assert(errorPos >= errorNode.Pos, "This failure could trigger https://github.com/Microsoft/TypeScript/issues/20809");
-            Debug.Assert(errorPos <= errorNode.End, "This failure could trigger https://github.com/Microsoft/TypeScript/issues/20809");
+            Debug.Assert(errorPos >= store.Pos(errorNode), "This failure could trigger https://github.com/Microsoft/TypeScript/issues/20809");
+            Debug.Assert(errorPos <= store.End(errorNode), "This failure could trigger https://github.com/Microsoft/TypeScript/issues/20809");
         }
 
-        return UtilitiesPublic.CreateTextSpanFromBounds(errorPos, errorNode.End);
+        return UtilitiesPublic.CreateTextSpanFromBounds(errorPos, store.End(errorNode));
     }
 
-    internal static List<CommentRange>? GetJSDocCommentRanges(Node node, string text)
+    internal static List<CommentRange>? GetJSDocCommentRanges(NodeStore store, Node node, string text)
     {
-        var commentRanges = (node.Kind == SyntaxKind.Parameter ||
-                node.Kind == SyntaxKind.TypeParameter ||
-                node.Kind == SyntaxKind.FunctionExpression ||
-                node.Kind == SyntaxKind.ArrowFunction ||
-                node.Kind == SyntaxKind.ParenthesizedExpression ||
-                node.Kind == SyntaxKind.VariableDeclaration ||
-                node.Kind == SyntaxKind.ExportSpecifier) ?
-            Core.Concatenate(Scanner.GetTrailingCommentRanges(text, node.Pos), Scanner.GetLeadingCommentRanges(text, node.Pos)) :
-            Scanner.GetLeadingCommentRanges(text, node.Pos);
+        var commentRanges = (store.Kind(node) == SyntaxKind.Parameter ||
+                store.Kind(node) == SyntaxKind.TypeParameter ||
+                store.Kind(node) == SyntaxKind.FunctionExpression ||
+                store.Kind(node) == SyntaxKind.ArrowFunction ||
+                store.Kind(node) == SyntaxKind.ParenthesizedExpression ||
+                store.Kind(node) == SyntaxKind.VariableDeclaration ||
+                store.Kind(node) == SyntaxKind.ExportSpecifier) ?
+            Core.Concatenate(Scanner.GetTrailingCommentRanges(text, store.Pos(node)), Scanner.GetLeadingCommentRanges(text, store.Pos(node))) :
+            Scanner.GetLeadingCommentRanges(text, store.Pos(node));
         // True if the comment starts with '/**' but not if it is '/**/'
         return Core.Filter(commentRanges, comment =>
-            comment.End <= node.End && // Due to parse errors sometime empty parameter may get comments assigned to it that end up not in parameter range
+            comment.End <= store.End(node) && // Due to parse errors sometime empty parameter may get comments assigned to it that end up not in parameter range
             CharCodeAtOrNaN(text, comment.Pos + 1) == (int)CharacterCodes.asterisk &&
             CharCodeAtOrNaN(text, comment.Pos + 2) == (int)CharacterCodes.asterisk &&
             CharCodeAtOrNaN(text, comment.Pos + 3) != (int)CharacterCodes.slash);
     }
 
-    internal static bool IsVariableLike(Node? node)
+    internal static bool IsVariableLike(NodeStore store, Node node)
     {
-        if (node != null)
+        if (!node.IsNone)
         {
-            switch (node.Kind)
+            switch (store.Kind(node))
             {
                 case SyntaxKind.BindingElement:
                 case SyntaxKind.EnumMember:
@@ -613,215 +614,215 @@ internal static partial class Utilities
         return false;
     }
 
-    internal static bool IsSuperProperty(Node node)
+    internal static bool IsSuperProperty(NodeStore store, Node node)
     {
-        var kind = node.Kind;
+        var kind = store.Kind(node);
         return (kind == SyntaxKind.PropertyAccessExpression || kind == SyntaxKind.ElementAccessExpression)
-            && GetAccessExpressionExpression(node).Kind == SyntaxKind.SuperKeyword;
+            && store.Kind(GetAccessExpressionExpression(store, node)) == SyntaxKind.SuperKeyword;
     }
 
     /// <summary>`(node as PropertyAccessExpression | ElementAccessExpression).expression`.</summary>
-    private static Node GetAccessExpressionExpression(Node node)
+    private static Node GetAccessExpressionExpression(NodeStore store, Node node)
     {
-        return node is PropertyAccessExpression propertyAccess ? propertyAccess.Expression : ((ElementAccessExpression)node).Expression;
+        return (node is var propertyAccess && store.IsPropertyAccessExpression(propertyAccess)) ? store.Expression(propertyAccess) : store.Expression(node);
     }
 
-    internal static bool IsInJSFile(Node? node)
+    internal static bool IsInJSFile(NodeStore store, Node node)
     {
-        return node != null && (node.Flags & NodeFlags.JavaScriptFile) != 0;
+        return !node.IsNone && (store.Flags(node) & NodeFlags.JavaScriptFile) != 0;
     }
 
-    internal static bool IsStringDoubleQuoted(Node str, SourceFile sourceFile)
+    internal static bool IsStringDoubleQuoted(NodeStore store, Node str, Node sourceFile)
     {
-        return CharCodeAtOrNaN(GetSourceTextOfNodeFromSourceFile(sourceFile, str), 0) == (int)CharacterCodes.doubleQuote;
+        return CharCodeAtOrNaN(GetSourceTextOfNodeFromSourceFile(store, sourceFile, str), 0) == (int)CharacterCodes.doubleQuote;
     }
 
-    internal static Node GetRightMostAssignedExpression(Node node)
+    internal static Node GetRightMostAssignedExpression(NodeStore store, Node node)
     {
-        while (IsAssignmentExpression(node, /*excludeCompoundAssignment*/ true))
+        while (IsAssignmentExpression(store, node, /*excludeCompoundAssignment*/ true))
         {
-            node = ((BinaryExpression)node).Right;
+            node = store.Right(node);
         }
         return node;
     }
 
-    internal static bool IsExportsIdentifier(Node node)
+    internal static bool IsExportsIdentifier(NodeStore store, Node node)
     {
-        return FactoryNodeTests.IsIdentifier(node) && (string)((Identifier)node).EscapedText! == "exports";
+        return FactoryNodeTests.IsIdentifier(store, node) && (string)store.EscapedText(node)! == "exports";
     }
 
-    internal static bool IsModuleIdentifier(Node node)
+    internal static bool IsModuleIdentifier(NodeStore store, Node node)
     {
-        return FactoryNodeTests.IsIdentifier(node) && (string)((Identifier)node).EscapedText! == "module";
+        return FactoryNodeTests.IsIdentifier(store, node) && (string)store.EscapedText(node)! == "module";
     }
 
-    internal static bool IsModuleExportsAccessExpression(Node node)
+    internal static bool IsModuleExportsAccessExpression(NodeStore store, Node node)
     {
-        return (FactoryNodeTests.IsPropertyAccessExpression(node) || IsLiteralLikeElementAccess(node))
-            && IsModuleIdentifier(GetAccessExpressionExpression(node))
-            && GetElementOrPropertyAccessName(node) == "exports";
+        return (FactoryNodeTests.IsPropertyAccessExpression(store, node) || IsLiteralLikeElementAccess(store, node))
+            && IsModuleIdentifier(store, GetAccessExpressionExpression(store, node))
+            && GetElementOrPropertyAccessName(store, node) == "exports";
     }
 
     // Given a BinaryExpression, returns SpecialPropertyAssignmentKind for the various kinds of property
     // assignments we treat as special in the binder
-    internal static AssignmentDeclarationKind GetAssignmentDeclarationKind(Node expr)
+    internal static AssignmentDeclarationKind GetAssignmentDeclarationKind(NodeStore store, Node expr)
     {
-        var special = GetAssignmentDeclarationKindWorker(expr);
-        return special == AssignmentDeclarationKind.Property || IsInJSFile(expr) ? special : AssignmentDeclarationKind.None;
+        var special = GetAssignmentDeclarationKindWorker(store, expr);
+        return special == AssignmentDeclarationKind.Property || IsInJSFile(store, expr) ? special : AssignmentDeclarationKind.None;
     }
 
-    internal static bool IsBindableObjectDefinePropertyCall(CallExpression expr)
+    internal static bool IsBindableObjectDefinePropertyCall(NodeStore store, Node expr)
     {
-        return Core.Length(expr.Arguments) == 3 &&
-            FactoryNodeTests.IsPropertyAccessExpression(expr.Expression) &&
-            FactoryNodeTests.IsIdentifier(((PropertyAccessExpression)expr.Expression).Expression) &&
-            UtilitiesPublic.IdText(((PropertyAccessExpression)expr.Expression).Expression) == "Object" &&
-            UtilitiesPublic.IdText(((PropertyAccessExpression)expr.Expression).Name) == "defineProperty" &&
-            IsStringOrNumericLiteralLike(expr.Arguments[1]) &&
-            IsBindableStaticNameExpression(expr.Arguments[0], /*excludeThisKeyword*/ true);
+        return Core.Length(store.Arguments(expr)!) == 3 &&
+            FactoryNodeTests.IsPropertyAccessExpression(store, store.Expression(expr)) &&
+            FactoryNodeTests.IsIdentifier(store, store.Expression(store.Expression(expr))) &&
+            UtilitiesPublic.IdText(store, store.Expression(store.Expression(expr))) == "Object" &&
+            UtilitiesPublic.IdText(store, store.Name(store.Expression(expr))) == "defineProperty" &&
+            IsStringOrNumericLiteralLike(store, store.Arguments(expr)![1]) &&
+            IsBindableStaticNameExpression(store, store.Arguments(expr)![0], /*excludeThisKeyword*/ true);
     }
 
     /// <summary>
     /// x[0] OR x['a'] OR x[Symbol.y]
     /// </summary>
-    private static bool IsLiteralLikeElementAccess(Node node)
+    private static bool IsLiteralLikeElementAccess(NodeStore store, Node node)
     {
-        return FactoryNodeTests.IsElementAccessExpression(node) && IsStringOrNumericLiteralLike(((ElementAccessExpression)node).ArgumentExpression);
+        return FactoryNodeTests.IsElementAccessExpression(store, node) && IsStringOrNumericLiteralLike(store, store.ArgumentExpression(node));
     }
 
     /// <summary>
     /// Any series of property and element accesses.
     /// </summary>
-    internal static bool IsBindableStaticAccessExpression(Node node, bool? excludeThisKeyword = null)
+    internal static bool IsBindableStaticAccessExpression(NodeStore store, Node node, bool? excludeThisKeyword = null)
     {
-        return FactoryNodeTests.IsPropertyAccessExpression(node) && (excludeThisKeyword != true && ((PropertyAccessExpression)node).Expression.Kind == SyntaxKind.ThisKeyword || FactoryNodeTests.IsIdentifier(((PropertyAccessExpression)node).Name) && IsBindableStaticNameExpression(((PropertyAccessExpression)node).Expression, /*excludeThisKeyword*/ true))
-            || IsBindableStaticElementAccessExpression(node, excludeThisKeyword);
+        return FactoryNodeTests.IsPropertyAccessExpression(store, node) && (excludeThisKeyword != true && store.Kind(store.Expression(node)) == SyntaxKind.ThisKeyword || FactoryNodeTests.IsIdentifier(store, store.Name(node)) && IsBindableStaticNameExpression(store, store.Expression(node), /*excludeThisKeyword*/ true))
+            || IsBindableStaticElementAccessExpression(store, node, excludeThisKeyword);
     }
 
     /// <summary>
     /// Any series of property and element accesses, ending in a literal element access
     /// </summary>
-    internal static bool IsBindableStaticElementAccessExpression(Node node, bool? excludeThisKeyword = null)
+    internal static bool IsBindableStaticElementAccessExpression(NodeStore store, Node node, bool? excludeThisKeyword = null)
     {
-        return IsLiteralLikeElementAccess(node)
-            && ((excludeThisKeyword != true && ((ElementAccessExpression)node).Expression.Kind == SyntaxKind.ThisKeyword) ||
-                IsEntityNameExpression(((ElementAccessExpression)node).Expression) ||
-                IsBindableStaticAccessExpression(((ElementAccessExpression)node).Expression, /*excludeThisKeyword*/ true));
+        return IsLiteralLikeElementAccess(store, node)
+            && ((excludeThisKeyword != true && store.Kind(store.Expression(node)) == SyntaxKind.ThisKeyword) ||
+                IsEntityNameExpression(store, store.Expression(node)) ||
+                IsBindableStaticAccessExpression(store, store.Expression(node), /*excludeThisKeyword*/ true));
     }
 
-    internal static bool IsBindableStaticNameExpression(Node node, bool? excludeThisKeyword = null)
+    internal static bool IsBindableStaticNameExpression(NodeStore store, Node node, bool? excludeThisKeyword = null)
     {
-        return IsEntityNameExpression(node) || IsBindableStaticAccessExpression(node, excludeThisKeyword);
+        return IsEntityNameExpression(store, node) || IsBindableStaticAccessExpression(store, node, excludeThisKeyword);
     }
 
-    private static AssignmentDeclarationKind GetAssignmentDeclarationKindWorker(Node expr)
+    private static AssignmentDeclarationKind GetAssignmentDeclarationKindWorker(NodeStore store, Node expr)
     {
-        if (FactoryNodeTests.IsCallExpression(expr))
+        if (FactoryNodeTests.IsCallExpression(store, expr))
         {
-            var call = (CallExpression)expr;
-            if (!IsBindableObjectDefinePropertyCall(call))
+            var call = expr;
+            if (!IsBindableObjectDefinePropertyCall(store, call))
             {
                 return AssignmentDeclarationKind.None;
             }
-            var entityName = call.Arguments[0];
-            if (IsExportsIdentifier(entityName) || IsModuleExportsAccessExpression(entityName))
+            var entityName = store.Arguments(call)![0];
+            if (IsExportsIdentifier(store, entityName) || IsModuleExportsAccessExpression(store, entityName))
             {
                 return AssignmentDeclarationKind.ObjectDefinePropertyExports;
             }
-            if (IsBindableStaticAccessExpression(entityName) && GetElementOrPropertyAccessName(entityName) == "prototype")
+            if (IsBindableStaticAccessExpression(store, entityName) && GetElementOrPropertyAccessName(store, entityName) == "prototype")
             {
                 return AssignmentDeclarationKind.ObjectDefinePrototypeProperty;
             }
             return AssignmentDeclarationKind.ObjectDefinePropertyValue;
         }
-        var binary = (BinaryExpression)expr;
-        if (binary.OperatorToken.Kind != SyntaxKind.EqualsToken || !IsAccessExpression(binary.Left) || IsVoidZero(GetRightMostAssignedExpression(binary)))
+        var binary = expr;
+        if (store.Kind(store.OperatorToken(binary)) != SyntaxKind.EqualsToken || !IsAccessExpression(store, store.Left(binary)) || IsVoidZero(store, GetRightMostAssignedExpression(store, binary)))
         {
             return AssignmentDeclarationKind.None;
         }
-        if (IsBindableStaticNameExpression(GetAccessExpressionExpression(binary.Left), /*excludeThisKeyword*/ true) && GetElementOrPropertyAccessName(binary.Left) == "prototype" && FactoryNodeTests.IsObjectLiteralExpression(GetInitializerOfBinaryExpression(binary)))
+        if (IsBindableStaticNameExpression(store, GetAccessExpressionExpression(store, store.Left(binary)), /*excludeThisKeyword*/ true) && GetElementOrPropertyAccessName(store, store.Left(binary)) == "prototype" && FactoryNodeTests.IsObjectLiteralExpression(store, GetInitializerOfBinaryExpression(store, binary)))
         {
             // F.prototype = { ... }
             return AssignmentDeclarationKind.Prototype;
         }
-        return GetAssignmentDeclarationPropertyAccessKind(binary.Left);
+        return GetAssignmentDeclarationPropertyAccessKind(store, store.Left(binary));
     }
 
-    private static bool IsVoidZero(Node node)
+    private static bool IsVoidZero(NodeStore store, Node node)
     {
-        return FactoryNodeTests.IsVoidExpression(node) && FactoryNodeTests.IsNumericLiteral(((VoidExpression)node).Expression) && ((NumericLiteral)((VoidExpression)node).Expression).Text == "0";
+        return FactoryNodeTests.IsVoidExpression(store, node) && FactoryNodeTests.IsNumericLiteral(store, store.Expression(node)) && store.Text(store.Expression(node)) == "0";
     }
 
     /// <summary>
     /// Does not handle signed numeric names like `a[+0]` - handling those would require handling prefix unary expressions
     /// throughout late binding handling as well, which is awkward (but ultimately probably doable if there is demand)
     /// </summary>
-    internal static Node? GetElementOrPropertyAccessArgumentExpressionOrName(Node node)
+    internal static Node GetElementOrPropertyAccessArgumentExpressionOrName(NodeStore store, Node node)
     {
-        if (FactoryNodeTests.IsPropertyAccessExpression(node))
+        if (FactoryNodeTests.IsPropertyAccessExpression(store, node))
         {
-            return ((PropertyAccessExpression)node).Name;
+            return store.Name(node);
         }
-        var arg = SkipParentheses(((ElementAccessExpression)node).ArgumentExpression);
-        if (FactoryNodeTests.IsNumericLiteral(arg) || UtilitiesPublic.IsStringLiteralLike(arg))
+        var arg = SkipParentheses(store, store.ArgumentExpression(node));
+        if (FactoryNodeTests.IsNumericLiteral(store, arg) || UtilitiesPublic.IsStringLiteralLike(store, arg))
         {
             return arg;
         }
         return node;
     }
 
-    internal static string? GetElementOrPropertyAccessName(Node node)
+    internal static string? GetElementOrPropertyAccessName(NodeStore store, Node node)
     {
-        var name = GetElementOrPropertyAccessArgumentExpressionOrName(node);
-        if (name != null)
+        var name = GetElementOrPropertyAccessArgumentExpressionOrName(store, node);
+        if (!name.IsNone)
         {
-            if (FactoryNodeTests.IsIdentifier(name))
+            if (FactoryNodeTests.IsIdentifier(store, name))
             {
-                return (string)((Identifier)name).EscapedText!;
+                return (string)store.EscapedText(name)!;
             }
-            if (UtilitiesPublic.IsStringLiteralLike(name) || FactoryNodeTests.IsNumericLiteral(name))
+            if (UtilitiesPublic.IsStringLiteralLike(store, name) || FactoryNodeTests.IsNumericLiteral(store, name))
             {
-                return UtilitiesPublic.EscapeLeadingUnderscores(GetLiteralText(name));
+                return UtilitiesPublic.EscapeLeadingUnderscores(GetLiteralText(store, name));
             }
         }
         return null;
     }
 
-    internal static AssignmentDeclarationKind GetAssignmentDeclarationPropertyAccessKind(Node lhs)
+    internal static AssignmentDeclarationKind GetAssignmentDeclarationPropertyAccessKind(NodeStore store, Node lhs)
     {
-        if (GetAccessExpressionExpression(lhs).Kind == SyntaxKind.ThisKeyword)
+        if (store.Kind(GetAccessExpressionExpression(store, lhs)) == SyntaxKind.ThisKeyword)
         {
             return AssignmentDeclarationKind.ThisProperty;
         }
-        else if (IsModuleExportsAccessExpression(lhs))
+        else if (IsModuleExportsAccessExpression(store, lhs))
         {
             // module.exports = expr
             return AssignmentDeclarationKind.ModuleExports;
         }
-        else if (IsBindableStaticNameExpression(GetAccessExpressionExpression(lhs), /*excludeThisKeyword*/ true))
+        else if (IsBindableStaticNameExpression(store, GetAccessExpressionExpression(store, lhs), /*excludeThisKeyword*/ true))
         {
-            if (IsPrototypeAccess(GetAccessExpressionExpression(lhs)))
+            if (IsPrototypeAccess(store, GetAccessExpressionExpression(store, lhs)))
             {
                 // F.G....prototype.x = expr
                 return AssignmentDeclarationKind.PrototypeProperty;
             }
 
             var nextToLast = lhs;
-            while (!FactoryNodeTests.IsIdentifier(GetAccessExpressionExpression(nextToLast)))
+            while (!FactoryNodeTests.IsIdentifier(store, GetAccessExpressionExpression(store, nextToLast)))
             {
-                nextToLast = GetAccessExpressionExpression(nextToLast);
+                nextToLast = GetAccessExpressionExpression(store, nextToLast);
             }
-            var id = (Identifier)GetAccessExpressionExpression(nextToLast);
+            var id = GetAccessExpressionExpression(store, nextToLast);
             if (
-                ((string)id.EscapedText! == "exports" ||
-                    (string)id.EscapedText! == "module" && GetElementOrPropertyAccessName(nextToLast) == "exports") &&
+                ((string)store.EscapedText(id)! == "exports" ||
+                    (string)store.EscapedText(id)! == "module" && GetElementOrPropertyAccessName(store, nextToLast) == "exports") &&
                 // ExportsProperty does not support binding with computed names
-                IsBindableStaticAccessExpression(lhs))
+                IsBindableStaticAccessExpression(store, lhs))
             {
                 // exports.name = expr OR module.exports.name = expr OR exports["name"] = expr ...
                 return AssignmentDeclarationKind.ExportsProperty;
             }
-            if (IsBindableStaticNameExpression(lhs, /*excludeThisKeyword*/ true) || (FactoryNodeTests.IsElementAccessExpression(lhs) && IsDynamicName(lhs)))
+            if (IsBindableStaticNameExpression(store, lhs, /*excludeThisKeyword*/ true) || (FactoryNodeTests.IsElementAccessExpression(store, lhs) && IsDynamicName(store, lhs)))
             {
                 // F.G...x = expr
                 return AssignmentDeclarationKind.Property;
@@ -831,63 +832,63 @@ internal static partial class Utilities
         return AssignmentDeclarationKind.None;
     }
 
-    internal static Node GetInitializerOfBinaryExpression(BinaryExpression expr)
+    internal static Node GetInitializerOfBinaryExpression(NodeStore store, Node expr)
     {
-        while (FactoryNodeTests.IsBinaryExpression(expr.Right))
+        while (FactoryNodeTests.IsBinaryExpression(store, store.Right(expr)))
         {
-            expr = (BinaryExpression)expr.Right;
+            expr = store.Right(expr);
         }
-        return expr.Right;
+        return store.Right(expr);
     }
 
-    private static Node? GetSourceOfDefaultedAssignment(Node node)
+    private static Node GetSourceOfDefaultedAssignment(NodeStore store, Node node)
     {
-        if (FactoryNodeTests.IsExpressionStatement(node) &&
-            FactoryNodeTests.IsBinaryExpression(((ExpressionStatement)node).Expression))
+        if (FactoryNodeTests.IsExpressionStatement(store, node) &&
+            FactoryNodeTests.IsBinaryExpression(store, store.Expression(node)))
         {
-            var expression = (BinaryExpression)((ExpressionStatement)node).Expression;
-            if (GetAssignmentDeclarationKind(expression) != AssignmentDeclarationKind.None &&
-                FactoryNodeTests.IsBinaryExpression(expression.Right) &&
-                (((BinaryExpression)expression.Right).OperatorToken.Kind == SyntaxKind.BarBarToken || ((BinaryExpression)expression.Right).OperatorToken.Kind == SyntaxKind.QuestionQuestionToken))
+            var expression = store.Expression(node);
+            if (GetAssignmentDeclarationKind(store, expression) != AssignmentDeclarationKind.None &&
+                FactoryNodeTests.IsBinaryExpression(store, store.Right(expression)) &&
+                (store.Kind(store.OperatorToken(store.Right(expression))) == SyntaxKind.BarBarToken || store.Kind(store.OperatorToken(store.Right(expression))) == SyntaxKind.QuestionQuestionToken))
             {
-                return ((BinaryExpression)expression.Right).Right;
+                return store.Right(store.Right(expression));
             }
         }
-        return null;
+        return default;
     }
 
-    private static Node? GetSingleInitializerOfVariableStatementOrPropertyDeclaration(Node node)
+    private static Node GetSingleInitializerOfVariableStatementOrPropertyDeclaration(NodeStore store, Node node)
     {
-        switch (node.Kind)
+        switch (store.Kind(node))
         {
             case SyntaxKind.VariableStatement:
-                var v = GetSingleVariableOfVariableStatement(node);
-                return v?.Initializer;
+                var v = GetSingleVariableOfVariableStatement(store, node);
+                return store.Initializer(v);
             case SyntaxKind.PropertyDeclaration:
-                return ((PropertyDeclaration)node).Initializer;
+                return store.Initializer(node);
             case SyntaxKind.PropertyAssignment:
-                return ((PropertyAssignment)node).Initializer;
+                return store.Initializer(node);
         }
-        return null;
+        return default;
     }
 
-    internal static VariableDeclaration? GetSingleVariableOfVariableStatement(Node node)
+    internal static Node GetSingleVariableOfVariableStatement(NodeStore store, Node node)
     {
-        return FactoryNodeTests.IsVariableStatement(node) ? (VariableDeclaration?)Core.FirstOrUndefined(((VariableStatement)node).DeclarationList.Declarations) : null;
+        return FactoryNodeTests.IsVariableStatement(store, node) ? Core.FirstOrUndefined(store.Declarations(store.DeclarationList(node))) : default;
     }
 
-    private static Node? GetNestedModuleDeclaration(Node node)
+    private static Node GetNestedModuleDeclaration(NodeStore store, Node node)
     {
-        return FactoryNodeTests.IsModuleDeclaration(node) &&
-                ((ModuleDeclaration)node).Body != null &&
-                ((ModuleDeclaration)node).Body!.Kind == SyntaxKind.ModuleDeclaration
-            ? ((ModuleDeclaration)node).Body
-            : null;
+        return FactoryNodeTests.IsModuleDeclaration(store, node) &&
+                !store.Body(node).IsNone &&
+                store.Kind(store.Body(node)) == SyntaxKind.ModuleDeclaration
+            ? store.Body(node)
+            : default;
     }
 
-    internal static bool CanHaveJSDoc(Node node)
+    internal static bool CanHaveJSDoc(NodeStore store, Node node)
     {
-        switch (node.Kind)
+        switch (store.Kind(node))
         {
             case SyntaxKind.ArrowFunction:
             case SyntaxKind.BinaryExpression:
@@ -980,39 +981,39 @@ internal static partial class Utilities
     /// function b(/** JSDoc will be returned for `c` *\/ c) {}
     /// ```
     /// </summary>
-    internal static IReadOnlyList<Node> GetJSDocCommentsAndTags(Node hostNode, bool? noCache = null)
+    internal static IReadOnlyList<Node> GetJSDocCommentsAndTags(NodeStore store, Node hostNode, bool? noCache = null)
     {
         List<Node>? result = null;
         // Pull parameter comments from declaring function as well
-        if (IsVariableLike(hostNode) && UtilitiesPublic.HasInitializer(hostNode) && UtilitiesPublic.HasJSDocNodes(NodeAccessors.GetInitializer(hostNode)!))
+        if (IsVariableLike(store, hostNode) && UtilitiesPublic.HasInitializer(store, hostNode) && UtilitiesPublic.HasJSDocNodes(store, store.Initializer(hostNode)))
         {
-            result = Core.AddRange(result, FilterOwnedJSDocTags(hostNode, JSDocContainers.GetJsDoc(NodeAccessors.GetInitializer(hostNode)!)!));
+            result = Core.AddRange(result, FilterOwnedJSDocTags(store, hostNode, store.JsDoc(store.Initializer(hostNode))!));
         }
 
-        Node? node = hostNode;
-        while (node != null && node.Parent != null)
+        Node node = hostNode;
+        while (!node.IsNone && !store.Parent(node).IsNone)
         {
-            if (UtilitiesPublic.HasJSDocNodes(node))
+            if (UtilitiesPublic.HasJSDocNodes(store, node))
             {
-                result = Core.AddRange(result, FilterOwnedJSDocTags(hostNode, JSDocContainers.GetJsDoc(node)!));
+                result = Core.AddRange(result, FilterOwnedJSDocTags(store, hostNode, store.JsDoc(node)!));
             }
 
-            if (node.Kind == SyntaxKind.Parameter)
+            if (store.Kind(node) == SyntaxKind.Parameter)
             {
-                result = Core.AddRange(result, noCache == true ? UtilitiesPublic.GetJSDocParameterTagsNoCache((ParameterDeclaration)node) : UtilitiesPublic.GetJSDocParameterTags((ParameterDeclaration)node));
+                result = Core.AddRange(result, noCache == true ? UtilitiesPublic.GetJSDocParameterTagsNoCache(store, node) : UtilitiesPublic.GetJSDocParameterTags(store, node));
                 break;
             }
-            if (node.Kind == SyntaxKind.TypeParameter)
+            if (store.Kind(node) == SyntaxKind.TypeParameter)
             {
-                result = Core.AddRange(result, noCache == true ? UtilitiesPublic.GetJSDocTypeParameterTagsNoCache((TypeParameterDeclaration)node) : UtilitiesPublic.GetJSDocTypeParameterTags((TypeParameterDeclaration)node));
+                result = Core.AddRange(result, noCache == true ? UtilitiesPublic.GetJSDocTypeParameterTagsNoCache(store, node) : UtilitiesPublic.GetJSDocTypeParameterTags(store, node));
                 break;
             }
-            node = GetNextJSDocCommentLocation(node);
+            node = GetNextJSDocCommentLocation(store, node);
         }
         return result ?? (IReadOnlyList<Node>)Core.EmptyArray<Node>();
     }
 
-    private static IReadOnlyList<Node> FilterOwnedJSDocTags(Node hostNode, List<JSDoc> comments)
+    private static IReadOnlyList<Node> FilterOwnedJSDocTags(NodeStore store, Node hostNode, List<Node> comments)
     {
         var lastJsDoc = Core.Last(comments);
         // flatMap<JSDoc, JSDoc | JSDocTag>(comments, jsDoc => ...)
@@ -1022,12 +1023,12 @@ internal static partial class Utilities
             IReadOnlyList<Node>? mapped;
             if (jsDoc == lastJsDoc)
             {
-                var ownedTags = Core.Filter((IReadOnlyList<Node>?)jsDoc.Tags, tag => OwnsJSDocTag(hostNode, tag));
-                mapped = jsDoc.Tags == ownedTags ? [jsDoc] : ownedTags;
+                var ownedTags = Core.Filter((IReadOnlyList<Node>?)store.Tags(jsDoc), tag => OwnsJSDocTag(store, hostNode, tag));
+                mapped = store.Tags(jsDoc) == ownedTags ? [jsDoc] : ownedTags;
             }
             else
             {
-                mapped = Core.Filter((IReadOnlyList<Node>?)jsDoc.Tags, FactoryNodeTests.IsJSDocOverloadTag);
+                mapped = Core.Filter((IReadOnlyList<Node>?)store.Tags(jsDoc), ((a0) => FactoryNodeTests.IsJSDocOverloadTag(store, a0)));
             }
             if (mapped != null)
             {
@@ -1042,26 +1043,26 @@ internal static partial class Utilities
     /// Determines whether a host node owns a jsDoc tag. A `@type`/`@satisfies` tag attached to a
     /// a ParenthesizedExpression belongs only to the ParenthesizedExpression.
     /// </summary>
-    private static bool OwnsJSDocTag(Node hostNode, Node tag)
+    private static bool OwnsJSDocTag(NodeStore store, Node hostNode, Node tag)
     {
-        return !(FactoryNodeTests.IsJSDocTypeTag(tag) || FactoryNodeTests.IsJSDocSatisfiesTag(tag))
-            || tag.Parent == null
-            || !FactoryNodeTests.IsJSDoc(tag.Parent)
-            || !FactoryNodeTests.IsParenthesizedExpression(tag.Parent.Parent)
-            || tag.Parent.Parent == hostNode;
+        return !(FactoryNodeTests.IsJSDocTypeTag(store, tag) || FactoryNodeTests.IsJSDocSatisfiesTag(store, tag))
+            || store.Parent(tag).IsNone
+            || !FactoryNodeTests.IsJSDoc(store, store.Parent(tag))
+            || !FactoryNodeTests.IsParenthesizedExpression(store, store.Parent(store.Parent(tag)))
+            || store.Parent(store.Parent(tag)) == hostNode;
     }
 
-    internal static Node? GetNextJSDocCommentLocation(Node node)
+    internal static Node GetNextJSDocCommentLocation(NodeStore store, Node node)
     {
-        var parent = node.Parent;
+        var parent = store.Parent(node);
         if (
-            parent.Kind == SyntaxKind.PropertyAssignment ||
-            parent.Kind == SyntaxKind.ExportAssignment ||
-            parent.Kind == SyntaxKind.PropertyDeclaration ||
-            parent.Kind == SyntaxKind.ExpressionStatement && node.Kind == SyntaxKind.PropertyAccessExpression ||
-            parent.Kind == SyntaxKind.ReturnStatement ||
-            GetNestedModuleDeclaration(parent) != null ||
-            IsAssignmentExpression(node))
+            store.Kind(parent) == SyntaxKind.PropertyAssignment ||
+            store.Kind(parent) == SyntaxKind.ExportAssignment ||
+            store.Kind(parent) == SyntaxKind.PropertyDeclaration ||
+            store.Kind(parent) == SyntaxKind.ExpressionStatement && store.Kind(node) == SyntaxKind.PropertyAccessExpression ||
+            store.Kind(parent) == SyntaxKind.ReturnStatement ||
+            !GetNestedModuleDeclaration(store, parent).IsNone ||
+            IsAssignmentExpression(store, node))
         {
             return parent;
         }
@@ -1072,28 +1073,28 @@ internal static partial class Utilities
         //   */
         // var x = function(name) { return name.length; }
         else if (
-            parent.Parent != null &&
-            (GetSingleVariableOfVariableStatement(parent.Parent) == node || IsAssignmentExpression(parent)))
+            !store.Parent(parent).IsNone &&
+            (GetSingleVariableOfVariableStatement(store, store.Parent(parent)) == node || IsAssignmentExpression(store, parent)))
         {
-            return parent.Parent;
+            return store.Parent(parent);
         }
         else if (
-            parent.Parent != null && parent.Parent.Parent != null &&
-            (GetSingleVariableOfVariableStatement(parent.Parent.Parent) != null ||
-                GetSingleInitializerOfVariableStatementOrPropertyDeclaration(parent.Parent.Parent) == node ||
-                GetSourceOfDefaultedAssignment(parent.Parent.Parent) != null))
+            !store.Parent(parent).IsNone && !store.Parent(store.Parent(parent)).IsNone &&
+            (!GetSingleVariableOfVariableStatement(store, store.Parent(store.Parent(parent))).IsNone ||
+                GetSingleInitializerOfVariableStatementOrPropertyDeclaration(store, store.Parent(store.Parent(parent))) == node ||
+                !GetSourceOfDefaultedAssignment(store, store.Parent(store.Parent(parent))).IsNone))
         {
-            return parent.Parent.Parent;
+            return store.Parent(store.Parent(parent));
         }
-        return null;
+        return default;
     }
 
-    internal static Node SkipParentheses(Node node, bool? excludeJSDocTypeAssertions = null)
+    internal static Node SkipParentheses(NodeStore store, Node node, bool? excludeJSDocTypeAssertions = null)
     {
         var flags = excludeJSDocTypeAssertions == true ?
             OuterExpressionKinds.Parentheses | OuterExpressionKinds.ExcludeJSDocTypeAssertion :
             OuterExpressionKinds.Parentheses;
-        return FactoryUtilities.SkipOuterExpressions(node, flags);
+        return FactoryUtilities.SkipOuterExpressions(store, node, flags);
     }
 
     internal static bool IsKeyword(SyntaxKind token)
@@ -1111,25 +1112,25 @@ internal static partial class Utilities
         return IsKeyword(token) || IsPunctuation(token);
     }
 
-    internal static bool IsStringOrNumericLiteralLike(Node node)
+    internal static bool IsStringOrNumericLiteralLike(NodeStore store, Node node)
     {
-        return UtilitiesPublic.IsStringLiteralLike(node) || FactoryNodeTests.IsNumericLiteral(node);
+        return UtilitiesPublic.IsStringLiteralLike(store, node) || FactoryNodeTests.IsNumericLiteral(store, node);
     }
 
-    internal static bool IsSignedNumericLiteral(Node node)
+    internal static bool IsSignedNumericLiteral(NodeStore store, Node node)
     {
-        return FactoryNodeTests.IsPrefixUnaryExpression(node) && (((PrefixUnaryExpression)node).Operator == SyntaxKind.PlusToken || ((PrefixUnaryExpression)node).Operator == SyntaxKind.MinusToken) && FactoryNodeTests.IsNumericLiteral(((PrefixUnaryExpression)node).Operand);
+        return FactoryNodeTests.IsPrefixUnaryExpression(store, node) && (store.Operator(node) == SyntaxKind.PlusToken || store.Operator(node) == SyntaxKind.MinusToken) && FactoryNodeTests.IsNumericLiteral(store, store.Operand(node));
     }
 
-    internal static bool IsDynamicName(Node name)
+    internal static bool IsDynamicName(NodeStore store, Node name)
     {
-        if (!(name.Kind == SyntaxKind.ComputedPropertyName || name.Kind == SyntaxKind.ElementAccessExpression))
+        if (!(store.Kind(name) == SyntaxKind.ComputedPropertyName || store.Kind(name) == SyntaxKind.ElementAccessExpression))
         {
             return false;
         }
-        var expr = FactoryNodeTests.IsElementAccessExpression(name) ? SkipParentheses(((ElementAccessExpression)name).ArgumentExpression) : ((ComputedPropertyName)name).Expression;
-        return !IsStringOrNumericLiteralLike(expr) &&
-            !IsSignedNumericLiteral(expr);
+        var expr = FactoryNodeTests.IsElementAccessExpression(store, name) ? SkipParentheses(store, store.ArgumentExpression(name)) : store.Expression(name);
+        return !IsStringOrNumericLiteralLike(store, expr) &&
+            !IsSignedNumericLiteral(store, expr);
     }
 
     internal static bool NodeIsSynthesized(TextRange range)
@@ -1138,11 +1139,17 @@ internal static partial class Utilities
             || PositionIsSynthesized(range.End);
     }
 
-    internal static Associativity GetExpressionAssociativity(Node expression)
+    internal static bool NodeIsSynthesized(NodeStore store, Node node)
     {
-        var @operator = GetOperator(expression);
-        var hasArguments = expression.Kind == SyntaxKind.NewExpression && ((NewExpression)expression).Arguments != null;
-        return GetOperatorAssociativity(expression.Kind, @operator, hasArguments);
+        return PositionIsSynthesized(store.Pos(node))
+            || PositionIsSynthesized(store.End(node));
+    }
+
+    internal static Associativity GetExpressionAssociativity(NodeStore store, Node expression)
+    {
+        var @operator = GetOperator(store, expression);
+        var hasArguments = store.Kind(expression) == SyntaxKind.NewExpression && store.Arguments(expression) != null;
+        return GetOperatorAssociativity(store.Kind(expression), @operator, hasArguments);
     }
 
     internal static Associativity GetOperatorAssociativity(SyntaxKind kind, SyntaxKind @operator, bool? hasArguments = null)
@@ -1188,26 +1195,26 @@ internal static partial class Utilities
         return Associativity.Left;
     }
 
-    internal static OperatorPrecedence GetExpressionPrecedence(Node expression)
+    internal static OperatorPrecedence GetExpressionPrecedence(NodeStore store, Node expression)
     {
-        var @operator = GetOperator(expression);
-        var hasArguments = expression.Kind == SyntaxKind.NewExpression && ((NewExpression)expression).Arguments != null;
-        return GetOperatorPrecedence(expression.Kind, @operator, hasArguments);
+        var @operator = GetOperator(store, expression);
+        var hasArguments = store.Kind(expression) == SyntaxKind.NewExpression && store.Arguments(expression) != null;
+        return GetOperatorPrecedence(store.Kind(expression), @operator, hasArguments);
     }
 
-    private static SyntaxKind GetOperator(Node expression)
+    private static SyntaxKind GetOperator(NodeStore store, Node expression)
     {
-        if (expression.Kind == SyntaxKind.BinaryExpression)
+        if (store.Kind(expression) == SyntaxKind.BinaryExpression)
         {
-            return ((BinaryExpression)expression).OperatorToken.Kind;
+            return store.Kind(store.OperatorToken(expression));
         }
-        else if (expression.Kind == SyntaxKind.PrefixUnaryExpression || expression.Kind == SyntaxKind.PostfixUnaryExpression)
+        else if (store.Kind(expression) == SyntaxKind.PrefixUnaryExpression || store.Kind(expression) == SyntaxKind.PostfixUnaryExpression)
         {
-            return expression is PrefixUnaryExpression prefix ? prefix.Operator : ((PostfixUnaryExpression)expression).Operator;
+            return (expression is var prefix && store.IsPrefixUnaryExpression(prefix)) ? store.Operator(prefix) : store.Operator(expression);
         }
         else
         {
-            return expression.Kind;
+            return store.Kind(expression);
         }
     }
 
@@ -1365,72 +1372,72 @@ internal static partial class Utilities
     }
 
     /// <summary>`node.templateFlags` of a TemplateLiteralToken (NoSubstitutionTemplateLiteral, TemplateHead/Middle/Tail).</summary>
-    private static TokenFlags GetTemplateFlags(Node node)
+    private static TokenFlags GetTemplateFlags(NodeStore store, Node node)
     {
         return node switch
         {
-            NoSubstitutionTemplateLiteral n => n.TemplateFlags,
-            TemplateHead n => n.TemplateFlags,
-            TemplateMiddle n => n.TemplateFlags,
-            TemplateTail n => n.TemplateFlags,
+            var n when store.IsNoSubstitutionTemplateLiteral(n) => store.TemplateFlags(n),
+            var n when store.IsTemplateHead(n) => store.TemplateFlags(n),
+            var n when store.IsTemplateMiddle(n) => store.TemplateFlags(n),
+            var n when store.IsTemplateTail(n) => store.TemplateFlags(n),
             _ => TokenFlags.None,
         };
     }
 
-    private static bool ContainsInvalidEscapeFlag(Node node)
+    private static bool ContainsInvalidEscapeFlag(NodeStore store, Node node)
     {
-        return (GetTemplateFlags(node) & TokenFlags.ContainsInvalidEscape) != 0;
+        return (GetTemplateFlags(store, node) & TokenFlags.ContainsInvalidEscape) != 0;
     }
 
-    internal static bool HasInvalidEscape(Node? template)
+    internal static bool HasInvalidEscape(NodeStore store, Node template)
     {
-        return template != null && (FactoryNodeTests.IsNoSubstitutionTemplateLiteral(template)
-            ? ContainsInvalidEscapeFlag(template)
-            : (ContainsInvalidEscapeFlag(((TemplateExpression)template).Head) || Core.Some(((TemplateExpression)template).TemplateSpans, span => ContainsInvalidEscapeFlag(((TemplateSpan)span).Literal))));
+        return !template.IsNone && (FactoryNodeTests.IsNoSubstitutionTemplateLiteral(store, template)
+            ? ContainsInvalidEscapeFlag(store, template)
+            : (ContainsInvalidEscapeFlag(store, store.Head(template)) || Core.Some(store.TemplateSpans(template), span => ContainsInvalidEscapeFlag(store, store.Literal(span)))));
     }
 
-    internal static bool IsThisIdentifier(Node? node)
+    internal static bool IsThisIdentifier(NodeStore store, Node node)
     {
-        return node != null && node.Kind == SyntaxKind.Identifier && IdentifierIsThisKeyword((Identifier)node);
+        return !node.IsNone && store.Kind(node) == SyntaxKind.Identifier && IdentifierIsThisKeyword(store, node);
     }
 
-    internal static bool IdentifierIsThisKeyword(Identifier id)
+    internal static bool IdentifierIsThisKeyword(NodeStore store, Node id)
     {
-        return (string)id.EscapedText! == "this";
+        return (string)store.EscapedText(id)! == "this";
     }
 
-    internal static bool HasSyntacticModifier(Node node, ModifierFlags flags)
+    internal static bool HasSyntacticModifier(NodeStore store, Node node, ModifierFlags flags)
     {
-        return GetSelectedSyntacticModifierFlags(node, flags) != 0;
+        return GetSelectedSyntacticModifierFlags(store, node, flags) != 0;
     }
 
-    internal static ModifierFlags GetSelectedSyntacticModifierFlags(Node node, ModifierFlags flags)
+    internal static ModifierFlags GetSelectedSyntacticModifierFlags(NodeStore store, Node node, ModifierFlags flags)
     {
-        return GetSyntacticModifierFlags(node) & flags;
+        return GetSyntacticModifierFlags(store, node) & flags;
     }
 
-    private static ModifierFlags GetModifierFlagsWorker(Node node, bool includeJSDoc, bool? alwaysIncludeJSDoc = null)
+    private static ModifierFlags GetModifierFlagsWorker(NodeStore store, Node node, bool includeJSDoc, bool? alwaysIncludeJSDoc = null)
     {
-        if (node.Kind >= SyntaxKind.FirstToken && node.Kind <= SyntaxKind.LastToken)
+        if (store.Kind(node) >= SyntaxKind.FirstToken && store.Kind(node) <= SyntaxKind.LastToken)
         {
             return ModifierFlags.None;
         }
 
-        if ((node.ModifierFlagsCache & ModifierFlags.HasComputedFlags) == 0)
+        if ((store.ModifierFlagsCache(node) & ModifierFlags.HasComputedFlags) == 0)
         {
-            node.ModifierFlagsCache = GetSyntacticModifierFlagsNoCache(node) | ModifierFlags.HasComputedFlags;
+            store.SetModifierFlagsCache(node, GetSyntacticModifierFlagsNoCache(store, node) | ModifierFlags.HasComputedFlags);
         }
 
-        if (alwaysIncludeJSDoc == true || includeJSDoc && IsInJSFile(node))
+        if (alwaysIncludeJSDoc == true || includeJSDoc && IsInJSFile(store, node))
         {
-            if ((node.ModifierFlagsCache & ModifierFlags.HasComputedJSDocModifiers) == 0 && node.Parent != null)
+            if ((store.ModifierFlagsCache(node) & ModifierFlags.HasComputedJSDocModifiers) == 0 && !store.Parent(node).IsNone)
             {
-                node.ModifierFlagsCache |= GetRawJSDocModifierFlagsNoCache(node) | ModifierFlags.HasComputedJSDocModifiers;
+                store.SetModifierFlagsCache(node, store.ModifierFlagsCache(node) | (GetRawJSDocModifierFlagsNoCache(store, node) | ModifierFlags.HasComputedJSDocModifiers));
             }
-            return SelectEffectiveModifierFlags(node.ModifierFlagsCache);
+            return SelectEffectiveModifierFlags(store.ModifierFlagsCache(node));
         }
 
-        return SelectSyntacticModifierFlags(node.ModifierFlagsCache);
+        return SelectSyntacticModifierFlags(store.ModifierFlagsCache(node));
     }
 
     /// <summary>
@@ -1438,40 +1445,40 @@ internal static partial class Utilities
     ///
     /// NOTE: This function does not use `parent` pointers and will not include modifiers from JSDoc.
     /// </summary>
-    internal static ModifierFlags GetSyntacticModifierFlags(Node node)
+    internal static ModifierFlags GetSyntacticModifierFlags(NodeStore store, Node node)
     {
-        return GetModifierFlagsWorker(node, /*includeJSDoc*/ false);
+        return GetModifierFlagsWorker(store, node, /*includeJSDoc*/ false);
     }
 
-    private static ModifierFlags GetRawJSDocModifierFlagsNoCache(Node node)
+    private static ModifierFlags GetRawJSDocModifierFlagsNoCache(NodeStore store, Node node)
     {
         var flags = ModifierFlags.None;
-        if (node.Parent != null && !FactoryNodeTests.IsParameter(node))
+        if (!store.Parent(node).IsNone && !FactoryNodeTests.IsParameter(store, node))
         {
-            if (IsInJSFile(node))
+            if (IsInJSFile(store, node))
             {
-                if (UtilitiesPublic.GetJSDocPublicTagNoCache(node) != null)
+                if (!UtilitiesPublic.GetJSDocPublicTagNoCache(store, node).IsNone)
                 {
                     flags |= ModifierFlags.JSDocPublic;
                 }
-                if (UtilitiesPublic.GetJSDocPrivateTagNoCache(node) != null)
+                if (!UtilitiesPublic.GetJSDocPrivateTagNoCache(store, node).IsNone)
                 {
                     flags |= ModifierFlags.JSDocPrivate;
                 }
-                if (UtilitiesPublic.GetJSDocProtectedTagNoCache(node) != null)
+                if (!UtilitiesPublic.GetJSDocProtectedTagNoCache(store, node).IsNone)
                 {
                     flags |= ModifierFlags.JSDocProtected;
                 }
-                if (UtilitiesPublic.GetJSDocReadonlyTagNoCache(node) != null)
+                if (!UtilitiesPublic.GetJSDocReadonlyTagNoCache(store, node).IsNone)
                 {
                     flags |= ModifierFlags.JSDocReadonly;
                 }
-                if (UtilitiesPublic.GetJSDocOverrideTagNoCache(node) != null)
+                if (!UtilitiesPublic.GetJSDocOverrideTagNoCache(store, node).IsNone)
                 {
                     flags |= ModifierFlags.JSDocOverride;
                 }
             }
-            if (UtilitiesPublic.GetJSDocDeprecatedTagNoCache(node) != null)
+            if (!UtilitiesPublic.GetJSDocDeprecatedTagNoCache(store, node).IsNone)
             {
                 flags |= ModifierFlags.Deprecated;
             }
@@ -1496,24 +1503,24 @@ internal static partial class Utilities
     ///
     /// NOTE: This function does not use `parent` pointers and will not include modifiers from JSDoc.
     /// </summary>
-    internal static ModifierFlags GetSyntacticModifierFlagsNoCache(Node node)
+    internal static ModifierFlags GetSyntacticModifierFlagsNoCache(NodeStore store, Node node)
     {
-        var flags = FactoryUtilitiesPublic.CanHaveModifiers(node) ? ModifiersToFlags(NodeAccessors.GetModifiers(node)) : ModifierFlags.None;
-        if ((node.Flags & NodeFlags.NestedNamespace) != 0 || node.Kind == SyntaxKind.Identifier && (node.Flags & NodeFlags.IdentifierIsInJSDocNamespace) != 0)
+        var flags = FactoryUtilitiesPublic.CanHaveModifiers(store, node) ? ModifiersToFlags(store, store.Modifiers(node)) : ModifierFlags.None;
+        if ((store.Flags(node) & NodeFlags.NestedNamespace) != 0 || store.Kind(node) == SyntaxKind.Identifier && (store.Flags(node) & NodeFlags.IdentifierIsInJSDocNamespace) != 0)
         {
             flags |= ModifierFlags.Export;
         }
         return flags;
     }
 
-    internal static ModifierFlags ModifiersToFlags(IReadOnlyList<Node>? modifiers)
+    internal static ModifierFlags ModifiersToFlags(NodeStore store, IReadOnlyList<Node>? modifiers)
     {
         var flags = ModifierFlags.None;
         if (modifiers != null)
         {
             foreach (var modifier in modifiers)
             {
-                flags |= ModifierToFlag(modifier.Kind);
+                flags |= ModifierToFlag(store.Kind(modifier));
             }
         }
         return flags;
@@ -1571,55 +1578,55 @@ internal static partial class Utilities
         return token >= SyntaxKind.FirstAssignment && token <= SyntaxKind.LastAssignment;
     }
 
-    internal static bool IsAssignmentExpression(Node node, bool? excludeCompoundAssignment = null)
+    internal static bool IsAssignmentExpression(NodeStore store, Node node, bool? excludeCompoundAssignment = null)
     {
-        return FactoryNodeTests.IsBinaryExpression(node)
+        return FactoryNodeTests.IsBinaryExpression(store, node)
             && (excludeCompoundAssignment == true
-                ? ((BinaryExpression)node).OperatorToken.Kind == SyntaxKind.EqualsToken
-                : IsAssignmentOperator(((BinaryExpression)node).OperatorToken.Kind))
-            && UtilitiesPublic.IsLeftHandSideExpression(((BinaryExpression)node).Left);
+                ? store.Kind(store.OperatorToken(node)) == SyntaxKind.EqualsToken
+                : IsAssignmentOperator(store.Kind(store.OperatorToken(node))))
+            && UtilitiesPublic.IsLeftHandSideExpression(store, store.Left(node));
     }
 
-    internal static bool IsEntityNameExpression(Node node)
+    internal static bool IsEntityNameExpression(NodeStore store, Node node)
     {
-        return node.Kind == SyntaxKind.Identifier || IsPropertyAccessEntityNameExpression(node);
+        return store.Kind(node) == SyntaxKind.Identifier || IsPropertyAccessEntityNameExpression(store, node);
     }
 
-    internal static bool IsPropertyAccessEntityNameExpression(Node node)
+    internal static bool IsPropertyAccessEntityNameExpression(NodeStore store, Node node)
     {
-        return FactoryNodeTests.IsPropertyAccessExpression(node) && FactoryNodeTests.IsIdentifier(((PropertyAccessExpression)node).Name) && IsEntityNameExpression(((PropertyAccessExpression)node).Expression);
+        return FactoryNodeTests.IsPropertyAccessExpression(store, node) && FactoryNodeTests.IsIdentifier(store, store.Name(node)) && IsEntityNameExpression(store, store.Expression(node));
     }
 
-    internal static bool IsPrototypeAccess(Node node)
+    internal static bool IsPrototypeAccess(NodeStore store, Node node)
     {
-        return IsBindableStaticAccessExpression(node) && GetElementOrPropertyAccessName(node) == "prototype";
+        return IsBindableStaticAccessExpression(store, node) && GetElementOrPropertyAccessName(store, node) == "prototype";
     }
 
-    internal static bool IsAccessExpression(Node node)
+    internal static bool IsAccessExpression(NodeStore store, Node node)
     {
-        return node.Kind == SyntaxKind.PropertyAccessExpression || node.Kind == SyntaxKind.ElementAccessExpression;
+        return store.Kind(node) == SyntaxKind.PropertyAccessExpression || store.Kind(node) == SyntaxKind.ElementAccessExpression;
     }
 
-    internal static Node GetLeftmostExpression(Node node, bool stopAtCallExpressions)
+    internal static Node GetLeftmostExpression(NodeStore store, Node node, bool stopAtCallExpressions)
     {
         while (true)
         {
-            switch (node.Kind)
+            switch (store.Kind(node))
             {
                 case SyntaxKind.PostfixUnaryExpression:
-                    node = ((PostfixUnaryExpression)node).Operand;
+                    node = store.Operand(node);
                     continue;
 
                 case SyntaxKind.BinaryExpression:
-                    node = ((BinaryExpression)node).Left;
+                    node = store.Left(node);
                     continue;
 
                 case SyntaxKind.ConditionalExpression:
-                    node = ((ConditionalExpression)node).Condition;
+                    node = store.Condition(node);
                     continue;
 
                 case SyntaxKind.TaggedTemplateExpression:
-                    node = ((TaggedTemplateExpression)node).Tag;
+                    node = store.Tag(node);
                     continue;
 
                 case SyntaxKind.CallExpression:
@@ -1627,27 +1634,27 @@ internal static partial class Utilities
                     {
                         return node;
                     }
-                    node = ((CallExpression)node).Expression;
+                    node = store.Expression(node);
                     continue;
 
                 // falls through (C#: the CallExpression case above continues with its expression, as the cases below)
                 case SyntaxKind.AsExpression:
-                    node = ((AsExpression)node).Expression;
+                    node = store.Expression(node);
                     continue;
                 case SyntaxKind.ElementAccessExpression:
-                    node = ((ElementAccessExpression)node).Expression;
+                    node = store.Expression(node);
                     continue;
                 case SyntaxKind.PropertyAccessExpression:
-                    node = ((PropertyAccessExpression)node).Expression;
+                    node = store.Expression(node);
                     continue;
                 case SyntaxKind.NonNullExpression:
-                    node = ((NonNullExpression)node).Expression;
+                    node = store.Expression(node);
                     continue;
                 case SyntaxKind.PartiallyEmittedExpression:
-                    node = ((PartiallyEmittedExpression)node).Expression;
+                    node = store.Expression(node);
                     continue;
                 case SyntaxKind.SatisfiesExpression:
-                    node = ((SatisfiesExpression)node).Expression;
+                    node = store.Expression(node);
                     continue;
             }
 
@@ -1715,12 +1722,11 @@ internal static partial class Utilities
     /// <summary>
     /// Bypasses immutability and directly sets the `parent` property of a `Node`.
     /// </summary>
-    internal static T? SetParent<T>(T? child, Node? parent)
-        where T : Node
+    internal static Node SetParent(NodeStore store, Node child, Node parent)
     {
-        if (child != null && parent != null)
+        if (!child.IsNone && !parent.IsNone)
         {
-            child.Parent = parent;
+            store.SetParent(child, parent);
         }
         return child;
     }
@@ -1731,35 +1737,34 @@ internal static partial class Utilities
     /// <param name="rootNode">The root node from which to start the recursion.</param>
     /// <param name="incremental">When `true`, only recursively descends through nodes whose `parent` pointers are incorrect.
     /// This allows us to quickly bail out of setting `parent` for subtrees during incremental parsing.</param>
-    internal static T? SetParentRecursive<T>(T? rootNode, bool incremental)
-        where T : Node
+    internal static Node SetParentRecursive(NodeStore store, Node rootNode, bool incremental)
     {
-        if (rootNode == null)
+        if (rootNode.IsNone)
         {
             return rootNode;
         }
-        Func<Node, Node, object?> cbNode = UtilitiesPublic.IsJSDocNode(rootNode) ? BindParentToChildIgnoringJSDoc : BindParentToChild;
-        Parser.ForEachChildRecursively<object>(rootNode, cbNode);
+        Func<Node, Node, object?> cbNode = UtilitiesPublic.IsJSDocNode(store, rootNode) ? BindParentToChildIgnoringJSDoc : BindParentToChild;
+        Parser.ForEachChildRecursively<object>(store, rootNode, cbNode);
         return rootNode;
 
         object? BindParentToChildIgnoringJSDoc(Node child, Node parent)
         {
-            if (incremental && child.Parent == parent)
+            if (incremental && store.Parent(child) == parent)
             {
                 return "skip";
             }
-            SetParent(child, parent);
+            SetParent(store, child, parent);
             return null;
         }
 
         object? BindJSDoc(Node child)
         {
-            if (UtilitiesPublic.HasJSDocNodes(child))
+            if (UtilitiesPublic.HasJSDocNodes(store, child))
             {
-                foreach (var doc in JSDocContainers.GetJsDoc(child)!)
+                foreach (var doc in store.JsDoc(child)!)
                 {
                     BindParentToChildIgnoringJSDoc(doc, child);
-                    Parser.ForEachChildRecursively<object>(doc, BindParentToChildIgnoringJSDoc);
+                    Parser.ForEachChildRecursively<object>(store, doc, BindParentToChildIgnoringJSDoc);
                 }
             }
             return null;
@@ -1771,9 +1776,9 @@ internal static partial class Utilities
         }
     }
 
-    internal static string GetEscapedTextOfJsxNamespacedName(JsxNamespacedName node)
+    internal static string GetEscapedTextOfJsxNamespacedName(NodeStore store, Node node)
     {
-        return $"{(string)node.Namespace.EscapedText!}:{UtilitiesPublic.IdText(node.Name)}";
+        return $"{(string)store.EscapedText(store.Namespace(node))!}:{UtilitiesPublic.IdText(store, store.Name(node))}";
     }
 
     //// JavaScript semantics the ported functions rely on.

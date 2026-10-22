@@ -20,83 +20,57 @@ internal sealed partial class NodeFactory
     //
 
     // @api
-    internal SourceFile CreateSourceFile(
+    internal Node CreateSourceFile(
         IReadOnlyList<Node> statements,
-        EndOfFileToken endOfFileToken,
+        Node endOfFileToken,
         NodeFlags flags)
     {
-        var node = (SourceFile)baseFactory.CreateBaseSourceFileNode(SyntaxKind.SourceFile);
-        node.Statements = CreateNodeArray(statements);
-        node.EndOfFileToken = endOfFileToken;
-        node.Flags |= flags;
-        node.Text = "";
-        node.FileName = "";
-        node.Path = "";
-        node.ResolvedPath = "";
-        node.OriginalFileName = "";
-        node.LanguageVersion = ScriptTarget.LatestStandard;
-        node.LanguageVariant = 0;
-        node.ScriptKind = 0;
-        node.IsDeclarationFile = false;
-        node.HasNoDefaultLib = false;
-        node.TransformFlags |= PropagateChildrenFlags(node.Statements) |
-            PropagateChildFlags(node.EndOfFileToken);
-        node.Locals = null; // initialized by binder (LocalsContainer)
-        node.NextContainer = null; // initialized by binder (LocalsContainer)
-        node.EndFlowNode = null;
-        node.NodeCount = 0;
-        node.IdentifierCount = 0;
-        node.SymbolCount = 0;
-        node.ParseDiagnostics = null!;
-        node.BindDiagnostics = null!;
-        node.BindSuggestionDiagnostics = null;
-        node.LineMap = null!;
-        node.ExternalModuleIndicator = null;
-        node.SetExternalModuleIndicator = null;
-        node.Pragmas = null!;
-        node.CheckJsDirective = null;
-        node.ReferencedFiles = null!;
-        node.TypeReferenceDirectives = null!;
-        node.LibReferenceDirectives = null!;
-        node.AmdDependencies = null!;
-        node.CommentDirectives = null;
-        node.Identifiers = null!;
-        node.PackageJsonLocations = null;
-        node.PackageJsonScope = null;
-        node.Imports = null!;
-        node.ModuleAugmentations = null!;
-        node.AmbientModuleNames = null!;
-        node.ClassifiableNames = null;
+        var node = baseFactory.CreateBaseSourceFileNode(SyntaxKind.SourceFile);
+        store.SetStatements(node, CreateNodeArray(store, statements));
+        store.SetEndOfFileToken(node, endOfFileToken);
+        store.SetFlags(node, store.Flags(node) | flags);
+        store.SetText(node, "");
+        store.SetFileName(node, "");
+        store.SetPath(node, "");
+        store.SetResolvedPath(node, "");
+        store.SetOriginalFileName(node, "");
+        store.SetLanguageVersion(node, ScriptTarget.LatestStandard);
+        store.SetLanguageVariant(node, 0);
+        store.SetScriptKind(node, 0);
+        store.SetIsDeclarationFile(node, false);
+        store.SetHasNoDefaultLib(node, false);
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildrenFlags(store.Statements(node)) |
+            PropagateChildFlags(store, store.EndOfFileToken(node))));
+        store.SetNextContainer(node, default); // initialized by binder (LocalsContainer)
+        store.SetNodeCount(node, 0);
+        store.SetIdentifierCount(node, 0);
+        store.SetSymbolCount(node, 0);
+        store.SetParseDiagnostics(node, null!);
+        store.SetBindDiagnostics(node, null!);
+        store.SetBindSuggestionDiagnostics(node, null);
+        store.SetLineMap(node, null!);
+        store.SetExternalModuleIndicator(node, null);
+        store.SetSetExternalModuleIndicator(node, null);
+        store.SetPragmas(node, null!);
+        store.SetCheckJsDirective(node, null);
+        store.SetReferencedFiles(node, null!);
+        store.SetTypeReferenceDirectives(node, null!);
+        store.SetLibReferenceDirectives(node, null!);
+        store.SetAmdDependencies(node, null!);
+        store.SetCommentDirectives(node, null);
+        store.SetIdentifiers(node, null!);
+        store.SetPackageJsonLocations(node, null);
+        store.SetImports(node, null!);
+        store.SetModuleAugmentations(node, null!);
+        store.SetAmbientModuleNames(node, null!);
         // TypeScript: `node.impliedNodeFormat = undefined` (the generated field is a ModuleKind; undefined is its default).
-        node.ImpliedNodeFormat = default;
+        store.SetImpliedNodeFormat(node, default);
         return node;
     }
 
-    /// <summary>
-    /// TypeScript creates the redirect with `Object.create(redirectInfo.redirectTarget)` (a prototype chain) and
-    /// accessors for `id` and `symbol`; C# objects have no prototypes. Redirects come from program construction,
-    /// not from the parser, which never sets `redirectInfo`.
-    /// </summary>
-    private static SourceFile CreateRedirectedSourceFile(object redirectInfo)
-    {
-        _ = redirectInfo;
-        Debug.Fail("createRedirectedSourceFile (prototype-based redirect source files) is not supported");
-        return null!;
-    }
-
-    private static SourceFile CloneRedirectedSourceFile(SourceFile source)
-    {
-        var node = CreateRedirectedSourceFile(source.RedirectInfo!);
-        node.Flags |= source.Flags & ~NodeFlags.Synthesized;
-        node.FileName = source.FileName;
-        node.Path = source.Path;
-        node.ResolvedPath = source.ResolvedPath;
-        node.OriginalFileName = source.OriginalFileName;
-        node.PackageJsonLocations = source.PackageJsonLocations;
-        node.PackageJsonScope = source.PackageJsonScope;
-        node.EmitNode = null;
-        return node;
-    }
+    // createRedirectedSourceFile / cloneRedirectedSourceFile: TypeScript clones a redirect when `source.redirectInfo`
+    // is set. Redirects come from program construction, not from the parser, which never sets `redirectInfo`; Track O's
+    // node store keeps no binder data such as redirectInfo (step O6a), so a source file is never a redirect here.
 
     /// <summary>
     /// TypeScript copies every own property of `source` that the new node does not have yet (`for (const p in source)`),
@@ -105,76 +79,69 @@ internal sealed partial class NodeFactory
     /// Node fields are the constructor's); a field that is not an own property in TypeScript holds its default
     /// value on both objects, so copying it changes nothing.
     /// </summary>
-    private SourceFile CloneSourceFileWorker(SourceFile source)
+    private Node CloneSourceFileWorker(Node source)
     {
         // TODO: This mechanism for cloning results in megamorphic property reads and writes. In future perf-related
         //       work, we should consider switching explicit property assignments instead of using `for..in`.
-        var node = (SourceFile)baseFactory.CreateBaseSourceFileNode(SyntaxKind.SourceFile);
-        node.Flags |= source.Flags & ~NodeFlags.Synthesized;
+        var node = baseFactory.CreateBaseSourceFileNode(SyntaxKind.SourceFile);
+        store.SetFlags(node, store.Flags(node) | (store.Flags(source) & ~NodeFlags.Synthesized));
 
         // Fields declared by the generated class (types.ts SourceFile).
-        node.AmbientModuleNames = source.AmbientModuleNames;
-        node.ClassifiableNames = source.ClassifiableNames;
-        node.EndFlowNode = source.EndFlowNode;
-        node.EndOfFileToken = source.EndOfFileToken;
-        node.ExternalModuleIndicator = source.ExternalModuleIndicator;
-        node.FileName = source.FileName;
-        node.HasNoDefaultLib = source.HasNoDefaultLib;
-        node.IdentifierCount = source.IdentifierCount;
-        node.Identifiers = source.Identifiers;
-        node.ImpliedNodeFormat = source.ImpliedNodeFormat;
-        node.Imports = source.Imports;
-        node.IsDeclarationFile = source.IsDeclarationFile;
-        node.JsDocParsingMode = source.JsDocParsingMode;
-        node.LanguageVariant = source.LanguageVariant;
-        node.LanguageVersion = source.LanguageVersion;
-        node.LineMap = source.LineMap;
-        node.LocalSymbol = source.LocalSymbol;
-        node.Locals = source.Locals;
-        node.ModuleAugmentations = source.ModuleAugmentations;
-        node.ModuleName = source.ModuleName;
-        node.NextContainer = source.NextContainer;
-        node.NodeCount = source.NodeCount;
-        node.OriginalFileName = source.OriginalFileName;
-        node.PackageJsonLocations = source.PackageJsonLocations;
-        node.PackageJsonScope = source.PackageJsonScope;
-        node.Path = source.Path;
-        node.RedirectInfo = source.RedirectInfo;
-        node.ResolvedPath = source.ResolvedPath;
-        node.ScriptKind = source.ScriptKind;
-        node.SetExternalModuleIndicator = source.SetExternalModuleIndicator;
-        node.Statements = source.Statements;
-        node.Symbol = source.Symbol;
-        node.SymbolCount = source.SymbolCount;
-        node.Text = source.Text;
+        store.SetAmbientModuleNames(node, store.AmbientModuleNames(source));
+        store.SetEndOfFileToken(node, store.EndOfFileToken(source));
+        store.SetExternalModuleIndicator(node, store.ExternalModuleIndicator(source));
+        store.SetFileName(node, store.FileName(source));
+        store.SetHasNoDefaultLib(node, store.HasNoDefaultLib(source));
+        store.SetIdentifierCount(node, store.IdentifierCount(source));
+        store.SetIdentifiers(node, store.Identifiers(source));
+        store.SetImpliedNodeFormat(node, store.ImpliedNodeFormat(source));
+        store.SetImports(node, store.Imports(source));
+        store.SetIsDeclarationFile(node, store.IsDeclarationFile(source));
+        store.SetJsDocParsingMode(node, store.JsDocParsingMode(source));
+        store.SetLanguageVariant(node, store.LanguageVariant(source));
+        store.SetLanguageVersion(node, store.LanguageVersion(source));
+        store.SetLineMap(node, store.LineMap(source));
+        store.SetModuleAugmentations(node, store.ModuleAugmentations(source));
+        store.SetModuleName(node, store.ModuleName(source));
+        store.SetNextContainer(node, store.NextContainer(source));
+        store.SetNodeCount(node, store.NodeCount(source));
+        store.SetOriginalFileName(node, store.OriginalFileName(source));
+        store.SetPackageJsonLocations(node, store.PackageJsonLocations(source));
+        store.SetPath(node, store.Path(source));
+        store.SetResolvedPath(node, store.ResolvedPath(source));
+        store.SetScriptKind(node, store.ScriptKind(source));
+        store.SetSetExternalModuleIndicator(node, store.SetExternalModuleIndicator(source));
+        store.SetStatements(node, store.Statements(source));
+        store.SetSymbolCount(node, store.SymbolCount(source));
+        store.SetText(node, store.Text(source));
 
         // Fields declared by the port (Parser/Types.cs, Parser/Parser.Pragmas.cs).
-        node.AmdDependencies = source.AmdDependencies;
-        node.ReferencedFiles = source.ReferencedFiles;
-        node.TypeReferenceDirectives = source.TypeReferenceDirectives;
-        node.LibReferenceDirectives = source.LibReferenceDirectives;
-        node.ParseDiagnostics = source.ParseDiagnostics;
-        node.BindDiagnostics = source.BindDiagnostics;
-        node.BindSuggestionDiagnostics = source.BindSuggestionDiagnostics;
-        node.JsDocDiagnostics = source.JsDocDiagnostics;
-        node.CommentDirectives = source.CommentDirectives;
-        node.CheckJsDirective = source.CheckJsDirective;
-        node.Pragmas = source.Pragmas;
+        store.SetAmdDependencies(node, store.AmdDependencies(source));
+        store.SetReferencedFiles(node, store.ReferencedFiles(source));
+        store.SetTypeReferenceDirectives(node, store.TypeReferenceDirectives(source));
+        store.SetLibReferenceDirectives(node, store.LibReferenceDirectives(source));
+        store.SetParseDiagnostics(node, store.ParseDiagnostics(source));
+        store.SetBindDiagnostics(node, store.BindDiagnostics(source));
+        store.SetBindSuggestionDiagnostics(node, store.BindSuggestionDiagnostics(source));
+        store.SetJsDocDiagnostics(node, store.JsDocDiagnostics(source));
+        store.SetCommentDirectives(node, store.CommentDirectives(source));
+        store.SetCheckJsDirective(node, store.CheckJsDirective(source));
+        store.SetPragmas(node, store.Pragmas(source));
 
         // `if (p === "emitNode") { node.emitNode = undefined; continue; }` (emitNode is a constructor property, so
         // this branch is never taken.)
         return node;
     }
 
-    private SourceFile CloneSourceFile(SourceFile source)
+    private Node CloneSourceFile(Node source)
     {
-        var node = source.RedirectInfo != null ? CloneRedirectedSourceFile(source) : CloneSourceFileWorker(source);
+        var node = CloneSourceFileWorker(source);
         SetOriginal(node, source);
         return node;
     }
 
-    private SourceFile CloneSourceFileWithChanges(
-        SourceFile source,
+    private Node CloneSourceFileWithChanges(
+        Node source,
         IReadOnlyList<Node> statements,
         bool isDeclarationFile,
         IReadOnlyList<FileReference> referencedFiles,
@@ -183,20 +150,20 @@ internal sealed partial class NodeFactory
         IReadOnlyList<FileReference> libReferences)
     {
         var node = CloneSourceFile(source);
-        node.Statements = CreateNodeArray(statements);
-        node.IsDeclarationFile = isDeclarationFile;
-        node.ReferencedFiles = referencedFiles;
-        node.TypeReferenceDirectives = typeReferences;
-        node.HasNoDefaultLib = hasNoDefaultLib;
-        node.LibReferenceDirectives = libReferences;
-        node.TransformFlags = PropagateChildrenFlags(node.Statements) |
-            PropagateChildFlags(node.EndOfFileToken);
+        store.SetStatements(node, CreateNodeArray(store, statements));
+        store.SetIsDeclarationFile(node, isDeclarationFile);
+        store.SetReferencedFiles(node, referencedFiles);
+        store.SetTypeReferenceDirectives(node, typeReferences);
+        store.SetHasNoDefaultLib(node, hasNoDefaultLib);
+        store.SetLibReferenceDirectives(node, libReferences);
+        store.SetTransformFlags(node, PropagateChildrenFlags(store.Statements(node)) |
+            PropagateChildFlags(store, store.EndOfFileToken(node)));
         return node;
     }
 
     // @api
-    internal SourceFile UpdateSourceFile(
-        SourceFile node,
+    internal Node UpdateSourceFile(
+        Node node,
         IReadOnlyList<Node> statements,
         bool? isDeclarationFile = null,
         IReadOnlyList<FileReference>? referencedFiles = null,
@@ -206,15 +173,15 @@ internal sealed partial class NodeFactory
     {
         // Default parameter values: `isDeclarationFile = node.isDeclarationFile`, ... (`_hasNoDefaultLib` is unused).
         _ = hasNoDefaultLib;
-        var isDeclarationFileValue = isDeclarationFile ?? node.IsDeclarationFile;
-        referencedFiles ??= node.ReferencedFiles;
-        typeReferenceDirectives ??= node.TypeReferenceDirectives;
-        libReferenceDirectives ??= node.LibReferenceDirectives;
-        return node.Statements != statements
-                || node.IsDeclarationFile != isDeclarationFileValue
-                || node.ReferencedFiles != referencedFiles
-                || node.TypeReferenceDirectives != typeReferenceDirectives
-                || node.LibReferenceDirectives != libReferenceDirectives
+        var isDeclarationFileValue = isDeclarationFile ?? store.IsDeclarationFile(node);
+        referencedFiles ??= store.ReferencedFiles(node);
+        typeReferenceDirectives ??= store.TypeReferenceDirectives(node);
+        libReferenceDirectives ??= store.LibReferenceDirectives(node);
+        return store.Statements(node) != statements
+                || store.IsDeclarationFile(node) != isDeclarationFileValue
+                || store.ReferencedFiles(node) != referencedFiles
+                || store.TypeReferenceDirectives(node) != typeReferenceDirectives
+                || store.LibReferenceDirectives(node) != libReferenceDirectives
             ? Update(CloneSourceFileWithChanges(node, statements, isDeclarationFileValue, referencedFiles, typeReferenceDirectives, /*hasNoDefaultLib*/ false, libReferenceDirectives), node)
             : node;
     }

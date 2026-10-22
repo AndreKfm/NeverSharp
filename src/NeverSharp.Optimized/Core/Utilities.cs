@@ -52,4 +52,28 @@ internal static partial class Utilities
     {
         return SetTextRangePosEnd(range, pos, pos + width);
     }
+
+    // Track O: a node's range is set through its store (the TextRange versions above serve NodeArray and the
+    // other text ranges).
+    internal static Node SetTextRangePos(NodeStore store, Node node, int pos)
+    {
+        store.SetPos(node, pos);
+        return node;
+    }
+
+    internal static Node SetTextRangeEnd(NodeStore store, Node node, int end)
+    {
+        store.SetEnd(node, end);
+        return node;
+    }
+
+    internal static Node SetTextRangePosEnd(NodeStore store, Node node, int pos, int end)
+    {
+        return SetTextRangeEnd(store, SetTextRangePos(store, node, pos), end);
+    }
+
+    internal static Node SetTextRangePosWidth(NodeStore store, Node node, int pos, int width)
+    {
+        return SetTextRangePosEnd(store, node, pos, pos + width);
+    }
 }

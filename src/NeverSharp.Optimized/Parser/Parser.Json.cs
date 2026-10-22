@@ -15,8 +15,9 @@ namespace NeverSharp.Optimized;
 /// <summary>parser.ts: Parser.parseJsonText.</summary>
 internal sealed partial class Parser
 {
-    internal SourceFile ParseJsonText(string fileName, string sourceText, ScriptTarget languageVersion = ScriptTarget.ES2015, SyntaxCursor? syntaxCursor = null, bool setParentNodes = false)
+    internal Node ParseJsonText(NodeStore nodeStore, string fileName, string sourceText, ScriptTarget languageVersion = ScriptTarget.ES2015, SyntaxCursor? syntaxCursor = null, bool setParentNodes = false)
     {
+        UseStore(nodeStore);
         InitializeState(fileName, sourceText, languageVersion, syntaxCursor, ScriptKind.JSON, JSDocParsingMode.ParseAll);
         sourceFlags = contextFlags;
 
@@ -24,11 +25,11 @@ internal sealed partial class Parser
         NextToken();
         var pos = GetNodePos();
         NodeArray statements;
-        EndOfFileToken endOfFileToken;
+        Node endOfFileToken;
         if (Token() == SyntaxKind.EndOfFileToken)
         {
             statements = CreateNodeArray(new NodeArray(), pos, pos);
-            endOfFileToken = ParseTokenNode<EndOfFileToken>();
+            endOfFileToken = ParseTokenNode();
         }
         else
         {
@@ -36,7 +37,7 @@ internal sealed partial class Parser
             // one top-level expressions to ensure all input text is consumed.
             // (TypeScript: `let expressions: Expression[] | Expression | undefined`; the array is `expressionList`.)
             NodeArray? expressionList = null;
-            Node? singleExpression = null;
+            Node singleExpression = default;
             while (Token() != SyntaxKind.EndOfFileToken)
             {
                 Node expression;
@@ -80,7 +81,7 @@ internal sealed partial class Parser
                 {
                     expressionList.Add(expression);
                 }
-                else if (singleExpression != null)
+                else if (!singleExpression.IsNone)
                 {
                     expressionList = [singleExpression, expression];
                 }
@@ -98,7 +99,7 @@ internal sealed partial class Parser
             var statement = factory.CreateExpressionStatement(expressionNode);
             FinishNode(statement, pos);
             statements = CreateNodeArray([statement], pos);
-            endOfFileToken = ParseExpectedToken<EndOfFileToken>(SyntaxKind.EndOfFileToken, Diagnostics.Unexpected_token);
+            endOfFileToken = ParseExpectedToken(SyntaxKind.EndOfFileToken, Diagnostics.Unexpected_token);
         }
 
         // Set source file so that errors will be reported with this file name
@@ -106,16 +107,16 @@ internal sealed partial class Parser
 
         if (setParentNodes)
         {
-            FixupParentReferences(sourceFile);
+            FixupParentReferences(store, sourceFile);
         }
 
-        sourceFile.NodeCount = nodeCount;
-        sourceFile.IdentifierCount = identifierCount;
-        sourceFile.Identifiers = identifiers;
-        sourceFile.ParseDiagnostics = Utilities.AttachFileToDiagnostics(parseDiagnostics, sourceFile);
+        store.SetNodeCount(sourceFile, nodeCount);
+        store.SetIdentifierCount(sourceFile, identifierCount);
+        store.SetIdentifiers(sourceFile, identifiers);
+        store.SetParseDiagnostics(sourceFile, Utilities.AttachFileToDiagnostics(store, parseDiagnostics, sourceFile));
         if (jsDocDiagnostics != null)
         {
-            sourceFile.JsDocDiagnostics = Utilities.AttachFileToDiagnostics(jsDocDiagnostics, sourceFile);
+            store.SetJsDocDiagnostics(sourceFile, Utilities.AttachFileToDiagnostics(store, jsDocDiagnostics, sourceFile));
         }
 
         var result = sourceFile;

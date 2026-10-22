@@ -192,6 +192,9 @@ internal sealed partial class Parser : BaseNodeFactory
 
     private bool hasDeprecatedTag;
 
+    // Track O: the node store of the current parse (created by the caller, kept by the result).
+    private NodeStore store = null!;
+
     private Parser()
     {
         factory = NodeFactory.CreateNodeFactory(NodeFactoryFlags.NoParenthesizerRules | NodeFactoryFlags.NoNodeConverters | NodeFactoryFlags.NoOriginalNode, this);
@@ -207,52 +210,61 @@ internal sealed partial class Parser : BaseNodeFactory
     // Rather than using `createBaseNodeFactory` here, we establish a `BaseNodeFactory` that closes over the
     // constructors above, which are reset each time `initializeState` is called.
     // (The constructors of objectAllocator create the node with the given kind, pos 0 and end 0.)
-    Node BaseNodeFactory.CreateBaseSourceFileNode(SyntaxKind kind) => CountNode(NewNode(kind));
+    Node BaseNodeFactory.CreateBaseSourceFileNode(SyntaxKind kind) => CountNode(NewNode(store, kind));
 
-    Node BaseNodeFactory.CreateBaseIdentifierNode(SyntaxKind kind) => CountNode(NewNode(kind));
+    Node BaseNodeFactory.CreateBaseIdentifierNode(SyntaxKind kind) => CountNode(NewNode(store, kind));
 
-    Node BaseNodeFactory.CreateBasePrivateIdentifierNode(SyntaxKind kind) => CountNode(NewNode(kind));
+    Node BaseNodeFactory.CreateBasePrivateIdentifierNode(SyntaxKind kind) => CountNode(NewNode(store, kind));
 
-    Node BaseNodeFactory.CreateBaseTokenNode(SyntaxKind kind) => CountNode(NewNode(kind));
+    Node BaseNodeFactory.CreateBaseTokenNode(SyntaxKind kind) => CountNode(NewNode(store, kind));
 
-    Node BaseNodeFactory.CreateBaseNode(SyntaxKind kind) => CountNode(NewNode(kind));
+    Node BaseNodeFactory.CreateBaseNode(SyntaxKind kind) => CountNode(NewNode(store, kind));
 
     /// <summary>`new XConstructor(kind, /*pos*/ 0, /*end*/ 0)` (utilities.ts: Node, Token, Identifier constructors).</summary>
-    private static Node NewNode(SyntaxKind kind)
+    private static Node NewNode(NodeStore store, SyntaxKind kind)
     {
-        var node = NodeAllocator.Create(kind);
-        node.Pos = 0;
-        node.End = 0;
+        var node = store.Create(kind);
+        store.SetPos(node, 0);
+        store.SetEnd(node, 0);
         return node;
     }
 
-    internal SourceFile ParseSourceFile(
+    /// <summary>Makes <paramref name="nodeStore"/> the store the parser and its factory create nodes in.</summary>
+    internal void UseStore(NodeStore nodeStore)
+    {
+        store = nodeStore;
+        factory.store = nodeStore;
+    }
+
+    internal Node ParseSourceFile(
+        NodeStore nodeStore,
         string fileName,
         string sourceText,
         ScriptTarget languageVersion,
         SyntaxCursor? syntaxCursor,
         bool setParentNodes = false,
         ScriptKind? scriptKind = null,
-        Action<SourceFile>? setExternalModuleIndicatorOverride = null,
+        Action<Node>? setExternalModuleIndicatorOverride = null,
         JSDocParsingMode jsDocParsingMode = JSDocParsingMode.ParseAll)
     {
+        UseStore(nodeStore);
         var ensuredScriptKind = Utilities.EnsureScriptKind(fileName, scriptKind);
         if (ensuredScriptKind == ScriptKind.JSON)
         {
-            var jsonResult = ParseJsonText(fileName, sourceText, languageVersion, syntaxCursor, setParentNodes);
-            CommandLineParser.ConvertToJson(jsonResult, jsonResult.Statements.Count > 0 ? ((ExpressionStatement)jsonResult.Statements[0]).Expression : null, jsonResult.ParseDiagnostics, /*returnValue*/ false, /*jsonConversionNotifier*/ null);
-            jsonResult.ReferencedFiles = Core.EmptyArray<FileReference>();
-            jsonResult.TypeReferenceDirectives = Core.EmptyArray<FileReference>();
-            jsonResult.LibReferenceDirectives = Core.EmptyArray<FileReference>();
-            jsonResult.AmdDependencies = Core.EmptyArray<AmdDependency>();
-            jsonResult.HasNoDefaultLib = false;
-            jsonResult.Pragmas = PragmaMap.Empty;
+            var jsonResult = ParseJsonText(nodeStore, fileName, sourceText, languageVersion, syntaxCursor, setParentNodes);
+            CommandLineParser.ConvertToJson(store, jsonResult, store.Statements(jsonResult).Count > 0 ? store.Expression(store.Statements(jsonResult)[0]) : default, store.ParseDiagnostics(jsonResult), /*returnValue*/ false, /*jsonConversionNotifier*/ null);
+            store.SetReferencedFiles(jsonResult, Core.EmptyArray<FileReference>());
+            store.SetTypeReferenceDirectives(jsonResult, Core.EmptyArray<FileReference>());
+            store.SetLibReferenceDirectives(jsonResult, Core.EmptyArray<FileReference>());
+            store.SetAmdDependencies(jsonResult, Core.EmptyArray<AmdDependency>());
+            store.SetHasNoDefaultLib(jsonResult, false);
+            store.SetPragmas(jsonResult, PragmaMap.Empty);
             return jsonResult;
         }
 
         InitializeState(fileName, sourceText, languageVersion, syntaxCursor, ensuredScriptKind, jsDocParsingMode);
 
-        var result = ParseSourceFileWorker(languageVersion, setParentNodes, ensuredScriptKind, setExternalModuleIndicatorOverride ?? SetExternalModuleIndicator, jsDocParsingMode);
+        var result = ParseSourceFileWorker(languageVersion, setParentNodes, ensuredScriptKind, setExternalModuleIndicatorOverride ?? ((a0) => SetExternalModuleIndicator(store, a0)), jsDocParsingMode);
 
         ClearState();
 
@@ -325,7 +337,7 @@ internal sealed partial class Parser : BaseNodeFactory
         topLevel = true;
     }
 
-    private SourceFile ParseSourceFileWorker(ScriptTarget languageVersion, bool setParentNodes, ScriptKind scriptKind, Action<SourceFile> setExternalModuleIndicator, JSDocParsingMode jsDocParsingMode)
+    private Node ParseSourceFileWorker(ScriptTarget languageVersion, bool setParentNodes, ScriptKind scriptKind, Action<Node> setExternalModuleIndicator, JSDocParsingMode jsDocParsingMode)
     {
         var isDeclarationFile = IsDeclarationFileName(fileName);
         if (isDeclarationFile)
@@ -341,28 +353,28 @@ internal sealed partial class Parser : BaseNodeFactory
         var statements = ParseList(ParsingContext.SourceElements, static p => p.ParseStatement());
         Debug.Assert(Token() == SyntaxKind.EndOfFileToken);
         var endHasJSDoc = HasPrecedingJSDocComment();
-        var endOfFileToken = WithJSDoc(ParseTokenNode<EndOfFileToken>(), endHasJSDoc);
+        var endOfFileToken = WithJSDoc(ParseTokenNode(), endHasJSDoc);
 
         var sourceFile = CreateSourceFile(fileName, languageVersion, scriptKind, isDeclarationFile, statements, endOfFileToken, sourceFlags, setExternalModuleIndicator);
 
         // A member of ReadonlyArray<T> isn't assignable to a member of T[] (and prevents a direct cast) - but this is where we set up those members so they can be readonly in the future
-        ProcessCommentPragmas(sourceFile, sourceText);
-        ProcessPragmasIntoFields(sourceFile, ReportPragmaDiagnostic);
+        ProcessCommentPragmas(store, sourceFile, sourceText);
+        ProcessPragmasIntoFields(store, sourceFile, ReportPragmaDiagnostic);
 
-        sourceFile.CommentDirectives = scanner.GetCommentDirectives();
-        sourceFile.NodeCount = nodeCount;
-        sourceFile.IdentifierCount = identifierCount;
-        sourceFile.Identifiers = identifiers;
-        sourceFile.ParseDiagnostics = Utilities.AttachFileToDiagnostics(parseDiagnostics, sourceFile);
-        sourceFile.JsDocParsingMode = jsDocParsingMode;
+        store.SetCommentDirectives(sourceFile, scanner.GetCommentDirectives());
+        store.SetNodeCount(sourceFile, nodeCount);
+        store.SetIdentifierCount(sourceFile, identifierCount);
+        store.SetIdentifiers(sourceFile, identifiers);
+        store.SetParseDiagnostics(sourceFile, Utilities.AttachFileToDiagnostics(store, parseDiagnostics, sourceFile));
+        store.SetJsDocParsingMode(sourceFile, jsDocParsingMode);
         if (jsDocDiagnostics != null)
         {
-            sourceFile.JsDocDiagnostics = Utilities.AttachFileToDiagnostics(jsDocDiagnostics, sourceFile);
+            store.SetJsDocDiagnostics(sourceFile, Utilities.AttachFileToDiagnostics(store, jsDocDiagnostics, sourceFile));
         }
 
         if (setParentNodes)
         {
-            FixupParentReferences(sourceFile);
+            FixupParentReferences(store, sourceFile);
         }
 
         return sourceFile;
@@ -373,55 +385,54 @@ internal sealed partial class Parser : BaseNodeFactory
         }
     }
 
-    private T WithJSDoc<T>(T node, bool hasJSDoc)
-        where T : Node
+    private Node WithJSDoc(Node node, bool hasJSDoc)
     {
         if (!hasJSDoc)
         {
             return node;
         }
 
-        Debug.Assert(JSDocContainers.GetJsDoc(node) == null); // Should only be called once per node
-        var jsDoc = Core.MapDefined(Utilities.GetJSDocCommentRanges(node, sourceText), (comment, _) => JSDocParserParseJSDocComment(node, comment.Pos, comment.End - comment.Pos));
+        Debug.Assert(store.JsDoc(node) == null); // Should only be called once per node
+        var jsDoc = Core.MapDefined(Utilities.GetJSDocCommentRanges(store, node, sourceText), (comment, _) => JSDocParserParseJSDocComment(node, comment.Pos, comment.End - comment.Pos));
         if (jsDoc.Count != 0)
         {
-            JSDocContainers.SetJsDoc(node, jsDoc);
+            store.SetJsDoc(node, jsDoc);
         }
         if (hasDeprecatedTag)
         {
             hasDeprecatedTag = false;
-            node.Flags |= NodeFlags.Deprecated;
+            store.SetFlags(node, store.Flags(node) | NodeFlags.Deprecated);
         }
         return node;
     }
 
-    internal static void FixupParentReferences(Node rootNode)
+    internal static void FixupParentReferences(NodeStore store, Node rootNode)
     {
         // normally parent references are set during binding. However, for clients that only need
         // a syntax tree, and no semantic features, then the binding process is an unnecessary
         // overhead.  This functions allows us to set all the parents, without all the expense of
         // binding.
-        Utilities.SetParentRecursive(rootNode, /*incremental*/ true);
+        Utilities.SetParentRecursive(store, rootNode, /*incremental*/ true);
     }
 
-    private SourceFile CreateSourceFile(
+    private Node CreateSourceFile(
         string fileName,
         ScriptTarget languageVersion,
         ScriptKind scriptKind,
         bool isDeclarationFile,
         IReadOnlyList<Node> statements,
-        EndOfFileToken endOfFileToken,
+        Node endOfFileToken,
         NodeFlags flags,
-        Action<SourceFile> setExternalModuleIndicator)
+        Action<Node> setExternalModuleIndicator)
     {
         // code from createNode is inlined here so createNode won't have to deal with special case of creating source files
         // this is quite rare comparing to other nodes and createNode should be as fast as possible
         var sourceFile = factory.CreateSourceFile(statements, endOfFileToken, flags);
-        Utilities.SetTextRangePosWidth(sourceFile, 0, sourceText.Length);
+        Utilities.SetTextRangePosWidth(store, sourceFile, 0, sourceText.Length);
         SetFields(sourceFile);
 
         // If we parsed this as an external module, it may contain top-level await
-        if (!isDeclarationFile && IsExternalModule(sourceFile) && (sourceFile.TransformFlags & TransformFlags.ContainsPossibleTopLevelAwait) != 0)
+        if (!isDeclarationFile && IsExternalModule(store, sourceFile) && (store.TransformFlags(sourceFile) & TransformFlags.ContainsPossibleTopLevelAwait) != 0)
         {
             var oldSourceFile = sourceFile;
             sourceFile = ReparseTopLevelAwait(sourceFile);
@@ -433,19 +444,19 @@ internal sealed partial class Parser : BaseNodeFactory
 
         return sourceFile;
 
-        void SetFields(SourceFile sourceFile)
+        void SetFields(Node sourceFile)
         {
-            sourceFile.Text = sourceText;
-            sourceFile.BindDiagnostics = [];
-            sourceFile.BindSuggestionDiagnostics = null;
-            sourceFile.LanguageVersion = languageVersion;
-            sourceFile.FileName = fileName;
-            sourceFile.LanguageVariant = Utilities.GetLanguageVariant(scriptKind);
-            sourceFile.IsDeclarationFile = isDeclarationFile;
-            sourceFile.ScriptKind = scriptKind;
+            store.SetText(sourceFile, sourceText);
+            store.SetBindDiagnostics(sourceFile, []);
+            store.SetBindSuggestionDiagnostics(sourceFile, null);
+            store.SetLanguageVersion(sourceFile, languageVersion);
+            store.SetFileName(sourceFile, fileName);
+            store.SetLanguageVariant(sourceFile, Utilities.GetLanguageVariant(scriptKind));
+            store.SetIsDeclarationFile(sourceFile, isDeclarationFile);
+            store.SetScriptKind(sourceFile, scriptKind);
 
             setExternalModuleIndicator(sourceFile);
-            sourceFile.SetExternalModuleIndicator = setExternalModuleIndicator;
+            store.SetSetExternalModuleIndicator(sourceFile, setExternalModuleIndicator);
         }
     }
 
@@ -634,9 +645,9 @@ internal sealed partial class Parser : BaseNodeFactory
         return ParseErrorAtPosition(start, end - start, message, args);
     }
 
-    private void ParseErrorAtRange(TextRange range, DiagnosticMessage message, params object?[] args)
+    private void ParseErrorAtRange(Node range, DiagnosticMessage message, params object?[] args)
     {
-        ParseErrorAt(range.Pos, range.End, message, args);
+        ParseErrorAt(store.Pos(range), store.End(range), message, args);
     }
 
     private void ScanError(DiagnosticMessage message, int length, object? arg0)
@@ -775,6 +786,7 @@ internal sealed partial class Parser : BaseNodeFactory
     private SpeculationAdapter<bool>? boolSpeculationAdapter;
     private SpeculationAdapter<Tristate>? tristateSpeculationAdapter;
     private SpeculationAdapter<object?>? objectSpeculationAdapter;
+    private SpeculationAdapter<Node>? nodeSpeculationAdapter;
 
     /// <summary>`scanner.lookAhead(callback)` or `scanner.tryScan(callback)` with the parser's callback.</summary>
     private T ScannerSpeculate<T>(Func<Parser, T> callback, bool isLookahead)
@@ -789,6 +801,12 @@ internal sealed partial class Parser : BaseNodeFactory
         {
             var adapter = tristateSpeculationAdapter ??= new SpeculationAdapter<Tristate>(this);
             var invoke = adapter.Prepare((Func<Parser, Tristate>)(object)callback);
+            return (T)(object)(isLookahead ? scanner.LookAhead(invoke) : scanner.TryScan(invoke));
+        }
+        if (typeof(T) == typeof(Node))
+        {
+            var adapter = nodeSpeculationAdapter ??= new SpeculationAdapter<Node>(this);
+            var invoke = adapter.Prepare((Func<Parser, Node>)(object)callback);
             return (T)(object)(isLookahead ? scanner.LookAhead(invoke) : scanner.TryScan(invoke));
         }
         if (!typeof(T).IsValueType)
@@ -822,6 +840,9 @@ internal sealed partial class Parser : BaseNodeFactory
         // assert that invariant holds.
         var saveContextFlags = contextFlags;
 
+        // Track O: the nodes created from here on are discarded with the arena if the parser rolls back.
+        var saveStoreMark = store.GetMark();
+
         // If we're only looking ahead, then tell the scanner to only lookahead as well.
         // Otherwise, if we're actually speculatively parsing, then tell the scanner to do the
         // same.
@@ -837,6 +858,9 @@ internal sealed partial class Parser : BaseNodeFactory
             if (speculationKind != SpeculationKind.Reparse)
             {
                 parseDiagnostics.RemoveRange(saveParseDiagnosticsLength, parseDiagnostics.Count - saveParseDiagnosticsLength);
+
+                // Nothing refers to the nodes of a rolled-back lookahead or tryParse (a reparse keeps its nodes).
+                store.Truncate(saveStoreMark);
             }
             parseErrorBeforeNextFinishedNode = saveParseErrorBeforeNextFinishedNode;
         }
@@ -950,22 +974,22 @@ internal sealed partial class Parser : BaseNodeFactory
         // Tagged template literals are sometimes used in places where only simple strings are allowed, i.e.:
         //   module `M1` {
         //   ^^^^^^^^^^^ This block is parsed as a template literal like module`M1`.
-        if (FactoryNodeTests.IsTaggedTemplateExpression(node))
+        if (FactoryNodeTests.IsTaggedTemplateExpression(store, node))
         {
-            var template = ((TaggedTemplateExpression)node).Template;
-            ParseErrorAt(Scanner.SkipTrivia(sourceText, template.Pos), template.End, Diagnostics.Module_declaration_names_may_only_use_or_quoted_strings);
+            var template = store.Template(node);
+            ParseErrorAt(Scanner.SkipTrivia(sourceText, store.Pos(template)), store.End(template), Diagnostics.Module_declaration_names_may_only_use_or_quoted_strings);
             return;
         }
 
         // Otherwise, if this isn't a well-known keyword-like identifier, give the generic fallback message.
-        var expressionText = FactoryNodeTests.IsIdentifier(node) ? UtilitiesPublic.IdText((Identifier)node) : null;
+        var expressionText = FactoryNodeTests.IsIdentifier(store, node) ? UtilitiesPublic.IdText(store, node) : null;
         if (string.IsNullOrEmpty(expressionText) || !Scanner.IsIdentifierText(expressionText, languageVersion))
         {
             ParseErrorAtCurrentToken(Diagnostics._0_expected, Scanner.TokenToString(SyntaxKind.SemicolonToken));
             return;
         }
 
-        var pos = Scanner.SkipTrivia(sourceText, node.Pos);
+        var pos = Scanner.SkipTrivia(sourceText, store.Pos(node));
 
         // Some known keywords are likely signs of syntax being used improperly.
         switch (expressionText)
@@ -973,7 +997,7 @@ internal sealed partial class Parser : BaseNodeFactory
             case "const":
             case "let":
             case "var":
-                ParseErrorAt(pos, node.End, Diagnostics.Variable_declaration_not_allowed_at_this_location);
+                ParseErrorAt(pos, store.End(node), Diagnostics.Variable_declaration_not_allowed_at_this_location);
                 return;
 
             case "declare":
@@ -1002,7 +1026,7 @@ internal sealed partial class Parser : BaseNodeFactory
         var suggestion = Core.GetSpellingSuggestion(expressionText, ViableKeywordSuggestions, n => n) ?? GetSpaceSuggestion(expressionText);
         if (!string.IsNullOrEmpty(suggestion))
         {
-            ParseErrorAt(pos, node.End, Diagnostics.Unknown_keyword_or_identifier_Did_you_mean_0, suggestion);
+            ParseErrorAt(pos, store.End(node), Diagnostics.Unknown_keyword_or_identifier_Did_you_mean_0, suggestion);
             return;
         }
 
@@ -1013,7 +1037,7 @@ internal sealed partial class Parser : BaseNodeFactory
         }
 
         // Otherwise, we know this some kind of unknown word, not just a missing expected semicolon.
-        ParseErrorAt(pos, node.End, Diagnostics.Unexpected_keyword_or_identifier);
+        ParseErrorAt(pos, store.End(node), Diagnostics.Unexpected_keyword_or_identifier);
     }
 
     /// <summary>
@@ -1047,7 +1071,7 @@ internal sealed partial class Parser : BaseNodeFactory
         return null;
     }
 
-    private void ParseSemicolonAfterPropertyName(Node name, Node? type, Node? initializer)
+    private void ParseSemicolonAfterPropertyName(Node name, Node type, Node initializer)
     {
         if (Token() == SyntaxKind.AtToken && !scanner.HasPrecedingLineBreak())
         {
@@ -1062,9 +1086,9 @@ internal sealed partial class Parser : BaseNodeFactory
             return;
         }
 
-        if (type != null && !CanParseSemicolon())
+        if (!type.IsNone && !CanParseSemicolon())
         {
-            if (initializer != null)
+            if (!initializer.IsNone)
             {
                 ParseErrorAtCurrentToken(Diagnostics._0_expected, Scanner.TokenToString(SyntaxKind.SemicolonToken));
             }
@@ -1080,7 +1104,7 @@ internal sealed partial class Parser : BaseNodeFactory
             return;
         }
 
-        if (initializer != null)
+        if (!initializer.IsNone)
         {
             ParseErrorAtCurrentToken(Diagnostics._0_expected, Scanner.TokenToString(SyntaxKind.SemicolonToken));
             return;
@@ -1131,46 +1155,33 @@ internal sealed partial class Parser : BaseNodeFactory
         return false;
     }
 
-    private Node? ParseOptionalToken(SyntaxKind t)
+    private Node ParseOptionalToken(SyntaxKind t)
     {
         if (Token() == t)
         {
             return ParseTokenNode();
         }
-        return null;
+        return default;
     }
 
-    private T? ParseOptionalToken<T>(SyntaxKind t)
-        where T : Node
-    {
-        return (T?)ParseOptionalToken(t);
-    }
-
-    private Node? ParseOptionalTokenJSDoc(SyntaxKind t)
+    private Node ParseOptionalTokenJSDoc(SyntaxKind t)
     {
         if (Token() == t)
         {
             return ParseTokenNodeJSDoc();
         }
-        return null;
+        return default;
     }
 
     private Node ParseExpectedToken(SyntaxKind t, DiagnosticMessage? diagnosticMessage = null, string? arg0 = null)
     {
-        return ParseOptionalToken(t) ??
-            CreateMissingNode(t, /*reportAtCurrentPosition*/ false, diagnosticMessage ?? Diagnostics._0_expected, !string.IsNullOrEmpty(arg0) ? arg0 : Scanner.TokenToString(t)!);
-    }
-
-    private T ParseExpectedToken<T>(SyntaxKind t, DiagnosticMessage? diagnosticMessage = null, string? arg0 = null)
-        where T : Node
-    {
-        return (T)ParseExpectedToken(t, diagnosticMessage, arg0);
+        return (ParseOptionalToken(t) is { IsNone: false } __t1 ? __t1 : CreateMissingNode(t, /*reportAtCurrentPosition*/ false, diagnosticMessage ?? Diagnostics._0_expected, !string.IsNullOrEmpty(arg0) ? arg0 : Scanner.TokenToString(t)!));
     }
 
     private Node ParseExpectedTokenJSDoc(SyntaxKind t)
     {
         var optional = ParseOptionalTokenJSDoc(t);
-        if (optional != null)
+        if (!optional.IsNone)
         {
             return optional;
         }
@@ -1184,12 +1195,6 @@ internal sealed partial class Parser : BaseNodeFactory
         var kind = Token();
         NextToken();
         return FinishNode(factory.CreateToken(kind), pos);
-    }
-
-    private T ParseTokenNode<T>()
-        where T : Node
-    {
-        return (T)ParseTokenNode();
     }
 
     private Node ParseTokenNodeJSDoc()
@@ -1239,18 +1244,17 @@ internal sealed partial class Parser : BaseNodeFactory
     /// </summary>
     private NodeArray CreateNodeArray(NodeArray elements, int pos, int? end = null, bool? hasTrailingComma = null)
     {
-        var array = NodeFactory.CreateNodeArray(elements, hasTrailingComma);
+        var array = NodeFactory.CreateNodeArray(store, elements, hasTrailingComma);
         Utilities.SetTextRangePosEnd(array, pos, end ?? scanner.GetTokenFullStart());
         return array;
     }
 
-    private T FinishNode<T>(T node, int pos, int? end = null)
-        where T : Node
+    private Node FinishNode(Node node, int pos, int? end = null)
     {
-        Utilities.SetTextRangePosEnd(node, pos, end ?? scanner.GetTokenFullStart());
+        Utilities.SetTextRangePosEnd(store, node, pos, end ?? scanner.GetTokenFullStart());
         if (contextFlags != 0)
         {
-            node.Flags |= contextFlags;
+            store.SetFlags(node, store.Flags(node) | contextFlags);
         }
 
         // Keep track on the node if we encountered an error while parsing it.  If we did, then
@@ -1259,7 +1263,7 @@ internal sealed partial class Parser : BaseNodeFactory
         if (parseErrorBeforeNextFinishedNode)
         {
             parseErrorBeforeNextFinishedNode = false;
-            node.Flags |= NodeFlags.ThisNodeHasError;
+            store.SetFlags(node, store.Flags(node) | NodeFlags.ThisNodeHasError);
         }
 
         return node;
@@ -1286,12 +1290,6 @@ internal sealed partial class Parser : BaseNodeFactory
         return FinishNode(result, pos);
     }
 
-    private T CreateMissingNode<T>(SyntaxKind kind, bool reportAtCurrentPosition, DiagnosticMessage? diagnosticMessage = null, params object?[] args)
-        where T : Node
-    {
-        return (T)CreateMissingNode(kind, reportAtCurrentPosition, diagnosticMessage, args);
-    }
-
     private string InternIdentifier(string text)
     {
         if (!identifiers.TryGetValue(text, out var identifier))
@@ -1304,7 +1302,7 @@ internal sealed partial class Parser : BaseNodeFactory
     // An identifier that starts with two underscores has an extra underscore character prepended to it to avoid issues
     // with magic property names like '__proto__'. The 'identifiers' object is used to share a single string instance for
     // each identifier in order to reduce memory consumption.
-    private Identifier CreateIdentifier(bool isIdentifier, DiagnosticMessage? diagnosticMessage = null, DiagnosticMessage? privateIdentifierDiagnosticMessage = null)
+    private Node CreateIdentifier(bool isIdentifier, DiagnosticMessage? diagnosticMessage = null, DiagnosticMessage? privateIdentifierDiagnosticMessage = null)
     {
         if (isIdentifier)
         {
@@ -1341,25 +1339,25 @@ internal sealed partial class Parser : BaseNodeFactory
             Diagnostics.Identifier_expected_0_is_a_reserved_word_that_cannot_be_used_here :
             Diagnostics.Identifier_expected;
 
-        return CreateMissingNode<Identifier>(SyntaxKind.Identifier, reportAtCurrentPosition, diagnosticMessage ?? defaultMessage, msgArg);
+        return CreateMissingNode(SyntaxKind.Identifier, reportAtCurrentPosition, diagnosticMessage ?? defaultMessage, msgArg);
     }
 
-    private Identifier ParseBindingIdentifier(DiagnosticMessage? privateIdentifierDiagnosticMessage = null)
+    private Node ParseBindingIdentifier(DiagnosticMessage? privateIdentifierDiagnosticMessage = null)
     {
         return CreateIdentifier(IsBindingIdentifier(), /*diagnosticMessage*/ null, privateIdentifierDiagnosticMessage);
     }
 
-    private Identifier ParseIdentifier(DiagnosticMessage? diagnosticMessage = null, DiagnosticMessage? privateIdentifierDiagnosticMessage = null)
+    private Node ParseIdentifier(DiagnosticMessage? diagnosticMessage = null, DiagnosticMessage? privateIdentifierDiagnosticMessage = null)
     {
         return CreateIdentifier(IsIdentifier(), diagnosticMessage, privateIdentifierDiagnosticMessage);
     }
 
-    private Identifier ParseIdentifierName(DiagnosticMessage? diagnosticMessage = null)
+    private Node ParseIdentifierName(DiagnosticMessage? diagnosticMessage = null)
     {
         return CreateIdentifier(Scanner.TokenIsIdentifierOrKeyword(Token()), diagnosticMessage);
     }
 
-    private Identifier ParseIdentifierNameErrorOnUnicodeEscapeSequence()
+    private Node ParseIdentifierNameErrorOnUnicodeEscapeSequence()
     {
         if (scanner.HasUnicodeEscape() || scanner.HasExtendedUnicodeEscape())
         {
@@ -1388,14 +1386,14 @@ internal sealed partial class Parser : BaseNodeFactory
             var node = ParseLiteralNode();
             switch (node)
             {
-                case StringLiteral s:
-                    s.Text = InternIdentifier(s.Text);
+                case var s when store.IsStringLiteral(s):
+                    store.SetText(s, InternIdentifier(store.Text(s)));
                     break;
-                case NumericLiteral n:
-                    n.Text = InternIdentifier(n.Text);
+                case var n when store.IsNumericLiteral(n):
+                    store.SetText(n, InternIdentifier(store.Text(n)));
                     break;
-                case BigIntLiteral b:
-                    b.Text = InternIdentifier(b.Text);
+                case var b when store.IsBigIntLiteral(b):
+                    store.SetText(b, InternIdentifier(store.Text(b)));
                     break;
             }
             return node;
@@ -1416,7 +1414,7 @@ internal sealed partial class Parser : BaseNodeFactory
         return ParsePropertyNameWorker(/*allowComputedPropertyNames*/ true);
     }
 
-    private ComputedPropertyName ParseComputedPropertyName()
+    private Node ParseComputedPropertyName()
     {
         // PropertyName [Yield]:
         //      LiteralPropertyName
@@ -1431,7 +1429,7 @@ internal sealed partial class Parser : BaseNodeFactory
         return FinishNode(factory.CreateComputedPropertyName(expression), pos);
     }
 
-    private PrivateIdentifier ParsePrivateIdentifier()
+    private Node ParsePrivateIdentifier()
     {
         var pos = GetNodePos();
         var node = factory.CreatePrivateIdentifier(InternIdentifier(scanner.GetTokenValue()));

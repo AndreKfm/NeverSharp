@@ -20,158 +20,158 @@ internal sealed partial class NodeFactory
     //
 
     // @api
-    internal JsxElement CreateJsxElement(JsxOpeningElement openingElement, IReadOnlyList<Node> children, JsxClosingElement closingElement)
+    internal Node CreateJsxElement(Node openingElement, IReadOnlyList<Node> children, Node closingElement)
     {
-        var node = CreateBaseNode<JsxElement>(SyntaxKind.JsxElement);
-        node.OpeningElement = openingElement;
-        node.Children = CreateNodeArray(children);
-        node.ClosingElement = closingElement;
-        node.TransformFlags |= PropagateChildFlags(node.OpeningElement) |
-            PropagateChildrenFlags(node.Children) |
-            PropagateChildFlags(node.ClosingElement) |
-            TransformFlags.ContainsJsx;
+        var node = CreateBaseNode(SyntaxKind.JsxElement);
+        store.SetOpeningElement(node, openingElement);
+        store.SetChildren(node, CreateNodeArray(store, children));
+        store.SetClosingElement(node, closingElement);
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.OpeningElement(node)) |
+            PropagateChildrenFlags(store.Children(node)) |
+            PropagateChildFlags(store, store.ClosingElement(node)) |
+            TransformFlags.ContainsJsx));
         return node;
     }
 
     // @api
-    internal JsxSelfClosingElement CreateJsxSelfClosingElement(Node tagName, IReadOnlyList<Node>? typeArguments, JsxAttributes attributes)
+    internal Node CreateJsxSelfClosingElement(Node tagName, IReadOnlyList<Node>? typeArguments, Node attributes)
     {
-        var node = CreateBaseNode<JsxSelfClosingElement>(SyntaxKind.JsxSelfClosingElement);
-        node.TagName = tagName;
-        node.TypeArguments = AsNodeArray(typeArguments);
-        node.Attributes = attributes;
-        node.TransformFlags |= PropagateChildFlags(node.TagName) |
-            PropagateChildrenFlags(node.TypeArguments) |
-            PropagateChildFlags(node.Attributes) |
-            TransformFlags.ContainsJsx;
-        if (node.TypeArguments != null)
+        var node = CreateBaseNode(SyntaxKind.JsxSelfClosingElement);
+        store.SetTagName(node, tagName);
+        store.SetTypeArguments(node, AsNodeArray(store, typeArguments));
+        store.SetAttributes(node, attributes);
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.TagName(node)) |
+            PropagateChildrenFlags(store.TypeArguments(node)) |
+            PropagateChildFlags(store, store.Attributes(node)) |
+            TransformFlags.ContainsJsx));
+        if (store.TypeArguments(node) != null)
         {
-            node.TransformFlags |= TransformFlags.ContainsTypeScript;
+            store.SetTransformFlags(node, store.TransformFlags(node) | TransformFlags.ContainsTypeScript);
         }
         return node;
     }
 
     // @api
-    internal JsxOpeningElement CreateJsxOpeningElement(Node tagName, IReadOnlyList<Node>? typeArguments, JsxAttributes attributes)
+    internal Node CreateJsxOpeningElement(Node tagName, IReadOnlyList<Node>? typeArguments, Node attributes)
     {
-        var node = CreateBaseNode<JsxOpeningElement>(SyntaxKind.JsxOpeningElement);
-        node.TagName = tagName;
-        node.TypeArguments = AsNodeArray(typeArguments);
-        node.Attributes = attributes;
-        node.TransformFlags |= PropagateChildFlags(node.TagName) |
-            PropagateChildrenFlags(node.TypeArguments) |
-            PropagateChildFlags(node.Attributes) |
-            TransformFlags.ContainsJsx;
+        var node = CreateBaseNode(SyntaxKind.JsxOpeningElement);
+        store.SetTagName(node, tagName);
+        store.SetTypeArguments(node, AsNodeArray(store, typeArguments));
+        store.SetAttributes(node, attributes);
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.TagName(node)) |
+            PropagateChildrenFlags(store.TypeArguments(node)) |
+            PropagateChildFlags(store, store.Attributes(node)) |
+            TransformFlags.ContainsJsx));
         if (typeArguments != null)
         {
-            node.TransformFlags |= TransformFlags.ContainsTypeScript;
+            store.SetTransformFlags(node, store.TransformFlags(node) | TransformFlags.ContainsTypeScript);
         }
         return node;
     }
 
     // @api
-    internal JsxClosingElement CreateJsxClosingElement(Node tagName)
+    internal Node CreateJsxClosingElement(Node tagName)
     {
-        var node = CreateBaseNode<JsxClosingElement>(SyntaxKind.JsxClosingElement);
-        node.TagName = tagName;
-        node.TransformFlags |= PropagateChildFlags(node.TagName) |
-            TransformFlags.ContainsJsx;
+        var node = CreateBaseNode(SyntaxKind.JsxClosingElement);
+        store.SetTagName(node, tagName);
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.TagName(node)) |
+            TransformFlags.ContainsJsx));
         return node;
     }
 
     // @api
-    internal JsxFragment CreateJsxFragment(JsxOpeningFragment openingFragment, IReadOnlyList<Node> children, JsxClosingFragment closingFragment)
+    internal Node CreateJsxFragment(Node openingFragment, IReadOnlyList<Node> children, Node closingFragment)
     {
-        var node = CreateBaseNode<JsxFragment>(SyntaxKind.JsxFragment);
-        node.OpeningFragment = openingFragment;
-        node.Children = CreateNodeArray(children);
-        node.ClosingFragment = closingFragment;
-        node.TransformFlags |= PropagateChildFlags(node.OpeningFragment) |
-            PropagateChildrenFlags(node.Children) |
-            PropagateChildFlags(node.ClosingFragment) |
-            TransformFlags.ContainsJsx;
+        var node = CreateBaseNode(SyntaxKind.JsxFragment);
+        store.SetOpeningFragment(node, openingFragment);
+        store.SetChildren(node, CreateNodeArray(store, children));
+        store.SetClosingFragment(node, closingFragment);
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.OpeningFragment(node)) |
+            PropagateChildrenFlags(store.Children(node)) |
+            PropagateChildFlags(store, store.ClosingFragment(node)) |
+            TransformFlags.ContainsJsx));
         return node;
     }
 
     // @api
-    internal JsxText CreateJsxText(string text, bool? containsOnlyTriviaWhiteSpaces = null)
+    internal Node CreateJsxText(string text, bool? containsOnlyTriviaWhiteSpaces = null)
     {
-        var node = CreateBaseNode<JsxText>(SyntaxKind.JsxText);
-        node.Text = text;
-        node.ContainsOnlyTriviaWhiteSpaces = containsOnlyTriviaWhiteSpaces == true;
-        node.TransformFlags |= TransformFlags.ContainsJsx;
+        var node = CreateBaseNode(SyntaxKind.JsxText);
+        store.SetText(node, text);
+        store.SetContainsOnlyTriviaWhiteSpaces(node, containsOnlyTriviaWhiteSpaces == true);
+        store.SetTransformFlags(node, store.TransformFlags(node) | TransformFlags.ContainsJsx);
         return node;
     }
 
     // @api
-    internal JsxOpeningFragment CreateJsxOpeningFragment()
+    internal Node CreateJsxOpeningFragment()
     {
-        var node = CreateBaseNode<JsxOpeningFragment>(SyntaxKind.JsxOpeningFragment);
-        node.TransformFlags |= TransformFlags.ContainsJsx;
+        var node = CreateBaseNode(SyntaxKind.JsxOpeningFragment);
+        store.SetTransformFlags(node, store.TransformFlags(node) | TransformFlags.ContainsJsx);
         return node;
     }
 
     // @api
-    internal JsxClosingFragment CreateJsxJsxClosingFragment()
+    internal Node CreateJsxJsxClosingFragment()
     {
-        var node = CreateBaseNode<JsxClosingFragment>(SyntaxKind.JsxClosingFragment);
-        node.TransformFlags |= TransformFlags.ContainsJsx;
+        var node = CreateBaseNode(SyntaxKind.JsxClosingFragment);
+        store.SetTransformFlags(node, store.TransformFlags(node) | TransformFlags.ContainsJsx);
         return node;
     }
 
     // @api
-    internal JsxAttribute CreateJsxAttribute(Node name, Node? initializer)
+    internal Node CreateJsxAttribute(Node name, Node initializer)
     {
-        var node = CreateBaseDeclaration<JsxAttribute>(SyntaxKind.JsxAttribute);
-        node.Name = name;
-        node.Initializer = initializer;
-        node.TransformFlags |= PropagateChildFlags(node.Name) |
-            PropagateChildFlags(node.Initializer) |
-            TransformFlags.ContainsJsx;
+        var node = CreateBaseDeclaration(SyntaxKind.JsxAttribute);
+        store.SetName(node, name);
+        store.SetInitializer(node, initializer);
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.Name(node)) |
+            PropagateChildFlags(store, store.Initializer(node)) |
+            TransformFlags.ContainsJsx));
         return node;
     }
 
     // @api
-    internal JsxAttributes CreateJsxAttributes(IReadOnlyList<Node> properties)
+    internal Node CreateJsxAttributes(IReadOnlyList<Node> properties)
     {
-        var node = CreateBaseDeclaration<JsxAttributes>(SyntaxKind.JsxAttributes);
-        node.Properties = CreateNodeArray(properties);
-        node.TransformFlags |= PropagateChildrenFlags(node.Properties) |
-            TransformFlags.ContainsJsx;
+        var node = CreateBaseDeclaration(SyntaxKind.JsxAttributes);
+        store.SetProperties(node, CreateNodeArray(store, properties));
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildrenFlags(store.Properties(node)) |
+            TransformFlags.ContainsJsx));
         return node;
     }
 
     // @api
-    internal JsxSpreadAttribute CreateJsxSpreadAttribute(Node expression)
+    internal Node CreateJsxSpreadAttribute(Node expression)
     {
-        var node = CreateBaseNode<JsxSpreadAttribute>(SyntaxKind.JsxSpreadAttribute);
-        node.Expression = expression;
-        node.TransformFlags |= PropagateChildFlags(node.Expression) |
-            TransformFlags.ContainsJsx;
+        var node = CreateBaseNode(SyntaxKind.JsxSpreadAttribute);
+        store.SetExpression(node, expression);
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.Expression(node)) |
+            TransformFlags.ContainsJsx));
         return node;
     }
 
     // @api
-    internal JsxExpression CreateJsxExpression(DotDotDotToken? dotDotDotToken, Node? expression)
+    internal Node CreateJsxExpression(Node dotDotDotToken, Node expression)
     {
-        var node = CreateBaseNode<JsxExpression>(SyntaxKind.JsxExpression);
-        node.DotDotDotToken = dotDotDotToken;
-        node.Expression = expression;
-        node.TransformFlags |= PropagateChildFlags(node.DotDotDotToken) |
-            PropagateChildFlags(node.Expression) |
-            TransformFlags.ContainsJsx;
+        var node = CreateBaseNode(SyntaxKind.JsxExpression);
+        store.SetDotDotDotToken(node, dotDotDotToken);
+        store.SetExpression(node, expression);
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.DotDotDotToken(node)) |
+            PropagateChildFlags(store, store.Expression(node)) |
+            TransformFlags.ContainsJsx));
         return node;
     }
 
     // @api
-    internal JsxNamespacedName CreateJsxNamespacedName(Identifier @namespace, Identifier name)
+    internal Node CreateJsxNamespacedName(Node @namespace, Node name)
     {
-        var node = CreateBaseNode<JsxNamespacedName>(SyntaxKind.JsxNamespacedName);
-        node.Namespace = @namespace;
-        node.Name = name;
-        node.TransformFlags |= PropagateChildFlags(node.Namespace) |
-            PropagateChildFlags(node.Name) |
-            TransformFlags.ContainsJsx;
+        var node = CreateBaseNode(SyntaxKind.JsxNamespacedName);
+        store.SetNamespace(node, @namespace);
+        store.SetName(node, name);
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.Namespace(node)) |
+            PropagateChildFlags(store, store.Name(node)) |
+            TransformFlags.ContainsJsx));
         return node;
     }
 
@@ -180,40 +180,40 @@ internal sealed partial class NodeFactory
     //
 
     // @api
-    internal CaseClause CreateCaseClause(Node expression, IReadOnlyList<Node> statements)
+    internal Node CreateCaseClause(Node expression, IReadOnlyList<Node> statements)
     {
-        var node = CreateBaseNode<CaseClause>(SyntaxKind.CaseClause);
-        node.Expression = Parenthesizer.ParenthesizeExpressionForDisallowedComma(expression);
-        node.Statements = CreateNodeArray(statements);
-        node.TransformFlags |= PropagateChildFlags(node.Expression) |
-            PropagateChildrenFlags(node.Statements);
+        var node = CreateBaseNode(SyntaxKind.CaseClause);
+        store.SetExpression(node, Parenthesizer.ParenthesizeExpressionForDisallowedComma(expression));
+        store.SetStatements(node, CreateNodeArray(store, statements));
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.Expression(node)) |
+            PropagateChildrenFlags(store.Statements(node))));
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         return node;
     }
 
     // @api
-    internal DefaultClause CreateDefaultClause(IReadOnlyList<Node> statements)
+    internal Node CreateDefaultClause(IReadOnlyList<Node> statements)
     {
-        var node = CreateBaseNode<DefaultClause>(SyntaxKind.DefaultClause);
-        node.Statements = CreateNodeArray(statements);
-        node.TransformFlags = PropagateChildrenFlags(node.Statements);
+        var node = CreateBaseNode(SyntaxKind.DefaultClause);
+        store.SetStatements(node, CreateNodeArray(store, statements));
+        store.SetTransformFlags(node, PropagateChildrenFlags(store.Statements(node)));
         return node;
     }
 
     // @api
-    internal HeritageClause CreateHeritageClause(SyntaxKind token, IReadOnlyList<Node> types)
+    internal Node CreateHeritageClause(SyntaxKind token, IReadOnlyList<Node> types)
     {
-        var node = CreateBaseNode<HeritageClause>(SyntaxKind.HeritageClause);
-        node.Token = token;
-        node.Types = CreateNodeArray(types);
-        node.TransformFlags |= PropagateChildrenFlags(node.Types);
+        var node = CreateBaseNode(SyntaxKind.HeritageClause);
+        store.SetToken(node, token);
+        store.SetTypes(node, CreateNodeArray(store, types));
+        store.SetTransformFlags(node, store.TransformFlags(node) | PropagateChildrenFlags(store.Types(node)));
         switch (token)
         {
             case SyntaxKind.ExtendsKeyword:
-                node.TransformFlags |= TransformFlags.ContainsES2015;
+                store.SetTransformFlags(node, store.TransformFlags(node) | TransformFlags.ContainsES2015);
                 break;
             case SyntaxKind.ImplementsKeyword:
-                node.TransformFlags |= TransformFlags.ContainsTypeScript;
+                store.SetTransformFlags(node, store.TransformFlags(node) | TransformFlags.ContainsTypeScript);
                 break;
             default:
                 Debug.AssertNever(token);
@@ -224,14 +224,16 @@ internal sealed partial class NodeFactory
 
     /// <summary>`createCatchClause(variableDeclaration: string | BindingName | VariableDeclaration | undefined, block)`.</summary>
     // @api
-    internal CatchClause CreateCatchClause(object? variableDeclaration, Block block)
+    internal Node CreateCatchClause(object? variableDeclaration, Node block)
     {
-        var node = CreateBaseNode<CatchClause>(SyntaxKind.CatchClause);
-        node.VariableDeclaration = AsVariableDeclaration(variableDeclaration);
-        node.Block = block;
-        node.TransformFlags |= PropagateChildFlags(node.VariableDeclaration) |
-            PropagateChildFlags(node.Block) |
-            (variableDeclaration == null || variableDeclaration is "" ? TransformFlags.ContainsES2019 : TransformFlags.None);
+        // Track O: a node handle passed as an object; None is undefined.
+        variableDeclaration = variableDeclaration is Node { IsNone: true } ? null : variableDeclaration;
+        var node = CreateBaseNode(SyntaxKind.CatchClause);
+        store.SetVariableDeclaration(node, AsVariableDeclaration(variableDeclaration));
+        store.SetBlock(node, block);
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.VariableDeclaration(node)) |
+            PropagateChildFlags(store, store.Block(node)) |
+            (variableDeclaration == null || variableDeclaration is "" ? TransformFlags.ContainsES2019 : TransformFlags.None)));
         // node.locals = undefined; // initialized by binder (LocalsContainer)
         // node.nextContainer = undefined; // initialized by binder (LocalsContainer)
         return node;
@@ -242,45 +244,45 @@ internal sealed partial class NodeFactory
     //
 
     // @api
-    internal PropertyAssignment CreatePropertyAssignment(object name, Node initializer)
+    internal Node CreatePropertyAssignment(object name, Node initializer)
     {
-        var node = CreateBaseDeclaration<PropertyAssignment>(SyntaxKind.PropertyAssignment);
-        node.Name = AsName(name)!;
-        node.Initializer = Parenthesizer.ParenthesizeExpressionForDisallowedComma(initializer);
-        node.TransformFlags |= PropagateNameFlags(node.Name) |
-            PropagateChildFlags(node.Initializer);
-        node.Modifiers = null; // initialized by parser to report grammar errors
-        node.QuestionToken = null; // initialized by parser to report grammar errors
-        node.ExclamationToken = null; // initialized by parser to report grammar errors
+        var node = CreateBaseDeclaration(SyntaxKind.PropertyAssignment);
+        store.SetName(node, AsName(name));
+        store.SetInitializer(node, Parenthesizer.ParenthesizeExpressionForDisallowedComma(initializer));
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateNameFlags(store, store.Name(node)) |
+            PropagateChildFlags(store, store.Initializer(node))));
+        store.SetModifiers(node, null); // initialized by parser to report grammar errors
+        store.SetQuestionToken(node, default); // initialized by parser to report grammar errors
+        store.SetExclamationToken(node, default); // initialized by parser to report grammar errors
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         return node;
     }
 
     // @api
-    internal ShorthandPropertyAssignment CreateShorthandPropertyAssignment(object name, Node? objectAssignmentInitializer = null)
+    internal Node CreateShorthandPropertyAssignment(object name, Node objectAssignmentInitializer = default)
     {
-        var node = CreateBaseDeclaration<ShorthandPropertyAssignment>(SyntaxKind.ShorthandPropertyAssignment);
-        node.Name = (Identifier)AsName(name)!;
-        node.ObjectAssignmentInitializer = objectAssignmentInitializer != null ? Parenthesizer.ParenthesizeExpressionForDisallowedComma(objectAssignmentInitializer) : null;
-        node.TransformFlags |= PropagateIdentifierNameFlags(node.Name) |
-            PropagateChildFlags(node.ObjectAssignmentInitializer) |
-            TransformFlags.ContainsES2015;
-        node.EqualsToken = null; // initialized by parser to report grammar errors
-        node.Modifiers = null; // initialized by parser to report grammar errors
-        node.QuestionToken = null; // initialized by parser to report grammar errors
-        node.ExclamationToken = null; // initialized by parser to report grammar errors
+        var node = CreateBaseDeclaration(SyntaxKind.ShorthandPropertyAssignment);
+        store.SetName(node, AsName(name));
+        store.SetObjectAssignmentInitializer(node, !objectAssignmentInitializer.IsNone ? Parenthesizer.ParenthesizeExpressionForDisallowedComma(objectAssignmentInitializer) : default);
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateIdentifierNameFlags(store, store.Name(node)) |
+            PropagateChildFlags(store, store.ObjectAssignmentInitializer(node)) |
+            TransformFlags.ContainsES2015));
+        store.SetEqualsToken(node, default); // initialized by parser to report grammar errors
+        store.SetModifiers(node, null); // initialized by parser to report grammar errors
+        store.SetQuestionToken(node, default); // initialized by parser to report grammar errors
+        store.SetExclamationToken(node, default); // initialized by parser to report grammar errors
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         return node;
     }
 
     // @api
-    internal SpreadAssignment CreateSpreadAssignment(Node expression)
+    internal Node CreateSpreadAssignment(Node expression)
     {
-        var node = CreateBaseDeclaration<SpreadAssignment>(SyntaxKind.SpreadAssignment);
-        node.Expression = Parenthesizer.ParenthesizeExpressionForDisallowedComma(expression);
-        node.TransformFlags |= PropagateChildFlags(node.Expression) |
+        var node = CreateBaseDeclaration(SyntaxKind.SpreadAssignment);
+        store.SetExpression(node, Parenthesizer.ParenthesizeExpressionForDisallowedComma(expression));
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.Expression(node)) |
             TransformFlags.ContainsES2018 |
-            TransformFlags.ContainsObjectRestOrSpread;
+            TransformFlags.ContainsObjectRestOrSpread));
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         return node;
     }
@@ -290,14 +292,14 @@ internal sealed partial class NodeFactory
     //
 
     // @api
-    internal EnumMember CreateEnumMember(object name, Node? initializer = null)
+    internal Node CreateEnumMember(object name, Node initializer = default)
     {
-        var node = CreateBaseDeclaration<EnumMember>(SyntaxKind.EnumMember);
-        node.Name = AsName(name)!;
-        node.Initializer = initializer != null ? Parenthesizer.ParenthesizeExpressionForDisallowedComma(initializer) : null;
-        node.TransformFlags |= PropagateChildFlags(node.Name) |
-            PropagateChildFlags(node.Initializer) |
-            TransformFlags.ContainsTypeScript;
+        var node = CreateBaseDeclaration(SyntaxKind.EnumMember);
+        store.SetName(node, AsName(name));
+        store.SetInitializer(node, !initializer.IsNone ? Parenthesizer.ParenthesizeExpressionForDisallowedComma(initializer) : default);
+        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.Name(node)) |
+            PropagateChildFlags(store, store.Initializer(node)) |
+            TransformFlags.ContainsTypeScript));
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         return node;
     }

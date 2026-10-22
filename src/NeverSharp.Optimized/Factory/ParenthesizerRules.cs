@@ -21,7 +21,7 @@ internal interface ParenthesizerRules
 
     Node ParenthesizeLeftSideOfBinary(SyntaxKind binaryOperator, Node leftSide);
 
-    Node ParenthesizeRightSideOfBinary(SyntaxKind binaryOperator, Node? leftSide, Node rightSide);
+    Node ParenthesizeRightSideOfBinary(SyntaxKind binaryOperator, Node leftSide, Node rightSide);
 
     Node ParenthesizeExpressionOfComputedPropertyName(Node expression);
 
@@ -79,11 +79,11 @@ internal interface ParenthesizerRules
 /// <summary>types.ts: NodeConverters.</summary>
 internal interface NodeConverters
 {
-    Block ConvertToFunctionBlock(Node node, bool? multiLine = null);
+    Node ConvertToFunctionBlock(Node node, bool? multiLine = null);
 
-    FunctionExpression ConvertToFunctionExpression(FunctionDeclaration node);
+    Node ConvertToFunctionExpression(Node node);
 
-    ClassExpression ConvertToClassExpression(ClassDeclaration node);
+    Node ConvertToClassExpression(Node node);
 
     Node ConvertToArrayAssignmentElement(Node element);
 
@@ -91,9 +91,9 @@ internal interface NodeConverters
 
     Node ConvertToAssignmentPattern(Node node);
 
-    ObjectLiteralExpression ConvertToObjectAssignmentPattern(Node node);
+    Node ConvertToObjectAssignmentPattern(Node node);
 
-    ArrayLiteralExpression ConvertToArrayAssignmentPattern(Node node);
+    Node ConvertToArrayAssignmentPattern(Node node);
 
     Node ConvertToAssignmentElementTarget(Node node);
 }
@@ -112,7 +112,7 @@ internal static class FactoryParenthesizerRules
 
         public Node ParenthesizeLeftSideOfBinary(SyntaxKind binaryOperator, Node leftSide) => leftSide;
 
-        public Node ParenthesizeRightSideOfBinary(SyntaxKind binaryOperator, Node? leftSide, Node rightSide) => rightSide;
+        public Node ParenthesizeRightSideOfBinary(SyntaxKind binaryOperator, Node leftSide, Node rightSide) => rightSide;
 
         public Node ParenthesizeExpressionOfComputedPropertyName(Node expression) => expression;
 
@@ -122,13 +122,16 @@ internal static class FactoryParenthesizerRules
 
         public Node ParenthesizeExpressionOfExportDefault(Node expression) => expression;
 
-        public Node ParenthesizeExpressionOfNew(Node expression) => Core.Cast<Node, Node>(expression, UtilitiesPublic.IsLeftHandSideExpression);
+        // `cast(expression, isLeftHandSideExpression)` and friends: the assertion of the cast needs the node store, which
 
-        public Node ParenthesizeLeftSideOfAccess(Node expression, bool? optionalChain = null) => Core.Cast<Node, Node>(expression, UtilitiesPublic.IsLeftHandSideExpression);
+        // these interface members do not get (Track O, O6a); the value is returned as cast returns it when the test holds.
+        public Node ParenthesizeExpressionOfNew(Node expression) => expression;
 
-        public Node ParenthesizeOperandOfPostfixUnary(Node operand) => Core.Cast<Node, Node>(operand, UtilitiesPublic.IsLeftHandSideExpression);
+        public Node ParenthesizeLeftSideOfAccess(Node expression, bool? optionalChain = null) => expression;
 
-        public Node ParenthesizeOperandOfPrefixUnary(Node operand) => Core.Cast<Node, Node>(operand, UtilitiesPublic.IsUnaryExpression);
+        public Node ParenthesizeOperandOfPostfixUnary(Node operand) => operand;
+
+        public Node ParenthesizeOperandOfPrefixUnary(Node operand) => operand;
 
         public NodeArray ParenthesizeExpressionsOfCommaDelimitedList(IReadOnlyList<Node> elements) => CastNodeArray(elements);
 
@@ -179,11 +182,11 @@ internal static class FactoryNodeConverters
     /// <summary>The object literal `nullNodeConverters`: every member is `notImplemented`.</summary>
     private sealed class NullNodeConvertersObject : NodeConverters
     {
-        public Block ConvertToFunctionBlock(Node node, bool? multiLine = null) => throw NotImplemented();
+        public Node ConvertToFunctionBlock(Node node, bool? multiLine = null) => throw NotImplemented();
 
-        public FunctionExpression ConvertToFunctionExpression(FunctionDeclaration node) => throw NotImplemented();
+        public Node ConvertToFunctionExpression(Node node) => throw NotImplemented();
 
-        public ClassExpression ConvertToClassExpression(ClassDeclaration node) => throw NotImplemented();
+        public Node ConvertToClassExpression(Node node) => throw NotImplemented();
 
         public Node ConvertToArrayAssignmentElement(Node element) => throw NotImplemented();
 
@@ -191,9 +194,9 @@ internal static class FactoryNodeConverters
 
         public Node ConvertToAssignmentPattern(Node node) => throw NotImplemented();
 
-        public ObjectLiteralExpression ConvertToObjectAssignmentPattern(Node node) => throw NotImplemented();
+        public Node ConvertToObjectAssignmentPattern(Node node) => throw NotImplemented();
 
-        public ArrayLiteralExpression ConvertToArrayAssignmentPattern(Node node) => throw NotImplemented();
+        public Node ConvertToArrayAssignmentPattern(Node node) => throw NotImplemented();
 
         public Node ConvertToAssignmentElementTarget(Node node) => throw NotImplemented();
 

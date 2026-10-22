@@ -87,12 +87,6 @@ internal sealed class PragmaMap : OrderedDictionary<string, object>
     }
 }
 
-/// <summary>types.ts: SourceFile.pragmas (declared by the port, see Types.cs).</summary>
-public sealed partial class SourceFile
-{
-    internal PragmaMap Pragmas = null!;
-}
-
 /// <summary>types.ts: declarations that are values (not types).</summary>
 internal static partial class Types
 {
@@ -201,7 +195,7 @@ internal sealed partial class Parser
         return null;
     }
 
-    internal static void ProcessCommentPragmas(SourceFile context, string sourceText)
+    internal static void ProcessCommentPragmas(NodeStore store, Node context, string sourceText)
     {
         var pragmas = new List<PragmaPseudoMapEntry>();
 
@@ -211,10 +205,10 @@ internal sealed partial class Parser
             ExtractPragmas(pragmas, range, comment);
         }
 
-        context.Pragmas = new PragmaMap();
+        store.SetPragmas(context, new PragmaMap());
         foreach (var pragma in pragmas)
         {
-            if (context.Pragmas.TryGetValue(pragma.Name, out var currentValue))
+            if (store.Pragmas(context).TryGetValue(pragma.Name, out var currentValue))
             {
                 if (currentValue is List<PragmaEntry> list)
                 {
@@ -222,25 +216,25 @@ internal sealed partial class Parser
                 }
                 else
                 {
-                    context.Pragmas[pragma.Name] = new List<PragmaEntry> { (PragmaEntry)currentValue, pragma.Args };
+                    store.Pragmas(context)[pragma.Name] = new List<PragmaEntry> { (PragmaEntry)currentValue, pragma.Args };
                 }
                 continue;
             }
-            context.Pragmas[pragma.Name] = pragma.Args;
+            store.Pragmas(context)[pragma.Name] = pragma.Args;
         }
     }
 
-    internal static void ProcessPragmasIntoFields(SourceFile context, Action<int, int, DiagnosticMessage> reportDiagnostic)
+    internal static void ProcessPragmasIntoFields(NodeStore store, Node context, Action<int, int, DiagnosticMessage> reportDiagnostic)
     {
-        context.CheckJsDirective = null;
+        store.SetCheckJsDirective(context, null);
         var contextReferencedFiles = new List<FileReference>();
         var contextTypeReferenceDirectives = new List<FileReference>();
         var contextLibReferenceDirectives = new List<FileReference>();
-        context.ReferencedFiles = contextReferencedFiles;
-        context.TypeReferenceDirectives = contextTypeReferenceDirectives;
-        context.LibReferenceDirectives = contextLibReferenceDirectives;
-        context.AmdDependencies = new List<AmdDependency>();
-        foreach (var (key, entryOrList) in context.Pragmas)
+        store.SetReferencedFiles(context, contextReferencedFiles);
+        store.SetTypeReferenceDirectives(context, contextTypeReferenceDirectives);
+        store.SetLibReferenceDirectives(context, contextLibReferenceDirectives);
+        store.SetAmdDependencies(context, new List<AmdDependency>());
+        foreach (var (key, entryOrList) in store.Pragmas(context))
         {
             // TODO: The below should be strongly type-guarded and not need casts/explicit annotations, since entryOrList is related to
             // key and key is constrained to a union; but it's not (see GH#21483 for at least partial fix) :(
@@ -290,7 +284,7 @@ internal sealed partial class Parser
                     {
                         amdDependencies.Add(new AmdDependency { Name = (string?)x.Arguments.Get("name"), Path = (string)x.Arguments.Get("path")! });
                     }
-                    context.AmdDependencies = amdDependencies;
+                    store.SetAmdDependencies(context, amdDependencies);
                     break;
                 }
                 case "amd-module":
@@ -299,17 +293,17 @@ internal sealed partial class Parser
                     {
                         foreach (var entry in entries)
                         {
-                            if (!string.IsNullOrEmpty(context.ModuleName))
+                            if (!string.IsNullOrEmpty(store.ModuleName(context)))
                             {
                                 // TODO: It's probably fine to issue this diagnostic on all instances of the pragma
                                 reportDiagnostic(entry.Range.Pos, entry.Range.End - entry.Range.Pos, Diagnostics.An_AMD_module_cannot_have_multiple_name_assignments);
                             }
-                            context.ModuleName = (string?)entry.Arguments.Get("name");
+                            store.SetModuleName(context, (string?)entry.Arguments.Get("name"));
                         }
                     }
                     else
                     {
-                        context.ModuleName = (string?)((PragmaEntry)entryOrList).Arguments.Get("name");
+                        store.SetModuleName(context, (string?)((PragmaEntry)entryOrList).Arguments.Get("name"));
                     }
                     break;
                 }
@@ -319,14 +313,14 @@ internal sealed partial class Parser
                     // _last_ of either nocheck or check in a file is the "winner"
                     foreach (var entry in ToEntryArray(entryOrList))
                     {
-                        if (context.CheckJsDirective == null || entry.Range.Pos > context.CheckJsDirective.Pos)
+                        if (store.CheckJsDirective(context) is not { } checkJsDirective || entry.Range.Pos > checkJsDirective.Pos)
                         {
-                            context.CheckJsDirective = new CheckJsDirective
+                            store.SetCheckJsDirective(context, new CheckJsDirective
                             {
                                 Enabled = key == "ts-check",
                                 End = entry.Range.End,
                                 Pos = entry.Range.Pos,
-                            };
+                            });
                         }
                     }
                     break;
@@ -464,40 +458,40 @@ internal sealed partial class Parser
         return argMap;
     }
 
-    internal static bool TagNamesAreEquivalent(Node lhs, Node rhs)
+    internal static bool TagNamesAreEquivalent(NodeStore store, Node lhs, Node rhs)
     {
-        if (lhs.Kind != rhs.Kind)
+        if (store.Kind(lhs) != store.Kind(rhs))
         {
             return false;
         }
 
-        if (lhs.Kind == SyntaxKind.Identifier)
+        if (store.Kind(lhs) == SyntaxKind.Identifier)
         {
-            return (string)((Identifier)lhs).EscapedText! == (string)((Identifier)rhs).EscapedText!;
+            return (string)store.EscapedText(lhs)! == (string)store.EscapedText(rhs)!;
         }
 
-        if (lhs.Kind == SyntaxKind.ThisKeyword)
+        if (store.Kind(lhs) == SyntaxKind.ThisKeyword)
         {
             return true;
         }
 
-        if (lhs.Kind == SyntaxKind.JsxNamespacedName)
+        if (store.Kind(lhs) == SyntaxKind.JsxNamespacedName)
         {
-            return (string)((JsxNamespacedName)lhs).Namespace.EscapedText! == (string)((JsxNamespacedName)rhs).Namespace.EscapedText! &&
-                (string)((JsxNamespacedName)lhs).Name.EscapedText! == (string)((JsxNamespacedName)rhs).Name.EscapedText!;
+            return (string)store.EscapedText(store.Namespace(lhs))! == (string)store.EscapedText(store.Namespace(rhs))! &&
+                (string)store.EscapedText(store.Name(lhs))! == (string)store.EscapedText(store.Name(rhs))!;
         }
 
         // If we are at this statement then we must have PropertyAccessExpression and because tag name in Jsx element can only
         // take forms of JsxTagNameExpression which includes an identifier, "this" expression, or another propertyAccessExpression
         // it is safe to case the expression property as such. See parseJsxElementName for how we parse tag name in Jsx element
-        return EscapedTextOfMemberName(((PropertyAccessExpression)lhs).Name) == EscapedTextOfMemberName(((PropertyAccessExpression)rhs).Name) &&
-            TagNamesAreEquivalent(((PropertyAccessExpression)lhs).Expression, ((PropertyAccessExpression)rhs).Expression);
+        return EscapedTextOfMemberName(store, store.Name(lhs)) == EscapedTextOfMemberName(store, store.Name(rhs)) &&
+            TagNamesAreEquivalent(store, store.Expression(lhs), store.Expression(rhs));
     }
 
     /// <summary>`(name as MemberName).escapedText` (Identifier or PrivateIdentifier).</summary>
-    private static string? EscapedTextOfMemberName(Node name)
+    private static string? EscapedTextOfMemberName(NodeStore store, Node name)
     {
-        return (string?)(name is Identifier identifier ? identifier.EscapedText : ((PrivateIdentifier)name).EscapedText);
+        return (string?)((name is var identifier && store.IsIdentifier(identifier)) ? store.EscapedText(identifier) : store.EscapedText(name));
     }
 
     //// The regular expressions of pragma processing, written as matchers with exactly their semantics (Track F bans

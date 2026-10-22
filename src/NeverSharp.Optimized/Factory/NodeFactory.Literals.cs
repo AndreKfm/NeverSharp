@@ -36,7 +36,7 @@ internal sealed partial class NodeFactory
                 return CreateTemplateLiteralLikeNode(kind, text, /*rawText*/ null, /*templateFlags*/ 0);
         }
         // (TypeScript's switch covers every kind of its parameter type and returns undefined otherwise.)
-        return null!;
+        return default;
     }
 
     private static TransformFlags GetTransformFlagsOfTemplateLiteralLike(TokenFlags templateFlags)
@@ -54,40 +54,40 @@ internal sealed partial class NodeFactory
     //       functions are intentionally duplicated.
     private Node CreateTemplateLiteralLikeToken(SyntaxKind kind, string text, string? rawText, TokenFlags? templateFlags)
     {
-        var node = CreateBaseToken<Node>(kind);
+        var node = CreateBaseToken(kind);
         // `templateFlags! & TokenFlags.TemplateLiteralLikeFlags` (undefined & x is 0)
         var flagsValue = (templateFlags ?? 0) & TokenFlags.TemplateLiteralLikeFlags;
         switch (node)
         {
-            case TemplateHead head:
-                head.Text = text;
-                head.RawText = rawText;
-                head.TemplateFlags = flagsValue;
+            case var head when store.IsTemplateHead(head):
+                store.SetText(head, text);
+                store.SetRawText(head, rawText);
+                store.SetTemplateFlags(head, flagsValue);
                 break;
-            case TemplateMiddle middle:
-                middle.Text = text;
-                middle.RawText = rawText;
-                middle.TemplateFlags = flagsValue;
+            case var middle when store.IsTemplateMiddle(middle):
+                store.SetText(middle, text);
+                store.SetRawText(middle, rawText);
+                store.SetTemplateFlags(middle, flagsValue);
                 break;
-            case TemplateTail tail:
-                tail.Text = text;
-                tail.RawText = rawText;
-                tail.TemplateFlags = flagsValue;
+            case var tail when store.IsTemplateTail(tail):
+                store.SetText(tail, text);
+                store.SetRawText(tail, rawText);
+                store.SetTemplateFlags(tail, flagsValue);
                 break;
             default:
-                throw new InvalidOperationException($"{node.Kind} is not a template literal token");
+                throw new InvalidOperationException($"{store.Kind(node)} is not a template literal token");
         }
-        node.TransformFlags = GetTransformFlagsOfTemplateLiteralLike(flagsValue);
+        store.SetTransformFlags(node, GetTransformFlagsOfTemplateLiteralLike(flagsValue));
         return node;
     }
 
-    private NoSubstitutionTemplateLiteral CreateTemplateLiteralLikeDeclaration(SyntaxKind kind, string text, string? rawText, TokenFlags? templateFlags)
+    private Node CreateTemplateLiteralLikeDeclaration(SyntaxKind kind, string text, string? rawText, TokenFlags? templateFlags)
     {
-        var node = CreateBaseDeclaration<NoSubstitutionTemplateLiteral>(kind);
-        node.Text = text;
-        node.RawText = rawText;
-        node.TemplateFlags = (templateFlags ?? 0) & TokenFlags.TemplateLiteralLikeFlags;
-        node.TransformFlags = GetTransformFlagsOfTemplateLiteralLike(node.TemplateFlags);
+        var node = CreateBaseDeclaration(kind);
+        store.SetText(node, text);
+        store.SetRawText(node, rawText);
+        store.SetTemplateFlags(node, (templateFlags ?? 0) & TokenFlags.TemplateLiteralLikeFlags);
+        store.SetTransformFlags(node, GetTransformFlagsOfTemplateLiteralLike(store.TemplateFlags(node)));
         return node;
     }
 
