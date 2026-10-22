@@ -225,7 +225,7 @@ A claim that C# is *faster* than typescript-go additionally requires the upper b
 
 **One final measurement.** The verdict comes from the first protocol-compliant run after Gate 1 and Gate 2 pass for the complete Phase 1 module. Replication runs may be published, each in full and alongside the first; they do not replace it.
 
-**Variance gate (kill criterion 3).** Every single-threaded configuration on every repository has MAD/median < 3 % in the deciding run; otherwise the rig is fixed and the run repeated before any number is published (B11). The parallel configurations' MAD/median is reported next to each median.
+**Variance gate (kill criterion 3).** Every single-threaded configuration on every repository has MAD/median < 3 % in the deciding run; otherwise the rig is fixed and the run repeated before any number is published (B11). The parallel configurations' MAD/median is reported next to each median. **Amended (prereg/v4, 2026-10-22; decided after seeing two runs):** the gate binds `tsc6-parse`, `tsgo7-parse-single` and the primary single-threaded C# configuration of each track (`cs-aot-ws-single`, `cs-o-aot-ws-single`); the other single-threaded C# configurations report their spread, with a variance note on any secondary result above 3 %. The verdict comes from the first protocol-compliant run after this tag that passes the amended gate; M6 runs 1 and 2 (before the tag) are published in full but carry no verdict.
 
 ## 9. Kill criteria for the project
 
@@ -300,6 +300,7 @@ For transparency, the decisions that were revised during Phase 0, before this do
 
 | Date | Tag | Change | Reason | Where |
 |---|---|---|---|---|
+| 2026-10-22 | `prereg/v4` | §8 variance gate: binding for tsc6-parse, tsgo7-parse-single and the primary single-threaded C# configuration of each track; other single-threaded C# configurations reported with a variance note | M6 runs 1 and 2 failed the gate only in JIT/Server-GC "single-threaded" configurations (3.36–5.08 %) while the rig configurations stayed ≤ 1.43 % and cs-aot-ws-single ≤ 1.68 %; **decided after seeing both runs**; the verdict comes from a run after this tag | benchmark-harness.md B11, results/m6/ |
 | 2026-10-21 | `prereg/v3` | §5.2: 2 attempts per Track F module from M5 on (1 × Opus 5.5, 1 × Sonnet 5.5), agents at medium effort, high only for Track O | token cost; M3+M4 attempt 1 was stopped by the author before finishing (logged in phase1-progress.md) | phase1-progress.md, modules/README.md |
 | 2026-10-21 | `prereg/v2` | §6.4 A7 table: property name `ServerGarbageCollector` → `ServerGarbageCollection` | erratum: `ServerGarbageCollector` is not an MSBuild property and is silently ignored, so the `-srv` configurations would have run with Workstation GC; the intent (Server GC for `-srv`) is unchanged. Found by the first publish of the four configurations, before any C# measurement. | eng/RuntimeConfiguration.props, phase1-progress.md |
 

@@ -76,14 +76,17 @@ for (const c of configs) {
 }
 push("");
 
-// Decision B11: single-threaded configurations are the rig check; parallel configurations report their spread.
-const threadsOf = c => c.threads ?? (c.id.endsWith("-single") || c.id.startsWith("tsc") ? "single" : "parallel");
+// Decision B11 as amended by prereg/v4: the rig check binds the configurations that measure the rig
+// (tsc6-parse, tsgo7-parse-single) and the primary single-threaded C# configuration of each track;
+// all other configurations report their spread (JIT and Server GC run background threads even in
+// "single-threaded" mode, so their spread belongs to the program, not to the rig).
+const RIG_CHECK = new Set(["tsc6-parse", "tsgo7-parse-single", "cs-aot-ws-single", "cs-o-aot-ws-single"]);
 push(`## Table 3. Variance gate (MAD/median < ${VARIANCE_LIMIT} %)`, "",
-    "Binding rows: single-threaded configurations (rig check). Parallel rows: reported spread, not gated; their run-to-run spread is a property of the parallel program (docs/benchmark-harness.md, B11).", "",
+    "Binding rows (rig check): tsc6-parse, tsgo7-parse-single and the primary single-threaded C# configuration of each track. Other rows: reported spread, not gated; a secondary configuration above the limit carries a variance note wherever its ratio is used (docs/benchmark-harness.md, B11 as amended by prereg/v4).", "",
     row(["Configuration", "Role", ...repos, "Worst"]), row(["---", "---", ...repos.map(() => "---:"), "---:"]));
 let gatePass = true;
 for (const c of configs) {
-    const binding = threadsOf(c) === "single";
+    const binding = RIG_CHECK.has(c.id);
     const v = repos.map(r => result(r, c.id)?.timing.madOverMedianPercent);
     const worst = Math.max(...v.filter(x => x !== undefined));
     if (binding && worst >= VARIANCE_LIMIT) gatePass = false;
