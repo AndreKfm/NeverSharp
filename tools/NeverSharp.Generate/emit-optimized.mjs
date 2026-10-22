@@ -1,6 +1,6 @@
 // Copyright 2026 Andre Kaufmann
 // SPDX-License-Identifier: Apache-2.0
-// Original code (not ported): Track O emitter for the node store's field accessors and ForEachChild (step O6a).
+// Original code (not ported): Track O emitter for the node store's field accessors and ForEachChild (steps O6a, O6b).
 //
 // Track O's nodes are int handles into a per-parse arena (pre-registration §5.4); the parser and the factory
 // read and write a node only through NodeStore (src/NeverSharp.Optimized/Arena/NodeStore.cs). This emitter writes
@@ -8,9 +8,10 @@
 // - The field set per node class is Track F's (a field exists when the interface declares the property and
 //   parser.ts, factory/nodeFactory.ts or utilities.ts assign it), without the binder and checker data the
 //   parser never touches, plus the SourceFile members Track F declares by hand (Parser/Types.cs, Parser.Pragmas.cs).
-// - Layout of O6a (the simplest that works; O6b compares layouts behind the same API): each node owns a block
-//   of int slots (child handles and scalar fields) and a block of object slots (strings, node lists, other
-//   objects); a field's offset in its block depends on the node's class, looked up per SyntaxKind in a table.
+// - Layout of O6b variant B (structure of arrays; NodeStore.cs): the base fields are columns indexed by the node;
+//   each node owns a block of int slots (child handles and scalar fields) and a block of object slots (strings,
+//   node lists, other objects); a field's offset in its block depends on the node's class, looked up per
+//   SyntaxKind in a table. jsDoc, set on few nodes, is a sparse column instead (SIDE_FIELDS).
 // - One getter and one setter per field name (`Expression(n)`, `SetExpression(n, v)`). A getter on a kind
 //   without the field reads as undefined (default), as the property does in TypeScript; a setter throws.
 //   Where one name has different types on different classes, the minority classes get `{Class}{Field}`.
@@ -97,6 +98,15 @@ function storage(cs, optional, usedAs) {
     }
 }
 
+// Fields kept in a node-indexed side array of the store (NodeStore.cs) instead of a node's object slots:
+// jsDoc is declared by 69 node classes but set on few nodes (parser.ts withJSDoc).
+const SIDE_FIELDS = new Set(["jsDoc"]);
+const SIDE_ARRAYS = { JsDoc: "jsDocs" };
+
+// The setter after which the store compacts itself: the parser stores the parse diagnostics on the source file as
+// the last step of a parse (parser.ts parseSourceFileWorker, parseJsonText).
+const SEAL_AFTER = "ParseDiagnostics";
+
 // JSDocSignature.parameters: parseCallbackTagParameters (parser.ts) also keeps non-parameter tags there.
 const FIELD_OVERRIDES = { "JSDocSignature.parameters": { store: "ref", type: "Node[]", nullable: true } };
 
@@ -129,12 +139,12 @@ export function emitOptimized(schema) {
         for (const p of (schema.interfaces[cls] ?? []).filter(p => !BASE_FIELDS.has(p.name) && assigned.has(p.name))) {
             const s = FIELD_OVERRIDES[`${cls}.${p.name}`] ?? storage(p.cs, p.optional, usage[cls]?.[p.name]);
             if (!s) { (omitted[cls] ??= []).push(pascal(p.name)); continue; }
-            list.push({ ts: p.name, name: pascal(p.name), ...s });
+            list.push({ ts: p.name, name: pascal(p.name), ...(SIDE_FIELDS.has(p.name) ? { ...s, store: "side" } : s) });
         }
         for (const [name, type, nullable] of EXTRA_FIELDS[cls] ?? []) list.push({ ts: name, name, store: "ref", type, nullable });
         list.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
         let slot = 0, ref = 0;
-        for (const f of list) f.offset = f.store === "slot" ? slot++ : ref++;
+        for (const f of list) f.offset = f.store === "slot" ? slot++ : f.store === "ref" ? ref++ : 0;
         fields[cls] = { list, slots: slot, refs: ref };
     }
 
@@ -181,7 +191,7 @@ export function emitOptimized(schema) {
 
     const lines = [header("src/compiler/types.ts (node interfaces) and src/compiler/parser.ts (forEachChildTable)"),
         "#nullable enable", "", "using NeverSharp.Generated;", "", "namespace NeverSharp.Optimized;", "",
-        "/// <summary>The generated part of the node store: layout tables, field accessors and node class tests (O6a layout).</summary>",
+        "/// <summary>The generated part of the node store: layout tables, field accessors and node class tests (O6b layout B: structure of arrays).</summary>",
         "internal sealed partial class NodeStore", "{",
         `    private const int KindCount = ${kindCount};`, "",
         "    /// <summary>Int slots (child handles, scalar fields) per kind.</summary>",
@@ -196,29 +206,42 @@ export function emitOptimized(schema) {
     if (classes.length > 255) throw new Error("more than 255 node classes");
 
     const getter = (name, a) => {
-        const nullable = a.store === "ref" && a.nullable;
-        const ret = a.store === "ref" ? `${a.type}${nullable ? "?" : ""}` : a.type;
-        const read = a.store === "ref" ? (nullable ? `(${a.type}?)refs[r.Refs + o]` : `(${a.type})refs[r.Refs + o]!`)
-            : a.conv === "node" ? "new Node(slots[r.Slots + o])"
-            : a.conv === "bool" ? "slots[r.Slots + o] != 0"
-            : a.conv === "enum" ? `(${a.type})slots[r.Slots + o]` : "slots[r.Slots + o]";
+        const nullable = a.store !== "slot" && a.nullable;
+        const ret = a.store !== "slot" ? `${a.type}${nullable ? "?" : ""}` : a.type;
+        const offsets = [`    private static ReadOnlySpan<sbyte> ${name}Offsets =>`, "    [",
+            ...tableOf(k => a.offsets.has(kindClass[k]) ? a.offsets.get(kindClass[k]) : -1), "    ];", ""];
+        if (a.store === "side") {
+            // A sparse node-indexed array (NodeStore.cs); kinds without the field never write it.
+            const array = SIDE_ARRAYS[name];
+            if (!array || !nullable) throw new Error(`side field ${name} needs a nullable side array in NodeStore.cs`);
+            return [
+                `    public ${ret} ${name}(Node node) => Sparse(${array}, node.Index);`, "",
+                `    public void Set${name}(Node node, ${ret} value)`, "    {",
+                "        var i = nodeBase + node.Index;",
+                `        if (Entry(${name}Offsets, At(kinds, i)) < 0)`, "        {", `            ThrowNoField((SyntaxKind)At(kinds, i), nameof(${name}));`, "        }",
+                `        SetSparse(ref ${array}, node.Index, value);`, "    }", "", ...offsets];
+        }
+        const cell = a.store === "ref" ? "At(refs, At(refStarts, i) + o)" : "At(slots, At(slotStarts, i) + o)";
+        const read = a.store === "ref" ? (nullable ? `(${a.type}?)${cell}` : `(${a.type})${cell}!`)
+            : a.conv === "node" ? `new Node(${cell})`
+            : a.conv === "bool" ? `${cell} != 0`
+            : a.conv === "enum" ? `(${a.type})${cell}` : cell;
         const absent = a.store === "ref" ? (nullable ? "null" : "null!") : "default";
-        const write = a.store === "ref" ? "refs[r.Refs + o] = value;"
-            : a.conv === "node" ? "slots[r.Slots + o] = value.Index;"
-            : a.conv === "bool" ? "slots[r.Slots + o] = value ? 1 : 0;"
-            : a.conv === "enum" ? "slots[r.Slots + o] = (int)value;" : "slots[r.Slots + o] = value;";
+        const write = a.store === "ref" ? `${cell} = value;`
+            : a.conv === "node" ? `${cell} = value.Index;`
+            : a.conv === "bool" ? `${cell} = value ? 1 : 0;`
+            : a.conv === "enum" ? `${cell} = (int)value;` : `${cell} = value;`;
+        const seal = name === SEAL_AFTER ? ["        if (value is not null)", "        {", "            Seal();", "        }"] : [];
         return [
             `    public ${ret} ${name}(Node node)`, "    {",
-            "        ref var r = ref records[node.Index];",
-            `        var o = ${name}Offsets[(int)r.Kind];`,
+            "        var i = nodeBase + node.Index;",
+            `        var o = Entry(${name}Offsets, At(kinds, i));`,
             `        return o < 0 ? ${absent} : ${read};`, "    }", "",
             `    public void Set${name}(Node node, ${ret} value)`, "    {",
-            "        ref var r = ref records[node.Index];",
-            `        var o = ${name}Offsets[(int)r.Kind];`,
-            "        if (o < 0)", "        {", `            ThrowNoField(r.Kind, nameof(${name}));`, "        }",
-            `        ${write}`, "    }", "",
-            `    private static ReadOnlySpan<sbyte> ${name}Offsets =>`, "    [",
-            ...tableOf(k => a.offsets.has(kindClass[k]) ? a.offsets.get(kindClass[k]) : -1), "    ];", ""];
+            "        var i = nodeBase + node.Index;",
+            `        var o = Entry(${name}Offsets, At(kinds, i));`,
+            "        if (o < 0)", "        {", `            ThrowNoField((SyntaxKind)At(kinds, i), nameof(${name}));`, "        }",
+            `        ${write}`, ...seal, "    }", "", ...offsets];
     };
     for (const [name, a] of [...accessors].sort((x, y) => x[0] < y[0] ? -1 : 1)) {
         const owners = [...a.offsets.keys()];
@@ -226,7 +249,7 @@ export function emitOptimized(schema) {
         lines.push(...getter(name, a));
     }
     lines.push("    // Node classes of types.ts: whether a node's kind is one of the class's kinds.");
-    for (const cls of classes) lines.push(`    public bool Is${cls}(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == ${classId.get(cls)};`, "");
+    for (const cls of classes) lines.push(`    public bool Is${cls}(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == ${classId.get(cls)};`, "");
     lines.pop();
     lines.push("}", "");
     writeFileSync(join(outDir, "NodeStore.g.cs"), lines.join("\n"));

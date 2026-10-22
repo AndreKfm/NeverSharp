@@ -15,7 +15,7 @@ using NeverSharp.Generated;
 
 namespace NeverSharp.Optimized;
 
-/// <summary>The generated part of the node store: layout tables, field accessors and node class tests (O6a layout).</summary>
+/// <summary>The generated part of the node store: layout tables, field accessors and node class tests (O6b layout B: structure of arrays).</summary>
 internal sealed partial class NodeStore
 {
     private const int KindCount = 359;
@@ -37,15 +37,15 @@ internal sealed partial class NodeStore
     /// <summary>Object slots (strings, node lists, other objects) per kind.</summary>
     private static ReadOnlySpan<byte> RefCounts =>
     [
-        0,1,0,0,0,0,0,0,0,1,1,1,1,0,1,2,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,1,1,1,1,0,1,2,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-        2,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-        0,0,0,0,0,0,0,0,0,2,2,0,2,2,5,5,2,5,5,5,4,4,5,0,1,5,5,1,1,0,1,0,0,1,1,0,0,0,0,0,
-        0,1,0,1,1,0,1,1,1,0,1,2,1,1,2,2,1,0,1,5,5,0,0,0,0,0,0,1,0,1,0,0,5,0,1,0,0,0,0,0,
-        0,1,2,1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,5,5,5,3,3,2,2,1,2,2,2,0,0,1,0,2,2,
-        1,0,1,2,0,1,1,1,0,1,0,0,0,1,0,0,0,2,1,1,0,1,0,0,2,2,1,1,26,1,0,0,0,0,0,0,0,0,4,0,
-        0,2,1,1,3,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,1,1,1,1,1,1,1,1,0,0,1,0,
+        0,0,0,0,0,0,0,0,0,1,1,0,1,1,4,4,1,4,4,4,3,3,4,0,1,4,4,1,1,0,1,0,0,1,1,0,0,0,0,0,
+        0,1,0,0,1,0,1,1,1,0,1,1,0,0,2,2,1,0,0,4,4,0,0,0,0,0,0,0,0,1,0,0,4,0,1,0,0,0,0,0,
+        0,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,4,4,4,2,2,1,1,1,1,1,1,0,0,1,0,1,1,
+        1,0,0,1,0,1,1,1,0,1,0,0,0,1,0,0,0,1,1,1,0,1,0,0,1,1,0,0,26,1,0,0,0,0,0,0,0,0,3,0,
+        0,2,1,1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,1,1,1,1,1,1,1,0,0,0,1,0,
     ];
 
     /// <summary>The node class of each kind (index into the classes of types.ts, Token for kinds without one).</summary>
@@ -65,20 +65,20 @@ internal sealed partial class NodeStore
     // SourceFile
     public IReadOnlyList<string>? AmbientModuleNames(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = AmbientModuleNamesOffsets[(int)r.Kind];
-        return o < 0 ? null : (IReadOnlyList<string>?)refs[r.Refs + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(AmbientModuleNamesOffsets, At(kinds, i));
+        return o < 0 ? null : (IReadOnlyList<string>?)At(refs, At(refStarts, i) + o);
     }
 
     public void SetAmbientModuleNames(Node node, IReadOnlyList<string>? value)
     {
-        ref var r = ref records[node.Index];
-        var o = AmbientModuleNamesOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(AmbientModuleNamesOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(AmbientModuleNames));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(AmbientModuleNames));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> AmbientModuleNamesOffsets =>
@@ -97,20 +97,20 @@ internal sealed partial class NodeStore
     // SourceFile
     public IReadOnlyList<AmdDependency> AmdDependencies(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = AmdDependenciesOffsets[(int)r.Kind];
-        return o < 0 ? null! : (IReadOnlyList<AmdDependency>)refs[r.Refs + o]!;
+        var i = nodeBase + node.Index;
+        var o = Entry(AmdDependenciesOffsets, At(kinds, i));
+        return o < 0 ? null! : (IReadOnlyList<AmdDependency>)At(refs, At(refStarts, i) + o)!;
     }
 
     public void SetAmdDependencies(Node node, IReadOnlyList<AmdDependency> value)
     {
-        ref var r = ref records[node.Index];
-        var o = AmdDependenciesOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(AmdDependenciesOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(AmdDependencies));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(AmdDependencies));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> AmdDependenciesOffsets =>
@@ -129,20 +129,20 @@ internal sealed partial class NodeStore
     // ImportTypeNode
     public Node Argument(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ArgumentOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(ArgumentOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetArgument(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ArgumentOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ArgumentOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Argument));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Argument));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ArgumentOffsets =>
@@ -161,20 +161,20 @@ internal sealed partial class NodeStore
     // ElementAccessExpression
     public Node ArgumentExpression(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ArgumentExpressionOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(ArgumentExpressionOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetArgumentExpression(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ArgumentExpressionOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ArgumentExpressionOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ArgumentExpression));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(ArgumentExpression));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ArgumentExpressionOffsets =>
@@ -193,20 +193,20 @@ internal sealed partial class NodeStore
     // CallExpression, NewExpression
     public NodeArray? Arguments(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ArgumentsOffsets[(int)r.Kind];
-        return o < 0 ? null : (NodeArray?)refs[r.Refs + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(ArgumentsOffsets, At(kinds, i));
+        return o < 0 ? null : (NodeArray?)At(refs, At(refStarts, i) + o);
     }
 
     public void SetArguments(Node node, NodeArray? value)
     {
-        ref var r = ref records[node.Index];
-        var o = ArgumentsOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ArgumentsOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Arguments));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Arguments));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> ArgumentsOffsets =>
@@ -225,20 +225,20 @@ internal sealed partial class NodeStore
     // ExportDeclaration, ImportDeclaration, ImportTypeAssertionContainer
     public Node AssertClause(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = AssertClauseOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(AssertClauseOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetAssertClause(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = AssertClauseOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(AssertClauseOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(AssertClause));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(AssertClause));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> AssertClauseOffsets =>
@@ -257,20 +257,20 @@ internal sealed partial class NodeStore
     // TypePredicateNode
     public Node AssertsModifier(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = AssertsModifierOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(AssertsModifierOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetAssertsModifier(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = AssertsModifierOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(AssertsModifierOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(AssertsModifier));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(AssertsModifier));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> AssertsModifierOffsets =>
@@ -289,20 +289,20 @@ internal sealed partial class NodeStore
     // ArrowFunction, ConstructorDeclaration, FunctionDeclaration, FunctionExpression, GetAccessorDeclaration, MethodDeclaration, … (8 classes)
     public Node AsteriskToken(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = AsteriskTokenOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(AsteriskTokenOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetAsteriskToken(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = AsteriskTokenOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(AsteriskTokenOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(AsteriskToken));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(AsteriskToken));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> AsteriskTokenOffsets =>
@@ -321,20 +321,20 @@ internal sealed partial class NodeStore
     // ExportDeclaration, ImportDeclaration, ImportTypeNode, JSDocImportTag, JsxOpeningElement, JsxSelfClosingElement
     public Node Attributes(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = AttributesOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(AttributesOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetAttributes(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = AttributesOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(AttributesOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Attributes));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Attributes));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> AttributesOffsets =>
@@ -353,20 +353,20 @@ internal sealed partial class NodeStore
     // ForOfStatement
     public Node AwaitModifier(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = AwaitModifierOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(AwaitModifierOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetAwaitModifier(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = AwaitModifierOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(AwaitModifierOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(AwaitModifier));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(AwaitModifier));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> AwaitModifierOffsets =>
@@ -385,20 +385,20 @@ internal sealed partial class NodeStore
     // SourceFile
     public List<DiagnosticWithLocation>? BindDiagnostics(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = BindDiagnosticsOffsets[(int)r.Kind];
-        return o < 0 ? null : (List<DiagnosticWithLocation>?)refs[r.Refs + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(BindDiagnosticsOffsets, At(kinds, i));
+        return o < 0 ? null : (List<DiagnosticWithLocation>?)At(refs, At(refStarts, i) + o);
     }
 
     public void SetBindDiagnostics(Node node, List<DiagnosticWithLocation>? value)
     {
-        ref var r = ref records[node.Index];
-        var o = BindDiagnosticsOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(BindDiagnosticsOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(BindDiagnostics));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(BindDiagnostics));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> BindDiagnosticsOffsets =>
@@ -417,20 +417,20 @@ internal sealed partial class NodeStore
     // SourceFile
     public List<DiagnosticWithLocation>? BindSuggestionDiagnostics(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = BindSuggestionDiagnosticsOffsets[(int)r.Kind];
-        return o < 0 ? null : (List<DiagnosticWithLocation>?)refs[r.Refs + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(BindSuggestionDiagnosticsOffsets, At(kinds, i));
+        return o < 0 ? null : (List<DiagnosticWithLocation>?)At(refs, At(refStarts, i) + o);
     }
 
     public void SetBindSuggestionDiagnostics(Node node, List<DiagnosticWithLocation>? value)
     {
-        ref var r = ref records[node.Index];
-        var o = BindSuggestionDiagnosticsOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(BindSuggestionDiagnosticsOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(BindSuggestionDiagnostics));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(BindSuggestionDiagnostics));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> BindSuggestionDiagnosticsOffsets =>
@@ -449,20 +449,20 @@ internal sealed partial class NodeStore
     // CatchClause
     public Node Block(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = BlockOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(BlockOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetBlock(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = BlockOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(BlockOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Block));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Block));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> BlockOffsets =>
@@ -481,20 +481,20 @@ internal sealed partial class NodeStore
     // ArrowFunction, ClassStaticBlockDeclaration, ConstructorDeclaration, FunctionDeclaration, FunctionExpression, GetAccessorDeclaration, … (9 classes)
     public Node Body(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = BodyOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(BodyOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetBody(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = BodyOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(BodyOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Body));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Body));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> BodyOffsets =>
@@ -513,20 +513,20 @@ internal sealed partial class NodeStore
     // SwitchStatement
     public Node CaseBlock(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = CaseBlockOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(CaseBlockOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetCaseBlock(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = CaseBlockOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(CaseBlockOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(CaseBlock));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(CaseBlock));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> CaseBlockOffsets =>
@@ -545,20 +545,20 @@ internal sealed partial class NodeStore
     // TryStatement
     public Node CatchClause(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = CatchClauseOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(CatchClauseOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetCatchClause(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = CatchClauseOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(CatchClauseOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(CatchClause));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(CatchClause));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> CatchClauseOffsets =>
@@ -577,20 +577,20 @@ internal sealed partial class NodeStore
     // SourceFile
     public CheckJsDirective? CheckJsDirective(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = CheckJsDirectiveOffsets[(int)r.Kind];
-        return o < 0 ? null : (CheckJsDirective?)refs[r.Refs + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(CheckJsDirectiveOffsets, At(kinds, i));
+        return o < 0 ? null : (CheckJsDirective?)At(refs, At(refStarts, i) + o);
     }
 
     public void SetCheckJsDirective(Node node, CheckJsDirective? value)
     {
-        ref var r = ref records[node.Index];
-        var o = CheckJsDirectiveOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(CheckJsDirectiveOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(CheckJsDirective));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(CheckJsDirective));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> CheckJsDirectiveOffsets =>
@@ -609,20 +609,20 @@ internal sealed partial class NodeStore
     // ConditionalTypeNode
     public Node CheckType(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = CheckTypeOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(CheckTypeOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetCheckType(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = CheckTypeOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(CheckTypeOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(CheckType));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(CheckType));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> CheckTypeOffsets =>
@@ -641,20 +641,20 @@ internal sealed partial class NodeStore
     // JsxElement, JsxFragment
     public NodeArray Children(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ChildrenOffsets[(int)r.Kind];
-        return o < 0 ? null! : (NodeArray)refs[r.Refs + o]!;
+        var i = nodeBase + node.Index;
+        var o = Entry(ChildrenOffsets, At(kinds, i));
+        return o < 0 ? null! : (NodeArray)At(refs, At(refStarts, i) + o)!;
     }
 
     public void SetChildren(Node node, NodeArray value)
     {
-        ref var r = ref records[node.Index];
-        var o = ChildrenOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ChildrenOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Children));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Children));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> ChildrenOffsets =>
@@ -673,20 +673,20 @@ internal sealed partial class NodeStore
     // JSDocAugmentsTag, JSDocImplementsTag
     public Node Class(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ClassOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(ClassOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetClass(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ClassOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ClassOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Class));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Class));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ClassOffsets =>
@@ -705,20 +705,20 @@ internal sealed partial class NodeStore
     // CaseBlock
     public NodeArray Clauses(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ClausesOffsets[(int)r.Kind];
-        return o < 0 ? null! : (NodeArray)refs[r.Refs + o]!;
+        var i = nodeBase + node.Index;
+        var o = Entry(ClausesOffsets, At(kinds, i));
+        return o < 0 ? null! : (NodeArray)At(refs, At(refStarts, i) + o)!;
     }
 
     public void SetClauses(Node node, NodeArray value)
     {
-        ref var r = ref records[node.Index];
-        var o = ClausesOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ClausesOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Clauses));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Clauses));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> ClausesOffsets =>
@@ -737,20 +737,20 @@ internal sealed partial class NodeStore
     // JsxElement
     public Node ClosingElement(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ClosingElementOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(ClosingElementOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetClosingElement(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ClosingElementOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ClosingElementOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ClosingElement));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(ClosingElement));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ClosingElementOffsets =>
@@ -769,20 +769,20 @@ internal sealed partial class NodeStore
     // JsxFragment
     public Node ClosingFragment(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ClosingFragmentOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(ClosingFragmentOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetClosingFragment(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ClosingFragmentOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ClosingFragmentOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ClosingFragment));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(ClosingFragment));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ClosingFragmentOffsets =>
@@ -801,20 +801,20 @@ internal sealed partial class NodeStore
     // ConditionalExpression
     public Node ColonToken(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ColonTokenOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(ColonTokenOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetColonToken(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ColonTokenOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ColonTokenOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ColonToken));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(ColonToken));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ColonTokenOffsets =>
@@ -833,20 +833,20 @@ internal sealed partial class NodeStore
     // JSDoc, JSDocAugmentsTag, JSDocAuthorTag, JSDocCallbackTag, JSDocClassTag, JSDocDeprecatedTag, … (26 classes)
     public object? Comment(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = CommentOffsets[(int)r.Kind];
-        return o < 0 ? null : (object?)refs[r.Refs + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(CommentOffsets, At(kinds, i));
+        return o < 0 ? null : (object?)At(refs, At(refStarts, i) + o);
     }
 
     public void SetComment(Node node, object? value)
     {
-        ref var r = ref records[node.Index];
-        var o = CommentOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(CommentOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Comment));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Comment));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> CommentOffsets =>
@@ -865,20 +865,20 @@ internal sealed partial class NodeStore
     // SourceFile
     public List<CommentDirective>? CommentDirectives(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = CommentDirectivesOffsets[(int)r.Kind];
-        return o < 0 ? null : (List<CommentDirective>?)refs[r.Refs + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(CommentDirectivesOffsets, At(kinds, i));
+        return o < 0 ? null : (List<CommentDirective>?)At(refs, At(refStarts, i) + o);
     }
 
     public void SetCommentDirectives(Node node, List<CommentDirective>? value)
     {
-        ref var r = ref records[node.Index];
-        var o = CommentDirectivesOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(CommentDirectivesOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(CommentDirectives));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(CommentDirectives));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> CommentDirectivesOffsets =>
@@ -897,20 +897,20 @@ internal sealed partial class NodeStore
     // ConditionalExpression, ForStatement
     public Node Condition(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ConditionOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(ConditionOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetCondition(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ConditionOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ConditionOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Condition));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Condition));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ConditionOffsets =>
@@ -929,20 +929,20 @@ internal sealed partial class NodeStore
     // JSDocTemplateTag, TypeParameterDeclaration
     public Node Constraint(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ConstraintOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(ConstraintOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetConstraint(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ConstraintOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ConstraintOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Constraint));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Constraint));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ConstraintOffsets =>
@@ -961,20 +961,20 @@ internal sealed partial class NodeStore
     // JsxText
     public bool ContainsOnlyTriviaWhiteSpaces(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ContainsOnlyTriviaWhiteSpacesOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var i = nodeBase + node.Index;
+        var o = Entry(ContainsOnlyTriviaWhiteSpacesOffsets, At(kinds, i));
+        return o < 0 ? default : At(slots, At(slotStarts, i) + o) != 0;
     }
 
     public void SetContainsOnlyTriviaWhiteSpaces(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = ContainsOnlyTriviaWhiteSpacesOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ContainsOnlyTriviaWhiteSpacesOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ContainsOnlyTriviaWhiteSpaces));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(ContainsOnlyTriviaWhiteSpaces));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        At(slots, At(slotStarts, i) + o) = value ? 1 : 0;
     }
 
     private static ReadOnlySpan<sbyte> ContainsOnlyTriviaWhiteSpacesOffsets =>
@@ -993,20 +993,20 @@ internal sealed partial class NodeStore
     // VariableStatement
     public Node DeclarationList(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = DeclarationListOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(DeclarationListOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetDeclarationList(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = DeclarationListOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(DeclarationListOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(DeclarationList));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(DeclarationList));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> DeclarationListOffsets =>
@@ -1025,20 +1025,20 @@ internal sealed partial class NodeStore
     // VariableDeclarationList
     public NodeArray Declarations(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = DeclarationsOffsets[(int)r.Kind];
-        return o < 0 ? null! : (NodeArray)refs[r.Refs + o]!;
+        var i = nodeBase + node.Index;
+        var o = Entry(DeclarationsOffsets, At(kinds, i));
+        return o < 0 ? null! : (NodeArray)At(refs, At(refStarts, i) + o)!;
     }
 
     public void SetDeclarations(Node node, NodeArray value)
     {
-        ref var r = ref records[node.Index];
-        var o = DeclarationsOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(DeclarationsOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Declarations));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Declarations));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> DeclarationsOffsets =>
@@ -1057,20 +1057,20 @@ internal sealed partial class NodeStore
     // TypeParameterDeclaration
     public Node Default(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = DefaultOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(DefaultOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetDefault(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = DefaultOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(DefaultOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Default));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Default));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> DefaultOffsets =>
@@ -1089,20 +1089,20 @@ internal sealed partial class NodeStore
     // BindingElement, JsxExpression, NamedTupleMember, ParameterDeclaration
     public Node DotDotDotToken(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = DotDotDotTokenOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(DotDotDotTokenOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetDotDotDotToken(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = DotDotDotTokenOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(DotDotDotTokenOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(DotDotDotToken));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(DotDotDotToken));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> DotDotDotTokenOffsets =>
@@ -1121,20 +1121,20 @@ internal sealed partial class NodeStore
     // ArrayTypeNode
     public Node ElementType(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ElementTypeOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(ElementTypeOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetElementType(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ElementTypeOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ElementTypeOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ElementType));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(ElementType));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ElementTypeOffsets =>
@@ -1153,20 +1153,20 @@ internal sealed partial class NodeStore
     // ArrayBindingPattern, ArrayLiteralExpression, CommaListExpression, ImportAttributes, NamedExports, NamedImports, … (8 classes)
     public NodeArray Elements(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ElementsOffsets[(int)r.Kind];
-        return o < 0 ? null! : (NodeArray)refs[r.Refs + o]!;
+        var i = nodeBase + node.Index;
+        var o = Entry(ElementsOffsets, At(kinds, i));
+        return o < 0 ? null! : (NodeArray)At(refs, At(refStarts, i) + o)!;
     }
 
     public void SetElements(Node node, NodeArray value)
     {
-        ref var r = ref records[node.Index];
-        var o = ElementsOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ElementsOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Elements));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Elements));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> ElementsOffsets =>
@@ -1185,20 +1185,20 @@ internal sealed partial class NodeStore
     // IfStatement
     public Node ElseStatement(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ElseStatementOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(ElseStatementOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetElseStatement(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ElseStatementOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ElseStatementOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ElseStatement));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(ElseStatement));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ElseStatementOffsets =>
@@ -1217,20 +1217,20 @@ internal sealed partial class NodeStore
     // SourceFile
     public Node EndOfFileToken(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = EndOfFileTokenOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(EndOfFileTokenOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetEndOfFileToken(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = EndOfFileTokenOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(EndOfFileTokenOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(EndOfFileToken));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(EndOfFileToken));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> EndOfFileTokenOffsets =>
@@ -1249,20 +1249,20 @@ internal sealed partial class NodeStore
     // ArrowFunction
     public Node EqualsGreaterThanToken(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = EqualsGreaterThanTokenOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(EqualsGreaterThanTokenOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetEqualsGreaterThanToken(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = EqualsGreaterThanTokenOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(EqualsGreaterThanTokenOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(EqualsGreaterThanToken));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(EqualsGreaterThanToken));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> EqualsGreaterThanTokenOffsets =>
@@ -1281,20 +1281,20 @@ internal sealed partial class NodeStore
     // ShorthandPropertyAssignment
     public Node EqualsToken(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = EqualsTokenOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(EqualsTokenOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetEqualsToken(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = EqualsTokenOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(EqualsTokenOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(EqualsToken));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(EqualsToken));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> EqualsTokenOffsets =>
@@ -1313,20 +1313,20 @@ internal sealed partial class NodeStore
     // Identifier, PrivateIdentifier
     public string? EscapedText(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = EscapedTextOffsets[(int)r.Kind];
-        return o < 0 ? null : (string?)refs[r.Refs + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(EscapedTextOffsets, At(kinds, i));
+        return o < 0 ? null : (string?)At(refs, At(refStarts, i) + o);
     }
 
     public void SetEscapedText(Node node, string? value)
     {
-        ref var r = ref records[node.Index];
-        var o = EscapedTextOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(EscapedTextOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(EscapedText));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(EscapedText));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> EscapedTextOffsets =>
@@ -1345,20 +1345,20 @@ internal sealed partial class NodeStore
     // ArrowFunction, ConstructorDeclaration, FunctionDeclaration, FunctionExpression, GetAccessorDeclaration, MethodDeclaration, … (11 classes)
     public Node ExclamationToken(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ExclamationTokenOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(ExclamationTokenOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetExclamationToken(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ExclamationTokenOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ExclamationTokenOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ExclamationToken));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(ExclamationToken));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ExclamationTokenOffsets =>
@@ -1377,20 +1377,20 @@ internal sealed partial class NodeStore
     // ExportDeclaration
     public Node ExportClause(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ExportClauseOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(ExportClauseOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetExportClause(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ExportClauseOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ExportClauseOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ExportClause));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(ExportClause));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ExportClauseOffsets =>
@@ -1409,20 +1409,20 @@ internal sealed partial class NodeStore
     // TypeQueryNode
     public Node ExprName(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ExprNameOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(ExprNameOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetExprName(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ExprNameOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ExprNameOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ExprName));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(ExprName));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ExprNameOffsets =>
@@ -1441,20 +1441,20 @@ internal sealed partial class NodeStore
     // AsExpression, AwaitExpression, CallExpression, CaseClause, ComputedPropertyName, Decorator, … (38 classes)
     public Node Expression(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ExpressionOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(ExpressionOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetExpression(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ExpressionOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ExpressionOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Expression));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Expression));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ExpressionOffsets =>
@@ -1473,20 +1473,20 @@ internal sealed partial class NodeStore
     // ConditionalTypeNode
     public Node ExtendsType(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ExtendsTypeOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(ExtendsTypeOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetExtendsType(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ExtendsTypeOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ExtendsTypeOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ExtendsType));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(ExtendsType));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ExtendsTypeOffsets =>
@@ -1505,20 +1505,20 @@ internal sealed partial class NodeStore
     // SourceFile
     public object? ExternalModuleIndicator(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ExternalModuleIndicatorOffsets[(int)r.Kind];
-        return o < 0 ? null : (object?)refs[r.Refs + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(ExternalModuleIndicatorOffsets, At(kinds, i));
+        return o < 0 ? null : (object?)At(refs, At(refStarts, i) + o);
     }
 
     public void SetExternalModuleIndicator(Node node, object? value)
     {
-        ref var r = ref records[node.Index];
-        var o = ExternalModuleIndicatorOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ExternalModuleIndicatorOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ExternalModuleIndicator));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(ExternalModuleIndicator));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> ExternalModuleIndicatorOffsets =>
@@ -1537,20 +1537,20 @@ internal sealed partial class NodeStore
     // ConditionalTypeNode
     public Node FalseType(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = FalseTypeOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(FalseTypeOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetFalseType(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = FalseTypeOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(FalseTypeOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(FalseType));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(FalseType));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> FalseTypeOffsets =>
@@ -1569,20 +1569,20 @@ internal sealed partial class NodeStore
     // SourceFile
     public string FileName(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = FileNameOffsets[(int)r.Kind];
-        return o < 0 ? null! : (string)refs[r.Refs + o]!;
+        var i = nodeBase + node.Index;
+        var o = Entry(FileNameOffsets, At(kinds, i));
+        return o < 0 ? null! : (string)At(refs, At(refStarts, i) + o)!;
     }
 
     public void SetFileName(Node node, string value)
     {
-        ref var r = ref records[node.Index];
-        var o = FileNameOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(FileNameOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(FileName));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(FileName));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> FileNameOffsets =>
@@ -1601,20 +1601,20 @@ internal sealed partial class NodeStore
     // TryStatement
     public Node FinallyBlock(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = FinallyBlockOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(FinallyBlockOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetFinallyBlock(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = FinallyBlockOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(FinallyBlockOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(FinallyBlock));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(FinallyBlock));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> FinallyBlockOffsets =>
@@ -1633,20 +1633,20 @@ internal sealed partial class NodeStore
     // JSDocCallbackTag, JSDocTypedefTag
     public Node FullName(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = FullNameOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(FullNameOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetFullName(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = FullNameOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(FullNameOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(FullName));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(FullName));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> FullNameOffsets =>
@@ -1665,20 +1665,20 @@ internal sealed partial class NodeStore
     // BigIntLiteral, JsxText, NoSubstitutionTemplateLiteral, NumericLiteral, RegularExpressionLiteral, StringLiteral, … (9 classes)
     public bool HasExtendedUnicodeEscape(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = HasExtendedUnicodeEscapeOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var i = nodeBase + node.Index;
+        var o = Entry(HasExtendedUnicodeEscapeOffsets, At(kinds, i));
+        return o < 0 ? default : At(slots, At(slotStarts, i) + o) != 0;
     }
 
     public void SetHasExtendedUnicodeEscape(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = HasExtendedUnicodeEscapeOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(HasExtendedUnicodeEscapeOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(HasExtendedUnicodeEscape));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(HasExtendedUnicodeEscape));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        At(slots, At(slotStarts, i) + o) = value ? 1 : 0;
     }
 
     private static ReadOnlySpan<sbyte> HasExtendedUnicodeEscapeOffsets =>
@@ -1697,20 +1697,20 @@ internal sealed partial class NodeStore
     // SourceFile
     public bool HasNoDefaultLib(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = HasNoDefaultLibOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var i = nodeBase + node.Index;
+        var o = Entry(HasNoDefaultLibOffsets, At(kinds, i));
+        return o < 0 ? default : At(slots, At(slotStarts, i) + o) != 0;
     }
 
     public void SetHasNoDefaultLib(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = HasNoDefaultLibOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(HasNoDefaultLibOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(HasNoDefaultLib));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(HasNoDefaultLib));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        At(slots, At(slotStarts, i) + o) = value ? 1 : 0;
     }
 
     private static ReadOnlySpan<sbyte> HasNoDefaultLibOffsets =>
@@ -1729,20 +1729,20 @@ internal sealed partial class NodeStore
     // TemplateExpression, TemplateLiteralTypeNode
     public Node Head(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = HeadOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(HeadOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetHead(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = HeadOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(HeadOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Head));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Head));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> HeadOffsets =>
@@ -1761,20 +1761,20 @@ internal sealed partial class NodeStore
     // ClassDeclaration, ClassExpression, InterfaceDeclaration
     public NodeArray? HeritageClauses(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = HeritageClausesOffsets[(int)r.Kind];
-        return o < 0 ? null : (NodeArray?)refs[r.Refs + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(HeritageClausesOffsets, At(kinds, i));
+        return o < 0 ? null : (NodeArray?)At(refs, At(refStarts, i) + o);
     }
 
     public void SetHeritageClauses(Node node, NodeArray? value)
     {
-        ref var r = ref records[node.Index];
-        var o = HeritageClausesOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(HeritageClausesOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(HeritageClauses));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(HeritageClauses));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> HeritageClausesOffsets =>
@@ -1793,20 +1793,20 @@ internal sealed partial class NodeStore
     // SourceFile
     public int IdentifierCount(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IdentifierCountOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(IdentifierCountOffsets, At(kinds, i));
+        return o < 0 ? default : At(slots, At(slotStarts, i) + o);
     }
 
     public void SetIdentifierCount(Node node, int value)
     {
-        ref var r = ref records[node.Index];
-        var o = IdentifierCountOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(IdentifierCountOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(IdentifierCount));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(IdentifierCount));
         }
-        slots[r.Slots + o] = value;
+        At(slots, At(slotStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> IdentifierCountOffsets =>
@@ -1825,20 +1825,20 @@ internal sealed partial class NodeStore
     // SourceFile
     public Dictionary<string, string>? Identifiers(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IdentifiersOffsets[(int)r.Kind];
-        return o < 0 ? null : (Dictionary<string, string>?)refs[r.Refs + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(IdentifiersOffsets, At(kinds, i));
+        return o < 0 ? null : (Dictionary<string, string>?)At(refs, At(refStarts, i) + o);
     }
 
     public void SetIdentifiers(Node node, Dictionary<string, string>? value)
     {
-        ref var r = ref records[node.Index];
-        var o = IdentifiersOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(IdentifiersOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Identifiers));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Identifiers));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> IdentifiersOffsets =>
@@ -1857,20 +1857,20 @@ internal sealed partial class NodeStore
     // SourceFile
     public ModuleKind ImpliedNodeFormat(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ImpliedNodeFormatOffsets[(int)r.Kind];
-        return o < 0 ? default : (ModuleKind)slots[r.Slots + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(ImpliedNodeFormatOffsets, At(kinds, i));
+        return o < 0 ? default : (ModuleKind)At(slots, At(slotStarts, i) + o);
     }
 
     public void SetImpliedNodeFormat(Node node, ModuleKind value)
     {
-        ref var r = ref records[node.Index];
-        var o = ImpliedNodeFormatOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ImpliedNodeFormatOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ImpliedNodeFormat));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(ImpliedNodeFormat));
         }
-        slots[r.Slots + o] = (int)value;
+        At(slots, At(slotStarts, i) + o) = (int)value;
     }
 
     private static ReadOnlySpan<sbyte> ImpliedNodeFormatOffsets =>
@@ -1889,20 +1889,20 @@ internal sealed partial class NodeStore
     // ImportDeclaration, JSDocImportTag
     public Node ImportClause(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ImportClauseOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(ImportClauseOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetImportClause(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ImportClauseOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ImportClauseOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ImportClause));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(ImportClause));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ImportClauseOffsets =>
@@ -1921,20 +1921,20 @@ internal sealed partial class NodeStore
     // SourceFile
     public Node[]? Imports(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ImportsOffsets[(int)r.Kind];
-        return o < 0 ? null : (Node[]?)refs[r.Refs + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(ImportsOffsets, At(kinds, i));
+        return o < 0 ? null : (Node[]?)At(refs, At(refStarts, i) + o);
     }
 
     public void SetImports(Node node, Node[]? value)
     {
-        ref var r = ref records[node.Index];
-        var o = ImportsOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ImportsOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Imports));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Imports));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> ImportsOffsets =>
@@ -1953,20 +1953,20 @@ internal sealed partial class NodeStore
     // ForStatement
     public Node Incrementor(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IncrementorOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(IncrementorOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetIncrementor(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = IncrementorOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(IncrementorOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Incrementor));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Incrementor));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> IncrementorOffsets =>
@@ -1985,20 +1985,20 @@ internal sealed partial class NodeStore
     // IndexedAccessTypeNode
     public Node IndexType(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IndexTypeOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(IndexTypeOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetIndexType(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = IndexTypeOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(IndexTypeOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(IndexType));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(IndexType));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> IndexTypeOffsets =>
@@ -2017,20 +2017,20 @@ internal sealed partial class NodeStore
     // BindingElement, EnumMember, ForInStatement, ForOfStatement, ForStatement, JsxAttribute, … (11 classes)
     public Node Initializer(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = InitializerOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(InitializerOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetInitializer(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = InitializerOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(InitializerOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Initializer));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Initializer));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> InitializerOffsets =>
@@ -2049,20 +2049,20 @@ internal sealed partial class NodeStore
     // JSDocTypeLiteral
     public bool IsArrayType(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IsArrayTypeOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var i = nodeBase + node.Index;
+        var o = Entry(IsArrayTypeOffsets, At(kinds, i));
+        return o < 0 ? default : At(slots, At(slotStarts, i) + o) != 0;
     }
 
     public void SetIsArrayType(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = IsArrayTypeOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(IsArrayTypeOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(IsArrayType));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(IsArrayType));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        At(slots, At(slotStarts, i) + o) = value ? 1 : 0;
     }
 
     private static ReadOnlySpan<sbyte> IsArrayTypeOffsets =>
@@ -2081,20 +2081,20 @@ internal sealed partial class NodeStore
     // JSDocParameterTag, JSDocPropertyTag
     public bool IsBracketed(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IsBracketedOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var i = nodeBase + node.Index;
+        var o = Entry(IsBracketedOffsets, At(kinds, i));
+        return o < 0 ? default : At(slots, At(slotStarts, i) + o) != 0;
     }
 
     public void SetIsBracketed(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = IsBracketedOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(IsBracketedOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(IsBracketed));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(IsBracketed));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        At(slots, At(slotStarts, i) + o) = value ? 1 : 0;
     }
 
     private static ReadOnlySpan<sbyte> IsBracketedOffsets =>
@@ -2113,20 +2113,20 @@ internal sealed partial class NodeStore
     // SourceFile
     public bool IsDeclarationFile(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IsDeclarationFileOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var i = nodeBase + node.Index;
+        var o = Entry(IsDeclarationFileOffsets, At(kinds, i));
+        return o < 0 ? default : At(slots, At(slotStarts, i) + o) != 0;
     }
 
     public void SetIsDeclarationFile(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = IsDeclarationFileOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(IsDeclarationFileOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(IsDeclarationFile));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(IsDeclarationFile));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        At(slots, At(slotStarts, i) + o) = value ? 1 : 0;
     }
 
     private static ReadOnlySpan<sbyte> IsDeclarationFileOffsets =>
@@ -2145,20 +2145,20 @@ internal sealed partial class NodeStore
     // ExportAssignment
     public bool IsExportEquals(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IsExportEqualsOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var i = nodeBase + node.Index;
+        var o = Entry(IsExportEqualsOffsets, At(kinds, i));
+        return o < 0 ? default : At(slots, At(slotStarts, i) + o) != 0;
     }
 
     public void SetIsExportEquals(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = IsExportEqualsOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(IsExportEqualsOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(IsExportEquals));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(IsExportEquals));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        At(slots, At(slotStarts, i) + o) = value ? 1 : 0;
     }
 
     private static ReadOnlySpan<sbyte> IsExportEqualsOffsets =>
@@ -2177,20 +2177,20 @@ internal sealed partial class NodeStore
     // JSDocParameterTag, JSDocPropertyTag
     public bool IsNameFirst(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IsNameFirstOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var i = nodeBase + node.Index;
+        var o = Entry(IsNameFirstOffsets, At(kinds, i));
+        return o < 0 ? default : At(slots, At(slotStarts, i) + o) != 0;
     }
 
     public void SetIsNameFirst(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = IsNameFirstOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(IsNameFirstOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(IsNameFirst));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(IsNameFirst));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        At(slots, At(slotStarts, i) + o) = value ? 1 : 0;
     }
 
     private static ReadOnlySpan<sbyte> IsNameFirstOffsets =>
@@ -2209,20 +2209,20 @@ internal sealed partial class NodeStore
     // SyntheticExpression
     public bool IsSpread(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IsSpreadOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var i = nodeBase + node.Index;
+        var o = Entry(IsSpreadOffsets, At(kinds, i));
+        return o < 0 ? default : At(slots, At(slotStarts, i) + o) != 0;
     }
 
     public void SetIsSpread(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = IsSpreadOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(IsSpreadOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(IsSpread));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(IsSpread));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        At(slots, At(slotStarts, i) + o) = value ? 1 : 0;
     }
 
     private static ReadOnlySpan<sbyte> IsSpreadOffsets =>
@@ -2241,20 +2241,20 @@ internal sealed partial class NodeStore
     // ImportTypeNode
     public bool IsTypeOf(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IsTypeOfOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var i = nodeBase + node.Index;
+        var o = Entry(IsTypeOfOffsets, At(kinds, i));
+        return o < 0 ? default : At(slots, At(slotStarts, i) + o) != 0;
     }
 
     public void SetIsTypeOf(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = IsTypeOfOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(IsTypeOfOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(IsTypeOf));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(IsTypeOf));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        At(slots, At(slotStarts, i) + o) = value ? 1 : 0;
     }
 
     private static ReadOnlySpan<sbyte> IsTypeOfOffsets =>
@@ -2273,20 +2273,20 @@ internal sealed partial class NodeStore
     // ExportDeclaration, ExportSpecifier, ImportClause, ImportEqualsDeclaration, ImportSpecifier
     public bool IsTypeOnly(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IsTypeOnlyOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var i = nodeBase + node.Index;
+        var o = Entry(IsTypeOnlyOffsets, At(kinds, i));
+        return o < 0 ? default : At(slots, At(slotStarts, i) + o) != 0;
     }
 
     public void SetIsTypeOnly(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = IsTypeOnlyOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(IsTypeOnlyOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(IsTypeOnly));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(IsTypeOnly));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        At(slots, At(slotStarts, i) + o) = value ? 1 : 0;
     }
 
     private static ReadOnlySpan<sbyte> IsTypeOnlyOffsets =>
@@ -2305,20 +2305,20 @@ internal sealed partial class NodeStore
     // BigIntLiteral, JsxText, NoSubstitutionTemplateLiteral, NumericLiteral, RegularExpressionLiteral, StringLiteral, … (9 classes)
     public bool IsUnterminated(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IsUnterminatedOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var i = nodeBase + node.Index;
+        var o = Entry(IsUnterminatedOffsets, At(kinds, i));
+        return o < 0 ? default : At(slots, At(slotStarts, i) + o) != 0;
     }
 
     public void SetIsUnterminated(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = IsUnterminatedOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(IsUnterminatedOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(IsUnterminated));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(IsUnterminated));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        At(slots, At(slotStarts, i) + o) = value ? 1 : 0;
     }
 
     private static ReadOnlySpan<sbyte> IsUnterminatedOffsets =>
@@ -2337,20 +2337,20 @@ internal sealed partial class NodeStore
     // JSDocSignature
     public Node[]? JSDocSignatureParameters(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = JSDocSignatureParametersOffsets[(int)r.Kind];
-        return o < 0 ? null : (Node[]?)refs[r.Refs + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(JSDocSignatureParametersOffsets, At(kinds, i));
+        return o < 0 ? null : (Node[]?)At(refs, At(refStarts, i) + o);
     }
 
     public void SetJSDocSignatureParameters(Node node, Node[]? value)
     {
-        ref var r = ref records[node.Index];
-        var o = JSDocSignatureParametersOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(JSDocSignatureParametersOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(JSDocSignatureParameters));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(JSDocSignatureParameters));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> JSDocSignatureParametersOffsets =>
@@ -2363,26 +2363,26 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // JSDocSignature
     public Node[]? JSDocSignatureTypeParameters(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = JSDocSignatureTypeParametersOffsets[(int)r.Kind];
-        return o < 0 ? null : (Node[]?)refs[r.Refs + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(JSDocSignatureTypeParametersOffsets, At(kinds, i));
+        return o < 0 ? null : (Node[]?)At(refs, At(refStarts, i) + o);
     }
 
     public void SetJSDocSignatureTypeParameters(Node node, Node[]? value)
     {
-        ref var r = ref records[node.Index];
-        var o = JSDocSignatureTypeParametersOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(JSDocSignatureTypeParametersOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(JSDocSignatureTypeParameters));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(JSDocSignatureTypeParameters));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> JSDocSignatureTypeParametersOffsets =>
@@ -2395,37 +2395,31 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // ArrowFunction, BinaryExpression, Block, BreakStatement, CallSignatureDeclaration, CaseClause, … (69 classes)
-    public List<Node>? JsDoc(Node node)
-    {
-        ref var r = ref records[node.Index];
-        var o = JsDocOffsets[(int)r.Kind];
-        return o < 0 ? null : (List<Node>?)refs[r.Refs + o];
-    }
+    public List<Node>? JsDoc(Node node) => Sparse(jsDocs, node.Index);
 
     public void SetJsDoc(Node node, List<Node>? value)
     {
-        ref var r = ref records[node.Index];
-        var o = JsDocOffsets[(int)r.Kind];
-        if (o < 0)
+        var i = nodeBase + node.Index;
+        if (Entry(JsDocOffsets, At(kinds, i)) < 0)
         {
-            ThrowNoField(r.Kind, nameof(JsDoc));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(JsDoc));
         }
-        refs[r.Refs + o] = value;
+        SetSparse(ref jsDocs, node.Index, value);
     }
 
     private static ReadOnlySpan<sbyte> JsDocOffsets =>
     [
         -1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,0,0,-1,0,0,0,0,0,0,0,0,0,0,0,-1,-1,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,0,0,0,-1,-1,-1,-1,0,0,0,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,
-        -1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,-1,0,1,1,0,0,0,0,-1,0,0,0,-1,-1,-1,-1,0,0,
+        -1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,0,0,0,-1,-1,-1,-1,0,0,0,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,
+        -1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,-1,0,0,0,0,0,0,0,-1,0,0,0,-1,-1,-1,-1,0,0,
         -1,-1,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,0,0,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,
         -1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,
     ];
@@ -2433,20 +2427,20 @@ internal sealed partial class NodeStore
     // SourceFile
     public List<DiagnosticWithLocation>? JsDocDiagnostics(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = JsDocDiagnosticsOffsets[(int)r.Kind];
-        return o < 0 ? null : (List<DiagnosticWithLocation>?)refs[r.Refs + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(JsDocDiagnosticsOffsets, At(kinds, i));
+        return o < 0 ? null : (List<DiagnosticWithLocation>?)At(refs, At(refStarts, i) + o);
     }
 
     public void SetJsDocDiagnostics(Node node, List<DiagnosticWithLocation>? value)
     {
-        ref var r = ref records[node.Index];
-        var o = JsDocDiagnosticsOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(JsDocDiagnosticsOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(JsDocDiagnostics));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(JsDocDiagnostics));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> JsDocDiagnosticsOffsets =>
@@ -2465,20 +2459,20 @@ internal sealed partial class NodeStore
     // SourceFile
     public JSDocParsingMode JsDocParsingMode(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = JsDocParsingModeOffsets[(int)r.Kind];
-        return o < 0 ? default : (JSDocParsingMode)slots[r.Slots + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(JsDocParsingModeOffsets, At(kinds, i));
+        return o < 0 ? default : (JSDocParsingMode)At(slots, At(slotStarts, i) + o);
     }
 
     public void SetJsDocParsingMode(Node node, JSDocParsingMode value)
     {
-        ref var r = ref records[node.Index];
-        var o = JsDocParsingModeOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(JsDocParsingModeOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(JsDocParsingMode));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(JsDocParsingMode));
         }
-        slots[r.Slots + o] = (int)value;
+        At(slots, At(slotStarts, i) + o) = (int)value;
     }
 
     private static ReadOnlySpan<sbyte> JsDocParsingModeOffsets =>
@@ -2497,20 +2491,20 @@ internal sealed partial class NodeStore
     // JSDocTypeLiteral
     public Node[]? JsDocPropertyTags(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = JsDocPropertyTagsOffsets[(int)r.Kind];
-        return o < 0 ? null : (Node[]?)refs[r.Refs + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(JsDocPropertyTagsOffsets, At(kinds, i));
+        return o < 0 ? null : (Node[]?)At(refs, At(refStarts, i) + o);
     }
 
     public void SetJsDocPropertyTags(Node node, Node[]? value)
     {
-        ref var r = ref records[node.Index];
-        var o = JsDocPropertyTagsOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(JsDocPropertyTagsOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(JsDocPropertyTags));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(JsDocPropertyTags));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> JsDocPropertyTagsOffsets =>
@@ -2529,20 +2523,20 @@ internal sealed partial class NodeStore
     // MetaProperty
     public SyntaxKind KeywordToken(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = KeywordTokenOffsets[(int)r.Kind];
-        return o < 0 ? default : (SyntaxKind)slots[r.Slots + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(KeywordTokenOffsets, At(kinds, i));
+        return o < 0 ? default : (SyntaxKind)At(slots, At(slotStarts, i) + o);
     }
 
     public void SetKeywordToken(Node node, SyntaxKind value)
     {
-        ref var r = ref records[node.Index];
-        var o = KeywordTokenOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(KeywordTokenOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(KeywordToken));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(KeywordToken));
         }
-        slots[r.Slots + o] = (int)value;
+        At(slots, At(slotStarts, i) + o) = (int)value;
     }
 
     private static ReadOnlySpan<sbyte> KeywordTokenOffsets =>
@@ -2561,20 +2555,20 @@ internal sealed partial class NodeStore
     // BreakStatement, ContinueStatement, LabeledStatement
     public Node Label(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = LabelOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(LabelOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetLabel(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = LabelOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(LabelOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Label));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Label));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> LabelOffsets =>
@@ -2593,20 +2587,20 @@ internal sealed partial class NodeStore
     // SourceFile
     public LanguageVariant LanguageVariant(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = LanguageVariantOffsets[(int)r.Kind];
-        return o < 0 ? default : (LanguageVariant)slots[r.Slots + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(LanguageVariantOffsets, At(kinds, i));
+        return o < 0 ? default : (LanguageVariant)At(slots, At(slotStarts, i) + o);
     }
 
     public void SetLanguageVariant(Node node, LanguageVariant value)
     {
-        ref var r = ref records[node.Index];
-        var o = LanguageVariantOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(LanguageVariantOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(LanguageVariant));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(LanguageVariant));
         }
-        slots[r.Slots + o] = (int)value;
+        At(slots, At(slotStarts, i) + o) = (int)value;
     }
 
     private static ReadOnlySpan<sbyte> LanguageVariantOffsets =>
@@ -2625,20 +2619,20 @@ internal sealed partial class NodeStore
     // SourceFile
     public ScriptTarget LanguageVersion(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = LanguageVersionOffsets[(int)r.Kind];
-        return o < 0 ? default : (ScriptTarget)slots[r.Slots + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(LanguageVersionOffsets, At(kinds, i));
+        return o < 0 ? default : (ScriptTarget)At(slots, At(slotStarts, i) + o);
     }
 
     public void SetLanguageVersion(Node node, ScriptTarget value)
     {
-        ref var r = ref records[node.Index];
-        var o = LanguageVersionOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(LanguageVersionOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(LanguageVersion));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(LanguageVersion));
         }
-        slots[r.Slots + o] = (int)value;
+        At(slots, At(slotStarts, i) + o) = (int)value;
     }
 
     private static ReadOnlySpan<sbyte> LanguageVersionOffsets =>
@@ -2657,20 +2651,20 @@ internal sealed partial class NodeStore
     // BinaryExpression, JSDocMemberName, QualifiedName
     public Node Left(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = LeftOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(LeftOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetLeft(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = LeftOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(LeftOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Left));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Left));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> LeftOffsets =>
@@ -2689,20 +2683,20 @@ internal sealed partial class NodeStore
     // SourceFile
     public IReadOnlyList<FileReference> LibReferenceDirectives(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = LibReferenceDirectivesOffsets[(int)r.Kind];
-        return o < 0 ? null! : (IReadOnlyList<FileReference>)refs[r.Refs + o]!;
+        var i = nodeBase + node.Index;
+        var o = Entry(LibReferenceDirectivesOffsets, At(kinds, i));
+        return o < 0 ? null! : (IReadOnlyList<FileReference>)At(refs, At(refStarts, i) + o)!;
     }
 
     public void SetLibReferenceDirectives(Node node, IReadOnlyList<FileReference> value)
     {
-        ref var r = ref records[node.Index];
-        var o = LibReferenceDirectivesOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(LibReferenceDirectivesOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(LibReferenceDirectives));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(LibReferenceDirectives));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> LibReferenceDirectivesOffsets =>
@@ -2721,20 +2715,20 @@ internal sealed partial class NodeStore
     // SourceFile
     public IReadOnlyList<int>? LineMap(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = LineMapOffsets[(int)r.Kind];
-        return o < 0 ? null : (IReadOnlyList<int>?)refs[r.Refs + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(LineMapOffsets, At(kinds, i));
+        return o < 0 ? null : (IReadOnlyList<int>?)At(refs, At(refStarts, i) + o);
     }
 
     public void SetLineMap(Node node, IReadOnlyList<int>? value)
     {
-        ref var r = ref records[node.Index];
-        var o = LineMapOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(LineMapOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(LineMap));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(LineMap));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> LineMapOffsets =>
@@ -2753,20 +2747,20 @@ internal sealed partial class NodeStore
     // LiteralTypeNode, TemplateLiteralTypeSpan, TemplateSpan
     public Node Literal(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = LiteralOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(LiteralOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetLiteral(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = LiteralOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(LiteralOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Literal));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Literal));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> LiteralOffsets =>
@@ -2785,20 +2779,20 @@ internal sealed partial class NodeStore
     // ClassDeclaration, ClassExpression, EnumDeclaration, InterfaceDeclaration, MappedTypeNode, TypeLiteralNode
     public NodeArray? Members(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = MembersOffsets[(int)r.Kind];
-        return o < 0 ? null : (NodeArray?)refs[r.Refs + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(MembersOffsets, At(kinds, i));
+        return o < 0 ? null : (NodeArray?)At(refs, At(refStarts, i) + o);
     }
 
     public void SetMembers(Node node, NodeArray? value)
     {
-        ref var r = ref records[node.Index];
-        var o = MembersOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(MembersOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Members));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Members));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> MembersOffsets =>
@@ -2808,8 +2802,8 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,2,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
@@ -2817,20 +2811,20 @@ internal sealed partial class NodeStore
     // ArrowFunction, ClassDeclaration, ClassExpression, ClassStaticBlockDeclaration, ConstructorDeclaration, ConstructorTypeNode, … (31 classes)
     public NodeArray? Modifiers(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ModifiersOffsets[(int)r.Kind];
-        return o < 0 ? null : (NodeArray?)refs[r.Refs + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(ModifiersOffsets, At(kinds, i));
+        return o < 0 ? null : (NodeArray?)At(refs, At(refStarts, i) + o);
     }
 
     public void SetModifiers(Node node, NodeArray? value)
     {
-        ref var r = ref records[node.Index];
-        var o = ModifiersOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ModifiersOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Modifiers));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Modifiers));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> ModifiersOffsets =>
@@ -2839,30 +2833,30 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,1,1,-1,1,1,1,1,1,1,1,1,-1,-1,1,-1,-1,1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,3,3,1,2,1,-1,-1,1,1,1,-1,-1,-1,-1,1,1,
-        -1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,0,0,-1,0,0,0,0,0,0,0,0,-1,-1,0,-1,-1,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,2,2,0,1,0,-1,-1,0,0,0,-1,-1,-1,-1,0,0,
+        -1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // SourceFile
     public Node[]? ModuleAugmentations(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ModuleAugmentationsOffsets[(int)r.Kind];
-        return o < 0 ? null : (Node[]?)refs[r.Refs + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(ModuleAugmentationsOffsets, At(kinds, i));
+        return o < 0 ? null : (Node[]?)At(refs, At(refStarts, i) + o);
     }
 
     public void SetModuleAugmentations(Node node, Node[]? value)
     {
-        ref var r = ref records[node.Index];
-        var o = ModuleAugmentationsOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ModuleAugmentationsOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ModuleAugmentations));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(ModuleAugmentations));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> ModuleAugmentationsOffsets =>
@@ -2881,20 +2875,20 @@ internal sealed partial class NodeStore
     // SourceFile
     public string? ModuleName(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ModuleNameOffsets[(int)r.Kind];
-        return o < 0 ? null : (string?)refs[r.Refs + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(ModuleNameOffsets, At(kinds, i));
+        return o < 0 ? null : (string?)At(refs, At(refStarts, i) + o);
     }
 
     public void SetModuleName(Node node, string? value)
     {
-        ref var r = ref records[node.Index];
-        var o = ModuleNameOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ModuleNameOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ModuleName));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(ModuleName));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> ModuleNameOffsets =>
@@ -2913,20 +2907,20 @@ internal sealed partial class NodeStore
     // ImportEqualsDeclaration
     public Node ModuleReference(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ModuleReferenceOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(ModuleReferenceOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetModuleReference(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ModuleReferenceOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ModuleReferenceOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ModuleReference));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(ModuleReference));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ModuleReferenceOffsets =>
@@ -2945,20 +2939,20 @@ internal sealed partial class NodeStore
     // ExportDeclaration, ImportDeclaration, JSDocImportTag
     public Node ModuleSpecifier(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ModuleSpecifierOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(ModuleSpecifierOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetModuleSpecifier(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ModuleSpecifierOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ModuleSpecifierOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ModuleSpecifier));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(ModuleSpecifier));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ModuleSpecifierOffsets =>
@@ -2977,20 +2971,20 @@ internal sealed partial class NodeStore
     // ArrayLiteralExpression, Block, ImportAttributes, ImportTypeAssertionContainer, ObjectLiteralExpression
     public bool MultiLine(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = MultiLineOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var i = nodeBase + node.Index;
+        var o = Entry(MultiLineOffsets, At(kinds, i));
+        return o < 0 ? default : At(slots, At(slotStarts, i) + o) != 0;
     }
 
     public void SetMultiLine(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = MultiLineOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(MultiLineOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(MultiLine));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(MultiLine));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        At(slots, At(slotStarts, i) + o) = value ? 1 : 0;
     }
 
     private static ReadOnlySpan<sbyte> MultiLineOffsets =>
@@ -3009,20 +3003,20 @@ internal sealed partial class NodeStore
     // BindingElement, CallSignatureDeclaration, ClassDeclaration, ClassExpression, ClassStaticBlockDeclaration, ConstructSignatureDeclaration, … (58 classes)
     public Node Name(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = NameOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(NameOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetName(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = NameOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(NameOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Name));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Name));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> NameOffsets =>
@@ -3041,20 +3035,20 @@ internal sealed partial class NodeStore
     // MappedTypeNode
     public Node NameType(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = NameTypeOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(NameTypeOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetNameType(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = NameTypeOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(NameTypeOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(NameType));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(NameType));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> NameTypeOffsets =>
@@ -3073,20 +3067,20 @@ internal sealed partial class NodeStore
     // ImportClause
     public Node NamedBindings(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = NamedBindingsOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(NamedBindingsOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetNamedBindings(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = NamedBindingsOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(NamedBindingsOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(NamedBindings));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(NamedBindings));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> NamedBindingsOffsets =>
@@ -3105,20 +3099,20 @@ internal sealed partial class NodeStore
     // JsxNamespacedName
     public Node Namespace(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = NamespaceOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(NamespaceOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetNamespace(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = NamespaceOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(NamespaceOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Namespace));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Namespace));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> NamespaceOffsets =>
@@ -3137,20 +3131,20 @@ internal sealed partial class NodeStore
     // ArrowFunction, Block, CallSignatureDeclaration, CaseBlock, CatchClause, ClassStaticBlockDeclaration, … (30 classes)
     public Node NextContainer(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = NextContainerOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(NextContainerOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetNextContainer(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = NextContainerOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(NextContainerOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(NextContainer));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(NextContainer));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> NextContainerOffsets =>
@@ -3169,20 +3163,20 @@ internal sealed partial class NodeStore
     // SourceFile
     public int NodeCount(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = NodeCountOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(NodeCountOffsets, At(kinds, i));
+        return o < 0 ? default : At(slots, At(slotStarts, i) + o);
     }
 
     public void SetNodeCount(Node node, int value)
     {
-        ref var r = ref records[node.Index];
-        var o = NodeCountOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(NodeCountOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(NodeCount));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(NodeCount));
         }
-        slots[r.Slots + o] = value;
+        At(slots, At(slotStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> NodeCountOffsets =>
@@ -3201,20 +3195,20 @@ internal sealed partial class NodeStore
     // NumericLiteral
     public TokenFlags NumericLiteralFlags(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = NumericLiteralFlagsOffsets[(int)r.Kind];
-        return o < 0 ? default : (TokenFlags)slots[r.Slots + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(NumericLiteralFlagsOffsets, At(kinds, i));
+        return o < 0 ? default : (TokenFlags)At(slots, At(slotStarts, i) + o);
     }
 
     public void SetNumericLiteralFlags(Node node, TokenFlags value)
     {
-        ref var r = ref records[node.Index];
-        var o = NumericLiteralFlagsOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(NumericLiteralFlagsOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(NumericLiteralFlags));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(NumericLiteralFlags));
         }
-        slots[r.Slots + o] = (int)value;
+        At(slots, At(slotStarts, i) + o) = (int)value;
     }
 
     private static ReadOnlySpan<sbyte> NumericLiteralFlagsOffsets =>
@@ -3233,20 +3227,20 @@ internal sealed partial class NodeStore
     // ShorthandPropertyAssignment
     public Node ObjectAssignmentInitializer(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ObjectAssignmentInitializerOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(ObjectAssignmentInitializerOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetObjectAssignmentInitializer(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ObjectAssignmentInitializerOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ObjectAssignmentInitializerOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ObjectAssignmentInitializer));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(ObjectAssignmentInitializer));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ObjectAssignmentInitializerOffsets =>
@@ -3265,20 +3259,20 @@ internal sealed partial class NodeStore
     // IndexedAccessTypeNode
     public Node ObjectType(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ObjectTypeOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(ObjectTypeOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetObjectType(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ObjectTypeOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ObjectTypeOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ObjectType));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(ObjectType));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ObjectTypeOffsets =>
@@ -3297,20 +3291,20 @@ internal sealed partial class NodeStore
     // JsxElement
     public Node OpeningElement(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = OpeningElementOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(OpeningElementOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetOpeningElement(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = OpeningElementOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(OpeningElementOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(OpeningElement));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(OpeningElement));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> OpeningElementOffsets =>
@@ -3329,20 +3323,20 @@ internal sealed partial class NodeStore
     // JsxFragment
     public Node OpeningFragment(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = OpeningFragmentOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(OpeningFragmentOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetOpeningFragment(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = OpeningFragmentOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(OpeningFragmentOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(OpeningFragment));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(OpeningFragment));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> OpeningFragmentOffsets =>
@@ -3361,20 +3355,20 @@ internal sealed partial class NodeStore
     // PostfixUnaryExpression, PrefixUnaryExpression
     public Node Operand(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = OperandOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(OperandOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetOperand(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = OperandOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(OperandOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Operand));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Operand));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> OperandOffsets =>
@@ -3393,20 +3387,20 @@ internal sealed partial class NodeStore
     // PostfixUnaryExpression, PrefixUnaryExpression, TypeOperatorNode
     public SyntaxKind Operator(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = OperatorOffsets[(int)r.Kind];
-        return o < 0 ? default : (SyntaxKind)slots[r.Slots + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(OperatorOffsets, At(kinds, i));
+        return o < 0 ? default : (SyntaxKind)At(slots, At(slotStarts, i) + o);
     }
 
     public void SetOperator(Node node, SyntaxKind value)
     {
-        ref var r = ref records[node.Index];
-        var o = OperatorOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(OperatorOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Operator));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Operator));
         }
-        slots[r.Slots + o] = (int)value;
+        At(slots, At(slotStarts, i) + o) = (int)value;
     }
 
     private static ReadOnlySpan<sbyte> OperatorOffsets =>
@@ -3425,20 +3419,20 @@ internal sealed partial class NodeStore
     // BinaryExpression
     public Node OperatorToken(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = OperatorTokenOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(OperatorTokenOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetOperatorToken(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = OperatorTokenOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(OperatorTokenOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(OperatorToken));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(OperatorToken));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> OperatorTokenOffsets =>
@@ -3457,20 +3451,20 @@ internal sealed partial class NodeStore
     // SourceFile
     public string OriginalFileName(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = OriginalFileNameOffsets[(int)r.Kind];
-        return o < 0 ? null! : (string)refs[r.Refs + o]!;
+        var i = nodeBase + node.Index;
+        var o = Entry(OriginalFileNameOffsets, At(kinds, i));
+        return o < 0 ? null! : (string)At(refs, At(refStarts, i) + o)!;
     }
 
     public void SetOriginalFileName(Node node, string value)
     {
-        ref var r = ref records[node.Index];
-        var o = OriginalFileNameOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(OriginalFileNameOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(OriginalFileName));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(OriginalFileName));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> OriginalFileNameOffsets =>
@@ -3489,20 +3483,20 @@ internal sealed partial class NodeStore
     // SourceFile
     public IReadOnlyList<string>? PackageJsonLocations(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = PackageJsonLocationsOffsets[(int)r.Kind];
-        return o < 0 ? null : (IReadOnlyList<string>?)refs[r.Refs + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(PackageJsonLocationsOffsets, At(kinds, i));
+        return o < 0 ? null : (IReadOnlyList<string>?)At(refs, At(refStarts, i) + o);
     }
 
     public void SetPackageJsonLocations(Node node, IReadOnlyList<string>? value)
     {
-        ref var r = ref records[node.Index];
-        var o = PackageJsonLocationsOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(PackageJsonLocationsOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(PackageJsonLocations));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(PackageJsonLocations));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> PackageJsonLocationsOffsets =>
@@ -3521,20 +3515,20 @@ internal sealed partial class NodeStore
     // TypePredicateNode
     public Node ParameterName(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ParameterNameOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(ParameterNameOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetParameterName(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ParameterNameOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ParameterNameOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ParameterName));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(ParameterName));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ParameterNameOffsets =>
@@ -3553,20 +3547,20 @@ internal sealed partial class NodeStore
     // ArrowFunction, CallSignatureDeclaration, ConstructSignatureDeclaration, ConstructorDeclaration, ConstructorTypeNode, FunctionDeclaration, … (14 classes)
     public NodeArray Parameters(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ParametersOffsets[(int)r.Kind];
-        return o < 0 ? null! : (NodeArray)refs[r.Refs + o]!;
+        var i = nodeBase + node.Index;
+        var o = Entry(ParametersOffsets, At(kinds, i));
+        return o < 0 ? null! : (NodeArray)At(refs, At(refStarts, i) + o)!;
     }
 
     public void SetParameters(Node node, NodeArray value)
     {
-        ref var r = ref records[node.Index];
-        var o = ParametersOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ParametersOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Parameters));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Parameters));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> ParametersOffsets =>
@@ -3575,30 +3569,34 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,2,-1,2,2,2,1,1,2,-1,-1,2,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,1,-1,1,1,1,0,0,1,-1,-1,1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // SourceFile
     public List<DiagnosticWithLocation> ParseDiagnostics(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ParseDiagnosticsOffsets[(int)r.Kind];
-        return o < 0 ? null! : (List<DiagnosticWithLocation>)refs[r.Refs + o]!;
+        var i = nodeBase + node.Index;
+        var o = Entry(ParseDiagnosticsOffsets, At(kinds, i));
+        return o < 0 ? null! : (List<DiagnosticWithLocation>)At(refs, At(refStarts, i) + o)!;
     }
 
     public void SetParseDiagnostics(Node node, List<DiagnosticWithLocation> value)
     {
-        ref var r = ref records[node.Index];
-        var o = ParseDiagnosticsOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ParseDiagnosticsOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ParseDiagnostics));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(ParseDiagnostics));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
+        if (value is not null)
+        {
+            Seal();
+        }
     }
 
     private static ReadOnlySpan<sbyte> ParseDiagnosticsOffsets =>
@@ -3617,20 +3615,20 @@ internal sealed partial class NodeStore
     // SourceFile
     public string? Path(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = PathOffsets[(int)r.Kind];
-        return o < 0 ? null : (string?)refs[r.Refs + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(PathOffsets, At(kinds, i));
+        return o < 0 ? null : (string?)At(refs, At(refStarts, i) + o);
     }
 
     public void SetPath(Node node, string? value)
     {
-        ref var r = ref records[node.Index];
-        var o = PathOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(PathOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Path));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Path));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> PathOffsets =>
@@ -3649,20 +3647,20 @@ internal sealed partial class NodeStore
     // ImportClause
     public SyntaxKind PhaseModifier(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = PhaseModifierOffsets[(int)r.Kind];
-        return o < 0 ? default : (SyntaxKind)slots[r.Slots + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(PhaseModifierOffsets, At(kinds, i));
+        return o < 0 ? default : (SyntaxKind)At(slots, At(slotStarts, i) + o);
     }
 
     public void SetPhaseModifier(Node node, SyntaxKind value)
     {
-        ref var r = ref records[node.Index];
-        var o = PhaseModifierOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(PhaseModifierOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(PhaseModifier));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(PhaseModifier));
         }
-        slots[r.Slots + o] = (int)value;
+        At(slots, At(slotStarts, i) + o) = (int)value;
     }
 
     private static ReadOnlySpan<sbyte> PhaseModifierOffsets =>
@@ -3681,20 +3679,20 @@ internal sealed partial class NodeStore
     // SwitchStatement
     public bool PossiblyExhaustive(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = PossiblyExhaustiveOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var i = nodeBase + node.Index;
+        var o = Entry(PossiblyExhaustiveOffsets, At(kinds, i));
+        return o < 0 ? default : At(slots, At(slotStarts, i) + o) != 0;
     }
 
     public void SetPossiblyExhaustive(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = PossiblyExhaustiveOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(PossiblyExhaustiveOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(PossiblyExhaustive));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(PossiblyExhaustive));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        At(slots, At(slotStarts, i) + o) = value ? 1 : 0;
     }
 
     private static ReadOnlySpan<sbyte> PossiblyExhaustiveOffsets =>
@@ -3713,20 +3711,20 @@ internal sealed partial class NodeStore
     // JSDocNonNullableType, JSDocNullableType
     public bool Postfix(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = PostfixOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var i = nodeBase + node.Index;
+        var o = Entry(PostfixOffsets, At(kinds, i));
+        return o < 0 ? default : At(slots, At(slotStarts, i) + o) != 0;
     }
 
     public void SetPostfix(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = PostfixOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(PostfixOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Postfix));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Postfix));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        At(slots, At(slotStarts, i) + o) = value ? 1 : 0;
     }
 
     private static ReadOnlySpan<sbyte> PostfixOffsets =>
@@ -3745,20 +3743,20 @@ internal sealed partial class NodeStore
     // SourceFile
     public PragmaMap Pragmas(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = PragmasOffsets[(int)r.Kind];
-        return o < 0 ? null! : (PragmaMap)refs[r.Refs + o]!;
+        var i = nodeBase + node.Index;
+        var o = Entry(PragmasOffsets, At(kinds, i));
+        return o < 0 ? null! : (PragmaMap)At(refs, At(refStarts, i) + o)!;
     }
 
     public void SetPragmas(Node node, PragmaMap value)
     {
-        ref var r = ref records[node.Index];
-        var o = PragmasOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(PragmasOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Pragmas));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Pragmas));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> PragmasOffsets =>
@@ -3777,20 +3775,20 @@ internal sealed partial class NodeStore
     // JsxAttributes, ObjectLiteralExpression
     public NodeArray Properties(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = PropertiesOffsets[(int)r.Kind];
-        return o < 0 ? null! : (NodeArray)refs[r.Refs + o]!;
+        var i = nodeBase + node.Index;
+        var o = Entry(PropertiesOffsets, At(kinds, i));
+        return o < 0 ? null! : (NodeArray)At(refs, At(refStarts, i) + o)!;
     }
 
     public void SetProperties(Node node, NodeArray value)
     {
-        ref var r = ref records[node.Index];
-        var o = PropertiesOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(PropertiesOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Properties));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Properties));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> PropertiesOffsets =>
@@ -3800,7 +3798,7 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
@@ -3809,20 +3807,20 @@ internal sealed partial class NodeStore
     // BindingElement, ExportSpecifier, ImportSpecifier
     public Node PropertyName(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = PropertyNameOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(PropertyNameOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetPropertyName(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = PropertyNameOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(PropertyNameOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(PropertyName));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(PropertyName));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> PropertyNameOffsets =>
@@ -3841,20 +3839,20 @@ internal sealed partial class NodeStore
     // ImportTypeNode
     public Node Qualifier(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = QualifierOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(QualifierOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetQualifier(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = QualifierOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(QualifierOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Qualifier));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Qualifier));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> QualifierOffsets =>
@@ -3873,20 +3871,20 @@ internal sealed partial class NodeStore
     // CallExpression, ElementAccessExpression, PropertyAccessExpression, TaggedTemplateExpression
     public Node QuestionDotToken(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = QuestionDotTokenOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(QuestionDotTokenOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetQuestionDotToken(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = QuestionDotTokenOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(QuestionDotTokenOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(QuestionDotToken));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(QuestionDotToken));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> QuestionDotTokenOffsets =>
@@ -3905,20 +3903,20 @@ internal sealed partial class NodeStore
     // ArrowFunction, CallSignatureDeclaration, ConditionalExpression, ConstructSignatureDeclaration, ConstructorDeclaration, FunctionDeclaration, … (20 classes)
     public Node QuestionToken(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = QuestionTokenOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(QuestionTokenOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetQuestionToken(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = QuestionTokenOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(QuestionTokenOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(QuestionToken));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(QuestionToken));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> QuestionTokenOffsets =>
@@ -3937,20 +3935,20 @@ internal sealed partial class NodeStore
     // NoSubstitutionTemplateLiteral, TemplateHead, TemplateMiddle, TemplateTail
     public string? RawText(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = RawTextOffsets[(int)r.Kind];
-        return o < 0 ? null : (string?)refs[r.Refs + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(RawTextOffsets, At(kinds, i));
+        return o < 0 ? null : (string?)At(refs, At(refStarts, i) + o);
     }
 
     public void SetRawText(Node node, string? value)
     {
-        ref var r = ref records[node.Index];
-        var o = RawTextOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(RawTextOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(RawText));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(RawText));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> RawTextOffsets =>
@@ -3969,20 +3967,20 @@ internal sealed partial class NodeStore
     // MappedTypeNode
     public Node ReadonlyToken(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ReadonlyTokenOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(ReadonlyTokenOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetReadonlyToken(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ReadonlyTokenOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ReadonlyTokenOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ReadonlyToken));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(ReadonlyToken));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ReadonlyTokenOffsets =>
@@ -4001,20 +3999,20 @@ internal sealed partial class NodeStore
     // SourceFile
     public IReadOnlyList<FileReference> ReferencedFiles(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ReferencedFilesOffsets[(int)r.Kind];
-        return o < 0 ? null! : (IReadOnlyList<FileReference>)refs[r.Refs + o]!;
+        var i = nodeBase + node.Index;
+        var o = Entry(ReferencedFilesOffsets, At(kinds, i));
+        return o < 0 ? null! : (IReadOnlyList<FileReference>)At(refs, At(refStarts, i) + o)!;
     }
 
     public void SetReferencedFiles(Node node, IReadOnlyList<FileReference> value)
     {
-        ref var r = ref records[node.Index];
-        var o = ReferencedFilesOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ReferencedFilesOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ReferencedFiles));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(ReferencedFiles));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> ReferencedFilesOffsets =>
@@ -4033,20 +4031,20 @@ internal sealed partial class NodeStore
     // SourceFile
     public string? ResolvedPath(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ResolvedPathOffsets[(int)r.Kind];
-        return o < 0 ? null : (string?)refs[r.Refs + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(ResolvedPathOffsets, At(kinds, i));
+        return o < 0 ? null : (string?)At(refs, At(refStarts, i) + o);
     }
 
     public void SetResolvedPath(Node node, string? value)
     {
-        ref var r = ref records[node.Index];
-        var o = ResolvedPathOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ResolvedPathOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ResolvedPath));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(ResolvedPath));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> ResolvedPathOffsets =>
@@ -4065,20 +4063,20 @@ internal sealed partial class NodeStore
     // BinaryExpression, JSDocMemberName, QualifiedName
     public Node Right(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = RightOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(RightOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetRight(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = RightOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(RightOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Right));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Right));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> RightOffsets =>
@@ -4097,20 +4095,20 @@ internal sealed partial class NodeStore
     // SourceFile
     public ScriptKind ScriptKind(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ScriptKindOffsets[(int)r.Kind];
-        return o < 0 ? default : (ScriptKind)slots[r.Slots + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(ScriptKindOffsets, At(kinds, i));
+        return o < 0 ? default : (ScriptKind)At(slots, At(slotStarts, i) + o);
     }
 
     public void SetScriptKind(Node node, ScriptKind value)
     {
-        ref var r = ref records[node.Index];
-        var o = ScriptKindOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ScriptKindOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ScriptKind));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(ScriptKind));
         }
-        slots[r.Slots + o] = (int)value;
+        At(slots, At(slotStarts, i) + o) = (int)value;
     }
 
     private static ReadOnlySpan<sbyte> ScriptKindOffsets =>
@@ -4129,20 +4127,20 @@ internal sealed partial class NodeStore
     // SourceFile
     public Action<Node>? SetExternalModuleIndicator(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = SetExternalModuleIndicatorOffsets[(int)r.Kind];
-        return o < 0 ? null : (Action<Node>?)refs[r.Refs + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(SetExternalModuleIndicatorOffsets, At(kinds, i));
+        return o < 0 ? null : (Action<Node>?)At(refs, At(refStarts, i) + o);
     }
 
     public void SetSetExternalModuleIndicator(Node node, Action<Node>? value)
     {
-        ref var r = ref records[node.Index];
-        var o = SetExternalModuleIndicatorOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(SetExternalModuleIndicatorOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(SetExternalModuleIndicator));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(SetExternalModuleIndicator));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> SetExternalModuleIndicatorOffsets =>
@@ -4161,20 +4159,20 @@ internal sealed partial class NodeStore
     // StringLiteral
     public bool SingleQuote(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = SingleQuoteOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var i = nodeBase + node.Index;
+        var o = Entry(SingleQuoteOffsets, At(kinds, i));
+        return o < 0 ? default : At(slots, At(slotStarts, i) + o) != 0;
     }
 
     public void SetSingleQuote(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = SingleQuoteOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(SingleQuoteOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(SingleQuote));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(SingleQuote));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        At(slots, At(slotStarts, i) + o) = value ? 1 : 0;
     }
 
     private static ReadOnlySpan<sbyte> SingleQuoteOffsets =>
@@ -4193,20 +4191,20 @@ internal sealed partial class NodeStore
     // Bundle
     public Node[]? SourceFiles(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = SourceFilesOffsets[(int)r.Kind];
-        return o < 0 ? null : (Node[]?)refs[r.Refs + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(SourceFilesOffsets, At(kinds, i));
+        return o < 0 ? null : (Node[]?)At(refs, At(refStarts, i) + o);
     }
 
     public void SetSourceFiles(Node node, Node[]? value)
     {
-        ref var r = ref records[node.Index];
-        var o = SourceFilesOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(SourceFilesOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(SourceFiles));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(SourceFiles));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> SourceFilesOffsets =>
@@ -4225,20 +4223,20 @@ internal sealed partial class NodeStore
     // DoStatement, ForInStatement, ForOfStatement, ForStatement, LabeledStatement, WhileStatement, … (7 classes)
     public Node Statement(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = StatementOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(StatementOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetStatement(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = StatementOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(StatementOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Statement));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Statement));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> StatementOffsets =>
@@ -4257,20 +4255,20 @@ internal sealed partial class NodeStore
     // Block, CaseClause, DefaultClause, ModuleBlock, SourceFile
     public NodeArray Statements(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = StatementsOffsets[(int)r.Kind];
-        return o < 0 ? null! : (NodeArray)refs[r.Refs + o]!;
+        var i = nodeBase + node.Index;
+        var o = Entry(StatementsOffsets, At(kinds, i));
+        return o < 0 ? null! : (NodeArray)At(refs, At(refStarts, i) + o)!;
     }
 
     public void SetStatements(Node node, NodeArray value)
     {
-        ref var r = ref records[node.Index];
-        var o = StatementsOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(StatementsOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Statements));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Statements));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> StatementsOffsets =>
@@ -4281,28 +4279,28 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,23,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,23,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // SourceFile
     public int SymbolCount(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = SymbolCountOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(SymbolCountOffsets, At(kinds, i));
+        return o < 0 ? default : At(slots, At(slotStarts, i) + o);
     }
 
     public void SetSymbolCount(Node node, int value)
     {
-        ref var r = ref records[node.Index];
-        var o = SymbolCountOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(SymbolCountOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(SymbolCount));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(SymbolCount));
         }
-        slots[r.Slots + o] = value;
+        At(slots, At(slotStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> SymbolCountOffsets =>
@@ -4321,20 +4319,20 @@ internal sealed partial class NodeStore
     // TaggedTemplateExpression
     public Node Tag(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TagOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(TagOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetTag(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = TagOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(TagOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Tag));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Tag));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> TagOffsets =>
@@ -4353,20 +4351,20 @@ internal sealed partial class NodeStore
     // JSDocAugmentsTag, JSDocAuthorTag, JSDocCallbackTag, JSDocClassTag, JSDocDeprecatedTag, JSDocEnumTag, … (28 classes)
     public Node TagName(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TagNameOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(TagNameOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetTagName(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = TagNameOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(TagNameOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(TagName));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(TagName));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> TagNameOffsets =>
@@ -4385,20 +4383,20 @@ internal sealed partial class NodeStore
     // JSDoc
     public NodeArray? Tags(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TagsOffsets[(int)r.Kind];
-        return o < 0 ? null : (NodeArray?)refs[r.Refs + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(TagsOffsets, At(kinds, i));
+        return o < 0 ? null : (NodeArray?)At(refs, At(refStarts, i) + o);
     }
 
     public void SetTags(Node node, NodeArray? value)
     {
-        ref var r = ref records[node.Index];
-        var o = TagsOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(TagsOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Tags));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Tags));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> TagsOffsets =>
@@ -4417,20 +4415,20 @@ internal sealed partial class NodeStore
     // TaggedTemplateExpression
     public Node Template(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TemplateOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(TemplateOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetTemplate(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = TemplateOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(TemplateOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Template));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Template));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> TemplateOffsets =>
@@ -4449,20 +4447,20 @@ internal sealed partial class NodeStore
     // NoSubstitutionTemplateLiteral, TemplateHead, TemplateMiddle, TemplateTail
     public TokenFlags TemplateFlags(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TemplateFlagsOffsets[(int)r.Kind];
-        return o < 0 ? default : (TokenFlags)slots[r.Slots + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(TemplateFlagsOffsets, At(kinds, i));
+        return o < 0 ? default : (TokenFlags)At(slots, At(slotStarts, i) + o);
     }
 
     public void SetTemplateFlags(Node node, TokenFlags value)
     {
-        ref var r = ref records[node.Index];
-        var o = TemplateFlagsOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(TemplateFlagsOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(TemplateFlags));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(TemplateFlags));
         }
-        slots[r.Slots + o] = (int)value;
+        At(slots, At(slotStarts, i) + o) = (int)value;
     }
 
     private static ReadOnlySpan<sbyte> TemplateFlagsOffsets =>
@@ -4481,20 +4479,20 @@ internal sealed partial class NodeStore
     // TemplateExpression, TemplateLiteralTypeNode
     public NodeArray TemplateSpans(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TemplateSpansOffsets[(int)r.Kind];
-        return o < 0 ? null! : (NodeArray)refs[r.Refs + o]!;
+        var i = nodeBase + node.Index;
+        var o = Entry(TemplateSpansOffsets, At(kinds, i));
+        return o < 0 ? null! : (NodeArray)At(refs, At(refStarts, i) + o)!;
     }
 
     public void SetTemplateSpans(Node node, NodeArray value)
     {
-        ref var r = ref records[node.Index];
-        var o = TemplateSpansOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(TemplateSpansOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(TemplateSpans));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(TemplateSpans));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> TemplateSpansOffsets =>
@@ -4513,20 +4511,20 @@ internal sealed partial class NodeStore
     // BigIntLiteral, JSDocLink, JSDocLinkCode, JSDocLinkPlain, JSDocText, JsxText, … (14 classes)
     public string Text(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TextOffsets[(int)r.Kind];
-        return o < 0 ? null! : (string)refs[r.Refs + o]!;
+        var i = nodeBase + node.Index;
+        var o = Entry(TextOffsets, At(kinds, i));
+        return o < 0 ? null! : (string)At(refs, At(refStarts, i) + o)!;
     }
 
     public void SetText(Node node, string value)
     {
-        ref var r = ref records[node.Index];
-        var o = TextOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(TextOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Text));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Text));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> TextOffsets =>
@@ -4545,20 +4543,20 @@ internal sealed partial class NodeStore
     // StringLiteral
     public Node TextSourceNode(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TextSourceNodeOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(TextSourceNodeOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetTextSourceNode(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = TextSourceNodeOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(TextSourceNodeOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(TextSourceNode));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(TextSourceNode));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> TextSourceNodeOffsets =>
@@ -4577,20 +4575,20 @@ internal sealed partial class NodeStore
     // IfStatement
     public Node ThenStatement(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ThenStatementOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(ThenStatementOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetThenStatement(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ThenStatementOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ThenStatementOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ThenStatement));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(ThenStatement));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ThenStatementOffsets =>
@@ -4609,20 +4607,20 @@ internal sealed partial class NodeStore
     // SyntheticReferenceExpression
     public Node ThisArg(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ThisArgOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(ThisArgOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetThisArg(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ThisArgOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ThisArgOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(ThisArg));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(ThisArg));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ThisArgOffsets =>
@@ -4641,20 +4639,20 @@ internal sealed partial class NodeStore
     // HeritageClause, ImportAttributes
     public SyntaxKind Token(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TokenOffsets[(int)r.Kind];
-        return o < 0 ? default : (SyntaxKind)slots[r.Slots + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(TokenOffsets, At(kinds, i));
+        return o < 0 ? default : (SyntaxKind)At(slots, At(slotStarts, i) + o);
     }
 
     public void SetToken(Node node, SyntaxKind value)
     {
-        ref var r = ref records[node.Index];
-        var o = TokenOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(TokenOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Token));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Token));
         }
-        slots[r.Slots + o] = (int)value;
+        At(slots, At(slotStarts, i) + o) = (int)value;
     }
 
     private static ReadOnlySpan<sbyte> TokenOffsets =>
@@ -4673,20 +4671,20 @@ internal sealed partial class NodeStore
     // ConditionalTypeNode
     public Node TrueType(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TrueTypeOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(TrueTypeOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetTrueType(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = TrueTypeOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(TrueTypeOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(TrueType));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(TrueType));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> TrueTypeOffsets =>
@@ -4705,20 +4703,20 @@ internal sealed partial class NodeStore
     // TryStatement
     public Node TryBlock(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TryBlockOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(TryBlockOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetTryBlock(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = TryBlockOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(TryBlockOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(TryBlock));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(TryBlock));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> TryBlockOffsets =>
@@ -4737,20 +4735,20 @@ internal sealed partial class NodeStore
     // SyntheticExpression
     public Node TupleNameSource(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TupleNameSourceOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(TupleNameSourceOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetTupleNameSource(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = TupleNameSourceOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(TupleNameSourceOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(TupleNameSource));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(TupleNameSource));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> TupleNameSourceOffsets =>
@@ -4769,20 +4767,20 @@ internal sealed partial class NodeStore
     // ArrowFunction, AsExpression, CallSignatureDeclaration, ConstructSignatureDeclaration, ConstructorDeclaration, ConstructorTypeNode, … (37 classes)
     public Node Type(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(TypeOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetType(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(TypeOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Type));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Type));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> TypeOffsets =>
@@ -4801,20 +4799,20 @@ internal sealed partial class NodeStore
     // ArrowFunction, CallExpression, CallSignatureDeclaration, ConstructSignatureDeclaration, ConstructorDeclaration, ConstructorTypeNode, … (23 classes)
     public NodeArray? TypeArguments(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeArgumentsOffsets[(int)r.Kind];
-        return o < 0 ? null : (NodeArray?)refs[r.Refs + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(TypeArgumentsOffsets, At(kinds, i));
+        return o < 0 ? null : (NodeArray?)At(refs, At(refStarts, i) + o);
     }
 
     public void SetTypeArguments(Node node, NodeArray? value)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeArgumentsOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(TypeArgumentsOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(TypeArguments));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(TypeArguments));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> TypeArgumentsOffsets =>
@@ -4823,30 +4821,30 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,3,-1,3,3,3,2,2,3,-1,0,3,3,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,1,1,0,-1,-1,3,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,2,-1,2,2,2,1,1,2,-1,0,2,2,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,1,1,0,-1,-1,2,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // JSDocCallbackTag, JSDocEnumTag, JSDocOverloadTag, JSDocParameterTag, JSDocPropertyTag, JSDocReturnTag, … (11 classes)
     public Node TypeExpression(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeExpressionOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(TypeExpressionOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetTypeExpression(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeExpressionOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(TypeExpressionOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(TypeExpression));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(TypeExpression));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> TypeExpressionOffsets =>
@@ -4865,20 +4863,20 @@ internal sealed partial class NodeStore
     // TypeReferenceNode
     public Node TypeName(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeNameOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(TypeNameOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetTypeName(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeNameOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(TypeNameOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(TypeName));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(TypeName));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> TypeNameOffsets =>
@@ -4897,20 +4895,20 @@ internal sealed partial class NodeStore
     // InferTypeNode, MappedTypeNode
     public Node TypeParameter(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeParameterOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(TypeParameterOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetTypeParameter(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeParameterOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(TypeParameterOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(TypeParameter));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(TypeParameter));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> TypeParameterOffsets =>
@@ -4929,20 +4927,20 @@ internal sealed partial class NodeStore
     // ArrowFunction, CallSignatureDeclaration, ClassDeclaration, ClassExpression, ConstructSignatureDeclaration, ConstructorDeclaration, … (19 classes)
     public NodeArray? TypeParameters(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeParametersOffsets[(int)r.Kind];
-        return o < 0 ? null : (NodeArray?)refs[r.Refs + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(TypeParametersOffsets, At(kinds, i));
+        return o < 0 ? null : (NodeArray?)At(refs, At(refStarts, i) + o);
     }
 
     public void SetTypeParameters(Node node, NodeArray? value)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeParametersOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(TypeParametersOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(TypeParameters));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(TypeParameters));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> TypeParametersOffsets =>
@@ -4951,30 +4949,30 @@ internal sealed partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,4,4,-1,4,4,4,3,3,4,-1,-1,4,4,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,4,4,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,4,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,4,4,4,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,3,-1,3,3,3,2,2,3,-1,-1,3,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,3,3,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     ];
 
     // SourceFile
     public IReadOnlyList<FileReference> TypeReferenceDirectives(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeReferenceDirectivesOffsets[(int)r.Kind];
-        return o < 0 ? null! : (IReadOnlyList<FileReference>)refs[r.Refs + o]!;
+        var i = nodeBase + node.Index;
+        var o = Entry(TypeReferenceDirectivesOffsets, At(kinds, i));
+        return o < 0 ? null! : (IReadOnlyList<FileReference>)At(refs, At(refStarts, i) + o)!;
     }
 
     public void SetTypeReferenceDirectives(Node node, IReadOnlyList<FileReference> value)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeReferenceDirectivesOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(TypeReferenceDirectivesOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(TypeReferenceDirectives));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(TypeReferenceDirectives));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> TypeReferenceDirectivesOffsets =>
@@ -4993,20 +4991,20 @@ internal sealed partial class NodeStore
     // HeritageClause, IntersectionTypeNode, UnionTypeNode
     public NodeArray Types(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TypesOffsets[(int)r.Kind];
-        return o < 0 ? null! : (NodeArray)refs[r.Refs + o]!;
+        var i = nodeBase + node.Index;
+        var o = Entry(TypesOffsets, At(kinds, i));
+        return o < 0 ? null! : (NodeArray)At(refs, At(refStarts, i) + o)!;
     }
 
     public void SetTypes(Node node, NodeArray value)
     {
-        ref var r = ref records[node.Index];
-        var o = TypesOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(TypesOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Types));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Types));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> TypesOffsets =>
@@ -5025,20 +5023,20 @@ internal sealed partial class NodeStore
     // ImportAttribute
     public Node Value(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ValueOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(ValueOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetValue(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ValueOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(ValueOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(Value));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(Value));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> ValueOffsets =>
@@ -5057,20 +5055,20 @@ internal sealed partial class NodeStore
     // CatchClause
     public Node VariableDeclaration(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = VariableDeclarationOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(VariableDeclarationOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetVariableDeclaration(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = VariableDeclarationOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(VariableDeclarationOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(VariableDeclaration));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(VariableDeclaration));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> VariableDeclarationOffsets =>
@@ -5089,20 +5087,20 @@ internal sealed partial class NodeStore
     // ConditionalExpression
     public Node WhenFalse(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = WhenFalseOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(WhenFalseOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetWhenFalse(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = WhenFalseOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(WhenFalseOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(WhenFalse));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(WhenFalse));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> WhenFalseOffsets =>
@@ -5121,20 +5119,20 @@ internal sealed partial class NodeStore
     // ConditionalExpression
     public Node WhenTrue(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = WhenTrueOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var i = nodeBase + node.Index;
+        var o = Entry(WhenTrueOffsets, At(kinds, i));
+        return o < 0 ? default : new Node(At(slots, At(slotStarts, i) + o));
     }
 
     public void SetWhenTrue(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = WhenTrueOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(WhenTrueOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(WhenTrue));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(WhenTrue));
         }
-        slots[r.Slots + o] = value.Index;
+        At(slots, At(slotStarts, i) + o) = value.Index;
     }
 
     private static ReadOnlySpan<sbyte> WhenTrueOffsets =>
@@ -5153,20 +5151,20 @@ internal sealed partial class NodeStore
     // SyntaxList
     public Node[]? _children(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = _childrenOffsets[(int)r.Kind];
-        return o < 0 ? null : (Node[]?)refs[r.Refs + o];
+        var i = nodeBase + node.Index;
+        var o = Entry(_childrenOffsets, At(kinds, i));
+        return o < 0 ? null : (Node[]?)At(refs, At(refStarts, i) + o);
     }
 
     public void Set_children(Node node, Node[]? value)
     {
-        ref var r = ref records[node.Index];
-        var o = _childrenOffsets[(int)r.Kind];
+        var i = nodeBase + node.Index;
+        var o = Entry(_childrenOffsets, At(kinds, i));
         if (o < 0)
         {
-            ThrowNoField(r.Kind, nameof(_children));
+            ThrowNoField((SyntaxKind)At(kinds, i), nameof(_children));
         }
-        refs[r.Refs + o] = value;
+        At(refs, At(refStarts, i) + o) = value;
     }
 
     private static ReadOnlySpan<sbyte> _childrenOffsets =>
@@ -5183,491 +5181,491 @@ internal sealed partial class NodeStore
     ];
 
     // Node classes of types.ts: whether a node's kind is one of the class's kinds.
-    public bool IsAbstractKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 0;
+    public bool IsAbstractKeyword(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 0;
 
-    public bool IsAccessorKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 1;
+    public bool IsAccessorKeyword(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 1;
 
-    public bool IsAmpersandAmpersandEqualsToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 2;
+    public bool IsAmpersandAmpersandEqualsToken(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 2;
 
-    public bool IsArrayBindingPattern(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 3;
+    public bool IsArrayBindingPattern(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 3;
 
-    public bool IsArrayLiteralExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 4;
+    public bool IsArrayLiteralExpression(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 4;
 
-    public bool IsArrayTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 5;
+    public bool IsArrayTypeNode(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 5;
 
-    public bool IsArrowFunction(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 6;
+    public bool IsArrowFunction(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 6;
 
-    public bool IsAsExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 7;
+    public bool IsAsExpression(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 7;
 
-    public bool IsAssertKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 8;
+    public bool IsAssertKeyword(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 8;
 
-    public bool IsAssertsKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 9;
+    public bool IsAssertsKeyword(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 9;
 
-    public bool IsAsteriskToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 10;
+    public bool IsAsteriskToken(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 10;
 
-    public bool IsAsyncKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 11;
+    public bool IsAsyncKeyword(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 11;
 
-    public bool IsAwaitExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 12;
+    public bool IsAwaitExpression(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 12;
 
-    public bool IsAwaitKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 13;
+    public bool IsAwaitKeyword(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 13;
 
-    public bool IsBarBarEqualsToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 14;
+    public bool IsBarBarEqualsToken(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 14;
 
-    public bool IsBigIntLiteral(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 15;
+    public bool IsBigIntLiteral(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 15;
 
-    public bool IsBinaryExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 16;
+    public bool IsBinaryExpression(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 16;
 
-    public bool IsBindingElement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 17;
+    public bool IsBindingElement(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 17;
 
-    public bool IsBlock(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 18;
+    public bool IsBlock(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 18;
 
-    public bool IsBreakStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 19;
+    public bool IsBreakStatement(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 19;
 
-    public bool IsBundle(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 20;
+    public bool IsBundle(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 20;
 
-    public bool IsCallExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 21;
+    public bool IsCallExpression(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 21;
 
-    public bool IsCallSignatureDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 22;
+    public bool IsCallSignatureDeclaration(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 22;
 
-    public bool IsCaseBlock(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 23;
+    public bool IsCaseBlock(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 23;
 
-    public bool IsCaseClause(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 24;
+    public bool IsCaseClause(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 24;
 
-    public bool IsCaseKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 25;
+    public bool IsCaseKeyword(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 25;
 
-    public bool IsCatchClause(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 26;
+    public bool IsCatchClause(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 26;
 
-    public bool IsClassDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 27;
+    public bool IsClassDeclaration(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 27;
 
-    public bool IsClassExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 28;
+    public bool IsClassExpression(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 28;
 
-    public bool IsClassStaticBlockDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 29;
+    public bool IsClassStaticBlockDeclaration(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 29;
 
-    public bool IsColonToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 30;
+    public bool IsColonToken(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 30;
 
-    public bool IsCommaListExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 31;
+    public bool IsCommaListExpression(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 31;
 
-    public bool IsComputedPropertyName(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 32;
+    public bool IsComputedPropertyName(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 32;
 
-    public bool IsConditionalExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 33;
+    public bool IsConditionalExpression(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 33;
 
-    public bool IsConditionalTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 34;
+    public bool IsConditionalTypeNode(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 34;
 
-    public bool IsConstKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 35;
+    public bool IsConstKeyword(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 35;
 
-    public bool IsConstructSignatureDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 36;
+    public bool IsConstructSignatureDeclaration(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 36;
 
-    public bool IsConstructorDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 37;
+    public bool IsConstructorDeclaration(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 37;
 
-    public bool IsConstructorTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 38;
+    public bool IsConstructorTypeNode(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 38;
 
-    public bool IsContinueStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 39;
+    public bool IsContinueStatement(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 39;
 
-    public bool IsDebuggerStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 40;
+    public bool IsDebuggerStatement(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 40;
 
-    public bool IsDeclareKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 41;
+    public bool IsDeclareKeyword(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 41;
 
-    public bool IsDecorator(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 42;
+    public bool IsDecorator(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 42;
 
-    public bool IsDefaultClause(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 43;
+    public bool IsDefaultClause(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 43;
 
-    public bool IsDefaultKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 44;
+    public bool IsDefaultKeyword(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 44;
 
-    public bool IsDeleteExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 45;
+    public bool IsDeleteExpression(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 45;
 
-    public bool IsDoStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 46;
+    public bool IsDoStatement(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 46;
 
-    public bool IsDotDotDotToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 47;
+    public bool IsDotDotDotToken(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 47;
 
-    public bool IsDotToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 48;
+    public bool IsDotToken(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 48;
 
-    public bool IsElementAccessExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 49;
+    public bool IsElementAccessExpression(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 49;
 
-    public bool IsEmptyStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 50;
+    public bool IsEmptyStatement(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 50;
 
-    public bool IsEndOfFileToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 51;
+    public bool IsEndOfFileToken(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 51;
 
-    public bool IsEnumDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 52;
+    public bool IsEnumDeclaration(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 52;
 
-    public bool IsEnumMember(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 53;
+    public bool IsEnumMember(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 53;
 
-    public bool IsEqualsGreaterThanToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 54;
+    public bool IsEqualsGreaterThanToken(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 54;
 
-    public bool IsEqualsToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 55;
+    public bool IsEqualsToken(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 55;
 
-    public bool IsExclamationToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 56;
+    public bool IsExclamationToken(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 56;
 
-    public bool IsExportAssignment(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 57;
+    public bool IsExportAssignment(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 57;
 
-    public bool IsExportDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 58;
+    public bool IsExportDeclaration(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 58;
 
-    public bool IsExportKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 59;
+    public bool IsExportKeyword(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 59;
 
-    public bool IsExportSpecifier(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 60;
+    public bool IsExportSpecifier(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 60;
 
-    public bool IsExpressionStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 61;
+    public bool IsExpressionStatement(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 61;
 
-    public bool IsExpressionWithTypeArguments(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 62;
+    public bool IsExpressionWithTypeArguments(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 62;
 
-    public bool IsExternalModuleReference(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 63;
+    public bool IsExternalModuleReference(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 63;
 
-    public bool IsFalseLiteral(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 64;
+    public bool IsFalseLiteral(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 64;
 
-    public bool IsForInStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 65;
+    public bool IsForInStatement(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 65;
 
-    public bool IsForOfStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 66;
+    public bool IsForOfStatement(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 66;
 
-    public bool IsForStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 67;
+    public bool IsForStatement(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 67;
 
-    public bool IsFunctionDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 68;
+    public bool IsFunctionDeclaration(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 68;
 
-    public bool IsFunctionExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 69;
+    public bool IsFunctionExpression(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 69;
 
-    public bool IsFunctionTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 70;
+    public bool IsFunctionTypeNode(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 70;
 
-    public bool IsGetAccessorDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 71;
+    public bool IsGetAccessorDeclaration(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 71;
 
-    public bool IsHeritageClause(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 72;
+    public bool IsHeritageClause(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 72;
 
-    public bool IsIdentifier(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 73;
+    public bool IsIdentifier(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 73;
 
-    public bool IsIfStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 74;
+    public bool IsIfStatement(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 74;
 
-    public bool IsImportAttribute(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 75;
+    public bool IsImportAttribute(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 75;
 
-    public bool IsImportAttributes(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 76;
+    public bool IsImportAttributes(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 76;
 
-    public bool IsImportClause(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 77;
+    public bool IsImportClause(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 77;
 
-    public bool IsImportDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 78;
+    public bool IsImportDeclaration(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 78;
 
-    public bool IsImportEqualsDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 79;
+    public bool IsImportEqualsDeclaration(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 79;
 
-    public bool IsImportExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 80;
+    public bool IsImportExpression(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 80;
 
-    public bool IsImportSpecifier(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 81;
+    public bool IsImportSpecifier(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 81;
 
-    public bool IsImportTypeAssertionContainer(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 82;
+    public bool IsImportTypeAssertionContainer(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 82;
 
-    public bool IsImportTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 83;
+    public bool IsImportTypeNode(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 83;
 
-    public bool IsInKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 84;
+    public bool IsInKeyword(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 84;
 
-    public bool IsIndexSignatureDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 85;
+    public bool IsIndexSignatureDeclaration(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 85;
 
-    public bool IsIndexedAccessTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 86;
+    public bool IsIndexedAccessTypeNode(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 86;
 
-    public bool IsInferTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 87;
+    public bool IsInferTypeNode(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 87;
 
-    public bool IsInterfaceDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 88;
+    public bool IsInterfaceDeclaration(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 88;
 
-    public bool IsIntersectionTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 89;
+    public bool IsIntersectionTypeNode(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 89;
 
-    public bool IsJSDoc(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 90;
+    public bool IsJSDoc(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 90;
 
-    public bool IsJSDocAllType(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 91;
+    public bool IsJSDocAllType(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 91;
 
-    public bool IsJSDocAugmentsTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 92;
+    public bool IsJSDocAugmentsTag(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 92;
 
-    public bool IsJSDocAuthorTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 93;
+    public bool IsJSDocAuthorTag(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 93;
 
-    public bool IsJSDocCallbackTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 94;
+    public bool IsJSDocCallbackTag(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 94;
 
-    public bool IsJSDocClassTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 95;
+    public bool IsJSDocClassTag(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 95;
 
-    public bool IsJSDocDeprecatedTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 96;
+    public bool IsJSDocDeprecatedTag(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 96;
 
-    public bool IsJSDocEnumTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 97;
+    public bool IsJSDocEnumTag(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 97;
 
-    public bool IsJSDocFunctionType(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 98;
+    public bool IsJSDocFunctionType(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 98;
 
-    public bool IsJSDocImplementsTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 99;
+    public bool IsJSDocImplementsTag(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 99;
 
-    public bool IsJSDocImportTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 100;
+    public bool IsJSDocImportTag(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 100;
 
-    public bool IsJSDocLink(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 101;
+    public bool IsJSDocLink(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 101;
 
-    public bool IsJSDocLinkCode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 102;
+    public bool IsJSDocLinkCode(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 102;
 
-    public bool IsJSDocLinkPlain(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 103;
+    public bool IsJSDocLinkPlain(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 103;
 
-    public bool IsJSDocMemberName(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 104;
+    public bool IsJSDocMemberName(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 104;
 
-    public bool IsJSDocNameReference(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 105;
+    public bool IsJSDocNameReference(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 105;
 
-    public bool IsJSDocNamepathType(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 106;
+    public bool IsJSDocNamepathType(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 106;
 
-    public bool IsJSDocNonNullableType(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 107;
+    public bool IsJSDocNonNullableType(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 107;
 
-    public bool IsJSDocNullableType(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 108;
+    public bool IsJSDocNullableType(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 108;
 
-    public bool IsJSDocOptionalType(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 109;
+    public bool IsJSDocOptionalType(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 109;
 
-    public bool IsJSDocOverloadTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 110;
+    public bool IsJSDocOverloadTag(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 110;
 
-    public bool IsJSDocOverrideTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 111;
+    public bool IsJSDocOverrideTag(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 111;
 
-    public bool IsJSDocParameterTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 112;
+    public bool IsJSDocParameterTag(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 112;
 
-    public bool IsJSDocPrivateTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 113;
+    public bool IsJSDocPrivateTag(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 113;
 
-    public bool IsJSDocPropertyTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 114;
+    public bool IsJSDocPropertyTag(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 114;
 
-    public bool IsJSDocProtectedTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 115;
+    public bool IsJSDocProtectedTag(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 115;
 
-    public bool IsJSDocPublicTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 116;
+    public bool IsJSDocPublicTag(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 116;
 
-    public bool IsJSDocReadonlyTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 117;
+    public bool IsJSDocReadonlyTag(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 117;
 
-    public bool IsJSDocReturnTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 118;
+    public bool IsJSDocReturnTag(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 118;
 
-    public bool IsJSDocSatisfiesTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 119;
+    public bool IsJSDocSatisfiesTag(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 119;
 
-    public bool IsJSDocSeeTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 120;
+    public bool IsJSDocSeeTag(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 120;
 
-    public bool IsJSDocSignature(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 121;
+    public bool IsJSDocSignature(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 121;
 
-    public bool IsJSDocTemplateTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 122;
+    public bool IsJSDocTemplateTag(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 122;
 
-    public bool IsJSDocText(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 123;
+    public bool IsJSDocText(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 123;
 
-    public bool IsJSDocThisTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 124;
+    public bool IsJSDocThisTag(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 124;
 
-    public bool IsJSDocThrowsTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 125;
+    public bool IsJSDocThrowsTag(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 125;
 
-    public bool IsJSDocTypeExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 126;
+    public bool IsJSDocTypeExpression(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 126;
 
-    public bool IsJSDocTypeLiteral(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 127;
+    public bool IsJSDocTypeLiteral(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 127;
 
-    public bool IsJSDocTypeTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 128;
+    public bool IsJSDocTypeTag(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 128;
 
-    public bool IsJSDocTypedefTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 129;
+    public bool IsJSDocTypedefTag(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 129;
 
-    public bool IsJSDocUnknownTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 130;
+    public bool IsJSDocUnknownTag(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 130;
 
-    public bool IsJSDocUnknownType(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 131;
+    public bool IsJSDocUnknownType(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 131;
 
-    public bool IsJSDocVariadicType(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 132;
+    public bool IsJSDocVariadicType(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 132;
 
-    public bool IsJsxAttribute(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 133;
+    public bool IsJsxAttribute(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 133;
 
-    public bool IsJsxAttributes(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 134;
+    public bool IsJsxAttributes(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 134;
 
-    public bool IsJsxClosingElement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 135;
+    public bool IsJsxClosingElement(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 135;
 
-    public bool IsJsxClosingFragment(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 136;
+    public bool IsJsxClosingFragment(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 136;
 
-    public bool IsJsxElement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 137;
+    public bool IsJsxElement(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 137;
 
-    public bool IsJsxExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 138;
+    public bool IsJsxExpression(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 138;
 
-    public bool IsJsxFragment(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 139;
+    public bool IsJsxFragment(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 139;
 
-    public bool IsJsxNamespacedName(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 140;
+    public bool IsJsxNamespacedName(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 140;
 
-    public bool IsJsxOpeningElement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 141;
+    public bool IsJsxOpeningElement(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 141;
 
-    public bool IsJsxOpeningFragment(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 142;
+    public bool IsJsxOpeningFragment(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 142;
 
-    public bool IsJsxSelfClosingElement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 143;
+    public bool IsJsxSelfClosingElement(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 143;
 
-    public bool IsJsxSpreadAttribute(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 144;
+    public bool IsJsxSpreadAttribute(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 144;
 
-    public bool IsJsxText(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 145;
+    public bool IsJsxText(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 145;
 
-    public bool IsLabeledStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 146;
+    public bool IsLabeledStatement(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 146;
 
-    public bool IsLiteralTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 147;
+    public bool IsLiteralTypeNode(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 147;
 
-    public bool IsMappedTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 148;
+    public bool IsMappedTypeNode(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 148;
 
-    public bool IsMetaProperty(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 149;
+    public bool IsMetaProperty(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 149;
 
-    public bool IsMethodDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 150;
+    public bool IsMethodDeclaration(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 150;
 
-    public bool IsMethodSignature(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 151;
+    public bool IsMethodSignature(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 151;
 
-    public bool IsMinusToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 152;
+    public bool IsMinusToken(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 152;
 
-    public bool IsMissingDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 153;
+    public bool IsMissingDeclaration(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 153;
 
-    public bool IsModuleBlock(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 154;
+    public bool IsModuleBlock(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 154;
 
-    public bool IsModuleDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 155;
+    public bool IsModuleDeclaration(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 155;
 
-    public bool IsNamedExports(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 156;
+    public bool IsNamedExports(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 156;
 
-    public bool IsNamedImports(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 157;
+    public bool IsNamedImports(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 157;
 
-    public bool IsNamedTupleMember(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 158;
+    public bool IsNamedTupleMember(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 158;
 
-    public bool IsNamespaceExport(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 159;
+    public bool IsNamespaceExport(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 159;
 
-    public bool IsNamespaceExportDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 160;
+    public bool IsNamespaceExportDeclaration(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 160;
 
-    public bool IsNamespaceImport(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 161;
+    public bool IsNamespaceImport(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 161;
 
-    public bool IsNewExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 162;
+    public bool IsNewExpression(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 162;
 
-    public bool IsNoSubstitutionTemplateLiteral(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 163;
+    public bool IsNoSubstitutionTemplateLiteral(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 163;
 
-    public bool IsNonNullExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 164;
+    public bool IsNonNullExpression(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 164;
 
-    public bool IsNotEmittedStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 165;
+    public bool IsNotEmittedStatement(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 165;
 
-    public bool IsNotEmittedTypeElement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 166;
+    public bool IsNotEmittedTypeElement(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 166;
 
-    public bool IsNullLiteral(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 167;
+    public bool IsNullLiteral(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 167;
 
-    public bool IsNumericLiteral(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 168;
+    public bool IsNumericLiteral(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 168;
 
-    public bool IsObjectBindingPattern(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 169;
+    public bool IsObjectBindingPattern(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 169;
 
-    public bool IsObjectLiteralExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 170;
+    public bool IsObjectLiteralExpression(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 170;
 
-    public bool IsOmittedExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 171;
+    public bool IsOmittedExpression(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 171;
 
-    public bool IsOptionalTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 172;
+    public bool IsOptionalTypeNode(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 172;
 
-    public bool IsOutKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 173;
+    public bool IsOutKeyword(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 173;
 
-    public bool IsOverrideKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 174;
+    public bool IsOverrideKeyword(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 174;
 
-    public bool IsParameterDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 175;
+    public bool IsParameterDeclaration(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 175;
 
-    public bool IsParenthesizedExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 176;
+    public bool IsParenthesizedExpression(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 176;
 
-    public bool IsParenthesizedTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 177;
+    public bool IsParenthesizedTypeNode(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 177;
 
-    public bool IsPartiallyEmittedExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 178;
+    public bool IsPartiallyEmittedExpression(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 178;
 
-    public bool IsPlusToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 179;
+    public bool IsPlusToken(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 179;
 
-    public bool IsPostfixUnaryExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 180;
+    public bool IsPostfixUnaryExpression(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 180;
 
-    public bool IsPrefixUnaryExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 181;
+    public bool IsPrefixUnaryExpression(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 181;
 
-    public bool IsPrivateIdentifier(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 182;
+    public bool IsPrivateIdentifier(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 182;
 
-    public bool IsPrivateKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 183;
+    public bool IsPrivateKeyword(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 183;
 
-    public bool IsPropertyAccessExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 184;
+    public bool IsPropertyAccessExpression(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 184;
 
-    public bool IsPropertyAssignment(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 185;
+    public bool IsPropertyAssignment(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 185;
 
-    public bool IsPropertyDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 186;
+    public bool IsPropertyDeclaration(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 186;
 
-    public bool IsPropertySignature(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 187;
+    public bool IsPropertySignature(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 187;
 
-    public bool IsProtectedKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 188;
+    public bool IsProtectedKeyword(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 188;
 
-    public bool IsPublicKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 189;
+    public bool IsPublicKeyword(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 189;
 
-    public bool IsQualifiedName(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 190;
+    public bool IsQualifiedName(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 190;
 
-    public bool IsQuestionDotToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 191;
+    public bool IsQuestionDotToken(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 191;
 
-    public bool IsQuestionQuestionEqualsToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 192;
+    public bool IsQuestionQuestionEqualsToken(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 192;
 
-    public bool IsQuestionToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 193;
+    public bool IsQuestionToken(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 193;
 
-    public bool IsReadonlyKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 194;
+    public bool IsReadonlyKeyword(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 194;
 
-    public bool IsRegularExpressionLiteral(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 195;
+    public bool IsRegularExpressionLiteral(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 195;
 
-    public bool IsRestTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 196;
+    public bool IsRestTypeNode(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 196;
 
-    public bool IsReturnStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 197;
+    public bool IsReturnStatement(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 197;
 
-    public bool IsSatisfiesExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 198;
+    public bool IsSatisfiesExpression(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 198;
 
-    public bool IsSemicolonClassElement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 199;
+    public bool IsSemicolonClassElement(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 199;
 
-    public bool IsSetAccessorDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 200;
+    public bool IsSetAccessorDeclaration(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 200;
 
-    public bool IsShorthandPropertyAssignment(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 201;
+    public bool IsShorthandPropertyAssignment(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 201;
 
-    public bool IsSourceFile(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 202;
+    public bool IsSourceFile(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 202;
 
-    public bool IsSpreadAssignment(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 203;
+    public bool IsSpreadAssignment(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 203;
 
-    public bool IsSpreadElement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 204;
+    public bool IsSpreadElement(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 204;
 
-    public bool IsStaticKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 205;
+    public bool IsStaticKeyword(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 205;
 
-    public bool IsStringLiteral(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 206;
+    public bool IsStringLiteral(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 206;
 
-    public bool IsSuperExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 207;
+    public bool IsSuperExpression(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 207;
 
-    public bool IsSwitchStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 208;
+    public bool IsSwitchStatement(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 208;
 
-    public bool IsSyntaxList(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 209;
+    public bool IsSyntaxList(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 209;
 
-    public bool IsSyntheticExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 210;
+    public bool IsSyntheticExpression(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 210;
 
-    public bool IsSyntheticReferenceExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 211;
+    public bool IsSyntheticReferenceExpression(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 211;
 
-    public bool IsTaggedTemplateExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 212;
+    public bool IsTaggedTemplateExpression(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 212;
 
-    public bool IsTemplateExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 213;
+    public bool IsTemplateExpression(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 213;
 
-    public bool IsTemplateHead(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 214;
+    public bool IsTemplateHead(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 214;
 
-    public bool IsTemplateLiteralTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 215;
+    public bool IsTemplateLiteralTypeNode(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 215;
 
-    public bool IsTemplateLiteralTypeSpan(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 216;
+    public bool IsTemplateLiteralTypeSpan(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 216;
 
-    public bool IsTemplateMiddle(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 217;
+    public bool IsTemplateMiddle(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 217;
 
-    public bool IsTemplateSpan(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 218;
+    public bool IsTemplateSpan(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 218;
 
-    public bool IsTemplateTail(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 219;
+    public bool IsTemplateTail(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 219;
 
-    public bool IsThisExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 220;
+    public bool IsThisExpression(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 220;
 
-    public bool IsThisTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 221;
+    public bool IsThisTypeNode(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 221;
 
-    public bool IsThrowStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 222;
+    public bool IsThrowStatement(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 222;
 
-    public bool IsToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 223;
+    public bool IsToken(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 223;
 
-    public bool IsTrueLiteral(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 224;
+    public bool IsTrueLiteral(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 224;
 
-    public bool IsTryStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 225;
+    public bool IsTryStatement(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 225;
 
-    public bool IsTupleTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 226;
+    public bool IsTupleTypeNode(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 226;
 
-    public bool IsTypeAliasDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 227;
+    public bool IsTypeAliasDeclaration(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 227;
 
-    public bool IsTypeAssertion(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 228;
+    public bool IsTypeAssertion(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 228;
 
-    public bool IsTypeLiteralNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 229;
+    public bool IsTypeLiteralNode(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 229;
 
-    public bool IsTypeOfExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 230;
+    public bool IsTypeOfExpression(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 230;
 
-    public bool IsTypeOperatorNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 231;
+    public bool IsTypeOperatorNode(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 231;
 
-    public bool IsTypeParameterDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 232;
+    public bool IsTypeParameterDeclaration(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 232;
 
-    public bool IsTypePredicateNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 233;
+    public bool IsTypePredicateNode(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 233;
 
-    public bool IsTypeQueryNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 234;
+    public bool IsTypeQueryNode(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 234;
 
-    public bool IsTypeReferenceNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 235;
+    public bool IsTypeReferenceNode(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 235;
 
-    public bool IsUnionTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 236;
+    public bool IsUnionTypeNode(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 236;
 
-    public bool IsVariableDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 237;
+    public bool IsVariableDeclaration(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 237;
 
-    public bool IsVariableDeclarationList(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 238;
+    public bool IsVariableDeclarationList(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 238;
 
-    public bool IsVariableStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 239;
+    public bool IsVariableStatement(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 239;
 
-    public bool IsVoidExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 240;
+    public bool IsVoidExpression(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 240;
 
-    public bool IsWhileStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 241;
+    public bool IsWhileStatement(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 241;
 
-    public bool IsWithStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 242;
+    public bool IsWithStatement(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 242;
 
-    public bool IsYieldExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 243;
+    public bool IsYieldExpression(Node node) => !node.IsNone && Entry(ClassIds, At(kinds, nodeBase + node.Index)) == 243;
 }
