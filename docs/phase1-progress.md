@@ -148,3 +148,12 @@ Ranking as the brief fixes it (parse-only harness on the tuning corpus decides; 
 - **Harness fix during the step:** the benchmark project compiled Track O without the NoAlloc attribute types (Track O's Gate 2 injects them through the analyzer); variants B and C removed their annotations for that reason, A kept them and was measurable after the fix (39677ae). Annotations do not change speed.
 - A uses `[MethodImpl(AggressiveInlining)]` on generated accessors (allowed in Track O, not in Track F) and the first `[NoAlloc]` annotations: 12 of 2,150 methods (`noalloc-report.mjs`).
 - From the reports: GC pause is about 60 % of the parallel wall time and depends on object count and references outside the store (node lists, strings), which points to O7 (lists) and O5 (text spans) next.
+
+### O7a: node lists as handles
+
+Brief: [modules/O7a.md](modules/O7a.md). One attempt (Opus 5.5, high effort, no sub-agents; call sites converted with rewrite scripts), about 22 of 100 gate runs; commit f48ed75 (branch `attempts/O7a`), merged. Both gates pass on the orchestrator's rerun (Track O 50,177/50,177 everywhere; Track F unchanged); no tool diff.
+
+- **Design:** `readonly struct NodeList` (header index; 0 = undefined); 24-byte headers (start, count, pos, end, transform flags, trailing-comma and missing-list bits); all finished lists' elements in one `Node[]`; lists under construction as frames of a reusable scratch stack (`ListBuilder`), copied at `createNodeArray`; the store's mark covers lists, elements, frames and scratch; arrays rented from the shared pool during the parse and moved to exact-size pinned arrays at the end. The one interleaved case (JSDoc comment parts and tags) finishes its tags list first; creating a list creates no node, so node order is unchanged.
+- **Measurement (development, both runs rig-compliant, idle 5.8 % / 6.2 %):** tuning corpus, cs-o-aot-ws, 20 runs: **O7a 845 ms** vs main (O6b A) 1,100 ms, ratio 0.768 [0.760, 0.774]; allocated 679 vs 693 MB; GC pause 576 vs 695 ms; gen1 collections 23 vs 30; peak working set 415 vs 448 MiB. `M5.ParseTuningCorpus` after the merge: 1.206 s, 417.0 MB (before: 1.456 s, 457.6 MB). Raw: `results/track-o/O7a/`.
+- NoAlloc: 27 of 2,193 methods annotated (before: 12), all in `Arena/`.
+- Seen by the attempt, for later steps: per-call closures (`Core.Some(..., a0 => ...)` about 15 MB, one parser closure about 26 MB) and about 24 MB of boxed `Node`; O7b candidates: smaller list headers, small-list inline storage, per-list pooled arrays.
