@@ -516,16 +516,16 @@ internal static partial class NodeVisitor
                 return VisitNodes(store, cbNode, cbNodes, store.Parameters(node))
                 ?? VisitNode(cbNode, store.Type(node));
             case SyntaxKind.JSDoc:
-                return (store.Comment(node) is string
+                return (store.Comment(node).IsText
                 ? null
-                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))))
+                : VisitNodes(store, cbNode, cbNodes, store.Comment(node).List))
                 ?? VisitNodes(store, cbNode, cbNodes, store.Tags(node));
             case SyntaxKind.JSDocSeeTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? VisitNode(cbNode, store.Name(node))
-                ?? (store.Comment(node) is string
+                ?? (store.Comment(node).IsText
                 ? null
-                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
+                : VisitNodes(store, cbNode, cbNodes, store.Comment(node).List));
             case SyntaxKind.JSDocNameReference:
                 return VisitNode(cbNode, store.Name(node));
             case SyntaxKind.JSDocMemberName:
@@ -538,9 +538,9 @@ internal static partial class NodeVisitor
                 ?? VisitNode(cbNode, store.TypeExpression(node))
                 : VisitNode(cbNode, store.TypeExpression(node))
                 ?? VisitNode(cbNode, store.Name(node)))
-                ?? (store.Comment(node) is string
+                ?? (store.Comment(node).IsText
                 ? null
-                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
+                : VisitNodes(store, cbNode, cbNodes, store.Comment(node).List));
             case SyntaxKind.JSDocPropertyTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? (store.IsNameFirst(node)
@@ -548,95 +548,95 @@ internal static partial class NodeVisitor
                 ?? VisitNode(cbNode, store.TypeExpression(node))
                 : VisitNode(cbNode, store.TypeExpression(node))
                 ?? VisitNode(cbNode, store.Name(node)))
-                ?? (store.Comment(node) is string
+                ?? (store.Comment(node).IsText
                 ? null
-                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
+                : VisitNodes(store, cbNode, cbNodes, store.Comment(node).List));
             case SyntaxKind.JSDocAuthorTag:
                 return VisitNode(cbNode, store.TagName(node))
-                ?? (store.Comment(node) is string
+                ?? (store.Comment(node).IsText
                 ? null
-                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
+                : VisitNodes(store, cbNode, cbNodes, store.Comment(node).List));
             case SyntaxKind.JSDocImplementsTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? VisitNode(cbNode, store.Class(node))
-                ?? (store.Comment(node) is string
+                ?? (store.Comment(node).IsText
                 ? null
-                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
+                : VisitNodes(store, cbNode, cbNodes, store.Comment(node).List));
             case SyntaxKind.JSDocAugmentsTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? VisitNode(cbNode, store.Class(node))
-                ?? (store.Comment(node) is string
+                ?? (store.Comment(node).IsText
                 ? null
-                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
+                : VisitNodes(store, cbNode, cbNodes, store.Comment(node).List));
             case SyntaxKind.JSDocTemplateTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? VisitNode(cbNode, store.Constraint(node))
                 ?? VisitNodes(store, cbNode, cbNodes, store.TypeParameters(node))
-                ?? (store.Comment(node) is string
+                ?? (store.Comment(node).IsText
                 ? null
-                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
+                : VisitNodes(store, cbNode, cbNodes, store.Comment(node).List));
             case SyntaxKind.JSDocTypedefTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? ((!store.TypeExpression(node).IsNone && store.Kind(store.TypeExpression(node)) == SyntaxKind.JSDocTypeExpression)
                 ? VisitNode(cbNode, store.TypeExpression(node))
                 ?? VisitNode(cbNode, store.FullName(node))
-                ?? (store.Comment(node) is string
+                ?? (store.Comment(node).IsText
                 ? null
-                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))))
+                : VisitNodes(store, cbNode, cbNodes, store.Comment(node).List))
                 : VisitNode(cbNode, store.FullName(node))
                 ?? VisitNode(cbNode, store.TypeExpression(node))
-                ?? (store.Comment(node) is string
+                ?? (store.Comment(node).IsText
                 ? null
-                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node)))));
+                : VisitNodes(store, cbNode, cbNodes, store.Comment(node).List)));
             case SyntaxKind.JSDocCallbackTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? VisitNode(cbNode, store.FullName(node))
                 ?? VisitNode(cbNode, store.TypeExpression(node))
-                ?? (store.Comment(node) is string
+                ?? (store.Comment(node).IsText
                 ? null
-                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
+                : VisitNodes(store, cbNode, cbNodes, store.Comment(node).List));
             case SyntaxKind.JSDocReturnTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? VisitNode(cbNode, store.TypeExpression(node))
-                ?? (store.Comment(node) is string
+                ?? (store.Comment(node).IsText
                 ? null
-                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
+                : VisitNodes(store, cbNode, cbNodes, store.Comment(node).List));
             case SyntaxKind.JSDocTypeTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? VisitNode(cbNode, store.TypeExpression(node))
-                ?? (store.Comment(node) is string
+                ?? (store.Comment(node).IsText
                 ? null
-                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
+                : VisitNodes(store, cbNode, cbNodes, store.Comment(node).List));
             case SyntaxKind.JSDocThisTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? VisitNode(cbNode, store.TypeExpression(node))
-                ?? (store.Comment(node) is string
+                ?? (store.Comment(node).IsText
                 ? null
-                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
+                : VisitNodes(store, cbNode, cbNodes, store.Comment(node).List));
             case SyntaxKind.JSDocEnumTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? VisitNode(cbNode, store.TypeExpression(node))
-                ?? (store.Comment(node) is string
+                ?? (store.Comment(node).IsText
                 ? null
-                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
+                : VisitNodes(store, cbNode, cbNodes, store.Comment(node).List));
             case SyntaxKind.JSDocSatisfiesTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? VisitNode(cbNode, store.TypeExpression(node))
-                ?? (store.Comment(node) is string
+                ?? (store.Comment(node).IsText
                 ? null
-                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
+                : VisitNodes(store, cbNode, cbNodes, store.Comment(node).List));
             case SyntaxKind.JSDocThrowsTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? VisitNode(cbNode, store.TypeExpression(node))
-                ?? (store.Comment(node) is string
+                ?? (store.Comment(node).IsText
                 ? null
-                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
+                : VisitNodes(store, cbNode, cbNodes, store.Comment(node).List));
             case SyntaxKind.JSDocOverloadTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? VisitNode(cbNode, store.TypeExpression(node))
-                ?? (store.Comment(node) is string
+                ?? (store.Comment(node).IsText
                 ? null
-                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
+                : VisitNodes(store, cbNode, cbNodes, store.Comment(node).List));
             case SyntaxKind.JSDocSignature:
                 return ForEachElement(store.JSDocSignatureTypeParameters(node), cbNode)
                 ?? ForEachElement(store.JSDocSignatureParameters(node), cbNode)
@@ -651,52 +651,52 @@ internal static partial class NodeVisitor
                 return ForEachElement(store.JsDocPropertyTags(node), cbNode);
             case SyntaxKind.JSDocTag:
                 return VisitNode(cbNode, store.TagName(node))
-                ?? (store.Comment(node) is string
+                ?? (store.Comment(node).IsText
                 ? null
-                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
+                : VisitNodes(store, cbNode, cbNodes, store.Comment(node).List));
             case SyntaxKind.JSDocClassTag:
                 return VisitNode(cbNode, store.TagName(node))
-                ?? (store.Comment(node) is string
+                ?? (store.Comment(node).IsText
                 ? null
-                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
+                : VisitNodes(store, cbNode, cbNodes, store.Comment(node).List));
             case SyntaxKind.JSDocPublicTag:
                 return VisitNode(cbNode, store.TagName(node))
-                ?? (store.Comment(node) is string
+                ?? (store.Comment(node).IsText
                 ? null
-                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
+                : VisitNodes(store, cbNode, cbNodes, store.Comment(node).List));
             case SyntaxKind.JSDocPrivateTag:
                 return VisitNode(cbNode, store.TagName(node))
-                ?? (store.Comment(node) is string
+                ?? (store.Comment(node).IsText
                 ? null
-                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
+                : VisitNodes(store, cbNode, cbNodes, store.Comment(node).List));
             case SyntaxKind.JSDocProtectedTag:
                 return VisitNode(cbNode, store.TagName(node))
-                ?? (store.Comment(node) is string
+                ?? (store.Comment(node).IsText
                 ? null
-                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
+                : VisitNodes(store, cbNode, cbNodes, store.Comment(node).List));
             case SyntaxKind.JSDocReadonlyTag:
                 return VisitNode(cbNode, store.TagName(node))
-                ?? (store.Comment(node) is string
+                ?? (store.Comment(node).IsText
                 ? null
-                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
+                : VisitNodes(store, cbNode, cbNodes, store.Comment(node).List));
             case SyntaxKind.JSDocDeprecatedTag:
                 return VisitNode(cbNode, store.TagName(node))
-                ?? (store.Comment(node) is string
+                ?? (store.Comment(node).IsText
                 ? null
-                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
+                : VisitNodes(store, cbNode, cbNodes, store.Comment(node).List));
             case SyntaxKind.JSDocOverrideTag:
                 return VisitNode(cbNode, store.TagName(node))
-                ?? (store.Comment(node) is string
+                ?? (store.Comment(node).IsText
                 ? null
-                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
+                : VisitNodes(store, cbNode, cbNodes, store.Comment(node).List));
             case SyntaxKind.JSDocImportTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? VisitNode(cbNode, store.ImportClause(node))
                 ?? VisitNode(cbNode, store.ModuleSpecifier(node))
                 ?? VisitNode(cbNode, store.Attributes(node))
-                ?? (store.Comment(node) is string
+                ?? (store.Comment(node).IsText
                 ? null
-                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
+                : VisitNodes(store, cbNode, cbNodes, store.Comment(node).List));
             case SyntaxKind.PartiallyEmittedExpression:
                 return VisitNode(cbNode, store.Expression(node));
             default:
@@ -727,9 +727,6 @@ internal static partial class NodeVisitor
         }
         return null;
     }
-
-    // A NodeArray held in an object slot (string | NodeArray)
-    private static NodeList AsList(object? value) => value is NodeList list ? list : default;
 
     // core.ts forEach(array, callback): every element through cbNode, also when cbNodes is given
     private static T? ForEachElement<T>(IReadOnlyList<Node>? array, Func<Node, T?> cbNode) where T : class

@@ -94,7 +94,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateJsxText(string text, bool? containsOnlyTriviaWhiteSpaces = null)
+    internal Node CreateJsxText(TextRef text, bool? containsOnlyTriviaWhiteSpaces = null)
     {
         var node = CreateBaseNode(SyntaxKind.JsxText);
         store.SetText(node, text);

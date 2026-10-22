@@ -164,7 +164,7 @@ internal sealed partial class Parser
         int tagsEnd = 0;
         int? linkEnd = null;
         int? commentsPos = null;
-        List<string> comments = [];
+        List<TextRef> comments = [];
         var parts = store.BeginList();
 
         // Initially we can parse out a tag.  We also have seen a starting asterisk.
@@ -203,12 +203,12 @@ internal sealed partial class Parser
                     margin = null;
                     break;
                 case SyntaxKind.NewLineTrivia:
-                    comments.Add(scanner.GetTokenText());
+                    comments.Add(scanner.GetTokenTextRef());
                     state = JSDocState.BeginningOfLine;
                     indent = 0;
                     break;
                 case SyntaxKind.AsteriskToken:
-                    var asterisk = scanner.GetTokenText();
+                    var asterisk = scanner.GetTokenTextRef();
                     if (state == JSDocState.SawAsterisk)
                     {
                         // If we've already seen an asterisk, then we can no longer parse a tag on this line
@@ -226,7 +226,7 @@ internal sealed partial class Parser
                 case SyntaxKind.WhitespaceTrivia:
                     Debug.Assert(state != JSDocState.SavingComments, "whitespace shouldn't come from the scanner while saving top-level comment text");
                     // only collect whitespace if we're already saving comments or have just crossed the comment indent margin
-                    var whitespace = scanner.GetTokenText();
+                    var whitespace = scanner.GetTokenTextRef();
                     if (margin != null && indent + whitespace.Length > margin.Value)
                     {
                         comments.Add(JsSlice(whitespace, margin.Value - indent));
@@ -238,7 +238,7 @@ internal sealed partial class Parser
                     break;
                 case SyntaxKind.JSDocCommentTextToken:
                     state = JSDocState.SavingComments;
-                    PushComment(scanner.GetTokenValue());
+                    PushComment(scanner.GetTokenValueRef());
                     break;
                 case SyntaxKind.OpenBraceToken:
                     state = JSDocState.SavingComments;
@@ -251,10 +251,10 @@ internal sealed partial class Parser
                         {
                             RemoveLeadingNewlines(comments);
                         }
-                        var text = FinishNode(factory.CreateJSDocText(string.Concat(comments)), linkEnd ?? start, commentEnd);
+                        var text = FinishNode(factory.CreateJSDocText(JoinTexts(comments)), linkEnd ?? start, commentEnd);
                         store.Push(parts, text);
                         store.Push(parts, link);
-                        comments = [];
+                        comments.Clear(); // (TypeScript: `comments = []`)
                         linkEnd = scanner.GetTokenEnd();
                         break;
                     }
@@ -265,7 +265,7 @@ internal sealed partial class Parser
                     // wasn't a tag, we can no longer parse a tag on this line until we hit the next
                     // line break.
                     state = JSDocState.SavingComments;
-                    PushComment(scanner.GetTokenText());
+                    PushComment(scanner.GetTokenTextRef());
                     break;
             }
             if (exitLoop)
@@ -281,7 +281,7 @@ internal sealed partial class Parser
                 NextTokenJSDoc();
             }
         }
-        var trimmedComments = JsTrimEnd(string.Concat(comments));
+        var trimmedComments = TrimEnd(JoinTexts(comments));
         // (Track O: the tags are turned into a NodeArray before the last part is pushed, not after: `tags` was opened
         // after `parts` and is finished first, so both lists are built at the top of the scratch stack. Creating a
         // list creates no node, so the order of the nodes is TypeScript's.)
@@ -295,7 +295,7 @@ internal sealed partial class Parser
         {
             Debug.Assert(commentsPos != null, "having parsed tags implies that the end of the comment span should be set");
         }
-        object? comment;
+        TextOrList comment;
         if (store.Length(parts) != 0)
         {
             comment = CreateNodeArray(parts, start, commentsPos);
@@ -303,11 +303,11 @@ internal sealed partial class Parser
         else
         {
             store.DiscardList(parts);
-            comment = trimmedComments.Length != 0 ? trimmedComments : null;
+            comment = trimmedComments.Length != 0 ? trimmedComments : TextOrList.None;
         }
         return FinishNode(factory.CreateJSDocComment(comment, tagsArray), start, end);
 
-        void PushComment(string text)
+        void PushComment(TextRef text)
         {
             if (margin is null or 0)
             {
@@ -318,19 +318,19 @@ internal sealed partial class Parser
         }
     }
 
-    private static void RemoveLeadingNewlines(List<string> comments)
+    private void RemoveLeadingNewlines(List<TextRef> comments)
     {
-        while (comments.Count != 0 && (comments[0] == "\n" || comments[0] == "\r"))
+        while (comments.Count != 0 && (texts.Equals(comments[0], "\n") || texts.Equals(comments[0], "\r")))
         {
             comments.RemoveAt(0);
         }
     }
 
-    private static void RemoveTrailingWhitespace(List<string> comments)
+    private void RemoveTrailingWhitespace(List<TextRef> comments)
     {
         while (comments.Count != 0)
         {
-            var trimmed = JsTrimEnd(comments[^1]);
+            var trimmed = TrimEnd(comments[^1]);
             if (trimmed.Length == 0)
             {
                 comments.RemoveAt(comments.Count - 1);
@@ -379,27 +379,28 @@ internal sealed partial class Parser
         }
     }
 
-    private string SkipWhitespaceOrAsterisk()
+    private TextRef SkipWhitespaceOrAsterisk()
     {
         if (Token() == SyntaxKind.WhitespaceTrivia || Token() == SyntaxKind.NewLineTrivia)
         {
             if (LookAhead(static p => p.IsNextNonwhitespaceTokenEndOfFile()))
             {
-                return ""; // Don't skip whitespace prior to EoF (or end of comment) - that shouldn't be included in any node's range
+                return TextRef.Empty; // Don't skip whitespace prior to EoF (or end of comment) - that shouldn't be included in any node's range
             }
         }
 
         var precedingLineBreak = scanner.HasPrecedingLineBreak();
         var seenLineBreak = false;
-        var indentText = "";
+        var indentText = TextRef.Empty;
         while ((precedingLineBreak && Token() == SyntaxKind.AsteriskToken) || Token() == SyntaxKind.WhitespaceTrivia || Token() == SyntaxKind.NewLineTrivia)
         {
-            indentText += scanner.GetTokenText();
+            // (Track O: adjacent tokens, so the concatenation is a span of the text.)
+            indentText = texts.Concat(indentText, scanner.GetTokenTextRef());
             if (Token() == SyntaxKind.NewLineTrivia)
             {
                 precedingLineBreak = true;
                 seenLineBreak = true;
-                indentText = "";
+                indentText = TextRef.Empty;
             }
             else if (Token() == SyntaxKind.AsteriskToken)
             {
@@ -407,7 +408,7 @@ internal sealed partial class Parser
             }
             NextTokenJSDoc();
         }
-        return seenLineBreak ? indentText : "";
+        return seenLineBreak ? indentText : TextRef.Empty;
     }
 
     private Node ParseTag(int margin)
@@ -420,7 +421,7 @@ internal sealed partial class Parser
         var indentText = SkipWhitespaceOrAsterisk();
 
         Node tag;
-        switch ((string)store.EscapedText(tagName)!)
+        switch (texts.Span(store.EscapedText(tagName)))
         {
             case "author":
                 tag = ParseAuthorTag(start, tagName, margin, indentText);
@@ -504,7 +505,7 @@ internal sealed partial class Parser
         return tag;
     }
 
-    private object? ParseTrailingTagComments(int pos, int end, int margin, string indentText)
+    private TextOrList ParseTrailingTagComments(int pos, int end, int margin, TextRef indentText)
     {
         // some tags, like typedef and callback, have already parsed their comments earlier
         if (indentText.Length == 0)
@@ -515,15 +516,15 @@ internal sealed partial class Parser
     }
 
     /// <returns>A string, a NodeArray of JSDocComment, or null (TypeScript: `string | NodeArray&lt;JSDocComment&gt; | undefined`).</returns>
-    private object? ParseTagComments(int indent, string? initialMargin = null)
+    private TextOrList ParseTagComments(int indent, TextRef initialMargin = default)
     {
         var commentsPos = GetNodePos();
-        List<string> comments = [];
+        List<TextRef> comments = [];
         var parts = store.BeginList();
         int? linkEnd = null;
         var state = JSDocState.BeginningOfLine;
         int? margin = null;
-        if (initialMargin != null)
+        if (!initialMargin.IsNone)
         {
             // jump straight to saving comments if there is some initial indentation
             if (initialMargin.Length != 0)
@@ -541,7 +542,7 @@ internal sealed partial class Parser
                 case SyntaxKind.NewLineTrivia:
                     state = JSDocState.BeginningOfLine;
                     // don't use pushComment here because we want to keep the margin unchanged
-                    comments.Add(scanner.GetTokenText());
+                    comments.Add(scanner.GetTokenTextRef());
                     indent = 0;
                     break;
                 case SyntaxKind.AtToken:
@@ -554,7 +555,7 @@ internal sealed partial class Parser
                     break;
                 case SyntaxKind.WhitespaceTrivia:
                     Debug.Assert(state != JSDocState.SavingComments && state != JSDocState.SavingBackticks, "whitespace shouldn't come from the scanner while saving comment text");
-                    var whitespace = scanner.GetTokenText();
+                    var whitespace = scanner.GetTokenTextRef();
                     // if the whitespace crosses the margin, take only the whitespace that passes the margin
                     if (margin != null && indent + whitespace.Length > margin.Value)
                     {
@@ -570,15 +571,15 @@ internal sealed partial class Parser
                     var link = ParseJSDocLink(linkStart);
                     if (!link.IsNone)
                     {
-                        var text = FinishNode(factory.CreateJSDocText(string.Concat(comments)), linkEnd ?? commentsPos, commentEnd);
+                        var text = FinishNode(factory.CreateJSDocText(JoinTexts(comments)), linkEnd ?? commentsPos, commentEnd);
                         store.Push(parts, text);
                         store.Push(parts, link);
-                        comments = [];
+                        comments.Clear(); // (TypeScript: `comments = []`)
                         linkEnd = scanner.GetTokenEnd();
                     }
                     else
                     {
-                        PushComment(scanner.GetTokenText());
+                        PushComment(scanner.GetTokenTextRef());
                     }
                     break;
                 case SyntaxKind.BacktickToken:
@@ -590,14 +591,14 @@ internal sealed partial class Parser
                     {
                         state = JSDocState.SavingBackticks;
                     }
-                    PushComment(scanner.GetTokenText());
+                    PushComment(scanner.GetTokenTextRef());
                     break;
                 case SyntaxKind.JSDocCommentTextToken:
                     if (state != JSDocState.SavingBackticks)
                     {
                         state = JSDocState.SavingComments; // leading identifiers start recording as well
                     }
-                    PushComment(scanner.GetTokenValue());
+                    PushComment(scanner.GetTokenValueRef());
                     break;
                 case SyntaxKind.AsteriskToken:
                     if (state == JSDocState.BeginningOfLine)
@@ -615,7 +616,7 @@ internal sealed partial class Parser
                     {
                         state = JSDocState.SavingComments; // leading identifiers start recording as well
                     }
-                    PushComment(scanner.GetTokenText());
+                    PushComment(scanner.GetTokenTextRef());
                     break;
             }
             if (exitLoop)
@@ -633,7 +634,7 @@ internal sealed partial class Parser
         }
 
         RemoveLeadingNewlines(comments);
-        var trimmedComments = JsTrimEnd(string.Concat(comments));
+        var trimmedComments = TrimEnd(JoinTexts(comments));
         if (store.Length(parts) != 0)
         {
             if (trimmedComments.Length != 0)
@@ -648,9 +649,9 @@ internal sealed partial class Parser
         {
             return trimmedComments;
         }
-        return null;
+        return TextOrList.None;
 
-        void PushComment(string text)
+        void PushComment(TextRef text)
         {
             if (margin is null or 0)
             {
@@ -671,13 +672,13 @@ internal sealed partial class Parser
         NextTokenJSDoc(); // start at token after link, then skip any whitespace
         SkipWhitespace();
         var name = ParseJSDocLinkName();
-        List<string> text = [];
+        List<TextRef> text = [];
         while (Token() != SyntaxKind.CloseBraceToken && Token() != SyntaxKind.NewLineTrivia && Token() != SyntaxKind.EndOfFileToken)
         {
-            text.Add(scanner.GetTokenText());
+            text.Add(scanner.GetTokenTextRef());
             NextTokenJSDoc();
         }
-        var joined = string.Concat(text);
+        var joined = JoinTexts(text);
         Node link = linkType == "link" ? factory.CreateJSDocLink(name, joined)
             : linkType == "linkcode" ? factory.CreateJSDocLinkCode(name, joined)
             : factory.CreateJSDocLinkPlain(name, joined);
@@ -714,8 +715,9 @@ internal sealed partial class Parser
             && NextTokenJSDoc() == SyntaxKind.AtToken
             && Scanner.TokenIsIdentifierOrKeyword(NextTokenJSDoc()))
         {
-            var kind = scanner.GetTokenValue();
-            if (IsJSDocLinkTag(kind))
+            // (Track O: the matching constant, not the token value, which a rolled-back lookahead may discard.)
+            var kind = JSDocLinkTag(scanner.GetTokenValueRef());
+            if (kind != null)
             {
                 return kind;
             }
@@ -723,12 +725,24 @@ internal sealed partial class Parser
         return null;
     }
 
-    private static bool IsJSDocLinkTag(string kind)
+    private bool IsJSDocLinkTag(TextRef kind)
     {
-        return kind == "link" || kind == "linkcode" || kind == "linkplain";
+        return JSDocLinkTag(kind) != null;
     }
 
-    private Node ParseUnknownTag(int start, Node tagName, int indent, string indentText)
+    // Track O (O5a): the link tag name a text equals ("link", "linkcode" or "linkplain"), or null.
+    private string? JSDocLinkTag(TextRef kind)
+    {
+        return texts.Span(kind) switch
+        {
+            "link" => "link",
+            "linkcode" => "linkcode",
+            "linkplain" => "linkplain",
+            _ => null,
+        };
+    }
+
+    private Node ParseUnknownTag(int start, Node tagName, int indent, TextRef indentText)
     {
         return FinishNode(factory.CreateJSDocUnknownTag(tagName, ParseTrailingTagComments(start, GetNodePos(), indent, indentText)), start);
     }
@@ -798,7 +812,7 @@ internal sealed partial class Parser
             case SyntaxKind.ArrayType:
                 return IsObjectOrObjectArrayTypeReference(store, store.ElementType(node));
             default:
-                return FactoryNodeTests.IsTypeReferenceNode(store, node) && FactoryNodeTests.IsIdentifier(store, store.TypeName(node)) && (string)store.EscapedText(store.TypeName(node))! == "Object" && store.TypeArguments(node).IsNone;
+                return FactoryNodeTests.IsTypeReferenceNode(store, node) && FactoryNodeTests.IsIdentifier(store, store.TypeName(node)) && store.Texts.Equals(store.EscapedText(store.TypeName(node)), "Object") && store.TypeArguments(node).IsNone;
         }
     }
 
@@ -860,63 +874,63 @@ internal sealed partial class Parser
         return default;
     }
 
-    private Node ParseReturnTag(int start, Node tagName, int indent, string indentText)
+    private Node ParseReturnTag(int start, Node tagName, int indent, TextRef indentText)
     {
         if (hasJsDocTags && Core.Some(store.Nodes(jsDocTags), ((a0) => FactoryNodeTests.IsJSDocReturnTag(store, a0))))
         {
-            ParseErrorAt(store.Pos(tagName), scanner.GetTokenStart(), Diagnostics._0_tag_already_specified, UtilitiesPublic.UnescapeLeadingUnderscores((string)store.EscapedText(tagName)!));
+            ParseErrorAt(store.Pos(tagName), scanner.GetTokenStart(), Diagnostics._0_tag_already_specified, texts.GetString(UtilitiesPublic.UnescapeLeadingUnderscores(texts, store.EscapedText(tagName))));
         }
 
         var typeExpression = TryParseTypeExpression();
         return FinishNode(factory.CreateJSDocReturnTag(tagName, typeExpression, ParseTrailingTagComments(start, GetNodePos(), indent, indentText)), start);
     }
 
-    private Node ParseTypeTag(int start, Node tagName, int? indent = null, string? indentText = null)
+    private Node ParseTypeTag(int start, Node tagName, int? indent = null, TextRef indentText = default)
     {
         if (hasJsDocTags && Core.Some(store.Nodes(jsDocTags), ((a0) => FactoryNodeTests.IsJSDocTypeTag(store, a0))))
         {
-            ParseErrorAt(store.Pos(tagName), scanner.GetTokenStart(), Diagnostics._0_tag_already_specified, UtilitiesPublic.UnescapeLeadingUnderscores((string)store.EscapedText(tagName)!));
+            ParseErrorAt(store.Pos(tagName), scanner.GetTokenStart(), Diagnostics._0_tag_already_specified, texts.GetString(UtilitiesPublic.UnescapeLeadingUnderscores(texts, store.EscapedText(tagName))));
         }
 
         var typeExpression = ParseJSDocTypeExpression(/*mayOmitBraces*/ true);
-        var comments = indent != null && indentText != null ? ParseTrailingTagComments(start, GetNodePos(), indent.Value, indentText) : null;
+        var comments = indent != null && !indentText.IsNone ? ParseTrailingTagComments(start, GetNodePos(), indent.Value, indentText) : TextOrList.None;
         return FinishNode(factory.CreateJSDocTypeTag(tagName, typeExpression, comments), start);
     }
 
-    private Node ParseSeeTag(int start, Node tagName, int? indent = null, string? indentText = null)
+    private Node ParseSeeTag(int start, Node tagName, int? indent = null, TextRef indentText = default)
     {
         var isMarkdownOrJSDocLink = Token() == SyntaxKind.OpenBracketToken
-            || LookAhead(static p => p.NextTokenJSDoc() == SyntaxKind.AtToken && Scanner.TokenIsIdentifierOrKeyword(p.NextTokenJSDoc()) && IsJSDocLinkTag(p.scanner.GetTokenValue()));
+            || LookAhead(static p => p.NextTokenJSDoc() == SyntaxKind.AtToken && Scanner.TokenIsIdentifierOrKeyword(p.NextTokenJSDoc()) && p.IsJSDocLinkTag(p.scanner.GetTokenValueRef()));
         var nameExpression = isMarkdownOrJSDocLink ? default : ParseJSDocNameReference();
-        var comments = indent != null && indentText != null ? ParseTrailingTagComments(start, GetNodePos(), indent.Value, indentText) : null;
+        var comments = indent != null && !indentText.IsNone ? ParseTrailingTagComments(start, GetNodePos(), indent.Value, indentText) : TextOrList.None;
         return FinishNode(factory.CreateJSDocSeeTag(tagName, nameExpression, comments), start);
     }
 
-    private Node ParseThrowsTag(int start, Node tagName, int indent, string indentText)
+    private Node ParseThrowsTag(int start, Node tagName, int indent, TextRef indentText)
     {
         var typeExpression = TryParseTypeExpression();
         var comment = ParseTrailingTagComments(start, GetNodePos(), indent, indentText);
         return FinishNode(factory.CreateJSDocThrowsTag(tagName, typeExpression, comment), start);
     }
 
-    private Node ParseAuthorTag(int start, Node tagName, int indent, string indentText)
+    private Node ParseAuthorTag(int start, Node tagName, int indent, TextRef indentText)
     {
         var commentStart = GetNodePos();
         var textOnly = ParseAuthorNameAndEmail();
         var commentEnd = scanner.GetTokenFullStart();
         var comments = ParseTrailingTagComments(start, commentEnd, indent, indentText);
-        if (comments == null)
+        if (comments.IsNone)
         {
             commentEnd = scanner.GetTokenFullStart();
         }
-        object allParts;
-        if (comments is not string commentText)
+        TextOrList allParts;
+        if (!comments.IsText)
         {
             // TypeScript: `createNodeArray(concatenate([finishNode(textOnly, commentStart, commentEnd)], comments), commentStart)`
             var first = FinishNode(textOnly, commentStart, commentEnd);
             var elements = store.BeginList();
             store.Push(elements, first);
-            if (comments is NodeList commentParts && store.Length(commentParts) != 0)
+            if (comments.List is var commentParts && !commentParts.IsNone && store.Length(commentParts) != 0)
             {
                 foreach (var part in store.Nodes(commentParts))
                 {
@@ -927,14 +941,14 @@ internal sealed partial class Parser
         }
         else
         {
-            allParts = store.Text(textOnly) + commentText;
+            allParts = texts.Concat(store.Text(textOnly), comments.Text);
         }
         return FinishNode(factory.CreateJSDocAuthorTag(tagName, allParts), start);
     }
 
     private Node ParseAuthorNameAndEmail()
     {
-        List<string> comments = [];
+        List<TextRef> comments = [];
         var inEmail = false;
         var token = scanner.GetToken();
         while (token != SyntaxKind.EndOfFileToken && token != SyntaxKind.NewLineTrivia)
@@ -949,30 +963,30 @@ internal sealed partial class Parser
             }
             else if (token == SyntaxKind.GreaterThanToken && inEmail)
             {
-                comments.Add(scanner.GetTokenText());
+                comments.Add(scanner.GetTokenTextRef());
                 scanner.ResetTokenState(scanner.GetTokenEnd());
                 break;
             }
-            comments.Add(scanner.GetTokenText());
+            comments.Add(scanner.GetTokenTextRef());
             token = NextTokenJSDoc();
         }
 
-        return factory.CreateJSDocText(string.Concat(comments));
+        return factory.CreateJSDocText(JoinTexts(comments));
     }
 
-    private Node ParseImplementsTag(int start, Node tagName, int margin, string indentText)
+    private Node ParseImplementsTag(int start, Node tagName, int margin, TextRef indentText)
     {
         var className = ParseExpressionWithTypeArgumentsForAugments();
         return FinishNode(factory.CreateJSDocImplementsTag(tagName, className, ParseTrailingTagComments(start, GetNodePos(), margin, indentText)), start);
     }
 
-    private Node ParseAugmentsTag(int start, Node tagName, int margin, string indentText)
+    private Node ParseAugmentsTag(int start, Node tagName, int margin, TextRef indentText)
     {
         var className = ParseExpressionWithTypeArgumentsForAugments();
         return FinishNode(factory.CreateJSDocAugmentsTag(tagName, className, ParseTrailingTagComments(start, GetNodePos(), margin, indentText)), start);
     }
 
-    private Node ParseSatisfiesTag(int start, Node tagName, int margin, string indentText)
+    private Node ParseSatisfiesTag(int start, Node tagName, int margin, TextRef indentText)
     {
         var typeExpression = ParseJSDocTypeExpression(/*mayOmitBraces*/ false);
         // (TypeScript: `margin !== undefined && indentText !== undefined ? ... : undefined`; both are always defined.)
@@ -980,7 +994,7 @@ internal sealed partial class Parser
         return FinishNode(factory.CreateJSDocSatisfiesTag(tagName, typeExpression, comments), start);
     }
 
-    private Node ParseImportTag(int start, Node tagName, int margin, string indentText)
+    private Node ParseImportTag(int start, Node tagName, int margin, TextRef indentText)
     {
         var afterImportTagPos = scanner.GetTokenFullStart();
 
@@ -1029,26 +1043,26 @@ internal sealed partial class Parser
         return node;
     }
 
-    private Node ParseSimpleTag(int start, Func<NodeFactory, Node, object?, Node> createTag, Node tagName, int margin, string indentText)
+    private Node ParseSimpleTag(int start, Func<NodeFactory, Node, TextOrList, Node> createTag, Node tagName, int margin, TextRef indentText)
     {
         return FinishNode(createTag(factory, tagName, ParseTrailingTagComments(start, GetNodePos(), margin, indentText)), start);
     }
 
-    private Node ParseThisTag(int start, Node tagName, int margin, string indentText)
+    private Node ParseThisTag(int start, Node tagName, int margin, TextRef indentText)
     {
         var typeExpression = ParseJSDocTypeExpression(/*mayOmitBraces*/ true);
         SkipWhitespace();
         return FinishNode(factory.CreateJSDocThisTag(tagName, typeExpression, ParseTrailingTagComments(start, GetNodePos(), margin, indentText)), start);
     }
 
-    private Node ParseEnumTag(int start, Node tagName, int margin, string indentText)
+    private Node ParseEnumTag(int start, Node tagName, int margin, TextRef indentText)
     {
         var typeExpression = ParseJSDocTypeExpression(/*mayOmitBraces*/ true);
         SkipWhitespace();
         return FinishNode(factory.CreateJSDocEnumTag(tagName, typeExpression, ParseTrailingTagComments(start, GetNodePos(), margin, indentText)), start);
     }
 
-    private Node ParseTypedefTag(int start, Node tagName, int indent, string indentText)
+    private Node ParseTypedefTag(int start, Node tagName, int indent, TextRef indentText)
     {
         Node typeExpression = TryParseTypeExpression();
         SkipWhitespaceOrAsterisk();
@@ -1115,11 +1129,14 @@ internal sealed partial class Parser
         }
 
         // Only include the characters between the name end and the next token if a comment was actually parsed out - otherwise it's just whitespace
-        end = end is not null and not 0 || comment != null ?
+        end = end is not null and not 0 || !comment.IsNone ?
             GetNodePos() :
             store.End(fullName.IsNone ? (typeExpression.IsNone ? tagName : typeExpression) : fullName);
 
-        comment ??= ParseTrailingTagComments(start, end.Value, indent, indentText);
+        if (comment.IsNone)
+        {
+            comment = ParseTrailingTagComments(start, end.Value, indent, indentText);
+        }
 
         var typedefTag = factory.CreateJSDocTypedefTag(tagName, typeExpression, fullName, comment);
         return FinishNode(typedefTag, start, end);
@@ -1187,24 +1204,30 @@ internal sealed partial class Parser
         return FinishNode(factory.CreateJSDocSignature(/*typeParameters*/ default, parameters, returnTag), start);
     }
 
-    private Node ParseCallbackTag(int start, Node tagName, int indent, string indentText)
+    private Node ParseCallbackTag(int start, Node tagName, int indent, TextRef indentText)
     {
         var fullName = ParseJSDocTypeNameWithNamespace();
         SkipWhitespace();
         var comment = ParseTagComments(indent);
         var typeExpression = ParseJSDocSignature(start, indent);
-        comment ??= ParseTrailingTagComments(start, GetNodePos(), indent, indentText);
-        var end = comment != null ? GetNodePos() : store.End(typeExpression);
+        if (comment.IsNone)
+        {
+            comment = ParseTrailingTagComments(start, GetNodePos(), indent, indentText);
+        }
+        var end = !comment.IsNone ? GetNodePos() : store.End(typeExpression);
         return FinishNode(factory.CreateJSDocCallbackTag(tagName, typeExpression, fullName, comment), start, end);
     }
 
-    private Node ParseOverloadTag(int start, Node tagName, int indent, string indentText)
+    private Node ParseOverloadTag(int start, Node tagName, int indent, TextRef indentText)
     {
         SkipWhitespace();
         var comment = ParseTagComments(indent);
         var typeExpression = ParseJSDocSignature(start, indent);
-        comment ??= ParseTrailingTagComments(start, GetNodePos(), indent, indentText);
-        var end = comment != null ? GetNodePos() : store.End(typeExpression);
+        if (comment.IsNone)
+        {
+            comment = ParseTrailingTagComments(start, GetNodePos(), indent, indentText);
+        }
+        var end = !comment.IsNone ? GetNodePos() : store.End(typeExpression);
         return FinishNode(factory.CreateJSDocOverloadTag(tagName, typeExpression, comment), start, end);
     }
 
@@ -1212,7 +1235,7 @@ internal sealed partial class Parser
     {
         while (!FactoryNodeTests.IsIdentifier(store, a) || !FactoryNodeTests.IsIdentifier(store, b))
         {
-            if (!FactoryNodeTests.IsIdentifier(store, a) && !FactoryNodeTests.IsIdentifier(store, b) && (string)store.EscapedText(store.Right(a))! == (string)store.EscapedText(store.Right(b))!)
+            if (!FactoryNodeTests.IsIdentifier(store, a) && !FactoryNodeTests.IsIdentifier(store, b) && store.Texts.Equals(store.EscapedText(store.Right(a)), store.EscapedText(store.Right(b))))
             {
                 a = store.Left(a);
                 b = store.Left(b);
@@ -1222,7 +1245,7 @@ internal sealed partial class Parser
                 return false;
             }
         }
-        return (string)store.EscapedText(a)! == (string)store.EscapedText(b)!;
+        return store.Texts.Equals(store.EscapedText(a), store.EscapedText(b));
     }
 
     private Node ParseChildPropertyTag(int indent)
@@ -1289,7 +1312,7 @@ internal sealed partial class Parser
         var tagName = ParseJSDocIdentifierName();
         var indentText = SkipWhitespaceOrAsterisk();
         PropertyLikeParse t;
-        switch ((string)store.EscapedText(tagName)!)
+        switch (texts.Span(store.EscapedText(tagName)))
         {
             case "type":
                 return target == PropertyLikeParse.Property ? ParseTypeTag(start, tagName) : default;
@@ -1361,7 +1384,7 @@ internal sealed partial class Parser
         return CreateNodeArray(typeParameters, pos);
     }
 
-    private Node ParseTemplateTag(int start, Node tagName, int indent, string indentText)
+    private Node ParseTemplateTag(int start, Node tagName, int indent, TextRef indentText)
     {
         // The template tag looks like one of the following:
         //   @template T,U,V
@@ -1422,30 +1445,43 @@ internal sealed partial class Parser
         var start = scanner.GetTokenStart();
         var end = scanner.GetTokenEnd();
         var originalKeywordKind = Token();
-        var text = InternIdentifier(scanner.GetTokenValue());
+        var text = InternIdentifier(scanner.GetTokenValueRef());
         var result = FinishNode(factory.CreateIdentifier(text, originalKeywordKind), start, end);
         NextTokenJSDoc();
         return result;
     }
 
-    /// <summary>JavaScript's `s.slice(start)` with one argument (a negative start counts from the end).</summary>
-    private static string JsSlice(string s, int start)
+    /// <summary>JavaScript's `s.slice(start)` with one argument (a negative start counts from the end); Track O: a slice of the text value.</summary>
+    private static TextRef JsSlice(TextRef s, int start)
     {
+        var length = s.Length;
         if (start < 0)
         {
-            start = Math.Max(s.Length + start, 0);
+            start = Math.Max(length + start, 0);
         }
-        return start >= s.Length ? "" : start == 0 ? s : s[start..];
+        return start >= length ? TextRef.Empty : start == 0 ? s : s.Slice(start);
     }
 
-    /// <summary>JavaScript's String.prototype.trimEnd.</summary>
-    private static string JsTrimEnd(string s)
+    /// <summary>JavaScript's String.prototype.trimEnd; Track O: a slice of the text value.</summary>
+    private TextRef TrimEnd(TextRef s)
     {
-        var end = s.Length;
-        while (end > 0 && Utilities.IsJsWhiteSpaceOrLineTerminator(s[end - 1]))
+        var span = texts.Span(s);
+        var end = span.Length;
+        while (end > 0 && Utilities.IsJsWhiteSpaceOrLineTerminator(span[end - 1]))
         {
             end--;
         }
-        return end == s.Length ? s : s[..end];
+        return end == span.Length ? s : s.Slice(0, end);
+    }
+
+    /// <summary>`parts.join("")` (Track O: adjacent spans of the text stay one span; other parts go to the character arena).</summary>
+    private TextRef JoinTexts(List<TextRef> parts)
+    {
+        var value = new TextBuilder(texts);
+        foreach (var part in parts)
+        {
+            value.Append(part);
+        }
+        return value.Result();
     }
 }

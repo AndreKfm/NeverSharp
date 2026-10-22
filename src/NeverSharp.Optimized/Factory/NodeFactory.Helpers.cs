@@ -81,7 +81,7 @@ internal sealed partial class NodeFactory
     {
         return value switch
         {
-            string s => CreateStringLiteral(s),
+            string s => CreateStringLiteral(store.Texts.Add(s)),
             int i => CreateNumericLiteral(i),
             double d => CreateNumericLiteral(d),
             bool b => b ? CreateToken(SyntaxKind.TrueKeyword) : CreateToken(SyntaxKind.FalseKeyword),

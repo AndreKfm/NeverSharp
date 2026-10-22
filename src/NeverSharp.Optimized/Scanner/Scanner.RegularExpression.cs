@@ -205,7 +205,7 @@ internal sealed partial class Scanner
                             pos++;
                             var digitsStart = pos;
                             ScanDigits();
-                            var min = tokenValue!;
+                            var min = GetTokenValue();
                             if (!anyUnicodeModeOrNonAnnexB && min.Length == 0)
                             {
                                 isPreviousTermQuantifiable = true;
@@ -215,7 +215,7 @@ internal sealed partial class Scanner
                             {
                                 pos++;
                                 ScanDigits();
-                                var max = tokenValue!;
+                                var max = GetTokenValue();
                                 if (min.Length == 0)
                                 {
                                     if (max.Length != 0 || CharCodeChecked(pos) == (int)CharacterCodes.closeBrace)
@@ -397,7 +397,7 @@ internal sealed partial class Scanner
             {
                 var start = pos;
                 ScanDigits();
-                decimalEscapes = Core.Append(decimalEscapes, new DecimalEscape { Pos = start, End = pos, Value = JsNumber.FromString(tokenValue!) });
+                decimalEscapes = Core.Append(decimalEscapes, new DecimalEscape { Pos = start, End = pos, Value = JsNumber.FromString(GetTokenValue()) });
                 return true;
             }
             return false;
@@ -480,18 +480,18 @@ internal sealed partial class Scanner
             }
             else if (isReference)
             {
-                groupNameReferences = Core.Append(groupNameReferences, new GroupNameReference { Pos = tokenStart, End = pos, Name = tokenValue! });
+                groupNameReferences = Core.Append(groupNameReferences, new GroupNameReference { Pos = tokenStart, End = pos, Name = GetTokenValue() });
             }
-            else if (topNamedCapturingGroupsScope?.Has(tokenValue!) == true || SomeScopeHas(namedCapturingGroupsScopeStack, tokenValue!))
+            else if (topNamedCapturingGroupsScope?.Has(GetTokenValue()) == true || SomeScopeHas(namedCapturingGroupsScopeStack, GetTokenValue()))
             {
                 Error(Diagnostics.Named_capturing_groups_with_the_same_name_must_be_mutually_exclusive_to_each_other, tokenStart, pos - tokenStart);
             }
             else
             {
                 topNamedCapturingGroupsScope ??= new OrderedStringSet();
-                topNamedCapturingGroupsScope.Add(tokenValue!);
+                topNamedCapturingGroupsScope.Add(GetTokenValue());
                 groupSpecifiers ??= new OrderedStringSet();
-                groupSpecifiers.Add(tokenValue!);
+                groupSpecifiers.Add(GetTokenValue());
             }
         }
 

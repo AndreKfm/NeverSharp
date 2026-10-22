@@ -101,7 +101,9 @@ internal sealed partial class Parser : BaseNodeFactory
 
     private SyntaxKind currentToken;
     private int nodeCount;
-    private Dictionary<string, string> identifiers = null!;
+    // Track O (O5a): the texts of the parse (the store's): character arena and interned identifiers (TypeScript's
+    // `identifiers` map).
+    private TextTable texts = null!;
     private int identifierCount;
 
     // TODO(jakebailey): This type is a lie; this value actually contains the result
@@ -234,6 +236,7 @@ internal sealed partial class Parser : BaseNodeFactory
     {
         store = nodeStore;
         factory.store = nodeStore;
+        texts = nodeStore?.Texts!;
     }
 
     internal Node ParseSourceFile(
@@ -283,7 +286,6 @@ internal sealed partial class Parser : BaseNodeFactory
 
         parseDiagnostics = [];
         parsingContext = 0;
-        identifiers = new Dictionary<string, string>(StringComparer.Ordinal);
         identifierCount = 0;
         nodeCount = 0;
         sourceFlags = 0;
@@ -306,6 +308,7 @@ internal sealed partial class Parser : BaseNodeFactory
 
         // Initialize and prime the scanner before parsing the source elements.
         scanner.SetText(this.sourceText);
+        scanner.UseTexts(texts); // Track O: token values go to the parse's texts
         scanner.SetOnError(scanErrorCallback);
         scanner.SetScriptTarget(this.languageVersion);
         scanner.SetLanguageVariant(languageVariant);
@@ -332,7 +335,6 @@ internal sealed partial class Parser : BaseNodeFactory
         parseDiagnostics = null!;
         jsDocDiagnostics = null;
         parsingContext = 0;
-        identifiers = null!;
         notParenthesizedArrow = null;
         topLevel = true;
     }
@@ -364,7 +366,7 @@ internal sealed partial class Parser : BaseNodeFactory
         store.SetCommentDirectives(sourceFile, scanner.GetCommentDirectives());
         store.SetNodeCount(sourceFile, nodeCount);
         store.SetIdentifierCount(sourceFile, identifierCount);
-        store.SetIdentifiers(sourceFile, identifiers);
+        store.SetIdentifiers(sourceFile, texts);
         store.SetParseDiagnostics(sourceFile, Utilities.AttachFileToDiagnostics(store, parseDiagnostics, sourceFile));
         store.SetJsDocParsingMode(sourceFile, jsDocParsingMode);
         if (jsDocDiagnostics != null)
@@ -446,7 +448,7 @@ internal sealed partial class Parser : BaseNodeFactory
 
         void SetFields(Node sourceFile)
         {
-            store.SetText(sourceFile, sourceText);
+            store.SetSourceFileText(sourceFile, sourceText);
             store.SetBindDiagnostics(sourceFile, []);
             store.SetBindSuggestionDiagnostics(sourceFile, null);
             store.SetLanguageVersion(sourceFile, languageVersion);
@@ -989,7 +991,7 @@ internal sealed partial class Parser : BaseNodeFactory
         }
 
         // Otherwise, if this isn't a well-known keyword-like identifier, give the generic fallback message.
-        var expressionText = FactoryNodeTests.IsIdentifier(store, node) ? UtilitiesPublic.IdText(store, node) : null;
+        var expressionText = FactoryNodeTests.IsIdentifier(store, node) ? texts.GetString(UtilitiesPublic.IdText(store, node)) : null; // (Track O: a string for the error message)
         if (string.IsNullOrEmpty(expressionText) || !Scanner.IsIdentifierText(expressionText, languageVersion))
         {
             ParseErrorAtCurrentToken(Diagnostics._0_expected, Scanner.TokenToString(SyntaxKind.SemicolonToken));
@@ -1296,22 +1298,19 @@ internal sealed partial class Parser : BaseNodeFactory
         }
 
         var pos = GetNodePos();
-        var result = kind == SyntaxKind.Identifier ? factory.CreateIdentifier("", /*originalKeywordKind*/ null) :
-            UtilitiesPublic.IsTemplateLiteralKind(kind) ? factory.CreateTemplateLiteralLikeNode(kind, "", "", /*templateFlags*/ null) :
-            kind == SyntaxKind.NumericLiteral ? factory.CreateNumericLiteral("", /*numericLiteralFlags*/ null) :
-            kind == SyntaxKind.StringLiteral ? factory.CreateStringLiteral("", /*isSingleQuote*/ null) :
+        var result = kind == SyntaxKind.Identifier ? factory.CreateIdentifier(TextRef.Empty, /*originalKeywordKind*/ null) :
+            UtilitiesPublic.IsTemplateLiteralKind(kind) ? factory.CreateTemplateLiteralLikeNode(kind, TextRef.Empty, TextRef.Empty, /*templateFlags*/ null) :
+            kind == SyntaxKind.NumericLiteral ? factory.CreateNumericLiteral(TextRef.Empty, /*numericLiteralFlags*/ null) :
+            kind == SyntaxKind.StringLiteral ? factory.CreateStringLiteral(TextRef.Empty, /*isSingleQuote*/ null) :
             kind == SyntaxKind.MissingDeclaration ? factory.CreateMissingDeclaration() :
             factory.CreateToken(kind);
         return FinishNode(result, pos);
     }
 
-    private string InternIdentifier(string text)
+    // Track O (O5a): the interning table of the parse's texts (TextTable.Intern), keyed by the characters of a span.
+    private TextRef InternIdentifier(TextRef text)
     {
-        if (!identifiers.TryGetValue(text, out var identifier))
-        {
-            identifiers[text] = identifier = text;
-        }
-        return identifier;
+        return texts.Intern(text);
     }
 
     // An identifier that starts with two underscores has an extra underscore character prepended to it to avoid issues
@@ -1325,7 +1324,7 @@ internal sealed partial class Parser : BaseNodeFactory
             var pos = scanner.HasPrecedingJSDocLeadingAsterisks() ? scanner.GetTokenStart() : GetNodePos();
             // Store original token kind if it is not just an Identifier so we can report appropriate error later in type checker
             var originalKeywordKind = Token();
-            var text = InternIdentifier(scanner.GetTokenValue());
+            var text = InternIdentifier(scanner.GetTokenValueRef());
             var hasExtendedUnicodeEscape = scanner.HasExtendedUnicodeEscape();
             NextTokenWithoutCheck();
             return FinishNode(factory.CreateIdentifier(text, originalKeywordKind, hasExtendedUnicodeEscape), pos);
@@ -1447,7 +1446,7 @@ internal sealed partial class Parser : BaseNodeFactory
     private Node ParsePrivateIdentifier()
     {
         var pos = GetNodePos();
-        var node = factory.CreatePrivateIdentifier(InternIdentifier(scanner.GetTokenValue()));
+        var node = factory.CreatePrivateIdentifier(InternIdentifier(scanner.GetTokenValueRef()));
         NextToken();
         return FinishNode(node, pos);
     }

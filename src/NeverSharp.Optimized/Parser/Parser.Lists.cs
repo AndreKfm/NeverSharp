@@ -530,7 +530,7 @@ internal sealed partial class Parser
                     // into an actual .ConstructorDeclaration.
                     var methodDeclaration = node;
                     var nameIsConstructor = store.Kind(store.Name(methodDeclaration)) == SyntaxKind.Identifier &&
-                        (string)store.EscapedText(store.Name(methodDeclaration))! == "constructor";
+                        store.Texts.Equals(store.EscapedText(store.Name(methodDeclaration)), "constructor");
 
                     return !nameIsConstructor;
             }
@@ -1044,11 +1044,11 @@ internal sealed partial class Parser
         return fragment;
     }
 
-    private string GetTemplateLiteralRawText(SyntaxKind kind)
+    private TextRef GetTemplateLiteralRawText(SyntaxKind kind)
     {
         var isLast = kind == SyntaxKind.NoSubstitutionTemplateLiteral || kind == SyntaxKind.TemplateTail;
-        var tokenText = scanner.GetTokenText();
-        return JsSubstring(tokenText, 1, tokenText.Length - (scanner.IsUnterminated() ? 0 : isLast ? 1 : 2));
+        var tokenText = scanner.GetTokenTextRef();
+        return tokenText.Substring(1, tokenText.Length - (scanner.IsUnterminated() ? 0 : isLast ? 1 : 2));
     }
 
     private Node ParseLiteralLikeNode(SyntaxKind kind)
@@ -1057,7 +1057,7 @@ internal sealed partial class Parser
         Node node;
         if (UtilitiesPublic.IsTemplateLiteralKind(kind))
         {
-            node = factory.CreateTemplateLiteralLikeNode(kind, scanner.GetTokenValue(), GetTemplateLiteralRawText(kind), scanner.GetTokenFlags() & TokenFlags.TemplateLiteralLikeFlags);
+            node = factory.CreateTemplateLiteralLikeNode(kind, scanner.GetTokenValueRef(), GetTemplateLiteralRawText(kind), scanner.GetTokenFlags() & TokenFlags.TemplateLiteralLikeFlags);
         }
         else if (kind == SyntaxKind.NumericLiteral)
         {
@@ -1066,15 +1066,15 @@ internal sealed partial class Parser
             // never get a token like this. Instead, we would get 00 and 9 as two separate tokens.
             // We also do not need to check for negatives because any prefix operator would be part of a
             // parent unary expression.
-            node = factory.CreateNumericLiteral(scanner.GetTokenValue(), scanner.GetNumericLiteralFlags());
+            node = factory.CreateNumericLiteral(scanner.GetTokenValueRef(), scanner.GetNumericLiteralFlags());
         }
         else if (kind == SyntaxKind.StringLiteral)
         {
-            node = factory.CreateStringLiteral(scanner.GetTokenValue(), /*isSingleQuote*/ null, scanner.HasExtendedUnicodeEscape());
+            node = factory.CreateStringLiteral(scanner.GetTokenValueRef(), /*isSingleQuote*/ null, scanner.HasExtendedUnicodeEscape());
         }
         else if (UtilitiesPublic.IsLiteralKind(kind))
         {
-            node = factory.CreateLiteralLikeNode(kind, scanner.GetTokenValue());
+            node = factory.CreateLiteralLikeNode(kind, scanner.GetTokenValueRef());
         }
         else
         {
@@ -1164,17 +1164,5 @@ internal sealed partial class Parser
                 store.SetIsUnterminated(n, true);
                 break;
         }
-    }
-
-    /// <summary>JavaScript's String.prototype.substring(start, end): clamps to the string and swaps reversed bounds.</summary>
-    private static string JsSubstring(string s, int start, int end)
-    {
-        var from = Math.Min(Math.Max(start, 0), s.Length);
-        var to = Math.Min(Math.Max(end, 0), s.Length);
-        if (from > to)
-        {
-            (from, to) = (to, from);
-        }
-        return s.Substring(from, to - from);
     }
 }

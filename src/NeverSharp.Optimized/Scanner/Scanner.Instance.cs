@@ -36,8 +36,14 @@ internal sealed partial class Scanner
     private int tokenStart;
 
     private SyntaxKind token;
-    private string? tokenValue;
+    // Track O (O5a): the token value as a handle into `texts`, a span of the text or a value in its character arena.
+    private TextRef tokenValue;
     private TokenFlags tokenFlags;
+
+    // Track O (O5a): the texts token values refer to: the scanner's own table (reset with each text), or the table of
+    // the parse that uses the scanner (UseTexts), so that the values outlive the token in the parse's nodes.
+    private readonly TextTable ownTexts = new("");
+    private TextTable texts;
 
     private List<CommentDirective>? commentDirectives;
     private int skipJsDocLeadingAsterisks;
@@ -63,6 +69,7 @@ internal sealed partial class Scanner
         this.onError = onError;
         this.start = start;
         text = textInitial!;
+        texts = ownTexts;
         SetText(text, this.start, length);
     }
 
@@ -110,7 +117,27 @@ internal sealed partial class Scanner
 
     internal string GetTokenText() => Substring(text, tokenStart, pos);
 
-    internal string GetTokenValue() => tokenValue!;
+    /// <summary>Track O (O5a): <see cref="GetTokenText"/> as a span of the text.</summary>
+    internal TextRef GetTokenTextRef() => texts.Substring(tokenStart, pos);
+
+    /// <summary>The token value as a string (materialized from <see cref="GetTokenValueRef"/>; null before any value).</summary>
+    internal string GetTokenValue() => texts.GetString(tokenValue)!;
+
+    /// <summary>Track O (O5a): the token value as a handle into <see cref="Texts"/>.</summary>
+    internal TextRef GetTokenValueRef() => tokenValue;
+
+    /// <summary>Track O (O5a): the texts the token values refer to.</summary>
+    internal TextTable Texts => texts;
+
+    /// <summary>
+    /// Track O (O5a): token values from here on go to <paramref name="table"/> (the texts of a parse, whose source text is
+    /// this scanner's text) until the next <see cref="SetText"/>.
+    /// </summary>
+    internal void UseTexts(TextTable table)
+    {
+        Debug.Assert(ReferenceEquals(table.Source, text) || (table.Source.Length == 0 && text.Length == 0), "The texts of another source text");
+        texts = table;
+    }
 
     internal bool HasUnicodeEscape() => (tokenFlags & TokenFlags.UnicodeEscape) != 0;
 
@@ -191,12 +218,12 @@ internal sealed partial class Scanner
         }
     }
 
-    private string ScanNumberFragment()
+    private TextRef ScanNumberFragment()
     {
         var start = pos;
         var allowSeparator = false;
         var isPreviousTokenSeparator = false;
-        var result = new StringParts(); // TypeScript: `let result = ""` (see StringParts)
+        var result = new TextBuilder(texts); // TypeScript: `let result = ""` (Track O: a span of the text unless separators split it)
         while (true)
         {
             var ch = CharCodeUnchecked(pos);
@@ -266,7 +293,7 @@ internal sealed partial class Scanner
     private SyntaxKind ScanNumber()
     {
         var start = pos;
-        string mainFragment;
+        TextRef mainFragment;
         if (CharCodeUnchecked(pos) == (int)CharacterCodes._0)
         {
             pos++;
@@ -284,20 +311,21 @@ internal sealed partial class Scanner
                 // NonOctalDecimalIntegerLiteral, emit error later
                 // Separators in decimal and exponent parts are still allowed according to the spec
                 tokenFlags |= TokenFlags.ContainsLeadingZero;
-                mainFragment = JsNumber.ToStringOfNumericString(tokenValue!);
+                mainFragment = NumericStringValue(tokenValue);
             }
-            else if (string.IsNullOrEmpty(tokenValue))
+            else if (tokenValue.Length <= 0)
             {
-                // a single zero
-                mainFragment = "0";
+                // a single zero (Track O: the "0" of the text)
+                mainFragment = texts.Substring(start, start + 1);
             }
             else
             {
                 // LegacyOctalIntegerLiteral
-                tokenValue = JsNumber.ToString(JsNumber.ParseInt(tokenValue, 8));
+                var octalValue = JsNumber.ToString(JsNumber.ParseInt(texts.GetString(tokenValue)!, 8));
+                tokenValue = texts.Add(octalValue);
                 tokenFlags |= TokenFlags.Octal;
                 var withMinus = token == SyntaxKind.MinusToken;
-                var literal = (withMinus ? "-" : "") + "0o" + JsNumber.ToRadixString(JsNumber.FromString(tokenValue), 8);
+                var literal = (withMinus ? "-" : "") + "0o" + JsNumber.ToRadixString(JsNumber.FromString(octalValue), 8);
                 if (withMinus)
                 {
                     start--;
@@ -310,8 +338,8 @@ internal sealed partial class Scanner
         {
             mainFragment = ScanNumberFragment();
         }
-        string? decimalFragment = null;
-        string? scientificFragment = null;
+        TextRef decimalFragment = default;
+        TextRef scientificFragment = default;
         if (CharCodeUnchecked(pos) == (int)CharacterCodes.dot)
         {
             pos++;
@@ -335,41 +363,44 @@ internal sealed partial class Scanner
             }
             else
             {
-                scientificFragment = Substring(text, numberEnd, preNumericPart) + finalFragment;
+                scientificFragment = texts.Concat(texts.Substring(numberEnd, preNumericPart), finalFragment);
                 numberEnd = pos;
             }
         }
-        string result;
+        TextRef result;
         if ((tokenFlags & TokenFlags.ContainsSeparator) != 0)
         {
-            result = mainFragment;
-            if (!string.IsNullOrEmpty(decimalFragment))
+            var parts = new TextBuilder(texts);
+            parts.Append(mainFragment);
+            if (decimalFragment.Length > 0)
             {
-                result += "." + decimalFragment;
+                parts.Append(".");
+                parts.Append(decimalFragment);
             }
-            if (!string.IsNullOrEmpty(scientificFragment))
+            if (scientificFragment.Length > 0)
             {
-                result += scientificFragment;
+                parts.Append(scientificFragment);
             }
+            result = parts.Result();
         }
         else
         {
-            result = Substring(text, start, numberEnd); // No need to use all the fragments; no _ removal needed
+            result = texts.Substring(start, numberEnd); // No need to use all the fragments; no _ removal needed
         }
 
         if ((tokenFlags & TokenFlags.ContainsLeadingZero) != 0)
         {
             Error(Diagnostics.Decimals_with_leading_zeros_are_not_allowed, start, numberEnd - start);
             // if a literal has a leading zero, it must not be bigint
-            tokenValue = JsNumber.ToStringOfNumericString(result);
+            tokenValue = NumericStringValue(result);
             return SyntaxKind.NumericLiteral;
         }
 
-        if (decimalFragment != null || (tokenFlags & TokenFlags.Scientific) != 0)
+        if (!decimalFragment.IsNone || (tokenFlags & TokenFlags.Scientific) != 0)
         {
-            CheckForIdentifierStartAfterNumericLiteral(start, decimalFragment == null && (tokenFlags & TokenFlags.Scientific) != 0);
+            CheckForIdentifierStartAfterNumericLiteral(start, decimalFragment.IsNone && (tokenFlags & TokenFlags.Scientific) != 0);
             // if value is not an integer, it can be safely coerced to a number
-            tokenValue = JsNumber.ToStringOfNumericString(result);
+            tokenValue = NumericStringValue(result);
             return SyntaxKind.NumericLiteral;
         }
         else
@@ -421,8 +452,22 @@ internal sealed partial class Scanner
             }
             pos++;
         }
-        tokenValue = Substring(text, start, pos);
+        tokenValue = texts.Substring(start, pos);
         return isOctal;
+    }
+
+    /// <summary>
+    /// `"" + +value` for the numeric strings the scanner builds (JsNumber.ToStringOfNumericString). Track O: a value that
+    /// is already in canonical form stays the handle it is; another goes to the character arena.
+    /// </summary>
+    private TextRef NumericStringValue(TextRef value)
+    {
+        var span = texts.Span(value);
+        if (JsNumber.IsCanonicalNumericString(span))
+        {
+            return value;
+        }
+        return texts.Add(JsNumber.ToStringOfNumericString(span.ToString()));
     }
 
     /// <summary>
@@ -498,11 +543,11 @@ internal sealed partial class Scanner
         return valueChars.ToString();
     }
 
-    private string ScanString(bool jsxAttributeString = false)
+    private TextRef ScanString(bool jsxAttributeString = false)
     {
         var quote = CharCodeUnchecked(pos);
         pos++;
-        var result = new StringParts(); // TypeScript: `let result = ""` (see StringParts)
+        var result = new TextBuilder(texts); // TypeScript: `let result = ""` (Track O: a span of the text unless escapes change it)
         var start = pos;
         while (true)
         {
@@ -557,7 +602,7 @@ internal sealed partial class Scanner
 
         pos++;
         var start = pos;
-        var contents = new StringParts(); // TypeScript: `let contents = ""` (see StringParts)
+        var contents = new TextBuilder(texts); // TypeScript: `let contents = ""` (Track O: a span of the text unless escapes or CRs change it)
         SyntaxKind resultingToken;
 
         while (true)
@@ -619,7 +664,7 @@ internal sealed partial class Scanner
                 {
                     pos++;
                     // TypeScript: `contents += "\n"`. The "\n" is the LF just consumed; appending it as that range
-                    // of the text lets StringParts merge it with the characters that follow (one part per line).
+                    // of the text lets the builder merge it with the characters that follow.
                     contents.Append(text, pos - 1, pos);
                 }
                 else
@@ -934,9 +979,16 @@ internal sealed partial class Scanner
         return -1;
     }
 
-    private string ScanIdentifierParts()
+    private TextRef ScanIdentifierParts()
     {
-        var result = new StringParts(); // TypeScript: `let result = ""` (see StringParts)
+        var result = new TextBuilder(texts); // TypeScript: `let result = ""`
+        ScanIdentifierParts(ref result);
+        return result.Result();
+    }
+
+    /// <summary>Track O (O5a): scanIdentifierParts appending to a value built by the caller (`value + scanIdentifierParts()`).</summary>
+    private void ScanIdentifierParts(ref TextBuilder result)
+    {
         var start = pos;
         while (pos < end)
         {
@@ -972,19 +1024,19 @@ internal sealed partial class Scanner
             }
         }
         result.Append(text, start, pos);
-        return result.Result();
     }
 
     private SyntaxKind GetIdentifierToken()
     {
         // Reserved words are between 2 and 12 characters long and start with a lowercase letter
-        var len = tokenValue!.Length;
+        var len = tokenValue.Length;
         if (len >= 2 && len <= 12)
         {
-            int ch = tokenValue[0];
+            var value = texts.Span(tokenValue);
+            int ch = value[0];
             if (ch >= (int)CharacterCodes.a && ch <= (int)CharacterCodes.z)
             {
-                if (TextToKeyword.TryGetValue(tokenValue, out var keyword))
+                if (TextToKeywordByRange.TryGetValue(value, out var keyword))
                 {
                     return token = keyword;
                 }
@@ -993,9 +1045,9 @@ internal sealed partial class Scanner
         return token = SyntaxKind.Identifier;
     }
 
-    private string ScanBinaryOrOctalDigits(int @base)
+    private TextRef ScanBinaryOrOctalDigits(int @base)
     {
-        var value = new StringParts(); // TypeScript: `let value = ""` (see StringParts)
+        var value = new TextBuilder(texts); // TypeScript: `let value = ""`
         // For counting number of digits; Valid binaryIntegerLiteral must have at least one binary digit following B or b.
         // Similarly valid octalIntegerLiteral must have at least one octal digit following o or O.
         var separatorAllowed = false;
@@ -1044,11 +1096,12 @@ internal sealed partial class Scanner
     {
         if (CharCodeUnchecked(pos) == (int)CharacterCodes.n)
         {
-            tokenValue += "n";
+            // TypeScript: `tokenValue += "n"` (Track O: the "n" of the text, which continues a value that is a span of it).
+            tokenValue = texts.Concat(tokenValue, texts.Substring(pos, pos + 1));
             // Use base 10 instead of base 2 or base 8 for shorter literals
             if ((tokenFlags & TokenFlags.BinaryOrOctalSpecifier) != 0)
             {
-                tokenValue = Utilities.ParsePseudoBigInt(tokenValue) + "n";
+                tokenValue = texts.Add(Utilities.ParsePseudoBigInt(texts.GetString(tokenValue)!) + "n");
             }
             pos++;
             return SyntaxKind.BigIntLiteral;
@@ -1058,14 +1111,15 @@ internal sealed partial class Scanner
             // Number() may not support 0b or 0o, so use parseInt() instead
             if ((tokenFlags & (TokenFlags.BinarySpecifier | TokenFlags.OctalSpecifier)) == 0)
             {
-                // `"" + +tokenValue` (JsNumber.ToStringOfNumericString keeps an already canonical integer string).
-                tokenValue = JsNumber.ToStringOfNumericString(tokenValue!);
+                // `"" + +tokenValue` (an already canonical integer string stays as it is).
+                tokenValue = NumericStringValue(tokenValue);
                 return SyntaxKind.NumericLiteral;
             }
+            var digits = texts.GetString(tokenValue.Slice(2))!; // skip "0b" or "0o"
             var numericValue = (tokenFlags & TokenFlags.BinarySpecifier) != 0
-                ? JsNumber.ParseInt(tokenValue!.Substring(2), 2) // skip "0b"
-                : JsNumber.ParseInt(tokenValue!.Substring(2), 8); // skip "0o"
-            tokenValue = JsNumber.ToString(numericValue);
+                ? JsNumber.ParseInt(digits, 2)
+                : JsNumber.ParseInt(digits, 8);
+            tokenValue = texts.Add(JsNumber.ToString(numericValue));
             return SyntaxKind.NumericLiteral;
         }
     }
@@ -1384,13 +1438,14 @@ internal sealed partial class Scanner
                     if (pos + 2 < end && (CharCodeUnchecked(pos + 1) == (int)CharacterCodes.X || CharCodeUnchecked(pos + 1) == (int)CharacterCodes.x))
                     {
                         pos += 2;
-                        tokenValue = ScanMinimumNumberOfHexDigits(1, /*canHaveSeparators*/ true);
-                        if (tokenValue.Length == 0)
+                        var hexDigits = ScanMinimumNumberOfHexDigits(1, /*canHaveSeparators*/ true);
+                        if (hexDigits.Length == 0)
                         {
                             Error(Diagnostics.Hexadecimal_digit_expected);
-                            tokenValue = "0";
+                            hexDigits = "0";
                         }
-                        tokenValue = "0x" + tokenValue;
+                        // (Track O: the digits are lowercased, so the value goes to the character arena.)
+                        tokenValue = texts.Add("0x" + hexDigits);
                         tokenFlags |= TokenFlags.HexSpecifier;
                         return token = CheckBigIntSuffix();
                     }
@@ -1401,9 +1456,9 @@ internal sealed partial class Scanner
                         if (tokenValue.Length == 0)
                         {
                             Error(Diagnostics.Binary_digit_expected);
-                            tokenValue = "0";
+                            tokenValue = texts.Add("0");
                         }
-                        tokenValue = "0b" + tokenValue;
+                        tokenValue = texts.Concat("0b", tokenValue);
                         tokenFlags |= TokenFlags.BinarySpecifier;
                         return token = CheckBigIntSuffix();
                     }
@@ -1414,9 +1469,9 @@ internal sealed partial class Scanner
                         if (tokenValue.Length == 0)
                         {
                             Error(Diagnostics.Octal_digit_expected);
-                            tokenValue = "0";
+                            tokenValue = texts.Add("0");
                         }
-                        tokenValue = "0o" + tokenValue;
+                        tokenValue = texts.Concat("0o", tokenValue);
                         tokenFlags |= TokenFlags.OctalSpecifier;
                         return token = CheckBigIntSuffix();
                     }
@@ -1604,7 +1659,7 @@ internal sealed partial class Scanner
                         var extendedCookedChar = PeekExtendedUnicodeEscape();
                         if (extendedCookedChar >= 0 && IsIdentifierStart(extendedCookedChar, languageVersion))
                         {
-                            tokenValue = ScanExtendedUnicodeEscape(/*shouldEmitInvalidEscapeError*/ true) + ScanIdentifierParts();
+                            tokenValue = ConcatIdentifierParts(null, ScanExtendedUnicodeEscape(/*shouldEmitInvalidEscapeError*/ true));
                             return token = GetIdentifierToken();
                         }
 
@@ -1613,7 +1668,7 @@ internal sealed partial class Scanner
                         {
                             pos += 6;
                             tokenFlags |= TokenFlags.UnicodeEscape;
-                            tokenValue = FromCharCode(cookedChar) + ScanIdentifierParts();
+                            tokenValue = ConcatIdentifierParts(null, FromCharCode(cookedChar));
                             return token = GetIdentifierToken();
                         }
 
@@ -1637,7 +1692,7 @@ internal sealed partial class Scanner
                             var extendedCookedChar = PeekExtendedUnicodeEscape();
                             if (extendedCookedChar >= 0 && IsIdentifierStart(extendedCookedChar, languageVersion))
                             {
-                                tokenValue = "#" + ScanExtendedUnicodeEscape(/*shouldEmitInvalidEscapeError*/ true) + ScanIdentifierParts();
+                                tokenValue = ConcatIdentifierParts("#", ScanExtendedUnicodeEscape(/*shouldEmitInvalidEscapeError*/ true));
                                 return token = SyntaxKind.PrivateIdentifier;
                             }
 
@@ -1646,7 +1701,7 @@ internal sealed partial class Scanner
                             {
                                 pos += 6;
                                 tokenFlags |= TokenFlags.UnicodeEscape;
-                                tokenValue = "#" + FromCharCode(cookedChar) + ScanIdentifierParts();
+                                tokenValue = ConcatIdentifierParts("#", FromCharCode(cookedChar));
                                 return token = SyntaxKind.PrivateIdentifier;
                             }
                             pos--;
@@ -1664,7 +1719,7 @@ internal sealed partial class Scanner
                         }
                         else
                         {
-                            tokenValue = "#";
+                            tokenValue = texts.Substring(pos, pos + 1); // TypeScript: `tokenValue = "#"` (the '#' at pos)
                             Error(Diagnostics.Invalid_character, pos++, CharSize(ch));
                         }
                         return token = SyntaxKind.PrivateIdentifier;
@@ -1768,15 +1823,17 @@ internal sealed partial class Scanner
             }
             if (ch == (int)CharacterCodes.backslash)
             {
-                tokenValue = Substring(text, tokenStart, pos);
-                tokenValue += ScanIdentifierParts();
+                // TypeScript: `tokenValue = text.substring(tokenStart, pos); tokenValue += scanIdentifierParts();`.
+                var value = new TextBuilder(texts);
+                value.AppendSource(tokenStart, pos);
+                ScanIdentifierParts(ref value);
+                tokenValue = value.Result();
                 return GetIdentifierToken();
             }
             // TypeScript: `tokenValue = text.substring(tokenStart, pos); return getIdentifierToken();`.
             // typescript-go takes the value as a slice of the text, which copies nothing
             // (`s.tokenValue = s.text[start:s.pos]`, scanIdentifier in internal/scanner/scanner.go); here the
-            // keyword lookup of getIdentifierToken runs on the range, and a keyword's value is the keyword table's
-            // string (the same text), so that only identifiers allocate their value.
+            // value is the span of the text (Track O, O5a) and the keyword lookup of getIdentifierToken runs on it.
             return GetIdentifierTokenOfRange(tokenStart, pos);
         }
         return null;
@@ -1816,15 +1873,28 @@ internal sealed partial class Scanner
             int ch = text[start];
             if (ch >= (int)CharacterCodes.a && ch <= (int)CharacterCodes.z)
             {
-                if (TextToKeywordByRange.TryGetValue(text.AsSpan(start, len), out var keywordText, out var keyword))
+                if (TextToKeywordByRange.TryGetValue(text.AsSpan(start, len), out var keyword))
                 {
-                    tokenValue = keywordText;
+                    tokenValue = TextRef.Source(start, len);
                     return token = keyword;
                 }
             }
         }
-        tokenValue = Substring(text, start, end);
+        tokenValue = TextRef.Source(start, len);
         return token = SyntaxKind.Identifier;
+    }
+
+    /// <summary>Track O (O5a): `prefix + escaped + scanIdentifierParts()` for identifiers that start with an escape.</summary>
+    private TextRef ConcatIdentifierParts(string? prefix, string escaped)
+    {
+        var value = new TextBuilder(texts);
+        if (prefix != null)
+        {
+            value.Append(prefix);
+        }
+        value.Append(escaped);
+        ScanIdentifierParts(ref value);
+        return value.Result();
     }
 
     internal SyntaxKind ReScanGreaterToken()
@@ -2044,7 +2114,7 @@ internal sealed partial class Scanner
                     });
                 }
             }
-            tokenValue = Substring(text, tokenStart, pos);
+            tokenValue = texts.Substring(tokenStart, pos);
             token = SyntaxKind.RegularExpressionLiteral;
         }
         return token;
@@ -2238,7 +2308,7 @@ internal sealed partial class Scanner
             pos++;
         }
 
-        tokenValue = Substring(text, fullStartPos, pos);
+        tokenValue = texts.Substring(fullStartPos, pos);
 
         return firstNonWhitespace == -1 ? SyntaxKind.JsxTextAllWhiteSpaces : SyntaxKind.JsxText;
     }
@@ -2253,22 +2323,26 @@ internal sealed partial class Scanner
             // everything after it to the token
             // Do note that this means that `scanJsxIdentifier` effectively _mutates_ the visible token without advancing to a new token
             // Any caller should be expecting this behavior and should only read the pos or token value after calling it.
+            // (Track O: `tokenValue += ...` on a builder that starts with the value; a "-" is the one of the text.)
+            var value = new TextBuilder(texts);
+            value.Append(tokenValue);
             while (pos < end)
             {
                 var ch = CharCodeUnchecked(pos);
                 if (ch == (int)CharacterCodes.minus)
                 {
-                    tokenValue += "-";
+                    value.AppendSource(pos, pos + 1); // TypeScript: `tokenValue += "-"`
                     pos++;
                     continue;
                 }
                 var oldPos = pos;
-                tokenValue += ScanIdentifierParts(); // reuse `scanIdentifierParts` so unicode escapes are handled
+                ScanIdentifierParts(ref value); // reuse `scanIdentifierParts` so unicode escapes are handled
                 if (pos == oldPos)
                 {
                     break;
                 }
             }
+            tokenValue = value.Result();
             return GetIdentifierToken();
         }
         return token;
@@ -2327,7 +2401,7 @@ internal sealed partial class Scanner
         {
             return ScanJsDocToken();
         }
-        tokenValue = Substring(text, tokenStart, pos);
+        tokenValue = texts.Substring(tokenStart, pos);
         return token = SyntaxKind.JSDocCommentTextToken;
     }
 
@@ -2397,7 +2471,7 @@ internal sealed partial class Scanner
                 var extendedCookedChar = PeekExtendedUnicodeEscape();
                 if (extendedCookedChar >= 0 && IsIdentifierStart(extendedCookedChar, languageVersion))
                 {
-                    tokenValue = ScanExtendedUnicodeEscape(/*shouldEmitInvalidEscapeError*/ true) + ScanIdentifierParts();
+                    tokenValue = ConcatIdentifierParts(null, ScanExtendedUnicodeEscape(/*shouldEmitInvalidEscapeError*/ true));
                     return token = GetIdentifierToken();
                 }
 
@@ -2406,7 +2480,7 @@ internal sealed partial class Scanner
                 {
                     pos += 6;
                     tokenFlags |= TokenFlags.UnicodeEscape;
-                    tokenValue = FromCharCode(cookedChar) + ScanIdentifierParts();
+                    tokenValue = ConcatIdentifierParts(null, FromCharCode(cookedChar));
                     return token = GetIdentifierToken();
                 }
                 pos++;
@@ -2423,10 +2497,16 @@ internal sealed partial class Scanner
             {
                 pos += CharSize(chr);
             }
-            tokenValue = Substring(text, tokenStart, pos);
             if (chr == (int)CharacterCodes.backslash)
             {
-                tokenValue += ScanIdentifierParts();
+                var value = new TextBuilder(texts);
+                value.AppendSource(tokenStart, pos);
+                ScanIdentifierParts(ref value);
+                tokenValue = value.Result();
+            }
+            else
+            {
+                tokenValue = texts.Substring(tokenStart, pos);
             }
             return token = GetIdentifierToken();
         }
@@ -2471,7 +2551,9 @@ internal sealed partial class Scanner
         var saveTokenFlags = tokenFlags;
         var saveErrorExpectations = commentDirectives;
 
-        SetText(text, start, length);
+        // (TypeScript: `setText(text, start, length)`; Track O: the same text, so the texts of the parse stay.)
+        end = start + length;
+        ResetTokenState(start);
         var result = callback();
 
         end = saveEnd;
@@ -2510,6 +2592,9 @@ internal sealed partial class Scanner
     {
         text = !string.IsNullOrEmpty(newText) ? newText : "";
         end = length == null ? text.Length : start!.Value + length.Value;
+        // Track O (O5a): token values go to the scanner's own texts until a parse attaches its texts (UseTexts).
+        texts = ownTexts;
+        ownTexts.Reset(text);
         ResetTokenState(start ?? 0);
     }
 
@@ -2545,7 +2630,7 @@ internal sealed partial class Scanner
         fullStartPos = position;
         tokenStart = position;
         token = SyntaxKind.Unknown;
-        tokenValue = null!;
+        tokenValue = default;
         tokenFlags = TokenFlags.None;
     }
 

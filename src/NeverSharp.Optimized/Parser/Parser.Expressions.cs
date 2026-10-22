@@ -1121,7 +1121,7 @@ internal sealed partial class Parser
                 NextToken(); // advance past the dot
                 expression = FinishNode(factory.CreateMetaProperty(SyntaxKind.ImportKeyword, ParseIdentifierName()), pos);
 
-                if ((string)store.EscapedText(store.Name(expression))! == "defer")
+                if (store.Texts.Equals(store.EscapedText(store.Name(expression)), "defer"))
                 {
                     if (Token() == SyntaxKind.OpenParenToken || Token() == SyntaxKind.LessThanToken)
                     {

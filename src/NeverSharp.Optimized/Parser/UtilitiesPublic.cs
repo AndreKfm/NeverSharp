@@ -96,11 +96,25 @@ internal static partial class UtilitiesPublic
         return id.Length >= 3 && id[0] == (char)CharacterCodes._ && id[1] == (char)CharacterCodes._ && id[2] == (char)CharacterCodes._ ? id[1..] : id;
     }
 
+    /// <summary>Track O (O5a): <see cref="EscapeLeadingUnderscores(string)"/> on a text value (an escaped value goes to the character arena).</summary>
+    internal static TextRef EscapeLeadingUnderscores(TextTable texts, TextRef identifier)
+    {
+        var span = texts.Span(identifier);
+        return span.Length >= 2 && span[0] == (char)CharacterCodes._ && span[1] == (char)CharacterCodes._ ? texts.Concat("_", identifier) : identifier;
+    }
+
+    /// <summary>Track O (O5a): <see cref="UnescapeLeadingUnderscores(string)"/> on a text value (a slice of it).</summary>
+    internal static TextRef UnescapeLeadingUnderscores(TextTable texts, TextRef identifier)
+    {
+        var id = texts.Span(identifier);
+        return id.Length >= 3 && id[0] == (char)CharacterCodes._ && id[1] == (char)CharacterCodes._ && id[2] == (char)CharacterCodes._ ? identifier.Slice(1) : identifier;
+    }
+
     /// <summary>TypeScript: `idText(identifierOrPrivateName: Identifier | PrivateIdentifier)`.</summary>
-    internal static string IdText(NodeStore store, Node identifierOrPrivateName)
+    internal static TextRef IdText(NodeStore store, Node identifierOrPrivateName)
     {
         var escapedText = (identifierOrPrivateName is var identifier && store.IsIdentifier(identifier)) ? store.EscapedText(identifier) : store.EscapedText(identifierOrPrivateName);
-        return UnescapeLeadingUnderscores((string)escapedText!);
+        return UnescapeLeadingUnderscores(store.Texts, escapedText);
     }
 
     internal static bool IsNamedDeclaration(NodeStore store, Node node)
@@ -147,11 +161,11 @@ internal static partial class UtilitiesPublic
         {
             if (FactoryNodeTests.IsIdentifier(store, store.Name(param)))
             {
-                var name = (string)store.EscapedText(store.Name(param))!;
+                var name = store.EscapedText(store.Name(param));
                 var result = new List<Node>();
                 foreach (var tag in GetJSDocTagsWorker(store, store.Parent(param), noCache))
                 {
-                    if (FactoryNodeTests.IsJSDocParameterTag(store, tag) && FactoryNodeTests.IsIdentifier(store, store.Name(tag)) && (string)store.EscapedText(store.Name(tag))! == name)
+                    if (FactoryNodeTests.IsJSDocParameterTag(store, tag) && FactoryNodeTests.IsIdentifier(store, store.Name(tag)) && store.Texts.Equals(store.EscapedText(store.Name(tag)), name))
                     {
                         result.Add(tag);
                     }
@@ -205,11 +219,11 @@ internal static partial class UtilitiesPublic
 
     private static List<Node> GetJSDocTypeParameterTagsWorker(NodeStore store, Node param, bool? noCache = null)
     {
-        var name = (string)store.EscapedText(store.Name(param))!;
+        var name = store.EscapedText(store.Name(param));
         var result = new List<Node>();
         foreach (var tag in GetJSDocTagsWorker(store, store.Parent(param), noCache))
         {
-            if (FactoryNodeTests.IsJSDocTemplateTag(store, tag) && Core.Some(store.Nodes(store.TypeParameters(tag)), tp => (string)store.EscapedText(store.Name(tp))! == name))
+            if (FactoryNodeTests.IsJSDocTemplateTag(store, tag) && Core.Some(store.Nodes(store.TypeParameters(tag)), tp => store.Texts.Equals(store.EscapedText(store.Name(tp)), name)))
             {
                 result.Add(tag);
             }

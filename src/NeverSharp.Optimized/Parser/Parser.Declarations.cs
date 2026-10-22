@@ -223,7 +223,7 @@ internal sealed partial class Parser
             return TryParse(p =>
             {
                 var literalNode = ParseLiteralNode();
-                return store.Text(literalNode) == "constructor" ? literalNode : default;
+                return store.Texts.Equals(store.Text(literalNode), "constructor") ? literalNode : default;
             });
         }
         return null;
@@ -988,7 +988,7 @@ internal sealed partial class Parser
 
         SyntaxKind? phaseModifier = null;
         if (
-            !identifier.IsNone && (string)store.EscapedText(identifier)! == "type" &&
+            !identifier.IsNone && store.Texts.Equals(store.EscapedText(identifier), "type") &&
             (Token() != SyntaxKind.FromKeyword || IsIdentifier() && LookAhead(static p => p.NextTokenIsFromKeywordOrEqualsToken())) &&
             (IsIdentifier() || TokenAfterImportDefinitelyProducesImportDeclaration()))
         {
@@ -996,7 +996,7 @@ internal sealed partial class Parser
             identifier = IsIdentifier() ? ParseIdentifier() : default;
         }
         else if (
-            !identifier.IsNone && (string)store.EscapedText(identifier)! == "defer" &&
+            !identifier.IsNone && store.Texts.Equals(store.EscapedText(identifier), "defer") &&
             (Token() == SyntaxKind.FromKeyword ? !LookAhead(static p => p.NextTokenIsStringLiteral()) : Token() != SyntaxKind.CommaToken && Token() != SyntaxKind.EqualsToken))
         {
             phaseModifier = SyntaxKind.DeferKeyword;
@@ -1244,7 +1244,7 @@ internal sealed partial class Parser
         Node propertyName = default;
         var canParseAsKeyword = true;
         var name = ParseModuleExportName(() => ParseIdentifierName());
-        if (store.Kind(name) == SyntaxKind.Identifier && (string)store.EscapedText(name)! == "type")
+        if (store.Kind(name) == SyntaxKind.Identifier && store.Texts.Equals(store.EscapedText(name), "type"))
         {
             // If the first token of an import specifier is 'type', there are a lot of possibilities,
             // especially if we see 'as' afterwards:

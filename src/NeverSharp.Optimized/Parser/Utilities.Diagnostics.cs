@@ -118,7 +118,7 @@ internal static partial class Utilities
     private static DiagnosticWithLocation AttachFileToDiagnostic(NodeStore store, DiagnosticWithDetachedLocation diagnostic, Node file)
     {
         var fileName = !string.IsNullOrEmpty(store.FileName(file)) ? store.FileName(file) : "";
-        var length = store.Text(file).Length;
+        var length = store.SourceFileText(file).Length;
         Debug.AssertEqual(diagnostic.FileName, fileName);
         Debug.AssertLessThanOrEqual(diagnostic.Start, length);
         Debug.AssertLessThanOrEqual(diagnostic.Start + diagnostic.Length, length);
@@ -165,7 +165,7 @@ internal static partial class Utilities
 
     internal static DiagnosticWithLocation CreateFileDiagnostic(NodeStore store, Node file, int start, int length, DiagnosticMessage message, params object?[] args)
     {
-        AssertDiagnosticLocation(store.Text(file), start, length);
+        AssertDiagnosticLocation(store.SourceFileText(file), start, length);
 
         var text = GetLocaleSpecificMessage(message);
 

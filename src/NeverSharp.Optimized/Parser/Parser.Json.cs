@@ -118,7 +118,7 @@ internal sealed partial class Parser
 
         store.SetNodeCount(sourceFile, nodeCount);
         store.SetIdentifierCount(sourceFile, identifierCount);
-        store.SetIdentifiers(sourceFile, identifiers);
+        store.SetIdentifiers(sourceFile, texts);
         store.SetParseDiagnostics(sourceFile, Utilities.AttachFileToDiagnostics(store, parseDiagnostics, sourceFile));
         if (jsDocDiagnostics != null)
         {

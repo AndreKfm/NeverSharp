@@ -134,6 +134,62 @@ internal static class JsNumber
     }
 
     /// <summary>
+    /// Track O (O5a): whether <see cref="ToStringOfNumericString"/> returns the value's own characters, decided without
+    /// converting, for the common forms (false only means "convert"):
+    /// - a decimal integer of at most 15 digits without leading zeros (as above);
+    /// - `I.F` with I `0` or without leading zeros, F not ending in `0`, at most 15 significant digits, and, for I `0`,
+    ///   at most 5 zeros before F's first nonzero digit. At most 15 significant digits round-trip through a double, so
+    ///   the shortest digits of the number are the literal's own (without trailing zeros), and Number::toString writes
+    ///   a value from 1e-6 to below 1e21 with those digits in positional notation.
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal static bool IsCanonicalNumericString(ReadOnlySpan<char> value)
+    {
+        var length = value.Length;
+        if (length == 0 || length > 24)
+        {
+            return false;
+        }
+        var i = 0;
+        while (i < length && (uint)(value[i] - '0') <= 9)
+        {
+            i++;
+        }
+        if (i == 0 || (value[0] == '0' && i > 1))
+        {
+            return false;
+        }
+        if (i == length)
+        {
+            return length <= 15;
+        }
+        if (value[i] != '.' || i == length - 1 || value[length - 1] == '0')
+        {
+            return false;
+        }
+        var integerZero = i == 1 && value[0] == '0';
+        var significant = integerZero ? 0 : i;
+        var leadingZeros = 0;
+        for (var j = i + 1; j < length; j++)
+        {
+            var ch = value[j];
+            if ((uint)(ch - '0') > 9)
+            {
+                return false;
+            }
+            if (integerZero && significant == 0 && ch == '0')
+            {
+                leadingZeros++;
+            }
+            else
+            {
+                significant++;
+            }
+        }
+        return significant <= 15 && leadingZeros <= 5;
+    }
+
+    /// <summary>
     /// StringToNumber (`+value`) for the strings the scanner produces: decimal literals without separators
     /// (`123`, `1.5`, `.5`, `1.`, `1e10`, `1.e-5`, possibly with leading zeros), `0x`/`0b`/`0o` integer
     /// literals, and the empty string (0).

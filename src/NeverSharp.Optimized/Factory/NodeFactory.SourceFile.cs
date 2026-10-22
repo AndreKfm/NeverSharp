@@ -29,7 +29,7 @@ internal sealed partial class NodeFactory
         store.SetStatements(node, CreateNodeArray(store, statements));
         store.SetEndOfFileToken(node, endOfFileToken);
         store.SetFlags(node, store.Flags(node) | flags);
-        store.SetText(node, "");
+        store.SetSourceFileText(node, "");
         store.SetFileName(node, "");
         store.SetPath(node, "");
         store.SetResolvedPath(node, "");
@@ -113,7 +113,7 @@ internal sealed partial class NodeFactory
         store.SetSetExternalModuleIndicator(node, store.SetExternalModuleIndicator(source));
         store.SetStatements(node, store.Statements(source));
         store.SetSymbolCount(node, store.SymbolCount(source));
-        store.SetText(node, store.Text(source));
+        store.SetSourceFileText(node, store.SourceFileText(source));
 
         // Fields declared by the port (Parser/Types.cs, Parser/Parser.Pragmas.cs).
         store.SetAmdDependencies(node, store.AmdDependencies(source));
