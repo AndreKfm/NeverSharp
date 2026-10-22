@@ -18,4 +18,6 @@ The list the Track O endpoint is reported with (pre-registration §8, A9). Each 
 | O4 | String, template and numeric literals | not started | | |
 | O8 | Parallel scheduling | not started | | |
 
+Endpoint (2026-10-22, after O1, Windows only): optimized track G = 0.60 [0.59, 0.61] vs tsgo7-parse (faster claim allowed); vs tsrs 1.52 [1.50, 1.54] (secondary). See results/track-o/endpoint/2026-10-22T18-55-52-105Z/VERDICT.md.
+
 NoAlloc coverage and exceptions: `node harness/port/noalloc-report.mjs`, reported with every Track O result.
