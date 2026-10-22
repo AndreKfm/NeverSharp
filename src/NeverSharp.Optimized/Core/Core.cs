@@ -770,6 +770,7 @@ internal static partial class Core
             int i => i != 0,
             double d => d != 0 && !double.IsNaN(d),
             Node n => !n.IsNone, // Track O: a node handle; None is undefined
+            NodeList l => !l.IsNone, // Track O (O7a): a list handle; None is undefined
             _ => true,
         };
     }
@@ -849,5 +850,57 @@ internal static partial class Core
     private static char ToLowerCase(char c)
     {
         return char.ToLowerInvariant(c);
+    }
+}
+
+/// <summary>
+/// core.ts array helpers over the elements of a node list (Track O, step O7a: a NodeArray's elements are a span of
+/// the list store).
+/// </summary>
+internal static partial class Core
+{
+    internal static TResult? ForEach<T, TResult>(ReadOnlySpan<T> array, Func<T, int, TResult?> callback)
+    {
+        for (var i = 0; i < array.Length; i++)
+        {
+            var result = callback(array[i], i);
+            if (IsTruthy(result))
+            {
+                return result;
+            }
+        }
+        return default;
+    }
+
+    internal static bool Some<T>(ReadOnlySpan<T> array)
+    {
+        return array.Length > 0;
+    }
+
+    internal static bool Some<T>(ReadOnlySpan<T> array, Func<T, bool>? predicate)
+    {
+        if (predicate == null)
+        {
+            return array.Length > 0;
+        }
+        foreach (var element in array)
+        {
+            if (predicate(element))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    internal static T? FirstOrUndefined<T>(ReadOnlySpan<T> array)
+    {
+        return array.Length == 0 ? default : array[0];
+    }
+
+    /// <summary>Returns the last element of an array if non-empty, `undefined` otherwise.</summary>
+    internal static T? LastOrUndefined<T>(ReadOnlySpan<T> array)
+    {
+        return array.Length == 0 ? default : array[^1];
     }
 }

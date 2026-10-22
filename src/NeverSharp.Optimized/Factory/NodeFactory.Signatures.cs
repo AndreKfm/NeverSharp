@@ -47,7 +47,7 @@ internal sealed partial class NodeFactory
     //
 
     // @api
-    internal Node CreateTypeParameterDeclaration(IReadOnlyList<Node>? modifiers, object name, Node constraint = default, Node defaultType = default)
+    internal Node CreateTypeParameterDeclaration(NodeList modifiers, object name, Node constraint = default, Node defaultType = default)
     {
         var node = CreateBaseDeclaration(SyntaxKind.TypeParameter);
         store.SetModifiers(node, AsNodeArray(store, modifiers));
@@ -62,7 +62,7 @@ internal sealed partial class NodeFactory
 
     // @api
     internal Node CreateParameterDeclaration(
-        IReadOnlyList<Node>? modifiers,
+        NodeList modifiers,
         Node dotDotDotToken,
         object name,
         Node questionToken = default,
@@ -113,7 +113,7 @@ internal sealed partial class NodeFactory
 
     // @api
     internal Node CreatePropertySignature(
-        IReadOnlyList<Node>? modifiers,
+        NodeList modifiers,
         object name,
         Node questionToken,
         Node type)
@@ -131,7 +131,7 @@ internal sealed partial class NodeFactory
 
     // @api
     internal Node CreatePropertyDeclaration(
-        IReadOnlyList<Node>? modifiers,
+        NodeList modifiers,
         object name,
         Node questionOrExclamationToken,
         Node type,
@@ -157,11 +157,11 @@ internal sealed partial class NodeFactory
 
     // @api
     internal Node CreateMethodSignature(
-        IReadOnlyList<Node>? modifiers,
+        NodeList modifiers,
         object name,
         Node questionToken,
-        IReadOnlyList<Node>? typeParameters,
-        IReadOnlyList<Node> parameters,
+        NodeList typeParameters,
+        NodeList parameters,
         Node type)
     {
         var node = CreateBaseDeclaration(SyntaxKind.MethodSignature);
@@ -169,7 +169,7 @@ internal sealed partial class NodeFactory
         store.SetName(node, AsName(name));
         store.SetQuestionToken(node, questionToken);
         store.SetTypeParameters(node, AsNodeArray(store, typeParameters));
-        store.SetParameters(node, AsNodeArray(store, parameters)!);
+        store.SetParameters(node, AsNodeArray(store, parameters));
         store.SetType(node, type);
         store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
@@ -181,12 +181,12 @@ internal sealed partial class NodeFactory
 
     // @api
     internal Node CreateMethodDeclaration(
-        IReadOnlyList<Node>? modifiers,
+        NodeList modifiers,
         Node asteriskToken,
         object name,
         Node questionToken,
-        IReadOnlyList<Node>? typeParameters,
-        IReadOnlyList<Node> parameters,
+        NodeList typeParameters,
+        NodeList parameters,
         Node type,
         Node body)
     {
@@ -221,7 +221,7 @@ internal sealed partial class NodeFactory
                     isAsync ? TransformFlags.ContainsES2017 :
                     isGenerator ? TransformFlags.ContainsGenerator :
                     TransformFlags.None) |
-                (!store.QuestionToken(node).IsNone || store.TypeParameters(node) != null || !store.Type(node).IsNone ? TransformFlags.ContainsTypeScript : TransformFlags.None) |
+                (!store.QuestionToken(node).IsNone || !store.TypeParameters(node).IsNone || !store.Type(node).IsNone ? TransformFlags.ContainsTypeScript : TransformFlags.None) |
                 TransformFlags.ContainsES2015);
         }
         // node.typeArguments = undefined; // used in quick info
@@ -241,7 +241,7 @@ internal sealed partial class NodeFactory
         var node = CreateBaseDeclaration(SyntaxKind.ClassStaticBlockDeclaration);
         store.SetBody(node, body);
         store.SetTransformFlags(node, PropagateChildFlags(store, body) | TransformFlags.ContainsClassFields);
-        store.SetModifiers(node, null); // initialized by parser for grammar errors
+        store.SetModifiers(node, default); // initialized by parser for grammar errors
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         // node.locals = undefined; // initialized by binder (LocalsContainer)
         // node.nextContainer = undefined; // initialized by binder (LocalsContainer)
@@ -252,8 +252,8 @@ internal sealed partial class NodeFactory
 
     // @api
     internal Node CreateConstructorDeclaration(
-        IReadOnlyList<Node>? modifiers,
-        IReadOnlyList<Node> parameters,
+        NodeList modifiers,
+        NodeList parameters,
         Node body)
     {
         var node = CreateBaseDeclaration(SyntaxKind.Constructor);
@@ -271,7 +271,7 @@ internal sealed partial class NodeFactory
                 (PropagateChildFlags(store, store.Body(node)) & ~TransformFlags.ContainsPossibleTopLevelAwait) |
                 TransformFlags.ContainsES2015);
         }
-        store.SetTypeParameters(node, null); // initialized by parser for grammar errors
+        store.SetTypeParameters(node, default); // initialized by parser for grammar errors
         store.SetType(node, default); // initialized by parser for grammar errors
         // node.typeArguments = undefined; // used in quick info
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
@@ -284,9 +284,9 @@ internal sealed partial class NodeFactory
 
     // @api
     internal Node CreateGetAccessorDeclaration(
-        IReadOnlyList<Node>? modifiers,
+        NodeList modifiers,
         object name,
-        IReadOnlyList<Node> parameters,
+        NodeList parameters,
         Node type,
         Node body)
     {
@@ -310,7 +310,7 @@ internal sealed partial class NodeFactory
                 (!store.Type(node).IsNone ? TransformFlags.ContainsTypeScript : TransformFlags.None));
         }
         // node.typeArguments = undefined; // used in quick info
-        store.SetTypeParameters(node, null); // initialized by parser for grammar errors
+        store.SetTypeParameters(node, default); // initialized by parser for grammar errors
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         // node.locals = undefined; // initialized by binder (LocalsContainer)
         // node.nextContainer = undefined; // initialized by binder (LocalsContainer)
@@ -322,9 +322,9 @@ internal sealed partial class NodeFactory
 
     // @api
     internal Node CreateSetAccessorDeclaration(
-        IReadOnlyList<Node>? modifiers,
+        NodeList modifiers,
         object name,
-        IReadOnlyList<Node> parameters,
+        NodeList parameters,
         Node body)
     {
         var node = CreateBaseDeclaration(SyntaxKind.SetAccessor);
@@ -345,7 +345,7 @@ internal sealed partial class NodeFactory
                 (!store.Type(node).IsNone ? TransformFlags.ContainsTypeScript : TransformFlags.None));
         }
         // node.typeArguments = undefined; // used in quick info
-        store.SetTypeParameters(node, null); // initialized by parser for grammar errors
+        store.SetTypeParameters(node, default); // initialized by parser for grammar errors
         store.SetType(node, default); // initialized by parser for grammar errors
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         // node.locals = undefined; // initialized by binder (LocalsContainer)
@@ -358,13 +358,13 @@ internal sealed partial class NodeFactory
 
     // @api
     internal Node CreateCallSignature(
-        IReadOnlyList<Node>? typeParameters,
-        IReadOnlyList<Node> parameters,
+        NodeList typeParameters,
+        NodeList parameters,
         Node type)
     {
         var node = CreateBaseDeclaration(SyntaxKind.CallSignature);
         store.SetTypeParameters(node, AsNodeArray(store, typeParameters));
-        store.SetParameters(node, AsNodeArray(store, parameters)!);
+        store.SetParameters(node, AsNodeArray(store, parameters));
         store.SetType(node, type);
         store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
@@ -376,13 +376,13 @@ internal sealed partial class NodeFactory
 
     // @api
     internal Node CreateConstructSignature(
-        IReadOnlyList<Node>? typeParameters,
-        IReadOnlyList<Node> parameters,
+        NodeList typeParameters,
+        NodeList parameters,
         Node type)
     {
         var node = CreateBaseDeclaration(SyntaxKind.ConstructSignature);
         store.SetTypeParameters(node, AsNodeArray(store, typeParameters));
-        store.SetParameters(node, AsNodeArray(store, parameters)!);
+        store.SetParameters(node, AsNodeArray(store, parameters));
         store.SetType(node, type);
         store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
@@ -394,13 +394,13 @@ internal sealed partial class NodeFactory
 
     // @api
     internal Node CreateIndexSignature(
-        IReadOnlyList<Node>? modifiers,
-        IReadOnlyList<Node> parameters,
+        NodeList modifiers,
+        NodeList parameters,
         Node type)
     {
         var node = CreateBaseDeclaration(SyntaxKind.IndexSignature);
         store.SetModifiers(node, AsNodeArray(store, modifiers));
-        store.SetParameters(node, AsNodeArray(store, parameters)!);
+        store.SetParameters(node, AsNodeArray(store, parameters));
         store.SetType(node, type); // TODO(rbuckton): We mark this as required in IndexSignatureDeclaration, but it looks like the parser allows it to be elided.
         store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)

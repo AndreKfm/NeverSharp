@@ -48,18 +48,6 @@ internal interface BaseNodeFactory
 }
 
 /// <summary>
-/// JavaScript turns a plain array into a NodeArray by assigning `pos`, `end`, `hasTrailingComma` and
-/// `transformFlags` to it (createNodeArray), and isNodeArray tests for the own properties `pos` and `end`.
-/// The parser builds its lists as plain arrays before they become NodeArrays; a C# object cannot change its
-/// class, so the list is a NodeArray object from the start and this field records whether the NodeArray
-/// properties have been assigned yet.
-/// </summary>
-internal sealed partial class NodeArray
-{
-    internal bool HasNodeArrayProperties;
-}
-
-/// <summary>
 /// nodeFactory.ts: createNodeFactory. The variables of its closure are the fields of the instance, its inner
 /// functions the instance methods, and the NodeFactory object it returns is the instance itself.
 /// </summary>
@@ -95,57 +83,54 @@ internal sealed partial class NodeFactory
     internal NodeFactoryFlags Flags => flags;
 
     // @api
-    internal static NodeArray CreateNodeArray(NodeStore store, IReadOnlyList<Node>? elements = null, bool? hasTrailingComma = null)
+    // TypeScript's createNodeArray takes a plain array or a NodeArray (`elements?: readonly T[]`). Track O (step O7a): a
+    // NodeArray is a list handle (NodeList), a plain array of the parser a list under construction (ListBuilder), and
+    // any other array a span of node handles; JavaScript turns a plain array into a NodeArray by assigning `pos`,
+    // `end`, `hasTrailingComma` and `transformFlags` to it, the list store copies it into its arena.
+    internal static NodeList CreateNodeArray(NodeStore store)
     {
-        if (elements == null || ReferenceEquals(elements, Core.EmptyArray<Node>()))
-        {
-            elements = new NodeArray();
-        }
-        else if (UtilitiesPublic.IsNodeArray(elements))
-        {
-            var nodeArray = (NodeArray)elements;
-            if (hasTrailingComma == null || nodeArray.HasTrailingComma == hasTrailingComma)
-            {
-                // Ensure the transform flags have been aggregated for this NodeArray
-                // (TypeScript: `if (elements.transformFlags === undefined)`; createNodeArray assigns them to
-                // every array it turns into a NodeArray, so they are defined here.)
-                return nodeArray;
-            }
+        return CreateNodeArray(store, ReadOnlySpan<Node>.Empty);
+    }
 
-            // This *was* a `NodeArray`, but the `hasTrailingComma` option differs. Recreate the
-            // array with the same elements, text range, and transform flags but with the updated
-            // value for `hasTrailingComma`
-            var copy = new NodeArray();
-            copy.AddRange(nodeArray);
-            copy.HasNodeArrayProperties = true;
-            copy.Pos = nodeArray.Pos;
-            copy.End = nodeArray.End;
-            copy.HasTrailingComma = hasTrailingComma.Value;
-            copy.TransformFlags = nodeArray.TransformFlags;
-            return copy;
+    internal static NodeList CreateNodeArray(NodeStore store, NodeList elements, bool? hasTrailingComma = null)
+    {
+        if (elements.IsNone)
+        {
+            return CreateNodeArray(store, ReadOnlySpan<Node>.Empty, hasTrailingComma);
         }
 
+        if (hasTrailingComma == null || store.HasTrailingComma(elements) == hasTrailingComma)
+        {
+            // Ensure the transform flags have been aggregated for this NodeArray
+            // (TypeScript: `if (elements.transformFlags === undefined)`; createNodeArray assigns them to
+            // every array it turns into a NodeArray, so they are defined here.)
+            return elements;
+        }
+
+        // This *was* a `NodeArray`, but the `hasTrailingComma` option differs. Recreate the
+        // array with the same elements, text range, and transform flags but with the updated
+        // value for `hasTrailingComma`
+        var copy = store.NewList(store.Nodes(elements), hasTrailingComma.Value);
+        store.SetPos(copy, store.Pos(elements));
+        store.SetEnd(copy, store.End(elements));
+        store.SetTransformFlags(copy, store.TransformFlags(elements));
+        return copy;
+    }
+
+    internal static NodeList CreateNodeArray(NodeStore store, ListBuilder elements, bool? hasTrailingComma = null)
+    {
         // Since the element list of a node array is typically created by starting with an empty array and
         // repeatedly calling push(), the list may not have the optimal memory layout. We invoke slice() for
         // small arrays (1 to 4 elements) to give the VM a chance to allocate an optimal representation.
-        // (C#: a plain array of the parser is a NodeArray object without the NodeArray properties and is
-        // used as it is; the copy of slice() only concerns the JavaScript engine's memory layout. Any other
-        // list is copied into a NodeArray, the class TypeScript's array becomes.)
-        NodeArray array;
-        if (elements is NodeArray plain)
-        {
-            array = plain;
-        }
-        else
-        {
-            array = new NodeArray();
-            array.AddRange(elements);
-        }
-        array.HasNodeArrayProperties = true;
-        array.Pos = -1;
-        array.End = -1;
-        array.HasTrailingComma = hasTrailingComma == true;
-        array.TransformFlags = TransformFlags.None;
+        // (C#: the list store copies the plain array into its arena, with pos and end -1.)
+        var array = store.FinishList(elements, hasTrailingComma == true);
+        AggregateChildrenFlags(store, array);
+        return array;
+    }
+
+    internal static NodeList CreateNodeArray(NodeStore store, ReadOnlySpan<Node> elements, bool? hasTrailingComma = null)
+    {
+        var array = store.NewList(elements, hasTrailingComma == true);
         AggregateChildrenFlags(store, array);
         return array;
     }
@@ -402,19 +387,20 @@ internal sealed partial class NodeFactory
         return childFlags;
     }
 
-    internal static TransformFlags PropagateChildrenFlags(NodeArray? children)
+    // (The store of the factory; header 0, an undefined list, has no transform flags.)
+    internal TransformFlags PropagateChildrenFlags(NodeList children)
     {
-        return children != null ? children.TransformFlags : TransformFlags.None;
+        return !children.IsNone ? store.TransformFlags(children) : TransformFlags.None;
     }
 
-    internal static void AggregateChildrenFlags(NodeStore store, NodeArray children)
+    internal static void AggregateChildrenFlags(NodeStore store, NodeList children)
     {
         var subtreeFlags = TransformFlags.None;
-        foreach (var child in children)
+        foreach (var child in store.Nodes(children))
         {
             subtreeFlags |= PropagateChildFlags(store, child);
         }
-        children.TransformFlags = subtreeFlags;
+        store.SetTransformFlags(children, subtreeFlags);
     }
 
     /// <summary>

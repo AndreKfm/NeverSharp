@@ -18,7 +18,7 @@ namespace NeverSharp.Optimized;
 internal static partial class NodeVisitor
 {
     /// <summary>parser.ts forEachChild: visits the children of a node in TypeScript's order; returns the first non-null callback result.</summary>
-    public static T? ForEachChild<T>(NodeStore store, Node node, Func<Node, T?> cbNode, Func<NodeArray, T?>? cbNodes = null) where T : class
+    public static T? ForEachChild<T>(NodeStore store, Node node, Func<Node, T?> cbNode, Func<NodeList, T?>? cbNodes = null) where T : class
     {
         if (node.IsNone || store.Kind(node) <= SyntaxKind.LastToken)
         {
@@ -30,13 +30,13 @@ internal static partial class NodeVisitor
                 return VisitNode(cbNode, store.Left(node))
                 ?? VisitNode(cbNode, store.Right(node));
             case SyntaxKind.TypeParameter:
-                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                return VisitNodes(store, cbNode, cbNodes, store.Modifiers(node))
                 ?? VisitNode(cbNode, store.Name(node))
                 ?? VisitNode(cbNode, store.Constraint(node))
                 ?? VisitNode(cbNode, store.Default(node))
                 ?? VisitNode(cbNode, store.Expression(node));
             case SyntaxKind.ShorthandPropertyAssignment:
-                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                return VisitNodes(store, cbNode, cbNodes, store.Modifiers(node))
                 ?? VisitNode(cbNode, store.Name(node))
                 ?? VisitNode(cbNode, store.QuestionToken(node))
                 ?? VisitNode(cbNode, store.ExclamationToken(node))
@@ -45,27 +45,27 @@ internal static partial class NodeVisitor
             case SyntaxKind.SpreadAssignment:
                 return VisitNode(cbNode, store.Expression(node));
             case SyntaxKind.Parameter:
-                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                return VisitNodes(store, cbNode, cbNodes, store.Modifiers(node))
                 ?? VisitNode(cbNode, store.DotDotDotToken(node))
                 ?? VisitNode(cbNode, store.Name(node))
                 ?? VisitNode(cbNode, store.QuestionToken(node))
                 ?? VisitNode(cbNode, store.Type(node))
                 ?? VisitNode(cbNode, store.Initializer(node));
             case SyntaxKind.PropertyDeclaration:
-                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                return VisitNodes(store, cbNode, cbNodes, store.Modifiers(node))
                 ?? VisitNode(cbNode, store.Name(node))
                 ?? VisitNode(cbNode, store.QuestionToken(node))
                 ?? VisitNode(cbNode, store.ExclamationToken(node))
                 ?? VisitNode(cbNode, store.Type(node))
                 ?? VisitNode(cbNode, store.Initializer(node));
             case SyntaxKind.PropertySignature:
-                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                return VisitNodes(store, cbNode, cbNodes, store.Modifiers(node))
                 ?? VisitNode(cbNode, store.Name(node))
                 ?? VisitNode(cbNode, store.QuestionToken(node))
                 ?? VisitNode(cbNode, store.Type(node))
                 ?? VisitNode(cbNode, store.Initializer(node));
             case SyntaxKind.PropertyAssignment:
-                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                return VisitNodes(store, cbNode, cbNodes, store.Modifiers(node))
                 ?? VisitNode(cbNode, store.Name(node))
                 ?? VisitNode(cbNode, store.QuestionToken(node))
                 ?? VisitNode(cbNode, store.ExclamationToken(node))
@@ -81,112 +81,112 @@ internal static partial class NodeVisitor
                 ?? VisitNode(cbNode, store.Name(node))
                 ?? VisitNode(cbNode, store.Initializer(node));
             case SyntaxKind.IndexSignature:
-                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
-                ?? VisitNodes(cbNode, cbNodes, store.TypeParameters(node))
-                ?? VisitNodes(cbNode, cbNodes, store.Parameters(node))
+                return VisitNodes(store, cbNode, cbNodes, store.Modifiers(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.TypeParameters(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.Parameters(node))
                 ?? VisitNode(cbNode, store.Type(node));
             case SyntaxKind.ConstructorType:
-                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
-                ?? VisitNodes(cbNode, cbNodes, store.TypeParameters(node))
-                ?? VisitNodes(cbNode, cbNodes, store.Parameters(node))
+                return VisitNodes(store, cbNode, cbNodes, store.Modifiers(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.TypeParameters(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.Parameters(node))
                 ?? VisitNode(cbNode, store.Type(node));
             case SyntaxKind.FunctionType:
-                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
-                ?? VisitNodes(cbNode, cbNodes, store.TypeParameters(node))
-                ?? VisitNodes(cbNode, cbNodes, store.Parameters(node))
+                return VisitNodes(store, cbNode, cbNodes, store.Modifiers(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.TypeParameters(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.Parameters(node))
                 ?? VisitNode(cbNode, store.Type(node));
             case SyntaxKind.CallSignature:
-                return VisitNodes(cbNode, cbNodes, store.TypeParameters(node))
-                ?? VisitNodes(cbNode, cbNodes, store.Parameters(node))
+                return VisitNodes(store, cbNode, cbNodes, store.TypeParameters(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.Parameters(node))
                 ?? VisitNode(cbNode, store.Type(node));
             case SyntaxKind.ConstructSignature:
-                return VisitNodes(cbNode, cbNodes, store.TypeParameters(node))
-                ?? VisitNodes(cbNode, cbNodes, store.Parameters(node))
+                return VisitNodes(store, cbNode, cbNodes, store.TypeParameters(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.Parameters(node))
                 ?? VisitNode(cbNode, store.Type(node));
             case SyntaxKind.MethodDeclaration:
-                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                return VisitNodes(store, cbNode, cbNodes, store.Modifiers(node))
                 ?? VisitNode(cbNode, store.AsteriskToken(node))
                 ?? VisitNode(cbNode, store.Name(node))
                 ?? VisitNode(cbNode, store.QuestionToken(node))
                 ?? VisitNode(cbNode, store.ExclamationToken(node))
-                ?? VisitNodes(cbNode, cbNodes, store.TypeParameters(node))
-                ?? VisitNodes(cbNode, cbNodes, store.Parameters(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.TypeParameters(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.Parameters(node))
                 ?? VisitNode(cbNode, store.Type(node))
                 ?? VisitNode(cbNode, store.Body(node));
             case SyntaxKind.MethodSignature:
-                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                return VisitNodes(store, cbNode, cbNodes, store.Modifiers(node))
                 ?? VisitNode(cbNode, store.Name(node))
                 ?? VisitNode(cbNode, store.QuestionToken(node))
-                ?? VisitNodes(cbNode, cbNodes, store.TypeParameters(node))
-                ?? VisitNodes(cbNode, cbNodes, store.Parameters(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.TypeParameters(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.Parameters(node))
                 ?? VisitNode(cbNode, store.Type(node));
             case SyntaxKind.Constructor:
-                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                return VisitNodes(store, cbNode, cbNodes, store.Modifiers(node))
                 ?? VisitNode(cbNode, store.Name(node))
-                ?? VisitNodes(cbNode, cbNodes, store.TypeParameters(node))
-                ?? VisitNodes(cbNode, cbNodes, store.Parameters(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.TypeParameters(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.Parameters(node))
                 ?? VisitNode(cbNode, store.Type(node))
                 ?? VisitNode(cbNode, store.Body(node));
             case SyntaxKind.GetAccessor:
-                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                return VisitNodes(store, cbNode, cbNodes, store.Modifiers(node))
                 ?? VisitNode(cbNode, store.Name(node))
-                ?? VisitNodes(cbNode, cbNodes, store.TypeParameters(node))
-                ?? VisitNodes(cbNode, cbNodes, store.Parameters(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.TypeParameters(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.Parameters(node))
                 ?? VisitNode(cbNode, store.Type(node))
                 ?? VisitNode(cbNode, store.Body(node));
             case SyntaxKind.SetAccessor:
-                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                return VisitNodes(store, cbNode, cbNodes, store.Modifiers(node))
                 ?? VisitNode(cbNode, store.Name(node))
-                ?? VisitNodes(cbNode, cbNodes, store.TypeParameters(node))
-                ?? VisitNodes(cbNode, cbNodes, store.Parameters(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.TypeParameters(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.Parameters(node))
                 ?? VisitNode(cbNode, store.Type(node))
                 ?? VisitNode(cbNode, store.Body(node));
             case SyntaxKind.FunctionDeclaration:
-                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                return VisitNodes(store, cbNode, cbNodes, store.Modifiers(node))
                 ?? VisitNode(cbNode, store.AsteriskToken(node))
                 ?? VisitNode(cbNode, store.Name(node))
-                ?? VisitNodes(cbNode, cbNodes, store.TypeParameters(node))
-                ?? VisitNodes(cbNode, cbNodes, store.Parameters(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.TypeParameters(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.Parameters(node))
                 ?? VisitNode(cbNode, store.Type(node))
                 ?? VisitNode(cbNode, store.Body(node));
             case SyntaxKind.FunctionExpression:
-                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                return VisitNodes(store, cbNode, cbNodes, store.Modifiers(node))
                 ?? VisitNode(cbNode, store.AsteriskToken(node))
                 ?? VisitNode(cbNode, store.Name(node))
-                ?? VisitNodes(cbNode, cbNodes, store.TypeParameters(node))
-                ?? VisitNodes(cbNode, cbNodes, store.Parameters(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.TypeParameters(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.Parameters(node))
                 ?? VisitNode(cbNode, store.Type(node))
                 ?? VisitNode(cbNode, store.Body(node));
             case SyntaxKind.ArrowFunction:
-                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
-                ?? VisitNodes(cbNode, cbNodes, store.TypeParameters(node))
-                ?? VisitNodes(cbNode, cbNodes, store.Parameters(node))
+                return VisitNodes(store, cbNode, cbNodes, store.Modifiers(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.TypeParameters(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.Parameters(node))
                 ?? VisitNode(cbNode, store.Type(node))
                 ?? VisitNode(cbNode, store.EqualsGreaterThanToken(node))
                 ?? VisitNode(cbNode, store.Body(node));
             case SyntaxKind.ClassStaticBlockDeclaration:
-                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                return VisitNodes(store, cbNode, cbNodes, store.Modifiers(node))
                 ?? VisitNode(cbNode, store.Body(node));
             case SyntaxKind.TypeReference:
                 return VisitNode(cbNode, store.TypeName(node))
-                ?? VisitNodes(cbNode, cbNodes, store.TypeArguments(node));
+                ?? VisitNodes(store, cbNode, cbNodes, store.TypeArguments(node));
             case SyntaxKind.TypePredicate:
                 return VisitNode(cbNode, store.AssertsModifier(node))
                 ?? VisitNode(cbNode, store.ParameterName(node))
                 ?? VisitNode(cbNode, store.Type(node));
             case SyntaxKind.TypeQuery:
                 return VisitNode(cbNode, store.ExprName(node))
-                ?? VisitNodes(cbNode, cbNodes, store.TypeArguments(node));
+                ?? VisitNodes(store, cbNode, cbNodes, store.TypeArguments(node));
             case SyntaxKind.TypeLiteral:
-                return VisitNodes(cbNode, cbNodes, store.Members(node));
+                return VisitNodes(store, cbNode, cbNodes, store.Members(node));
             case SyntaxKind.ArrayType:
                 return VisitNode(cbNode, store.ElementType(node));
             case SyntaxKind.TupleType:
-                return VisitNodes(cbNode, cbNodes, store.Elements(node));
+                return VisitNodes(store, cbNode, cbNodes, store.Elements(node));
             case SyntaxKind.UnionType:
-                return VisitNodes(cbNode, cbNodes, store.Types(node));
+                return VisitNodes(store, cbNode, cbNodes, store.Types(node));
             case SyntaxKind.IntersectionType:
-                return VisitNodes(cbNode, cbNodes, store.Types(node));
+                return VisitNodes(store, cbNode, cbNodes, store.Types(node));
             case SyntaxKind.ConditionalType:
                 return VisitNode(cbNode, store.CheckType(node))
                 ?? VisitNode(cbNode, store.ExtendsType(node))
@@ -198,7 +198,7 @@ internal static partial class NodeVisitor
                 return VisitNode(cbNode, store.Argument(node))
                 ?? VisitNode(cbNode, store.Attributes(node))
                 ?? VisitNode(cbNode, store.Qualifier(node))
-                ?? VisitNodes(cbNode, cbNodes, store.TypeArguments(node));
+                ?? VisitNodes(store, cbNode, cbNodes, store.TypeArguments(node));
             case SyntaxKind.ImportTypeAssertionContainer:
                 return VisitNode(cbNode, store.AssertClause(node));
             case SyntaxKind.ParenthesizedType:
@@ -214,7 +214,7 @@ internal static partial class NodeVisitor
                 ?? VisitNode(cbNode, store.NameType(node))
                 ?? VisitNode(cbNode, store.QuestionToken(node))
                 ?? VisitNode(cbNode, store.Type(node))
-                ?? VisitNodes(cbNode, cbNodes, store.Members(node));
+                ?? VisitNodes(store, cbNode, cbNodes, store.Members(node));
             case SyntaxKind.LiteralType:
                 return VisitNode(cbNode, store.Literal(node));
             case SyntaxKind.NamedTupleMember:
@@ -223,13 +223,13 @@ internal static partial class NodeVisitor
                 ?? VisitNode(cbNode, store.QuestionToken(node))
                 ?? VisitNode(cbNode, store.Type(node));
             case SyntaxKind.ObjectBindingPattern:
-                return VisitNodes(cbNode, cbNodes, store.Elements(node));
+                return VisitNodes(store, cbNode, cbNodes, store.Elements(node));
             case SyntaxKind.ArrayBindingPattern:
-                return VisitNodes(cbNode, cbNodes, store.Elements(node));
+                return VisitNodes(store, cbNode, cbNodes, store.Elements(node));
             case SyntaxKind.ArrayLiteralExpression:
-                return VisitNodes(cbNode, cbNodes, store.Elements(node));
+                return VisitNodes(store, cbNode, cbNodes, store.Elements(node));
             case SyntaxKind.ObjectLiteralExpression:
-                return VisitNodes(cbNode, cbNodes, store.Properties(node));
+                return VisitNodes(store, cbNode, cbNodes, store.Properties(node));
             case SyntaxKind.PropertyAccessExpression:
                 return VisitNode(cbNode, store.Expression(node))
                 ?? VisitNode(cbNode, store.QuestionDotToken(node))
@@ -241,17 +241,17 @@ internal static partial class NodeVisitor
             case SyntaxKind.CallExpression:
                 return VisitNode(cbNode, store.Expression(node))
                 ?? VisitNode(cbNode, store.QuestionDotToken(node))
-                ?? VisitNodes(cbNode, cbNodes, store.TypeArguments(node))
-                ?? VisitNodes(cbNode, cbNodes, store.Arguments(node));
+                ?? VisitNodes(store, cbNode, cbNodes, store.TypeArguments(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.Arguments(node));
             case SyntaxKind.NewExpression:
                 return VisitNode(cbNode, store.Expression(node))
                 ?? null
-                ?? VisitNodes(cbNode, cbNodes, store.TypeArguments(node))
-                ?? VisitNodes(cbNode, cbNodes, store.Arguments(node));
+                ?? VisitNodes(store, cbNode, cbNodes, store.TypeArguments(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.Arguments(node));
             case SyntaxKind.TaggedTemplateExpression:
                 return VisitNode(cbNode, store.Tag(node))
                 ?? VisitNode(cbNode, store.QuestionDotToken(node))
-                ?? VisitNodes(cbNode, cbNodes, store.TypeArguments(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.TypeArguments(node))
                 ?? VisitNode(cbNode, store.Template(node));
             case SyntaxKind.TypeAssertionExpression:
                 return VisitNode(cbNode, store.Type(node))
@@ -296,17 +296,17 @@ internal static partial class NodeVisitor
             case SyntaxKind.SpreadElement:
                 return VisitNode(cbNode, store.Expression(node));
             case SyntaxKind.Block:
-                return VisitNodes(cbNode, cbNodes, store.Statements(node));
+                return VisitNodes(store, cbNode, cbNodes, store.Statements(node));
             case SyntaxKind.ModuleBlock:
-                return VisitNodes(cbNode, cbNodes, store.Statements(node));
+                return VisitNodes(store, cbNode, cbNodes, store.Statements(node));
             case SyntaxKind.SourceFile:
-                return VisitNodes(cbNode, cbNodes, store.Statements(node))
+                return VisitNodes(store, cbNode, cbNodes, store.Statements(node))
                 ?? VisitNode(cbNode, store.EndOfFileToken(node));
             case SyntaxKind.VariableStatement:
-                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                return VisitNodes(store, cbNode, cbNodes, store.Modifiers(node))
                 ?? VisitNode(cbNode, store.DeclarationList(node));
             case SyntaxKind.VariableDeclarationList:
-                return VisitNodes(cbNode, cbNodes, store.Declarations(node));
+                return VisitNodes(store, cbNode, cbNodes, store.Declarations(node));
             case SyntaxKind.ExpressionStatement:
                 return VisitNode(cbNode, store.Expression(node));
             case SyntaxKind.IfStatement:
@@ -346,12 +346,12 @@ internal static partial class NodeVisitor
                 return VisitNode(cbNode, store.Expression(node))
                 ?? VisitNode(cbNode, store.CaseBlock(node));
             case SyntaxKind.CaseBlock:
-                return VisitNodes(cbNode, cbNodes, store.Clauses(node));
+                return VisitNodes(store, cbNode, cbNodes, store.Clauses(node));
             case SyntaxKind.CaseClause:
                 return VisitNode(cbNode, store.Expression(node))
-                ?? VisitNodes(cbNode, cbNodes, store.Statements(node));
+                ?? VisitNodes(store, cbNode, cbNodes, store.Statements(node));
             case SyntaxKind.DefaultClause:
-                return VisitNodes(cbNode, cbNodes, store.Statements(node));
+                return VisitNodes(store, cbNode, cbNodes, store.Statements(node));
             case SyntaxKind.LabeledStatement:
                 return VisitNode(cbNode, store.Label(node))
                 ?? VisitNode(cbNode, store.Statement(node));
@@ -367,45 +367,45 @@ internal static partial class NodeVisitor
             case SyntaxKind.Decorator:
                 return VisitNode(cbNode, store.Expression(node));
             case SyntaxKind.ClassDeclaration:
-                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                return VisitNodes(store, cbNode, cbNodes, store.Modifiers(node))
                 ?? VisitNode(cbNode, store.Name(node))
-                ?? VisitNodes(cbNode, cbNodes, store.TypeParameters(node))
-                ?? VisitNodes(cbNode, cbNodes, store.HeritageClauses(node))
-                ?? VisitNodes(cbNode, cbNodes, store.Members(node));
+                ?? VisitNodes(store, cbNode, cbNodes, store.TypeParameters(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.HeritageClauses(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.Members(node));
             case SyntaxKind.ClassExpression:
-                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                return VisitNodes(store, cbNode, cbNodes, store.Modifiers(node))
                 ?? VisitNode(cbNode, store.Name(node))
-                ?? VisitNodes(cbNode, cbNodes, store.TypeParameters(node))
-                ?? VisitNodes(cbNode, cbNodes, store.HeritageClauses(node))
-                ?? VisitNodes(cbNode, cbNodes, store.Members(node));
+                ?? VisitNodes(store, cbNode, cbNodes, store.TypeParameters(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.HeritageClauses(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.Members(node));
             case SyntaxKind.InterfaceDeclaration:
-                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                return VisitNodes(store, cbNode, cbNodes, store.Modifiers(node))
                 ?? VisitNode(cbNode, store.Name(node))
-                ?? VisitNodes(cbNode, cbNodes, store.TypeParameters(node))
-                ?? VisitNodes(cbNode, cbNodes, store.HeritageClauses(node))
-                ?? VisitNodes(cbNode, cbNodes, store.Members(node));
+                ?? VisitNodes(store, cbNode, cbNodes, store.TypeParameters(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.HeritageClauses(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.Members(node));
             case SyntaxKind.TypeAliasDeclaration:
-                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                return VisitNodes(store, cbNode, cbNodes, store.Modifiers(node))
                 ?? VisitNode(cbNode, store.Name(node))
-                ?? VisitNodes(cbNode, cbNodes, store.TypeParameters(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.TypeParameters(node))
                 ?? VisitNode(cbNode, store.Type(node));
             case SyntaxKind.EnumDeclaration:
-                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                return VisitNodes(store, cbNode, cbNodes, store.Modifiers(node))
                 ?? VisitNode(cbNode, store.Name(node))
-                ?? VisitNodes(cbNode, cbNodes, store.Members(node));
+                ?? VisitNodes(store, cbNode, cbNodes, store.Members(node));
             case SyntaxKind.EnumMember:
                 return VisitNode(cbNode, store.Name(node))
                 ?? VisitNode(cbNode, store.Initializer(node));
             case SyntaxKind.ModuleDeclaration:
-                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                return VisitNodes(store, cbNode, cbNodes, store.Modifiers(node))
                 ?? VisitNode(cbNode, store.Name(node))
                 ?? VisitNode(cbNode, store.Body(node));
             case SyntaxKind.ImportEqualsDeclaration:
-                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                return VisitNodes(store, cbNode, cbNodes, store.Modifiers(node))
                 ?? VisitNode(cbNode, store.Name(node))
                 ?? VisitNode(cbNode, store.ModuleReference(node));
             case SyntaxKind.ImportDeclaration:
-                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                return VisitNodes(store, cbNode, cbNodes, store.Modifiers(node))
                 ?? VisitNode(cbNode, store.ImportClause(node))
                 ?? VisitNode(cbNode, store.ModuleSpecifier(node))
                 ?? VisitNode(cbNode, store.Attributes(node));
@@ -413,23 +413,23 @@ internal static partial class NodeVisitor
                 return VisitNode(cbNode, store.Name(node))
                 ?? VisitNode(cbNode, store.NamedBindings(node));
             case SyntaxKind.ImportAttributes:
-                return VisitNodes(cbNode, cbNodes, store.Elements(node));
+                return VisitNodes(store, cbNode, cbNodes, store.Elements(node));
             case SyntaxKind.ImportAttribute:
                 return VisitNode(cbNode, store.Name(node))
                 ?? VisitNode(cbNode, store.Value(node));
             case SyntaxKind.NamespaceExportDeclaration:
-                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                return VisitNodes(store, cbNode, cbNodes, store.Modifiers(node))
                 ?? VisitNode(cbNode, store.Name(node));
             case SyntaxKind.NamespaceImport:
                 return VisitNode(cbNode, store.Name(node));
             case SyntaxKind.NamespaceExport:
                 return VisitNode(cbNode, store.Name(node));
             case SyntaxKind.NamedImports:
-                return VisitNodes(cbNode, cbNodes, store.Elements(node));
+                return VisitNodes(store, cbNode, cbNodes, store.Elements(node));
             case SyntaxKind.NamedExports:
-                return VisitNodes(cbNode, cbNodes, store.Elements(node));
+                return VisitNodes(store, cbNode, cbNodes, store.Elements(node));
             case SyntaxKind.ExportDeclaration:
-                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                return VisitNodes(store, cbNode, cbNodes, store.Modifiers(node))
                 ?? VisitNode(cbNode, store.ExportClause(node))
                 ?? VisitNode(cbNode, store.ModuleSpecifier(node))
                 ?? VisitNode(cbNode, store.Attributes(node));
@@ -440,51 +440,51 @@ internal static partial class NodeVisitor
                 return VisitNode(cbNode, store.PropertyName(node))
                 ?? VisitNode(cbNode, store.Name(node));
             case SyntaxKind.ExportAssignment:
-                return VisitNodes(cbNode, cbNodes, store.Modifiers(node))
+                return VisitNodes(store, cbNode, cbNodes, store.Modifiers(node))
                 ?? VisitNode(cbNode, store.Expression(node));
             case SyntaxKind.TemplateExpression:
                 return VisitNode(cbNode, store.Head(node))
-                ?? VisitNodes(cbNode, cbNodes, store.TemplateSpans(node));
+                ?? VisitNodes(store, cbNode, cbNodes, store.TemplateSpans(node));
             case SyntaxKind.TemplateSpan:
                 return VisitNode(cbNode, store.Expression(node))
                 ?? VisitNode(cbNode, store.Literal(node));
             case SyntaxKind.TemplateLiteralType:
                 return VisitNode(cbNode, store.Head(node))
-                ?? VisitNodes(cbNode, cbNodes, store.TemplateSpans(node));
+                ?? VisitNodes(store, cbNode, cbNodes, store.TemplateSpans(node));
             case SyntaxKind.TemplateLiteralTypeSpan:
                 return VisitNode(cbNode, store.Type(node))
                 ?? VisitNode(cbNode, store.Literal(node));
             case SyntaxKind.ComputedPropertyName:
                 return VisitNode(cbNode, store.Expression(node));
             case SyntaxKind.HeritageClause:
-                return VisitNodes(cbNode, cbNodes, store.Types(node));
+                return VisitNodes(store, cbNode, cbNodes, store.Types(node));
             case SyntaxKind.ExpressionWithTypeArguments:
                 return VisitNode(cbNode, store.Expression(node))
-                ?? VisitNodes(cbNode, cbNodes, store.TypeArguments(node));
+                ?? VisitNodes(store, cbNode, cbNodes, store.TypeArguments(node));
             case SyntaxKind.ExternalModuleReference:
                 return VisitNode(cbNode, store.Expression(node));
             case SyntaxKind.MissingDeclaration:
-                return VisitNodes(cbNode, cbNodes, store.Modifiers(node));
+                return VisitNodes(store, cbNode, cbNodes, store.Modifiers(node));
             case SyntaxKind.CommaListExpression:
-                return VisitNodes(cbNode, cbNodes, store.Elements(node));
+                return VisitNodes(store, cbNode, cbNodes, store.Elements(node));
             case SyntaxKind.JsxElement:
                 return VisitNode(cbNode, store.OpeningElement(node))
-                ?? VisitNodes(cbNode, cbNodes, store.Children(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.Children(node))
                 ?? VisitNode(cbNode, store.ClosingElement(node));
             case SyntaxKind.JsxFragment:
                 return VisitNode(cbNode, store.OpeningFragment(node))
-                ?? VisitNodes(cbNode, cbNodes, store.Children(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.Children(node))
                 ?? VisitNode(cbNode, store.ClosingFragment(node));
             case SyntaxKind.JsxSelfClosingElement:
                 return VisitNode(cbNode, store.TagName(node))
-                ?? VisitNodes(cbNode, cbNodes, store.TypeArguments(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.TypeArguments(node))
                 ?? VisitNode(cbNode, store.Attributes(node));
             case SyntaxKind.JsxOpeningElement:
                 return VisitNode(cbNode, store.TagName(node))
-                ?? VisitNodes(cbNode, cbNodes, store.TypeArguments(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.TypeArguments(node))
                 ?? VisitNode(cbNode, store.Attributes(node));
             case SyntaxKind.JsxAttributes:
-                return VisitNodes(cbNode, cbNodes, store.Properties(node));
+                return VisitNodes(store, cbNode, cbNodes, store.Properties(node));
             case SyntaxKind.JsxAttribute:
                 return VisitNode(cbNode, store.Name(node))
                 ?? VisitNode(cbNode, store.Initializer(node));
@@ -513,19 +513,19 @@ internal static partial class NodeVisitor
             case SyntaxKind.JSDocVariadicType:
                 return VisitNode(cbNode, store.Type(node));
             case SyntaxKind.JSDocFunctionType:
-                return VisitNodes(cbNode, cbNodes, store.Parameters(node))
+                return VisitNodes(store, cbNode, cbNodes, store.Parameters(node))
                 ?? VisitNode(cbNode, store.Type(node));
             case SyntaxKind.JSDoc:
                 return (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray))
-                ?? VisitNodes(cbNode, cbNodes, store.Tags(node));
+                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))))
+                ?? VisitNodes(store, cbNode, cbNodes, store.Tags(node));
             case SyntaxKind.JSDocSeeTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? VisitNode(cbNode, store.Name(node))
                 ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
+                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
             case SyntaxKind.JSDocNameReference:
                 return VisitNode(cbNode, store.Name(node));
             case SyntaxKind.JSDocMemberName:
@@ -540,7 +540,7 @@ internal static partial class NodeVisitor
                 ?? VisitNode(cbNode, store.Name(node)))
                 ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
+                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
             case SyntaxKind.JSDocPropertyTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? (store.IsNameFirst(node)
@@ -550,31 +550,31 @@ internal static partial class NodeVisitor
                 ?? VisitNode(cbNode, store.Name(node)))
                 ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
+                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
             case SyntaxKind.JSDocAuthorTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
+                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
             case SyntaxKind.JSDocImplementsTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? VisitNode(cbNode, store.Class(node))
                 ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
+                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
             case SyntaxKind.JSDocAugmentsTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? VisitNode(cbNode, store.Class(node))
                 ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
+                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
             case SyntaxKind.JSDocTemplateTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? VisitNode(cbNode, store.Constraint(node))
-                ?? VisitNodes(cbNode, cbNodes, store.TypeParameters(node))
+                ?? VisitNodes(store, cbNode, cbNodes, store.TypeParameters(node))
                 ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
+                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
             case SyntaxKind.JSDocTypedefTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? ((!store.TypeExpression(node).IsNone && store.Kind(store.TypeExpression(node)) == SyntaxKind.JSDocTypeExpression)
@@ -582,61 +582,61 @@ internal static partial class NodeVisitor
                 ?? VisitNode(cbNode, store.FullName(node))
                 ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray))
+                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))))
                 : VisitNode(cbNode, store.FullName(node))
                 ?? VisitNode(cbNode, store.TypeExpression(node))
                 ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray)));
+                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node)))));
             case SyntaxKind.JSDocCallbackTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? VisitNode(cbNode, store.FullName(node))
                 ?? VisitNode(cbNode, store.TypeExpression(node))
                 ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
+                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
             case SyntaxKind.JSDocReturnTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? VisitNode(cbNode, store.TypeExpression(node))
                 ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
+                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
             case SyntaxKind.JSDocTypeTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? VisitNode(cbNode, store.TypeExpression(node))
                 ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
+                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
             case SyntaxKind.JSDocThisTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? VisitNode(cbNode, store.TypeExpression(node))
                 ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
+                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
             case SyntaxKind.JSDocEnumTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? VisitNode(cbNode, store.TypeExpression(node))
                 ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
+                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
             case SyntaxKind.JSDocSatisfiesTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? VisitNode(cbNode, store.TypeExpression(node))
                 ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
+                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
             case SyntaxKind.JSDocThrowsTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? VisitNode(cbNode, store.TypeExpression(node))
                 ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
+                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
             case SyntaxKind.JSDocOverloadTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? VisitNode(cbNode, store.TypeExpression(node))
                 ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
+                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
             case SyntaxKind.JSDocSignature:
                 return ForEachElement(store.JSDocSignatureTypeParameters(node), cbNode)
                 ?? ForEachElement(store.JSDocSignatureParameters(node), cbNode)
@@ -653,42 +653,42 @@ internal static partial class NodeVisitor
                 return VisitNode(cbNode, store.TagName(node))
                 ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
+                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
             case SyntaxKind.JSDocClassTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
+                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
             case SyntaxKind.JSDocPublicTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
+                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
             case SyntaxKind.JSDocPrivateTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
+                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
             case SyntaxKind.JSDocProtectedTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
+                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
             case SyntaxKind.JSDocReadonlyTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
+                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
             case SyntaxKind.JSDocDeprecatedTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
+                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
             case SyntaxKind.JSDocOverrideTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
+                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
             case SyntaxKind.JSDocImportTag:
                 return VisitNode(cbNode, store.TagName(node))
                 ?? VisitNode(cbNode, store.ImportClause(node))
@@ -696,7 +696,7 @@ internal static partial class NodeVisitor
                 ?? VisitNode(cbNode, store.Attributes(node))
                 ?? (store.Comment(node) is string
                 ? null
-                : VisitNodes(cbNode, cbNodes, store.Comment(node) as NodeArray));
+                : VisitNodes(store, cbNode, cbNodes, AsList(store.Comment(node))));
             case SyntaxKind.PartiallyEmittedExpression:
                 return VisitNode(cbNode, store.Expression(node));
             default:
@@ -707,16 +707,16 @@ internal static partial class NodeVisitor
     // parser.ts visitNode
     private static T? VisitNode<T>(Func<Node, T?> cbNode, Node node) where T : class => node.IsNone ? null : cbNode(node);
 
-    // parser.ts visitNodes
-    private static T? VisitNodes<T>(Func<Node, T?> cbNode, Func<NodeArray, T?>? cbNodes, NodeArray? nodes) where T : class
+    // parser.ts visitNodes (a list's elements stay where they are while lists are added)
+    private static T? VisitNodes<T>(NodeStore store, Func<Node, T?> cbNode, Func<NodeList, T?>? cbNodes, NodeList nodes) where T : class
     {
-        if (nodes is not null)
+        if (!nodes.IsNone)
         {
             if (cbNodes is not null)
             {
                 return cbNodes(nodes);
             }
-            foreach (var node in nodes)
+            foreach (var node in store.Nodes(nodes))
             {
                 var result = cbNode(node);
                 if (result is not null)
@@ -727,6 +727,9 @@ internal static partial class NodeVisitor
         }
         return null;
     }
+
+    // A NodeArray held in an object slot (string | NodeArray)
+    private static NodeList AsList(object? value) => value is NodeList list ? list : default;
 
     // core.ts forEach(array, callback): every element through cbNode, also when cbNodes is given
     private static T? ForEachElement<T>(IReadOnlyList<Node>? array, Func<Node, T?> cbNode) where T : class

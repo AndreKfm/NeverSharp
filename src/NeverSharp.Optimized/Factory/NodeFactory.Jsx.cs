@@ -20,7 +20,7 @@ internal sealed partial class NodeFactory
     //
 
     // @api
-    internal Node CreateJsxElement(Node openingElement, IReadOnlyList<Node> children, Node closingElement)
+    internal Node CreateJsxElement(Node openingElement, NodeList children, Node closingElement)
     {
         var node = CreateBaseNode(SyntaxKind.JsxElement);
         store.SetOpeningElement(node, openingElement);
@@ -34,7 +34,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateJsxSelfClosingElement(Node tagName, IReadOnlyList<Node>? typeArguments, Node attributes)
+    internal Node CreateJsxSelfClosingElement(Node tagName, NodeList typeArguments, Node attributes)
     {
         var node = CreateBaseNode(SyntaxKind.JsxSelfClosingElement);
         store.SetTagName(node, tagName);
@@ -44,7 +44,7 @@ internal sealed partial class NodeFactory
             PropagateChildrenFlags(store.TypeArguments(node)) |
             PropagateChildFlags(store, store.Attributes(node)) |
             TransformFlags.ContainsJsx));
-        if (store.TypeArguments(node) != null)
+        if (!store.TypeArguments(node).IsNone)
         {
             store.SetTransformFlags(node, store.TransformFlags(node) | TransformFlags.ContainsTypeScript);
         }
@@ -52,7 +52,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateJsxOpeningElement(Node tagName, IReadOnlyList<Node>? typeArguments, Node attributes)
+    internal Node CreateJsxOpeningElement(Node tagName, NodeList typeArguments, Node attributes)
     {
         var node = CreateBaseNode(SyntaxKind.JsxOpeningElement);
         store.SetTagName(node, tagName);
@@ -62,7 +62,7 @@ internal sealed partial class NodeFactory
             PropagateChildrenFlags(store.TypeArguments(node)) |
             PropagateChildFlags(store, store.Attributes(node)) |
             TransformFlags.ContainsJsx));
-        if (typeArguments != null)
+        if (!typeArguments.IsNone)
         {
             store.SetTransformFlags(node, store.TransformFlags(node) | TransformFlags.ContainsTypeScript);
         }
@@ -80,7 +80,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateJsxFragment(Node openingFragment, IReadOnlyList<Node> children, Node closingFragment)
+    internal Node CreateJsxFragment(Node openingFragment, NodeList children, Node closingFragment)
     {
         var node = CreateBaseNode(SyntaxKind.JsxFragment);
         store.SetOpeningFragment(node, openingFragment);
@@ -132,7 +132,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateJsxAttributes(IReadOnlyList<Node> properties)
+    internal Node CreateJsxAttributes(NodeList properties)
     {
         var node = CreateBaseDeclaration(SyntaxKind.JsxAttributes);
         store.SetProperties(node, CreateNodeArray(store, properties));
@@ -180,7 +180,7 @@ internal sealed partial class NodeFactory
     //
 
     // @api
-    internal Node CreateCaseClause(Node expression, IReadOnlyList<Node> statements)
+    internal Node CreateCaseClause(Node expression, NodeList statements)
     {
         var node = CreateBaseNode(SyntaxKind.CaseClause);
         store.SetExpression(node, Parenthesizer.ParenthesizeExpressionForDisallowedComma(expression));
@@ -192,7 +192,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateDefaultClause(IReadOnlyList<Node> statements)
+    internal Node CreateDefaultClause(NodeList statements)
     {
         var node = CreateBaseNode(SyntaxKind.DefaultClause);
         store.SetStatements(node, CreateNodeArray(store, statements));
@@ -201,7 +201,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateHeritageClause(SyntaxKind token, IReadOnlyList<Node> types)
+    internal Node CreateHeritageClause(SyntaxKind token, NodeList types)
     {
         var node = CreateBaseNode(SyntaxKind.HeritageClause);
         store.SetToken(node, token);
@@ -251,7 +251,7 @@ internal sealed partial class NodeFactory
         store.SetInitializer(node, Parenthesizer.ParenthesizeExpressionForDisallowedComma(initializer));
         store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateNameFlags(store, store.Name(node)) |
             PropagateChildFlags(store, store.Initializer(node))));
-        store.SetModifiers(node, null); // initialized by parser to report grammar errors
+        store.SetModifiers(node, default); // initialized by parser to report grammar errors
         store.SetQuestionToken(node, default); // initialized by parser to report grammar errors
         store.SetExclamationToken(node, default); // initialized by parser to report grammar errors
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
@@ -268,7 +268,7 @@ internal sealed partial class NodeFactory
             PropagateChildFlags(store, store.ObjectAssignmentInitializer(node)) |
             TransformFlags.ContainsES2015));
         store.SetEqualsToken(node, default); // initialized by parser to report grammar errors
-        store.SetModifiers(node, null); // initialized by parser to report grammar errors
+        store.SetModifiers(node, default); // initialized by parser to report grammar errors
         store.SetQuestionToken(node, default); // initialized by parser to report grammar errors
         store.SetExclamationToken(node, default); // initialized by parser to report grammar errors
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)

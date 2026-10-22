@@ -22,13 +22,13 @@ internal sealed partial class Parser
         return ParseEntityName(/*allowReservedWords*/ true, Diagnostics.Type_expected);
     }
 
-    private NodeArray? ParseTypeArgumentsOfTypeReference()
+    private NodeList ParseTypeArgumentsOfTypeReference()
     {
         if (!scanner.HasPrecedingLineBreak() && ReScanLessThanToken() == SyntaxKind.LessThanToken)
         {
             return ParseBracketedList(ParsingContext.TypeArguments, static p => p.ParseType(), SyntaxKind.LessThanToken, SyntaxKind.GreaterThanToken);
         }
-        return null;
+        return default;
     }
 
     private Node ParseTypeReference()
@@ -51,12 +51,12 @@ internal sealed partial class Parser
             case SyntaxKind.FunctionType:
             {
                 var functionType = node;
-                return IsMissingList(store.Parameters(functionType)) || TypeHasArrowFunctionBlockingParseError(store, store.Type(functionType));
+                return store.IsMissingList(store.Parameters(functionType)) || TypeHasArrowFunctionBlockingParseError(store, store.Type(functionType));
             }
             case SyntaxKind.ConstructorType:
             {
                 var constructorType = node;
-                return IsMissingList(store.Parameters(constructorType)) || TypeHasArrowFunctionBlockingParseError(store, store.Type(constructorType));
+                return store.IsMissingList(store.Parameters(constructorType)) || TypeHasArrowFunctionBlockingParseError(store, store.Type(constructorType));
             }
             case SyntaxKind.ParenthesizedType:
                 return TypeHasArrowFunctionBlockingParseError(store, store.Type(node));
@@ -134,7 +134,7 @@ internal sealed partial class Parser
             var type = ParseReturnType(SyntaxKind.ColonToken, /*isType*/ false);
             return WithJSDoc(FinishNode(factory.CreateJSDocFunctionType(parameters, type), pos), hasJSDoc);
         }
-        return FinishNode(factory.CreateTypeReferenceNode(ParseIdentifierName(), /*typeArguments*/ null), pos);
+        return FinishNode(factory.CreateTypeReferenceNode(ParseIdentifierName(), /*typeArguments*/ default), pos);
     }
 
     private Node ParseJSDocParameter()
@@ -148,7 +148,7 @@ internal sealed partial class Parser
         }
         return FinishNode(
             factory.CreateParameterDeclaration(
-                /*modifiers*/ null,
+                /*modifiers*/ default,
                 /*dotDotDotToken*/ default,
                 // TODO(rbuckton): JSDoc parameters don't have names (except `this`/`new`), should we manufacture an empty identifier?
                 name,
@@ -208,7 +208,7 @@ internal sealed partial class Parser
         ParseExpected(SyntaxKind.TypeOfKeyword);
         var entityName = ParseEntityName(/*allowReservedWords*/ true);
         // Make sure we perform ASI to prevent parsing the next line's type arguments as part of an instantiation expression.
-        var typeArguments = !scanner.HasPrecedingLineBreak() ? TryParseTypeArguments() : null;
+        var typeArguments = !scanner.HasPrecedingLineBreak() ? TryParseTypeArguments() : default;
         return FinishNode(factory.CreateTypeQueryNode(entityName, typeArguments), pos);
     }
 
@@ -248,13 +248,13 @@ internal sealed partial class Parser
         return FinishNode(node, pos);
     }
 
-    private NodeArray? ParseTypeParameters()
+    private NodeList ParseTypeParameters()
     {
         if (Token() == SyntaxKind.LessThanToken)
         {
             return ParseBracketedList(ParsingContext.TypeParameters, static p => p.ParseTypeParameter(), SyntaxKind.LessThanToken, SyntaxKind.GreaterThanToken);
         }
-        return null;
+        return default;
     }
 
     private bool IsStartOfParameter(bool isJSDocParameter)
@@ -266,12 +266,12 @@ internal sealed partial class Parser
             IsStartOfType(/*inStartOfParameter*/ !isJSDocParameter);
     }
 
-    private Node ParseNameOfParameter(NodeArray? modifiers)
+    private Node ParseNameOfParameter(NodeList modifiers)
     {
         // FormalParameter [Yield,Await]:
         //      BindingElement[?Yield,?Await]
         var name = ParseIdentifierOrPattern(Diagnostics.Private_identifiers_cannot_be_used_as_parameters);
-        if (Utilities.GetFullWidth(store, name) == 0 && !Core.Some(modifiers) && UtilitiesPublic.IsModifierKind(Token()))
+        if (Utilities.GetFullWidth(store, name) == 0 && !Core.Some(store.Nodes(modifiers)) && UtilitiesPublic.IsModifierKind(Token()))
         {
             // in cases like
             // 'use strict'
@@ -327,7 +327,7 @@ internal sealed partial class Parser
                 ParseTypeAnnotation(),
                 /*initializer*/ default);
 
-            var modifier = Core.FirstOrUndefined(modifiers);
+            var modifier = Core.FirstOrUndefined(store.Nodes(modifiers));
             if (!modifier.IsNone)
             {
                 ParseErrorAtRange(modifier, Diagnostics.Neither_decorators_nor_modifiers_may_be_applied_to_this_parameters);
@@ -395,7 +395,7 @@ internal sealed partial class Parser
     }
 
     /// <summary>TypeScript overloads: with allowAmbiguity true the result is defined; with false it may be undefined.</summary>
-    private NodeArray? ParseParametersWorker(SignatureFlags flags, bool allowAmbiguity)
+    private NodeList ParseParametersWorker(SignatureFlags flags, bool allowAmbiguity)
     {
         // FormalParameters [Yield,Await]: (modified)
         //      [empty]
@@ -428,7 +428,7 @@ internal sealed partial class Parser
         return parameters;
     }
 
-    private NodeArray ParseParameters(SignatureFlags flags)
+    private NodeList ParseParameters(SignatureFlags flags)
     {
         // FormalParameters [Yield,Await]: (modified)
         //      [empty]
@@ -553,7 +553,7 @@ internal sealed partial class Parser
         return Token() == SyntaxKind.ColonToken || Token() == SyntaxKind.CommaToken || Token() == SyntaxKind.CloseBracketToken;
     }
 
-    private Node ParseIndexSignatureDeclaration(int pos, bool hasJSDoc, NodeArray? modifiers)
+    private Node ParseIndexSignatureDeclaration(int pos, bool hasJSDoc, NodeList modifiers)
     {
         var parameters = ParseBracketedList(ParsingContext.Parameters, static p => p.ParseParameter(/*inOuterAwaitContext*/ false), SyntaxKind.OpenBracketToken, SyntaxKind.CloseBracketToken);
         var type = ParseTypeAnnotation();
@@ -562,7 +562,7 @@ internal sealed partial class Parser
         return WithJSDoc(FinishNode(node, pos), hasJSDoc);
     }
 
-    private Node ParsePropertyOrMethodSignature(int pos, bool hasJSDoc, NodeArray? modifiers)
+    private Node ParsePropertyOrMethodSignature(int pos, bool hasJSDoc, NodeList modifiers)
     {
         var name = ParsePropertyName();
         var questionToken = ParseOptionalToken(SyntaxKind.QuestionToken);
@@ -695,9 +695,9 @@ internal sealed partial class Parser
         return FinishNode(factory.CreateTypeLiteralNode(ParseObjectTypeMembers()), pos);
     }
 
-    private NodeArray ParseObjectTypeMembers()
+    private NodeList ParseObjectTypeMembers()
     {
-        NodeArray members;
+        NodeList members;
         if (ParseExpected(SyntaxKind.OpenBraceToken))
         {
             members = ParseList(ParsingContext.TypeMembers, static p => p.ParseTypeMember());
@@ -731,7 +731,7 @@ internal sealed partial class Parser
         var name = ParseIdentifierName();
         ParseExpected(SyntaxKind.InKeyword);
         var type = ParseType();
-        return FinishNode(factory.CreateTypeParameterDeclaration(/*modifiers*/ null, name, type, /*defaultType*/ default), pos);
+        return FinishNode(factory.CreateTypeParameterDeclaration(/*modifiers*/ default, name, type, /*defaultType*/ default), pos);
     }
 
     private Node ParseMappedType()
@@ -834,15 +834,15 @@ internal sealed partial class Parser
         return FinishNode(factory.CreateParenthesizedType(type), pos);
     }
 
-    private NodeArray? ParseModifiersForConstructorType()
+    private NodeList ParseModifiersForConstructorType()
     {
-        NodeArray? modifiers = null;
+        NodeList modifiers = default;
         if (Token() == SyntaxKind.AbstractKeyword)
         {
             var pos = GetNodePos();
             NextToken();
             var modifier = FinishNode(factory.CreateToken(SyntaxKind.AbstractKeyword), pos);
-            modifiers = CreateNodeArray(new NodeArray { modifier }, pos);
+            modifiers = CreateNodeArray([modifier], pos);
         }
         return modifiers;
     }
@@ -853,7 +853,7 @@ internal sealed partial class Parser
         var hasJSDoc = HasPrecedingJSDocComment();
         var modifiers = ParseModifiersForConstructorType();
         var isConstructorType = ParseOptional(SyntaxKind.NewKeyword);
-        Debug.Assert(modifiers == null || isConstructorType, "Per isStartOfFunctionOrConstructorType, a function type cannot have modifiers.");
+        Debug.Assert(modifiers.IsNone || isConstructorType, "Per isStartOfFunctionOrConstructorType, a function type cannot have modifiers.");
         var typeParameters = ParseTypeParameters();
         var parameters = ParseParameters(SignatureFlags.Type);
         var type = ParseReturnType(SyntaxKind.EqualsGreaterThanToken, /*isType*/ false);
@@ -1144,7 +1144,7 @@ internal sealed partial class Parser
         var pos = GetNodePos();
         var name = ParseIdentifier();
         var constraint = TryParse(static p => p.TryParseConstraintOfInferType());
-        var node = factory.CreateTypeParameterDeclaration(/*modifiers*/ null, name, constraint);
+        var node = factory.CreateTypeParameterDeclaration(/*modifiers*/ default, name, constraint);
         return FinishNode(node, pos);
     }
 
@@ -1201,7 +1201,7 @@ internal sealed partial class Parser
     private Node ParseUnionOrIntersectionType(
         SyntaxKind @operator,
         Func<Parser, Node> parseConstituentType,
-        Func<Parser, NodeArray, Node> createTypeNode)
+        Func<Parser, NodeList, Node> createTypeNode)
     {
         var pos = GetNodePos();
         var isUnionType = @operator == SyntaxKind.BarToken;
@@ -1209,10 +1209,12 @@ internal sealed partial class Parser
         var type = ((hasLeadingOperator ? ParseFunctionOrConstructorTypeToError(isUnionType) : default) is { IsNone: false } __t2 ? __t2 : parseConstituentType(this));
         if (Token() == @operator || hasLeadingOperator)
         {
-            var types = new NodeArray { type };
+            var types = store.BeginList();
+            store.Push(types, type);
             while (ParseOptional(@operator))
             {
-                types.Add((ParseFunctionOrConstructorTypeToError(isUnionType) is { IsNone: false } __t3 ? __t3 : parseConstituentType(this)));
+                var constituent = ParseFunctionOrConstructorTypeToError(isUnionType) is { IsNone: false } __t3 ? __t3 : parseConstituentType(this);
+                store.Push(types, constituent);
             }
             type = FinishNode(createTypeNode(this, CreateNodeArray(types, pos)), pos);
         }

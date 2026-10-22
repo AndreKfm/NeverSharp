@@ -112,13 +112,14 @@ internal static partial class UtilitiesPublic
     {
         if (Utilities.HasSyntacticModifier(store, node, ModifierFlags.Modifier))
         {
-            return Core.Filter((IReadOnlyList<Node>?)store.Modifiers(node), ((a0) => IsModifier(store, a0)));
+            var modifiers = store.Modifiers(node);
+            return modifiers.IsNone ? null : Core.Filter((IReadOnlyList<Node>)store.Nodes(modifiers).ToArray(), ((a0) => IsModifier(store, a0)));
         }
         return null;
     }
 
     /// <summary>`(param.parent as SignatureDeclaration).parameters`.</summary>
-    private static NodeArray GetParametersOfParent(NodeStore store, Node parent)
+    private static NodeList GetParametersOfParent(NodeStore store, Node parent)
     {
         return parent switch
         {
@@ -159,7 +160,7 @@ internal static partial class UtilitiesPublic
             }
             else
             {
-                var i = GetParametersOfParent(store, store.Parent(param)).IndexOf(param);
+                var i = store.Nodes(GetParametersOfParent(store, store.Parent(param))).IndexOf(param);
                 Debug.Assert(i > -1, "Parameters should always be in their parents' parameter list");
                 var paramTags = new List<Node>();
                 foreach (var tag in GetJSDocTagsWorker(store, store.Parent(param), noCache))
@@ -208,7 +209,7 @@ internal static partial class UtilitiesPublic
         var result = new List<Node>();
         foreach (var tag in GetJSDocTagsWorker(store, store.Parent(param), noCache))
         {
-            if (FactoryNodeTests.IsJSDocTemplateTag(store, tag) && Core.Some(store.TypeParameters(tag)!, tp => (string)store.EscapedText(store.Name(tp))! == name))
+            if (FactoryNodeTests.IsJSDocTemplateTag(store, tag) && Core.Some(store.Nodes(store.TypeParameters(tag)), tp => (string)store.EscapedText(store.Name(tp))! == name))
             {
                 result.Add(tag);
             }
@@ -298,10 +299,10 @@ internal static partial class UtilitiesPublic
                 if (FactoryNodeTests.IsJSDoc(store, j))
                 {
                     var jTags = store.Tags(j);
-                    if (jTags != null)
+                    if (!jTags.IsNone)
                     {
                         flat ??= [];
-                        flat.AddRange(jTags);
+                        flat.AddRange(store.Nodes(jTags));
                     }
                 }
                 else
@@ -363,11 +364,11 @@ internal static partial class UtilitiesPublic
 
     /// <summary>
     /// TypeScript: `hasProperty(array, "pos") && hasProperty(array, "end")`, i.e. whether createNodeArray has turned the
-    /// array into a NodeArray (see NodeArray.HasNodeArrayProperties).
+    /// array into a NodeArray (Track O: a list handle; a plain array is a list under construction or a span).
     /// </summary>
     internal static bool IsNodeArray(object? array)
     {
-        return array is NodeArray { HasNodeArrayProperties: true };
+        return array is NodeList;
     }
 
     // Literals

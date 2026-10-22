@@ -185,7 +185,7 @@ internal sealed partial class Parser
         // identifier and the current token is an arrow.
         if (store.Kind(expr) == SyntaxKind.Identifier && Token() == SyntaxKind.EqualsGreaterThanToken)
         {
-            return ParseSimpleArrowFunctionExpression(pos, expr, allowReturnTypeInArrowFunction, hasJSDoc, /*asyncModifier*/ null);
+            return ParseSimpleArrowFunctionExpression(pos, expr, allowReturnTypeInArrowFunction, hasJSDoc, /*asyncModifier*/ default);
         }
 
         // Now see if we might be in cases '2' or '3'.
@@ -268,11 +268,11 @@ internal sealed partial class Parser
         }
     }
 
-    private Node ParseSimpleArrowFunctionExpression(int pos, Node identifier, bool allowReturnTypeInArrowFunction, bool hasJSDoc, NodeArray? asyncModifier)
+    private Node ParseSimpleArrowFunctionExpression(int pos, Node identifier, bool allowReturnTypeInArrowFunction, bool hasJSDoc, NodeList asyncModifier)
     {
         Debug.Assert(Token() == SyntaxKind.EqualsGreaterThanToken, "parseSimpleArrowFunctionExpression should only have been called if we had a =>");
         var parameter = factory.CreateParameterDeclaration(
-            /*modifiers*/ null,
+            /*modifiers*/ default,
             /*dotDotDotToken*/ default,
             identifier,
             /*questionToken*/ default,
@@ -280,12 +280,10 @@ internal sealed partial class Parser
             /*initializer*/ default);
         FinishNode(parameter, store.Pos(identifier));
 
-        var parameterList = new NodeArray();
-        parameterList.Add(parameter);
-        var parameters = CreateNodeArray(parameterList, store.Pos(parameter), store.End(parameter));
+        var parameters = CreateNodeArray([parameter], store.Pos(parameter), store.End(parameter));
         var equalsGreaterThanToken = ParseExpectedToken(SyntaxKind.EqualsGreaterThanToken);
-        var body = ParseArrowFunctionExpressionBody(/*isAsync*/ asyncModifier != null, allowReturnTypeInArrowFunction);
-        var node = factory.CreateArrowFunction(asyncModifier, /*typeParameters*/ null, parameters, /*type*/ default, equalsGreaterThanToken, body);
+        var body = ParseArrowFunctionExpressionBody(/*isAsync*/ !asyncModifier.IsNone, allowReturnTypeInArrowFunction);
+        var node = factory.CreateArrowFunction(asyncModifier, /*typeParameters*/ default, parameters, /*type*/ default, equalsGreaterThanToken, body);
         return WithJSDoc(FinishNode(node, pos), hasJSDoc);
     }
 
@@ -551,7 +549,7 @@ internal sealed partial class Parser
         var pos = GetNodePos();
         var hasJSDoc = HasPrecedingJSDocComment();
         var modifiers = ParseModifiersForArrowFunction();
-        var isAsync = Core.Some(modifiers, ((a0) => FactoryNodeTests.IsAsyncModifier(store, a0))) ? SignatureFlags.Await : SignatureFlags.None;
+        var isAsync = Core.Some(store.Nodes(modifiers), ((a0) => FactoryNodeTests.IsAsyncModifier(store, a0))) ? SignatureFlags.Await : SignatureFlags.None;
         // Arrow functions are never generators.
         //
         // If we're speculatively parsing a signature for a parenthesized arrow function, then
@@ -561,7 +559,7 @@ internal sealed partial class Parser
         // close paren.
         var typeParameters = ParseTypeParameters();
 
-        NodeArray parameters;
+        NodeList parameters;
         if (!ParseExpected(SyntaxKind.OpenParenToken))
         {
             if (!allowAmbiguity)
@@ -575,7 +573,7 @@ internal sealed partial class Parser
             if (!allowAmbiguity)
             {
                 var maybeParameters = ParseParametersWorker(isAsync, allowAmbiguity);
-                if (maybeParameters == null)
+                if (maybeParameters.IsNone)
                 {
                     return default;
                 }
@@ -627,7 +625,7 @@ internal sealed partial class Parser
         var lastToken = Token();
         var equalsGreaterThanToken = ParseExpectedToken(SyntaxKind.EqualsGreaterThanToken);
         var body = (lastToken == SyntaxKind.EqualsGreaterThanToken || lastToken == SyntaxKind.OpenBraceToken)
-            ? ParseArrowFunctionExpressionBody(Core.Some(modifiers, ((a0) => FactoryNodeTests.IsAsyncModifier(store, a0))), allowReturnTypeInArrowFunction)
+            ? ParseArrowFunctionExpressionBody(Core.Some(store.Nodes(modifiers), ((a0) => FactoryNodeTests.IsAsyncModifier(store, a0))), allowReturnTypeInArrowFunction)
             : ParseIdentifier();
 
         // Given:
@@ -1213,7 +1211,7 @@ internal sealed partial class Parser
         {
             var startPos = GetNodePos();
             var typeArguments = TryParse(static p => p.ParseTypeArgumentsInExpression());
-            if (typeArguments != null)
+            if (!typeArguments.IsNone)
             {
                 ParseErrorAt(startPos, GetNodePos(), Diagnostics.super_may_not_use_type_arguments);
                 if (!IsTemplateStartOfTaggedTemplate())
@@ -1299,11 +1297,11 @@ internal sealed partial class Parser
         {
             ParseErrorAtRange(store.Name(propertyAccess), Diagnostics.An_optional_chain_cannot_contain_private_identifiers);
         }
-        if (FactoryNodeTests.IsExpressionWithTypeArguments(store, expression) && store.TypeArguments(expression) != null)
+        if (FactoryNodeTests.IsExpressionWithTypeArguments(store, expression) && !store.TypeArguments(expression).IsNone)
         {
-            var typeArguments = store.TypeArguments(expression)!;
-            var errorPos = typeArguments.Pos - 1;
-            var end = Scanner.SkipTrivia(sourceText, typeArguments.End) + 1;
+            var typeArguments = store.TypeArguments(expression);
+            var errorPos = store.Pos(typeArguments) - 1;
+            var end = Scanner.SkipTrivia(sourceText, store.End(typeArguments)) + 1;
             ParseErrorAt(errorPos, end, Diagnostics.An_instantiation_expression_cannot_be_followed_by_a_property_access);
         }
         return FinishNode(propertyAccess, pos);
@@ -1379,7 +1377,7 @@ internal sealed partial class Parser
                 // Absorb type arguments into TemplateExpression when preceding expression is ExpressionWithTypeArguments
                 expression = questionDotToken.IsNone && store.Kind(expression) == SyntaxKind.ExpressionWithTypeArguments ?
                     ParseTaggedTemplateRest(pos, store.Expression(expression), questionDotToken, store.TypeArguments(expression)) :
-                    ParseTaggedTemplateRest(pos, expression, questionDotToken, /*typeArguments*/ null);
+                    ParseTaggedTemplateRest(pos, expression, questionDotToken, /*typeArguments*/ default);
                 continue;
             }
 
@@ -1392,7 +1390,7 @@ internal sealed partial class Parser
                     continue;
                 }
                 var typeArguments = TryParse(static p => p.ParseTypeArgumentsInExpression());
-                if (typeArguments != null)
+                if (!typeArguments.IsNone)
                 {
                     expression = FinishNode(factory.CreateExpressionWithTypeArguments(expression, typeArguments), pos);
                     continue;
@@ -1408,7 +1406,7 @@ internal sealed partial class Parser
         return Token() == SyntaxKind.NoSubstitutionTemplateLiteral || Token() == SyntaxKind.TemplateHead;
     }
 
-    private Node ParseTaggedTemplateRest(int pos, Node tag, Node questionDotToken, NodeArray? typeArguments)
+    private Node ParseTaggedTemplateRest(int pos, Node tag, Node questionDotToken, NodeList typeArguments)
     {
         Node template;
         if (Token() == SyntaxKind.NoSubstitutionTemplateLiteral)
@@ -1437,7 +1435,7 @@ internal sealed partial class Parser
         while (true)
         {
             expression = ParseMemberExpressionRest(pos, expression, /*allowOptionalChain*/ true);
-            NodeArray? typeArguments = null;
+            NodeList typeArguments = default;
             var questionDotToken = ParseOptionalToken(SyntaxKind.QuestionDotToken);
             if (!questionDotToken.IsNone)
             {
@@ -1448,7 +1446,7 @@ internal sealed partial class Parser
                     continue;
                 }
             }
-            if (typeArguments != null || Token() == SyntaxKind.OpenParenToken)
+            if (!typeArguments.IsNone || Token() == SyntaxKind.OpenParenToken)
             {
                 // Absorb type arguments into CallExpression when preceding expression is ExpressionWithTypeArguments
                 if (questionDotToken.IsNone && store.Kind(expression) == SyntaxKind.ExpressionWithTypeArguments)
@@ -1474,7 +1472,7 @@ internal sealed partial class Parser
         return expression;
     }
 
-    private NodeArray ParseArgumentList()
+    private NodeList ParseArgumentList()
     {
         ParseExpected(SyntaxKind.OpenParenToken);
         var result = ParseDelimitedList(ParsingContext.ArgumentExpressions, static p => p.ParseArgumentExpression());
@@ -1482,17 +1480,17 @@ internal sealed partial class Parser
         return result;
     }
 
-    private NodeArray? ParseTypeArgumentsInExpression()
+    private NodeList ParseTypeArgumentsInExpression()
     {
         if ((contextFlags & NodeFlags.JavaScriptFile) != 0)
         {
             // TypeArguments must not be parsed in JavaScript files to avoid ambiguity with binary operators.
-            return null;
+            return default;
         }
 
         if (ReScanLessThanToken() != SyntaxKind.LessThanToken)
         {
-            return null;
+            return default;
         }
         NextToken();
 
@@ -1500,7 +1498,7 @@ internal sealed partial class Parser
         if (ReScanGreaterToken() != SyntaxKind.GreaterThanToken)
         {
             // If it doesn't have the closing `>` then it's definitely not an type argument list.
-            return null;
+            return default;
         }
         NextToken();
 
@@ -1508,7 +1506,7 @@ internal sealed partial class Parser
         // treat it as such. If the type argument list is followed by `(` or a template literal, as in
         // `f<number>(42)`, we favor the type argument interpretation even though JavaScript would view
         // it as a relational expression.
-        return typeArguments != null && CanFollowTypeArgumentsInExpression() ? typeArguments : null;
+        return !typeArguments.IsNone && CanFollowTypeArgumentsInExpression() ? typeArguments : default;
     }
 
     private bool CanFollowTypeArgumentsInExpression()
@@ -1732,7 +1730,7 @@ internal sealed partial class Parser
         ParseExpected(SyntaxKind.FunctionKeyword);
         var asteriskToken = ParseOptionalToken(SyntaxKind.AsteriskToken);
         var isGenerator = !asteriskToken.IsNone ? SignatureFlags.Yield : SignatureFlags.None;
-        var isAsync = Core.Some(modifiers, ((a0) => FactoryNodeTests.IsAsyncModifier(store, a0))) ? SignatureFlags.Await : SignatureFlags.None;
+        var isAsync = Core.Some(store.Nodes(modifiers), ((a0) => FactoryNodeTests.IsAsyncModifier(store, a0))) ? SignatureFlags.Await : SignatureFlags.None;
         var name = isGenerator != 0 && isAsync != 0 ? DoInYieldAndAwaitContext(static p => p.ParseOptionalBindingIdentifier()) :
             isGenerator != 0 ? DoInYieldContext(static p => p.ParseOptionalBindingIdentifier()) :
             isAsync != 0 ? DoInAwaitContext(static p => p.ParseOptionalBindingIdentifier()) :
@@ -1765,7 +1763,7 @@ internal sealed partial class Parser
         }
         var expressionPos = GetNodePos();
         var expression = ParseMemberExpressionRest(expressionPos, ParsePrimaryExpression(), /*allowOptionalChain*/ false);
-        NodeArray? typeArguments = null;
+        NodeList typeArguments = default;
         // Absorb type arguments into NewExpression when preceding expression is ExpressionWithTypeArguments
         if (store.Kind(expression) == SyntaxKind.ExpressionWithTypeArguments)
         {
@@ -1776,7 +1774,7 @@ internal sealed partial class Parser
         {
             ParseErrorAtCurrentToken(Diagnostics.Invalid_optional_chain_from_new_expression_Did_you_mean_to_call_0, Utilities.GetTextOfNodeFromSourceText(store, sourceText, expression));
         }
-        var argumentList = Token() == SyntaxKind.OpenParenToken ? ParseArgumentList() : null;
+        var argumentList = Token() == SyntaxKind.OpenParenToken ? ParseArgumentList() : default;
         return FinishNode(factory.CreateNewExpression(expression, typeArguments, argumentList), pos);
     }
 }

@@ -649,29 +649,29 @@ internal sealed partial class Parser
             case SyntaxKind.OpenBraceToken:
                 return ParseBlock(/*ignoreMissingOpenBrace*/ false);
             case SyntaxKind.VarKeyword:
-                return ParseVariableStatement(GetNodePos(), HasPrecedingJSDocComment(), /*modifiers*/ null);
+                return ParseVariableStatement(GetNodePos(), HasPrecedingJSDocComment(), /*modifiers*/ default);
             case SyntaxKind.LetKeyword:
                 if (IsLetDeclaration())
                 {
-                    return ParseVariableStatement(GetNodePos(), HasPrecedingJSDocComment(), /*modifiers*/ null);
+                    return ParseVariableStatement(GetNodePos(), HasPrecedingJSDocComment(), /*modifiers*/ default);
                 }
                 break;
             case SyntaxKind.AwaitKeyword:
                 if (IsAwaitUsingDeclaration())
                 {
-                    return ParseVariableStatement(GetNodePos(), HasPrecedingJSDocComment(), /*modifiers*/ null);
+                    return ParseVariableStatement(GetNodePos(), HasPrecedingJSDocComment(), /*modifiers*/ default);
                 }
                 break;
             case SyntaxKind.UsingKeyword:
                 if (IsUsingDeclaration())
                 {
-                    return ParseVariableStatement(GetNodePos(), HasPrecedingJSDocComment(), /*modifiers*/ null);
+                    return ParseVariableStatement(GetNodePos(), HasPrecedingJSDocComment(), /*modifiers*/ default);
                 }
                 break;
             case SyntaxKind.FunctionKeyword:
-                return ParseFunctionDeclaration(GetNodePos(), HasPrecedingJSDocComment(), /*modifiers*/ null);
+                return ParseFunctionDeclaration(GetNodePos(), HasPrecedingJSDocComment(), /*modifiers*/ default);
             case SyntaxKind.ClassKeyword:
-                return ParseClassDeclaration(GetNodePos(), HasPrecedingJSDocComment(), /*modifiers*/ null);
+                return ParseClassDeclaration(GetNodePos(), HasPrecedingJSDocComment(), /*modifiers*/ default);
             case SyntaxKind.IfKeyword:
                 return ParseIfStatement();
             case SyntaxKind.DoKeyword:
@@ -742,7 +742,7 @@ internal sealed partial class Parser
         var pos = GetNodePos();
         var hasJSDoc = HasPrecedingJSDocComment();
         var modifiers = ParseModifiers(/*allowDecorators*/ true);
-        var isAmbient = Core.Some(modifiers, ((a0) => IsDeclareModifier(store, a0)));
+        var isAmbient = Core.Some(store.Nodes(modifiers), ((a0) => IsDeclareModifier(store, a0)));
         if (isAmbient)
         {
             var node = TryReuseAmbientDeclaration(pos);
@@ -751,7 +751,7 @@ internal sealed partial class Parser
                 return node;
             }
 
-            foreach (var m in modifiers!)
+            foreach (var m in store.Nodes(modifiers))
             {
                 store.SetFlags(m, store.Flags(m) | NodeFlags.Ambient);
             }
@@ -784,7 +784,7 @@ internal sealed partial class Parser
         });
     }
 
-    private Node ParseDeclarationWorker(int pos, bool hasJSDoc, NodeArray? modifiersIn)
+    private Node ParseDeclarationWorker(int pos, bool hasJSDoc, NodeList modifiersIn)
     {
         switch (Token())
         {
@@ -828,7 +828,7 @@ internal sealed partial class Parser
                         return ParseExportDeclaration(pos, hasJSDoc, modifiersIn);
                 }
         }
-        if (modifiersIn != null)
+        if (!modifiersIn.IsNone)
         {
             // We reached this point because we encountered decorators and/or modifiers and assumed a declaration
             // would follow. For recovery and error reporting purposes, return an incomplete declaration.

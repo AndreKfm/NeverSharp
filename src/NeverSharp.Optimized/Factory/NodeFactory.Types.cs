@@ -31,27 +31,27 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateTypeReferenceNode(object typeName, IReadOnlyList<Node>? typeArguments)
+    internal Node CreateTypeReferenceNode(object typeName, NodeList typeArguments)
     {
         var node = CreateBaseNode(SyntaxKind.TypeReference);
         store.SetTypeName(node, AsName(typeName));
-        store.SetTypeArguments(node, typeArguments != null ? Parenthesizer.ParenthesizeTypeArguments(CreateNodeArray(store, typeArguments)) : null);
+        store.SetTypeArguments(node, !typeArguments.IsNone ? Parenthesizer.ParenthesizeTypeArguments(CreateNodeArray(store, typeArguments)) : default);
         store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
         return node;
     }
 
     // @api
     internal Node CreateFunctionTypeNode(
-        IReadOnlyList<Node>? typeParameters,
-        IReadOnlyList<Node> parameters,
+        NodeList typeParameters,
+        NodeList parameters,
         Node type)
     {
         var node = CreateBaseDeclaration(SyntaxKind.FunctionType);
         store.SetTypeParameters(node, AsNodeArray(store, typeParameters));
-        store.SetParameters(node, AsNodeArray(store, parameters)!);
+        store.SetParameters(node, AsNodeArray(store, parameters));
         store.SetType(node, type);
         store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
-        store.SetModifiers(node, null); // initialized by parser for grammar errors
+        store.SetModifiers(node, default); // initialized by parser for grammar errors
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         // node.locals = undefined; // initialized by binder (LocalsContainer)
         // node.nextContainer = undefined; // initialized by binder (LocalsContainer)
@@ -64,27 +64,27 @@ internal sealed partial class NodeFactory
     /// createConstructorTypeNode1, 3 to createConstructorTypeNode2. The two C# overloads are that dispatch.
     /// </summary>
     // @api
-    internal Node CreateConstructorTypeNode(IReadOnlyList<Node>? modifiers, IReadOnlyList<Node>? typeParameters, IReadOnlyList<Node> parameters, Node type)
+    internal Node CreateConstructorTypeNode(NodeList modifiers, NodeList typeParameters, NodeList parameters, Node type)
     {
         return CreateConstructorTypeNode1(modifiers, typeParameters, parameters, type);
     }
 
     // @api
-    internal Node CreateConstructorTypeNode(IReadOnlyList<Node>? typeParameters, IReadOnlyList<Node> parameters, Node type)
+    internal Node CreateConstructorTypeNode(NodeList typeParameters, NodeList parameters, Node type)
     {
         return CreateConstructorTypeNode2(typeParameters, parameters, type);
     }
 
     private Node CreateConstructorTypeNode1(
-        IReadOnlyList<Node>? modifiers,
-        IReadOnlyList<Node>? typeParameters,
-        IReadOnlyList<Node> parameters,
+        NodeList modifiers,
+        NodeList typeParameters,
+        NodeList parameters,
         Node type)
     {
         var node = CreateBaseDeclaration(SyntaxKind.ConstructorType);
         store.SetModifiers(node, AsNodeArray(store, modifiers));
         store.SetTypeParameters(node, AsNodeArray(store, typeParameters));
-        store.SetParameters(node, AsNodeArray(store, parameters)!);
+        store.SetParameters(node, AsNodeArray(store, parameters));
         store.SetType(node, type);
         store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
@@ -96,25 +96,25 @@ internal sealed partial class NodeFactory
 
     /// <summary>Deprecated.</summary>
     private Node CreateConstructorTypeNode2(
-        IReadOnlyList<Node>? typeParameters,
-        IReadOnlyList<Node> parameters,
+        NodeList typeParameters,
+        NodeList parameters,
         Node type)
     {
-        return CreateConstructorTypeNode1(/*modifiers*/ null, typeParameters, parameters, type);
+        return CreateConstructorTypeNode1(/*modifiers*/ default, typeParameters, parameters, type);
     }
 
     // @api
-    internal Node CreateTypeQueryNode(Node exprName, IReadOnlyList<Node>? typeArguments = null)
+    internal Node CreateTypeQueryNode(Node exprName, NodeList typeArguments = default)
     {
         var node = CreateBaseNode(SyntaxKind.TypeQuery);
         store.SetExprName(node, exprName);
-        store.SetTypeArguments(node, typeArguments != null ? Parenthesizer.ParenthesizeTypeArguments(typeArguments) : null);
+        store.SetTypeArguments(node, !typeArguments.IsNone ? Parenthesizer.ParenthesizeTypeArguments(typeArguments) : default);
         store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
         return node;
     }
 
     // @api
-    internal Node CreateTypeLiteralNode(IReadOnlyList<Node>? members)
+    internal Node CreateTypeLiteralNode(NodeList members)
     {
         var node = CreateBaseDeclaration(SyntaxKind.TypeLiteral);
         store.SetMembers(node, CreateNodeArray(store, members));
@@ -132,7 +132,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateTupleTypeNode(IReadOnlyList<Node> elements)
+    internal Node CreateTupleTypeNode(NodeList elements)
     {
         var node = CreateBaseNode(SyntaxKind.TupleType);
         store.SetElements(node, CreateNodeArray(store, Parenthesizer.ParenthesizeElementTypesOfTupleType(elements)));
@@ -171,7 +171,7 @@ internal sealed partial class NodeFactory
         return node;
     }
 
-    private Node CreateUnionOrIntersectionTypeNode(SyntaxKind kind, IReadOnlyList<Node> types, Func<IReadOnlyList<Node>, IReadOnlyList<Node>> parenthesize)
+    private Node CreateUnionOrIntersectionTypeNode(SyntaxKind kind, NodeList types, Func<NodeList, NodeList> parenthesize)
     {
         var node = CreateBaseNode(kind);
         var typesArray = CreateNodeArray(store, parenthesize(types));
@@ -188,13 +188,13 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateUnionTypeNode(IReadOnlyList<Node> types)
+    internal Node CreateUnionTypeNode(NodeList types)
     {
         return CreateUnionOrIntersectionTypeNode(SyntaxKind.UnionType, types, Parenthesizer.ParenthesizeConstituentTypesOfUnionType);
     }
 
     // @api
-    internal Node CreateIntersectionTypeNode(IReadOnlyList<Node> types)
+    internal Node CreateIntersectionTypeNode(NodeList types)
     {
         return CreateUnionOrIntersectionTypeNode(SyntaxKind.IntersectionType, types, Parenthesizer.ParenthesizeConstituentTypesOfIntersectionType);
     }
@@ -223,7 +223,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateTemplateLiteralType(Node head, IReadOnlyList<Node> templateSpans)
+    internal Node CreateTemplateLiteralType(Node head, NodeList templateSpans)
     {
         var node = CreateBaseNode(SyntaxKind.TemplateLiteralType);
         store.SetHead(node, head);
@@ -237,7 +237,7 @@ internal sealed partial class NodeFactory
         Node argument,
         Node attributes = default,
         Node qualifier = default,
-        IReadOnlyList<Node>? typeArguments = null,
+        NodeList typeArguments = default,
         bool isTypeOf = false)
     {
         var node = CreateBaseNode(SyntaxKind.ImportType);
@@ -246,7 +246,7 @@ internal sealed partial class NodeFactory
         // TypeScript: `if (node.assertions && node.assertions.assertClause && node.attributes) { ... }`; a new node has
         // no `assertions` (the deprecated property is not declared on the generated class), so the test is false.
         store.SetQualifier(node, qualifier);
-        store.SetTypeArguments(node, typeArguments != null ? Parenthesizer.ParenthesizeTypeArguments(typeArguments) : null);
+        store.SetTypeArguments(node, !typeArguments.IsNone ? Parenthesizer.ParenthesizeTypeArguments(typeArguments) : default);
         store.SetIsTypeOf(node, isTypeOf);
         store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
         return node;
@@ -292,7 +292,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateMappedTypeNode(Node readonlyToken, Node typeParameter, Node nameType, Node questionToken, Node type, IReadOnlyList<Node>? members)
+    internal Node CreateMappedTypeNode(Node readonlyToken, Node typeParameter, Node nameType, Node questionToken, Node type, NodeList members)
     {
         var node = CreateBaseDeclaration(SyntaxKind.MappedType);
         store.SetReadonlyToken(node, readonlyToken);
@@ -300,7 +300,7 @@ internal sealed partial class NodeFactory
         store.SetNameType(node, nameType);
         store.SetQuestionToken(node, questionToken);
         store.SetType(node, type);
-        store.SetMembers(node, members != null ? CreateNodeArray(store, members) : null);
+        store.SetMembers(node, !members.IsNone ? CreateNodeArray(store, members) : default);
         store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
         // node.locals = undefined; // initialized by binder (LocalsContainer)
         // node.nextContainer = undefined; // initialized by binder (LocalsContainer)
@@ -321,7 +321,7 @@ internal sealed partial class NodeFactory
     //
 
     // @api
-    internal Node CreateObjectBindingPattern(IReadOnlyList<Node> elements)
+    internal Node CreateObjectBindingPattern(NodeList elements)
     {
         var node = CreateBaseNode(SyntaxKind.ObjectBindingPattern);
         store.SetElements(node, CreateNodeArray(store, elements));
@@ -337,7 +337,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateArrayBindingPattern(IReadOnlyList<Node> elements)
+    internal Node CreateArrayBindingPattern(NodeList elements)
     {
         var node = CreateBaseNode(SyntaxKind.ArrayBindingPattern);
         store.SetElements(node, CreateNodeArray(store, elements));

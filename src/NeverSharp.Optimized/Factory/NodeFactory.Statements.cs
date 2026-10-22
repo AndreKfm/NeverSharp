@@ -20,7 +20,7 @@ internal sealed partial class NodeFactory
     //
 
     // @api
-    internal Node CreateBlock(IReadOnlyList<Node> statements, bool? multiLine = null)
+    internal Node CreateBlock(NodeList statements, bool? multiLine = null)
     {
         var node = CreateBaseNode(SyntaxKind.Block);
         store.SetStatements(node, CreateNodeArray(store, statements));
@@ -34,11 +34,11 @@ internal sealed partial class NodeFactory
 
     /// <summary>`createVariableStatement(modifiers, declarationList: VariableDeclarationList | readonly VariableDeclaration[])`.</summary>
     // @api
-    internal Node CreateVariableStatement(IReadOnlyList<Node>? modifiers, object declarationList)
+    internal Node CreateVariableStatement(NodeList modifiers, object declarationList)
     {
         var node = CreateBaseNode(SyntaxKind.VariableStatement);
         store.SetModifiers(node, AsNodeArray(store, modifiers));
-        store.SetDeclarationList(node, declarationList is IReadOnlyList<Node> list ? CreateVariableDeclarationList(list) : Node.FromObject(declarationList));
+        store.SetDeclarationList(node, declarationList is NodeList list ? CreateVariableDeclarationList(list) : Node.FromObject(declarationList));
         store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildrenFlags(store.Modifiers(node)) |
             PropagateChildFlags(store, store.DeclarationList(node))));
         if ((Utilities.ModifiersToFlags(store, store.Modifiers(node)) & ModifierFlags.Ambient) != 0)
@@ -299,7 +299,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateVariableDeclarationList(IReadOnlyList<Node> declarations, NodeFlags flags = NodeFlags.None)
+    internal Node CreateVariableDeclarationList(NodeList declarations, NodeFlags flags = NodeFlags.None)
     {
         var node = CreateBaseNode(SyntaxKind.VariableDeclarationList);
         store.SetFlags(node, store.Flags(node) | (flags & NodeFlags.BlockScoped));
@@ -320,11 +320,11 @@ internal sealed partial class NodeFactory
 
     // @api
     internal Node CreateFunctionDeclaration(
-        IReadOnlyList<Node>? modifiers,
+        NodeList modifiers,
         Node asteriskToken,
         object? name,
-        IReadOnlyList<Node>? typeParameters,
-        IReadOnlyList<Node> parameters,
+        NodeList typeParameters,
+        NodeList parameters,
         Node type,
         Node body)
     {
@@ -356,7 +356,7 @@ internal sealed partial class NodeFactory
                     isAsync ? TransformFlags.ContainsES2017 :
                     isGenerator ? TransformFlags.ContainsGenerator :
                     TransformFlags.None) |
-                (store.TypeParameters(node) != null || !store.Type(node).IsNone ? TransformFlags.ContainsTypeScript : TransformFlags.None) |
+                (!store.TypeParameters(node).IsNone || !store.Type(node).IsNone ? TransformFlags.ContainsTypeScript : TransformFlags.None) |
                 TransformFlags.ContainsHoistedDeclarationOrCompletion);
         }
         // node.typeArguments = undefined; // used in quick info
@@ -370,11 +370,11 @@ internal sealed partial class NodeFactory
 
     // @api
     internal Node CreateClassDeclaration(
-        IReadOnlyList<Node>? modifiers,
+        NodeList modifiers,
         object? name,
-        IReadOnlyList<Node>? typeParameters,
-        IReadOnlyList<Node>? heritageClauses,
-        IReadOnlyList<Node> members)
+        NodeList typeParameters,
+        NodeList heritageClauses,
+        NodeList members)
     {
         var node = CreateBaseDeclaration(SyntaxKind.ClassDeclaration);
         store.SetModifiers(node, AsNodeArray(store, modifiers));
@@ -392,8 +392,8 @@ internal sealed partial class NodeFactory
                 PropagateNameFlags(store, store.Name(node)) |
                 PropagateChildrenFlags(store.TypeParameters(node)) |
                 PropagateChildrenFlags(store.HeritageClauses(node)) |
-                PropagateChildrenFlags(store.Members(node)!) |
-                (store.TypeParameters(node) != null ? TransformFlags.ContainsTypeScript : TransformFlags.None) |
+                PropagateChildrenFlags(store.Members(node)) |
+                (!store.TypeParameters(node).IsNone ? TransformFlags.ContainsTypeScript : TransformFlags.None) |
                 TransformFlags.ContainsES2015));
             if ((store.TransformFlags(node) & TransformFlags.ContainsTypeScriptClassSyntax) != 0)
             {
@@ -406,11 +406,11 @@ internal sealed partial class NodeFactory
 
     // @api
     internal Node CreateInterfaceDeclaration(
-        IReadOnlyList<Node>? modifiers,
+        NodeList modifiers,
         object name,
-        IReadOnlyList<Node>? typeParameters,
-        IReadOnlyList<Node>? heritageClauses,
-        IReadOnlyList<Node> members)
+        NodeList typeParameters,
+        NodeList heritageClauses,
+        NodeList members)
     {
         var node = CreateBaseDeclaration(SyntaxKind.InterfaceDeclaration);
         store.SetModifiers(node, AsNodeArray(store, modifiers));
@@ -425,9 +425,9 @@ internal sealed partial class NodeFactory
 
     // @api
     internal Node CreateTypeAliasDeclaration(
-        IReadOnlyList<Node>? modifiers,
+        NodeList modifiers,
         object name,
-        IReadOnlyList<Node>? typeParameters,
+        NodeList typeParameters,
         Node type)
     {
         var node = CreateBaseDeclaration(SyntaxKind.TypeAliasDeclaration);
@@ -444,9 +444,9 @@ internal sealed partial class NodeFactory
 
     // @api
     internal Node CreateEnumDeclaration(
-        IReadOnlyList<Node>? modifiers,
+        NodeList modifiers,
         object name,
-        IReadOnlyList<Node> members)
+        NodeList members)
     {
         var node = CreateBaseDeclaration(SyntaxKind.EnumDeclaration);
         store.SetModifiers(node, AsNodeArray(store, modifiers));
@@ -454,7 +454,7 @@ internal sealed partial class NodeFactory
         store.SetMembers(node, CreateNodeArray(store, members));
         store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildrenFlags(store.Modifiers(node)) |
             PropagateChildFlags(store, store.Name(node)) |
-            PropagateChildrenFlags(store.Members(node)!) |
+            PropagateChildrenFlags(store.Members(node)) |
             TransformFlags.ContainsTypeScript));
         store.SetTransformFlags(node, store.TransformFlags(node) & (~TransformFlags.ContainsPossibleTopLevelAwait)); // Enum declarations cannot contain `await`
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
@@ -463,7 +463,7 @@ internal sealed partial class NodeFactory
 
     // @api
     internal Node CreateModuleDeclaration(
-        IReadOnlyList<Node>? modifiers,
+        NodeList modifiers,
         Node name,
         Node body,
         NodeFlags flags = NodeFlags.None)
@@ -492,7 +492,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateModuleBlock(IReadOnlyList<Node> statements)
+    internal Node CreateModuleBlock(NodeList statements)
     {
         var node = CreateBaseNode(SyntaxKind.ModuleBlock);
         store.SetStatements(node, CreateNodeArray(store, statements));
@@ -502,7 +502,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateCaseBlock(IReadOnlyList<Node> clauses)
+    internal Node CreateCaseBlock(NodeList clauses)
     {
         var node = CreateBaseNode(SyntaxKind.CaseBlock);
         store.SetClauses(node, CreateNodeArray(store, clauses));
@@ -519,14 +519,14 @@ internal sealed partial class NodeFactory
         store.SetName(node, AsName(name));
         store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateIdentifierNameFlags(store, store.Name(node)) |
             TransformFlags.ContainsTypeScript));
-        store.SetModifiers(node, null); // initialized by parser to report grammar errors
+        store.SetModifiers(node, default); // initialized by parser to report grammar errors
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         return node;
     }
 
     // @api
     internal Node CreateImportEqualsDeclaration(
-        IReadOnlyList<Node>? modifiers,
+        NodeList modifiers,
         bool isTypeOnly,
         object name,
         Node moduleReference)
@@ -550,7 +550,7 @@ internal sealed partial class NodeFactory
 
     // @api
     internal Node CreateImportDeclaration(
-        IReadOnlyList<Node>? modifiers,
+        NodeList modifiers,
         Node importClause,
         Node moduleSpecifier,
         Node attributes)
@@ -596,7 +596,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateImportAttributes(IReadOnlyList<Node> elements, bool? multiLine = null, SyntaxKind? token = null)
+    internal Node CreateImportAttributes(NodeList elements, bool? multiLine = null, SyntaxKind? token = null)
     {
         var node = CreateBaseNode(SyntaxKind.ImportAttributes);
         store.SetToken(node, token ?? SyntaxKind.WithKeyword);
@@ -638,7 +638,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateNamedImports(IReadOnlyList<Node> elements)
+    internal Node CreateNamedImports(NodeList elements)
     {
         var node = CreateBaseNode(SyntaxKind.NamedImports);
         store.SetElements(node, CreateNodeArray(store, elements));
@@ -662,7 +662,7 @@ internal sealed partial class NodeFactory
 
     // @api
     internal Node CreateExportAssignment(
-        IReadOnlyList<Node>? modifiers,
+        NodeList modifiers,
         bool? isExportEquals,
         Node expression)
     {
@@ -680,7 +680,7 @@ internal sealed partial class NodeFactory
 
     // @api
     internal Node CreateExportDeclaration(
-        IReadOnlyList<Node>? modifiers,
+        NodeList modifiers,
         bool isTypeOnly,
         Node exportClause,
         Node moduleSpecifier = default,
@@ -702,7 +702,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateNamedExports(IReadOnlyList<Node> elements)
+    internal Node CreateNamedExports(NodeList elements)
     {
         var node = CreateBaseNode(SyntaxKind.NamedExports);
         store.SetElements(node, CreateNodeArray(store, elements));

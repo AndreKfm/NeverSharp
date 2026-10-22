@@ -1,6 +1,6 @@
 // Copyright 2026 Andre Kaufmann
 // SPDX-License-Identifier: Apache-2.0
-// Original code (not ported): Track O emitter for the node store's field accessors and ForEachChild (steps O6a, O6b).
+// Original code (not ported): Track O emitter for the node store's field accessors and ForEachChild (steps O6a, O6b, O7a).
 //
 // Track O's nodes are int handles into a per-parse arena (pre-registration §5.4); the parser and the factory
 // read and write a node only through NodeStore (src/NeverSharp.Optimized/Arena/NodeStore.cs). This emitter writes
@@ -11,14 +11,16 @@
 // - Layout of O6b variant A (compact records): a node is a variable-length record in one int array, its handle
 //   the record's offset. The record holds the header (kind word, flags, pos, end, transform flags), the index of
 //   the node's first object slot (only for kinds with object slots), and one int slot per child handle or scalar
-//   field; boolean fields are bits of the kind word; strings, node lists and other objects live in a block of
-//   object slots per node; rare fields (SIDE_FIELDS) live in the store's side table. A field's word offset, bit
+//   field; boolean fields are bits of the kind word; node lists are list handles (NodeList, step O7a) in int slots;
+//   strings and other objects live in a block of object slots per node; rare fields (SIDE_FIELDS) live in the
+//   store's side table. A field's word offset, bit
 //   or object slot depends on the node's class, looked up per SyntaxKind in a table.
 // - One getter and one setter per field name (`Expression(n)`, `SetExpression(n, v)`). A getter on a kind
 //   without the field reads as undefined (default), as the property does in TypeScript; a setter throws.
 //   Where one name has different types on different classes, the minority classes get `{Class}{Field}`.
 // - `Is{Class}(n)`: whether a node's kind belongs to a node class (Track F's `node is Class`).
-// - NodeVisitor.ForEachChild over handles, translating forEachChildTable entry by entry.
+// - NodeVisitor.ForEachChild over handles, translating forEachChildTable entry by entry; list elements are read
+//   through the store's list store.
 //
 // Writes src/NeverSharp.Optimized/Generated/NodeStore.g.cs and NodeVisitor.g.cs, and
 // artifacts/generate/optimized-fields.json (the class/field -> accessor map, for tools).
@@ -31,7 +33,9 @@ const BASE_FIELDS = new Set(["kind", "pos", "end", "id", "flags", "modifierFlags
 // Accessor names NodeStore.cs defines by hand (base fields and infrastructure).
 const RESERVED = new Set(["Kind", "Pos", "End", "Flags", "Parent", "TransformFlags", "ModifierFlagsCache", "Original", "EmitNode",
     "SetPos", "SetEnd", "SetFlags", "SetParent", "SetTransformFlags", "SetModifierFlagsCache", "SetOriginal", "SetEmitNode",
-    "Create", "GetMark", "Truncate", "Count"]);
+    "Create", "GetMark", "Truncate", "Count",
+    // The list store (NodeList.cs, step O7a).
+    "Nodes", "Length", "Element", "HasTrailingComma", "IsMissingList", "SetIsMissingList", "NewList", "BeginList", "Push", "FinishList", "DiscardList"]);
 const pascal = n => n[0].toUpperCase() + n.slice(1);
 
 function assignedPropertyNames() {
@@ -81,7 +85,7 @@ const EXTRA_FIELDS = {
     ],
 };
 
-// Field storage: { store: "slot" | "ref", type (C#, without `?`), nullable (refs), conv (slots: node|bool|int|enum) }.
+// Field storage: { store: "slot" | "ref", type (C#, without `?`), nullable (refs), conv (slots: node|list|bool|int|enum) }.
 function storage(cs, optional, usedAs) {
     switch (cs.k) {
         case "string": return { store: "ref", type: "string", nullable: optional };
@@ -89,12 +93,12 @@ function storage(cs, optional, usedAs) {
         case "int": return { store: "slot", type: "int", conv: "int" };
         case "enum": return cs.name === "int" ? { store: "slot", type: "int", conv: "int" } : { store: "slot", type: cs.name, conv: "enum" };
         case "node": return { store: "slot", type: "Node", conv: "node" };
-        case "nodes": return { store: "ref", type: "NodeArray", nullable: optional };
+        case "nodes": return { store: "slot", type: "NodeList", conv: "list" };
         case "array": return { store: "ref", type: "Node[]", nullable: true };
         case "stringOrNodes": return { store: "ref", type: "object", nullable: true };
         case "undefinedOnly":
             // Declared `?: undefined`; assigned for grammar errors where forEachChild visits it, never otherwise.
-            return usedAs === "nodes" ? { store: "ref", type: "NodeArray", nullable: true }
+            return usedAs === "nodes" ? { store: "slot", type: "NodeList", conv: "list" }
                 : usedAs === "node" ? { store: "slot", type: "Node", conv: "node" } : null;
         default: return OBJECT_TYPES[cs.ts] ? { store: "ref", ...OBJECT_TYPES[cs.ts] } : null; // binder/checker data: not stored
     }
@@ -261,8 +265,8 @@ export function emitOptimized(schema) {
         const nullable = isRef && a.nullable;
         const ret = isRef ? `${a.type}${nullable ? "?" : ""}` : a.type;
         const absent = isRef ? (nullable ? "null" : "null!") : "default";
-        const fromInt = v => a.conv === "node" ? `new Node(${v})` : a.conv === "bool" ? `${v} != 0` : a.conv === "enum" ? `(${a.type})${v}` : v;
-        const toInt = a.conv === "node" ? "value.Index" : a.conv === "bool" ? "(value ? 1 : 0)" : a.conv === "enum" ? "(int)value" : "value";
+        const fromInt = v => a.conv === "node" ? `new Node(${v})` : a.conv === "list" ? `new NodeList(${v})` : a.conv === "bool" ? `${v} != 0` : a.conv === "enum" ? `(${a.type})${v}` : v;
+        const toInt = a.conv === "node" || a.conv === "list" ? "value.Index" : a.conv === "bool" ? "(value ? 1 : 0)" : a.conv === "enum" ? "(int)value" : "value";
         const cast = v => a.type === "object" ? v : `Unsafe.As<${ret}>(${v})${nullable ? "" : "!"}`;
         const side = a.layouts.has("side");
         const layout = [...a.layouts].find(l => l !== "side") ?? "side"; // word, ref or bit; side if only there
@@ -320,7 +324,7 @@ export function emitOptimized(schema) {
             case "or": return ir.items.map(i => expr(i, cls)).join("\n                ?? ");
             case "none": return "null";
             case "node": { const f = field(cls, ir.prop); return f ? `VisitNode(cbNode, store.${f.accessor}(node))` : "null"; }
-            case "nodes": { const f = field(cls, ir.prop); return f ? `VisitNodes(cbNode, cbNodes, store.${f.accessor}(node)${f.type === "object" ? " as NodeArray" : ""})` : "null"; }
+            case "nodes": { const f = field(cls, ir.prop); return f ? `VisitNodes(store, cbNode, cbNodes, ${f.type === "object" ? `AsList(store.${f.accessor}(node))` : `store.${f.accessor}(node)`})` : "null"; }
             case "each": { const f = field(cls, ir.prop); return f ? `ForEachElement(store.${f.accessor}(node), cbNode)` : "null"; }
             case "cond": return `(${test(ir.test, cls)}\n                ? ${expr(ir.then, cls)}\n                : ${expr(ir.else, cls)})`;
             default: throw new Error(`unknown IR op ${ir.op}`);
@@ -331,7 +335,7 @@ export function emitOptimized(schema) {
         if (t.op !== "and" && !f) throw new Error(`${cls}.${t.prop} tested but not stored`);
         switch (t.op) {
             case "isString": return `store.${f.accessor}(node) is string`;
-            case "bool": return f.type === "bool" ? `store.${f.accessor}(node)` : f.conv === "node" ? `!store.${f.accessor}(node).IsNone` : `store.${f.accessor}(node) is not null`;
+            case "bool": return f.type === "bool" ? `store.${f.accessor}(node)` : f.conv === "node" || f.conv === "list" ? `!store.${f.accessor}(node).IsNone` : `store.${f.accessor}(node) is not null`;
             case "kindIs": return `store.Kind(store.${f.accessor}(node)) == SyntaxKind.${t.kind}`;
             case "and": return `(${test(t.left, cls)} && ${test(t.right, cls)})`;
             default: throw new Error(`unknown test ${t.op}`);
@@ -341,7 +345,7 @@ export function emitOptimized(schema) {
         "#nullable enable", "", "using NeverSharp.Generated;", "", "namespace NeverSharp.Optimized;", "",
         "internal static partial class NodeVisitor", "{",
         "    /// <summary>parser.ts forEachChild: visits the children of a node in TypeScript's order; returns the first non-null callback result.</summary>",
-        "    public static T? ForEachChild<T>(NodeStore store, Node node, Func<Node, T?> cbNode, Func<NodeArray, T?>? cbNodes = null) where T : class",
+        "    public static T? ForEachChild<T>(NodeStore store, Node node, Func<Node, T?> cbNode, Func<NodeList, T?>? cbNodes = null) where T : class",
         "    {",
         "        if (node.IsNone || store.Kind(node) <= SyntaxKind.LastToken)", "        {", "            return null;", "        }",
         "        switch (store.Kind(node))", "        {"];
@@ -352,9 +356,12 @@ export function emitOptimized(schema) {
     }
     v.push("            default:", "                return null;", "        }", "    }", "",
         "    // parser.ts visitNode", "    private static T? VisitNode<T>(Func<Node, T?> cbNode, Node node) where T : class => node.IsNone ? null : cbNode(node);", "",
-        "    // parser.ts visitNodes", "    private static T? VisitNodes<T>(Func<Node, T?> cbNode, Func<NodeArray, T?>? cbNodes, NodeArray? nodes) where T : class",
-        "    {", "        if (nodes is not null)", "        {", "            if (cbNodes is not null)", "            {", "                return cbNodes(nodes);", "            }",
-        "            foreach (var node in nodes)", "            {", "                var result = cbNode(node);", "                if (result is not null)", "                {", "                    return result;", "                }", "            }", "        }", "        return null;", "    }", "",
+        "    // parser.ts visitNodes (a list's elements stay where they are while lists are added)",
+        "    private static T? VisitNodes<T>(NodeStore store, Func<Node, T?> cbNode, Func<NodeList, T?>? cbNodes, NodeList nodes) where T : class",
+        "    {", "        if (!nodes.IsNone)", "        {", "            if (cbNodes is not null)", "            {", "                return cbNodes(nodes);", "            }",
+        "            foreach (var node in store.Nodes(nodes))", "            {", "                var result = cbNode(node);", "                if (result is not null)", "                {", "                    return result;", "                }", "            }", "        }", "        return null;", "    }", "",
+        "    // A NodeArray held in an object slot (string | NodeArray)",
+        "    private static NodeList AsList(object? value) => value is NodeList list ? list : default;", "",
         "    // core.ts forEach(array, callback): every element through cbNode, also when cbNodes is given",
         "    private static T? ForEachElement<T>(IReadOnlyList<Node>? array, Func<Node, T?> cbNode) where T : class",
         "    {", "        if (array is not null)", "        {", "            for (var i = 0; i < array.Count; i++)", "            {", "                var result = cbNode(array[i]);", "                if (result is not null)", "                {", "                    return result;", "                }", "            }", "        }", "        return null;", "    }",

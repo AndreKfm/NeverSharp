@@ -252,7 +252,7 @@ internal sealed partial class Parser : BaseNodeFactory
         if (ensuredScriptKind == ScriptKind.JSON)
         {
             var jsonResult = ParseJsonText(nodeStore, fileName, sourceText, languageVersion, syntaxCursor, setParentNodes);
-            CommandLineParser.ConvertToJson(store, jsonResult, store.Statements(jsonResult).Count > 0 ? store.Expression(store.Statements(jsonResult)[0]) : default, store.ParseDiagnostics(jsonResult), /*returnValue*/ false, /*jsonConversionNotifier*/ null);
+            CommandLineParser.ConvertToJson(store, jsonResult, store.Length(store.Statements(jsonResult)) > 0 ? store.Expression(store.Element(store.Statements(jsonResult), 0)) : default, store.ParseDiagnostics(jsonResult), /*returnValue*/ false, /*jsonConversionNotifier*/ null);
             store.SetReferencedFiles(jsonResult, Core.EmptyArray<FileReference>());
             store.SetTypeReferenceDirectives(jsonResult, Core.EmptyArray<FileReference>());
             store.SetLibReferenceDirectives(jsonResult, Core.EmptyArray<FileReference>());
@@ -420,7 +420,7 @@ internal sealed partial class Parser : BaseNodeFactory
         ScriptTarget languageVersion,
         ScriptKind scriptKind,
         bool isDeclarationFile,
-        IReadOnlyList<Node> statements,
+        NodeList statements,
         Node endOfFileToken,
         NodeFlags flags,
         Action<Node> setExternalModuleIndicator)
@@ -787,6 +787,7 @@ internal sealed partial class Parser : BaseNodeFactory
     private SpeculationAdapter<Tristate>? tristateSpeculationAdapter;
     private SpeculationAdapter<object?>? objectSpeculationAdapter;
     private SpeculationAdapter<Node>? nodeSpeculationAdapter;
+    private SpeculationAdapter<NodeList>? listSpeculationAdapter;
 
     /// <summary>`scanner.lookAhead(callback)` or `scanner.tryScan(callback)` with the parser's callback.</summary>
     private T ScannerSpeculate<T>(Func<Parser, T> callback, bool isLookahead)
@@ -807,6 +808,12 @@ internal sealed partial class Parser : BaseNodeFactory
         {
             var adapter = nodeSpeculationAdapter ??= new SpeculationAdapter<Node>(this);
             var invoke = adapter.Prepare((Func<Parser, Node>)(object)callback);
+            return (T)(object)(isLookahead ? scanner.LookAhead(invoke) : scanner.TryScan(invoke));
+        }
+        if (typeof(T) == typeof(NodeList))
+        {
+            var adapter = listSpeculationAdapter ??= new SpeculationAdapter<NodeList>(this);
+            var invoke = adapter.Prepare((Func<Parser, NodeList>)(object)callback);
             return (T)(object)(isLookahead ? scanner.LookAhead(invoke) : scanner.TryScan(invoke));
         }
         if (!typeof(T).IsValueType)
@@ -1239,13 +1246,21 @@ internal sealed partial class Parser : BaseNodeFactory
     }
 
     /// <summary>
-    /// TypeScript: `createNodeArray(elements: T[], pos, end?, hasTrailingComma?)`. The elements are a plain array
-    /// (a NodeArray object without the NodeArray properties, see NodeArray.HasNodeArrayProperties).
+    /// TypeScript: `createNodeArray(elements: T[], pos, end?, hasTrailingComma?)`. The elements are a plain array: a
+    /// list under construction (Track O, step O7a), which the list store copies into its arena.
     /// </summary>
-    private NodeArray CreateNodeArray(NodeArray elements, int pos, int? end = null, bool? hasTrailingComma = null)
+    private NodeList CreateNodeArray(ListBuilder elements, int pos, int? end = null, bool? hasTrailingComma = null)
     {
         var array = NodeFactory.CreateNodeArray(store, elements, hasTrailingComma);
-        Utilities.SetTextRangePosEnd(array, pos, end ?? scanner.GetTokenFullStart());
+        Utilities.SetTextRangePosEnd(store, array, pos, end ?? scanner.GetTokenFullStart());
+        return array;
+    }
+
+    /// <summary>`createNodeArray([...], pos, end?)` with an array literal.</summary>
+    private NodeList CreateNodeArray(ReadOnlySpan<Node> elements, int pos, int? end = null)
+    {
+        var array = NodeFactory.CreateNodeArray(store, elements);
+        Utilities.SetTextRangePosEnd(store, array, pos, end ?? scanner.GetTokenFullStart());
         return array;
     }
 
