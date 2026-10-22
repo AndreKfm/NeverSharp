@@ -1,6 +1,6 @@
 // Copyright 2026 Andre Kaufmann
 // SPDX-License-Identifier: Apache-2.0
-// Original code (not ported): Track O emitter for the node store's field accessors and ForEachChild (step O6a).
+// Original code (not ported): Track O emitter for the node store's field accessors and ForEachChild (steps O6a, O6b).
 //
 // Track O's nodes are int handles into a per-parse arena (pre-registration §5.4); the parser and the factory
 // read and write a node only through NodeStore (src/NeverSharp.Optimized/Arena/NodeStore.cs). This emitter writes
@@ -8,11 +8,18 @@
 // - The field set per node class is Track F's (a field exists when the interface declares the property and
 //   parser.ts, factory/nodeFactory.ts or utilities.ts assign it), without the binder and checker data the
 //   parser never touches, plus the SourceFile members Track F declares by hand (Parser/Types.cs, Parser.Pragmas.cs).
-// - Layout of O6a (the simplest that works; O6b compares layouts behind the same API): each node owns a block
-//   of int slots (child handles and scalar fields) and a block of object slots (strings, node lists, other
-//   objects); a field's offset in its block depends on the node's class, looked up per SyntaxKind in a table.
-// - One getter and one setter per field name (`Expression(n)`, `SetExpression(n, v)`). A getter on a kind
-//   without the field reads as undefined (default), as the property does in TypeScript; a setter throws.
+// - Layout of O6b variant C (header plus per-kind payload arenas): the store keeps a small header per node
+//   (Arena/NodeStore.cs); the fields of a node class form one payload struct ({Class}Payload, child handles,
+//   scalars and object fields typed as declared, explicit layout: references, 4-byte values, bools). The
+//   payloads live in typed arenas, one per payload shape (size and reference offsets; Shape{n}, viewed as the
+//   class's payload struct), created with the shape's first node; the header holds the node's index in its
+//   arena. Fields almost always undefined during parsing (SIDE_FIELDS: JsDoc) live in a side table instead of
+//   the payload.
+// - One getter and one setter per field name (`Expression(n)`, `SetExpression(n, v)`). A field of one class is
+//   read through the typed payload after a test of the kind; a field of several classes at its byte offset in
+//   the payload of the node's kind, from a table per field (a switch over the owning kinds was measured slower:
+//   its compare chains mispredict). A getter on a kind without the field reads as undefined (default), as the
+//   property does in TypeScript; a setter throws.
 //   Where one name has different types on different classes, the minority classes get `{Class}{Field}`.
 // - `Is{Class}(n)`: whether a node's kind belongs to a node class (Track F's `node is Class`).
 // - NodeVisitor.ForEachChild over handles, translating forEachChildTable entry by entry.
@@ -28,8 +35,34 @@ const BASE_FIELDS = new Set(["kind", "pos", "end", "id", "flags", "modifierFlags
 // Accessor names NodeStore.cs defines by hand (base fields and infrastructure).
 const RESERVED = new Set(["Kind", "Pos", "End", "Flags", "Parent", "TransformFlags", "ModifierFlagsCache", "Original", "EmitNode",
     "SetPos", "SetEnd", "SetFlags", "SetParent", "SetTransformFlags", "SetModifierFlagsCache", "SetOriginal", "SetEmitNode",
-    "Create", "GetMark", "Truncate", "Count"]);
+    "Create", "GetMark", "Truncate", "Count", "PayloadOf", "PayloadByte", "NewPayloads", "SetJsDocEntry"]);
 const pascal = n => n[0].toUpperCase() + n.slice(1);
+
+// Fields the parser almost never sets (tuning corpus, ParseForTypeErrors: 1,522 of 1.6 million owners have JSDoc):
+// kept in a side table keyed by node index (NodeStore.cs) instead of a payload slot of every owner.
+const SIDE_FIELDS = new Set(["JsDoc"]);
+
+// Nodes per class per 65,536 nodes, measured with TypeScript's parser on the tuning corpus (step O6b): the first
+// capacity of a class's payload array is this share of the nodes the store expects for its source text.
+const CLASS_SHARES = Object.fromEntries(("Identifier 22155 PropertyAccessExpression 3560 CallExpression 2582 StringLiteral 2276 " +
+    "BinaryExpression 2200 TypeReferenceNode 2198 ExpressionStatement 1850 NumericLiteral 1627 VariableDeclaration 1545 " +
+    "ParameterDeclaration 1531 VariableDeclarationList 1520 VariableStatement 1459 Block 1458 PropertyAssignment 1344 " +
+    "ReturnStatement 674 ObjectLiteralExpression 646 FunctionDeclaration 521 IfStatement 473 PropertySignature 446 " +
+    "ImportSpecifier 378 ArrayLiteralExpression 365 ElementAccessExpression 352 LiteralTypeNode 313 ArrowFunction 313 " +
+    "TypeParameterDeclaration 304 UnionTypeNode 282 ParenthesizedExpression 267 PrefixUnaryExpression 256 QualifiedName 244 " +
+    "AsExpression 243 ArrayTypeNode 241 ClassDeclaration 199 MethodDeclaration 194 TypeLiteralNode 188 CaseClause 180 " +
+    "BindingElement 163 InterfaceDeclaration 153 ConditionalExpression 152 PropertyDeclaration 148 " +
+    "NoSubstitutionTemplateLiteral 133 NewExpression 125 EnumMember 122 FunctionTypeNode 120 TypeAliasDeclaration 110 " +
+    "ExpressionWithTypeArguments 101 ShorthandPropertyAssignment 100 MethodSignature 100 TemplateSpan 98 HeritageClause 92 " +
+    "TypeOperatorNode 86 ImportDeclaration 83 ImportClause 81 ModuleDeclaration 79 TemplateHead 75 TemplateTail 75 " +
+    "ModuleBlock 74 TemplateExpression 67 ObjectBindingPattern 59 ComputedPropertyName 50 NonNullExpression 50 " +
+    "NamedImports 49 ConstructorDeclaration 47 FunctionExpression 46 PostfixUnaryExpression 45 BreakStatement 39 " +
+    "ForOfStatement 39 ExportDeclaration 37 TupleTypeNode 37 IndexedAccessTypeNode 36 JSDocTypeExpression 36 " +
+    "TemplateMiddle 34 TypeQueryNode 34 JSDoc 32 JsxAttributes 31 IntersectionTypeNode 30 IndexSignatureDeclaration 29 " +
+    "SpreadElement 29 GetAccessorDeclaration 27 ArrayBindingPattern 27 CallSignatureDeclaration 26 ForStatement 25 " +
+    "SwitchStatement 25 CaseBlock 25 NamespaceImport 25 TypeOfExpression 24 ImportEqualsDeclaration 24 PrivateIdentifier 24 " +
+    "TypePredicateNode 24 ConditionalTypeNode 24 EnumDeclaration 24 NamedExports 23 ParenthesizedTypeNode 23 " +
+    "ExportSpecifier 22").split(" ").reduce((pairs, x, i, all) => i % 2 ? pairs : [...pairs, [x, Number(all[i + 1])]], []));
 
 function assignedPropertyNames() {
     const assigned = new Set();
@@ -78,7 +111,7 @@ const EXTRA_FIELDS = {
     ],
 };
 
-// Field storage: { store: "slot" | "ref", type (C#, without `?`), nullable (refs), conv (slots: node|bool|int|enum) }.
+// Field storage: { store: "slot" (value: child handle or scalar) | "ref" (object), type (C#, without `?`), nullable (refs), conv (slots: node|bool|int|enum) }.
 function storage(cs, optional, usedAs) {
     switch (cs.k) {
         case "string": return { store: "ref", type: "string", nullable: optional };
@@ -133,9 +166,8 @@ export function emitOptimized(schema) {
         }
         for (const [name, type, nullable] of EXTRA_FIELDS[cls] ?? []) list.push({ ts: name, name, store: "ref", type, nullable });
         list.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
-        let slot = 0, ref = 0;
-        for (const f of list) f.offset = f.store === "slot" ? slot++ : ref++;
-        fields[cls] = { list, slots: slot, refs: ref };
+        for (const f of list) f.side = SIDE_FIELDS.has(f.name);
+        fields[cls] = { list, payload: list.filter(f => !f.side) };
     }
 
     // Accessor names: one per field name and storage type; the type most classes use keeps the plain name.
@@ -147,7 +179,7 @@ export function emitOptimized(schema) {
         if (!sigs.has(sig)) sigs.set(sig, []);
         sigs.get(sig).push(cls);
     }
-    const accessors = new Map(); // accessor -> { store, type, nullable, conv, offsets: Map<cls, offset> }
+    const accessors = new Map(); // accessor -> { store, type, nullable, conv, side, owners: [cls] }
     const accessorOf = {}; // `${cls}.${field}` -> accessor
     const collisions = [];
     for (const [name, sigs] of byName) {
@@ -158,10 +190,11 @@ export function emitOptimized(schema) {
                 if (i > 0) collisions.push(`${cls}.${name} -> ${accessor}`);
                 if (RESERVED.has(accessor)) throw new Error(`accessor ${accessor} collides with a hand-written NodeStore member`);
                 const f = fields[cls].list.find(x => x.name === name);
-                if (!accessors.has(accessor)) accessors.set(accessor, { store: f.store, type: f.type, nullable: false, conv: f.conv, offsets: new Map() });
+                if (!accessors.has(accessor)) accessors.set(accessor, { store: f.store, type: f.type, nullable: false, conv: f.conv, side: f.side, owners: [] });
                 const a = accessors.get(accessor);
                 a.nullable ||= !!f.nullable;
-                a.offsets.set(cls, f.offset);
+                if (a.side !== f.side) throw new Error(`${accessor}: side table on some classes only`);
+                a.owners.push(cls);
                 accessorOf[`${cls}.${name}`] = accessor;
                 f.accessor = accessor;
             }
@@ -169,64 +202,147 @@ export function emitOptimized(schema) {
     }
 
     const classId = new Map(classes.map((c, i) => [c, i]));
-    const tableOf = valueOfKind => {
+    const tableOf = (valueOf, count = kindCount) => {
         const values = [];
-        for (let k = 0; k < kindCount; k++) values.push(valueOfKind(k));
+        for (let k = 0; k < count; k++) values.push(valueOf(k));
         const rows = [];
         for (let i = 0; i < values.length; i += 40) rows.push("        " + values.slice(i, i + 40).join(",") + ",");
         return rows;
     };
     const kindClass = new Array(kindCount).fill("Token");
     for (const name of kindNames) kindClass[kindValue(name)] = schema.kindToClass[name];
+    const kindsOf = cls => kindNames.filter(k => schema.kindToClass[k] === cls).sort((a, b) => kindValue(a) - kindValue(b));
+    if (classes.length > 255) throw new Error("more than 255 node classes");
+    const payloadClasses = classes.filter(c => fields[c].payload.length > 0);
+    for (const c of Object.keys(CLASS_SHARES)) if (!payloadClasses.includes(c)) throw new Error(`CLASS_SHARES: ${c} has no payload`);
+    // Payload struct layout per class (explicit, so that offset tables and the struct agree): object references
+    // first (8 bytes each, pointer aligned also on 64-bit), then 4-byte values (child handles, ints, enums), then bools.
+    const layout = {};
+    for (const cls of payloadClasses) {
+        const order = f => f.store === "ref" ? 0 : f.type === "bool" ? 2 : 1;
+        const list = [...fields[cls].payload].sort((a, b) => order(a) - order(b));
+        let offset = 0;
+        for (const f of list) {
+            f.byteOffset = offset;
+            offset += f.store === "ref" ? 8 : f.type === "bool" ? 1 : 4;
+        }
+        const align = list.some(f => f.store === "ref") ? 8 : 4;
+        layout[cls] = { list, size: Math.ceil(offset / align) * align };
+    }
+    const singleOwner = a => a.owners.length === 1;
+    // Classes whose payloads have the same size and the same reference offsets share one arena (a {Shape} array
+    // viewed as the class's payload struct): 194 payload classes have 17 shapes, so a small file has about 7 arenas
+    // instead of 11.
+    const signature = cls => `${layout[cls].size}:${layout[cls].list.filter(f => f.store === "ref").map(f => f.byteOffset).join(",")}`;
+    const shapes = [...new Set(payloadClasses.map(signature))].sort((a, b) => {
+        const [sa, ra] = a.split(":"), [sb, rb] = b.split(":");
+        return Number(sa) - Number(sb) || ra.length - rb.length || (ra < rb ? -1 : ra > rb ? 1 : 0);
+    });
+    if (shapes.length > 31) throw new Error("more than 31 payload shapes: offset tables keep the shape in 5 bits");
+    if (payloadClasses.some(c => layout[c].size > 2048)) throw new Error("payload above 2,048 bytes: offset tables keep the offset in 11 bits");
+    const shapeOfKind = k => layout[kindClass[k]] ? shapes.indexOf(signature(kindClass[k])) : -1;
+    if (kindCount > 512) throw new Error("more than 512 kinds: NodeStore's header keeps the kind in 9 bits");
+    const shapeShare = s => payloadClasses.filter(c => signature(c) === shapes[s]).reduce((n, c) => n + (CLASS_SHARES[c] ?? 0), 0);
+    if (shapes.some((_, s) => shapeShare(s) > 0xFFFF)) throw new Error("shape share above 65,535");
 
     const lines = [header("src/compiler/types.ts (node interfaces) and src/compiler/parser.ts (forEachChildTable)"),
-        "#nullable enable", "", "using NeverSharp.Generated;", "", "namespace NeverSharp.Optimized;", "",
-        "/// <summary>The generated part of the node store: layout tables, field accessors and node class tests (O6a layout).</summary>",
+        "#nullable enable", "", "using System.Runtime.CompilerServices;", "using System.Runtime.InteropServices;", "using NeverSharp.Generated;", "",
+        "namespace NeverSharp.Optimized;", "",
+        "/// <summary>The generated part of the node store: node classes, payload structs, field accessors and node class tests (O6b variant C).</summary>",
         "internal sealed partial class NodeStore", "{",
         `    private const int KindCount = ${kindCount};`, "",
-        "    /// <summary>Int slots (child handles, scalar fields) per kind.</summary>",
-        "    private static ReadOnlySpan<byte> SlotCounts =>", "    [",
-        ...tableOf(k => fields[kindClass[k]].slots), "    ];", "",
-        "    /// <summary>Object slots (strings, node lists, other objects) per kind.</summary>",
-        "    private static ReadOnlySpan<byte> RefCounts =>", "    [",
-        ...tableOf(k => fields[kindClass[k]].refs), "    ];", "",
         "    /// <summary>The node class of each kind (index into the classes of types.ts, Token for kinds without one).</summary>",
         "    private static ReadOnlySpan<byte> ClassIds =>", "    [",
-        ...tableOf(k => classId.get(kindClass[k])), "    ];", ""];
-    if (classes.length > 255) throw new Error("more than 255 node classes");
+        ...tableOf(k => classId.get(kindClass[k])), "    ];", "",
+        "    /// <summary>Bytes of a payload per kind (0: the kind's class has no fields in a payload).</summary>",
+        "    private static ReadOnlySpan<ushort> PayloadSizes =>", "    [",
+        ...tableOf(k => layout[kindClass[k]]?.size ?? 0), "    ];", "",
+        `    private const int ShapeCount = ${shapes.length};`, "",
+        "    /// <summary>The payload shape of each kind, indexed by the header's kind bits (NoShape: none): the arena its payloads share with other kinds of the same shape.</summary>",
+        "    private static ReadOnlySpan<byte> ShapeIds =>", "    [",
+        ...tableOf(k => k >= kindCount || shapeOfKind(k) < 0 ? 255 : shapeOfKind(k), 512), "    ];", "",
+        "    /// <summary>The store's arenas, one per payload shape (created with the shape's first node).</summary>",
+        "    [InlineArray(ShapeCount)]", "    private struct Arenas", "    {", "        private Arena arena;", "    }", "",
+        "    /// <summary>Nodes of each shape per 65,536 nodes (tuning corpus): the first capacity of the shape's arena.</summary>",
+        "    private static ReadOnlySpan<ushort> ShapeShares =>", "    [",
+        ...tableOf(shapeShare, shapes.length), "    ];", ""];
+    for (const name of SIDE_FIELDS) {
+        lines.push(`    /// <summary>Whether a kind's class has the field ${name} (kept in a side table, not in the payload).</summary>`,
+            `    private static ReadOnlySpan<byte> ${name}Owners =>`, "    [",
+            ...tableOf(k => fields[kindClass[k]].list.some(f => f.name === name) ? 1 : 0), "    ];", "");
+    }
+    lines.push("#pragma warning disable CS0169 // The fields of a shape only tell the collector where the references are.", "");
+    shapes.forEach((sig, s) => {
+        const [size, refs] = sig.split(":");
+        lines.push(`    [StructLayout(LayoutKind.Explicit, Size = ${size})]`, `    private struct Shape${s}`, "    {");
+        const offsets = refs ? refs.split(",") : [];
+        if (offsets.length === 0) lines.push("        [FieldOffset(0)]", "        private int value;");
+        offsets.forEach((o, i) => lines.push(...(i ? [""] : []), `        [FieldOffset(${o})]`, `        private object? reference${o};`));
+        lines.push("    }", "");
+    });
+    lines.push("#pragma warning restore CS0169", "");
+    for (const cls of payloadClasses) {
+        lines.push(`    // Shape${shapes.indexOf(signature(cls))}`, `    [StructLayout(LayoutKind.Explicit, Size = ${layout[cls].size})]`, `    private struct ${cls}Payload`, "    {");
+        for (const f of layout[cls].list) lines.push(`        [FieldOffset(${f.byteOffset})]`, `        public ${f.store === "ref" ? `${f.type}?` : f.type} ${f.name};`, "");
+        lines.pop();
+        lines.push("    }", "");
+    }
+    lines.push("    /// <summary>An arena of the shape with the given capacity.</summary>",
+        "    private static Array NewPayloads(int shapeId, int length)", "    {", "        switch (shapeId)", "        {");
+    shapes.forEach((_, s) => lines.push(`            case ${s}:`, `                return new Shape${s}[length];`));
+    lines.push("            default:", "                throw new InvalidOperationException(\"no payload\");", "        }", "    }", "");
 
-    const getter = (name, a) => {
+    const accessor = (name, a) => {
         const nullable = a.store === "ref" && a.nullable;
         const ret = a.store === "ref" ? `${a.type}${nullable ? "?" : ""}` : a.type;
-        const read = a.store === "ref" ? (nullable ? `(${a.type}?)refs[r.Refs + o]` : `(${a.type})refs[r.Refs + o]!`)
-            : a.conv === "node" ? "new Node(slots[r.Slots + o])"
-            : a.conv === "bool" ? "slots[r.Slots + o] != 0"
-            : a.conv === "enum" ? `(${a.type})slots[r.Slots + o]` : "slots[r.Slots + o]";
+        const field = cls => fields[cls].list.find(f => f.accessor === name);
+        if (a.side) {
+            return [
+                `    public ${ret} ${name}(Node node) => ${name}Entry(node);`, "",
+                `    public void Set${name}(Node node, ${ret} value)`, "    {",
+                `        if (${name}Owners[(int)Kind(node)] == 0)`, "        {", `            ThrowNoField(Kind(node), nameof(${name}));`, "        }",
+                `        Set${name}Entry(node, value);`, "    }", ""];
+        }
         const absent = a.store === "ref" ? (nullable ? "null" : "null!") : "default";
-        const write = a.store === "ref" ? "refs[r.Refs + o] = value;"
-            : a.conv === "node" ? "slots[r.Slots + o] = value.Index;"
-            : a.conv === "bool" ? "slots[r.Slots + o] = value ? 1 : 0;"
-            : a.conv === "enum" ? "slots[r.Slots + o] = (int)value;" : "slots[r.Slots + o] = value;";
+        const bang = a.store === "ref" && !nullable ? "!" : "";
+        if (singleOwner(a)) {
+            // One class: a test of the kind, then the typed payload.
+            const cls = a.owners[0];
+            const test = kindsOf(cls).map(k => `(h & KindMask) == (int)SyntaxKind.${k}`).join(" || ");
+            const at = `PayloadOf<${cls}Payload>(h, ${shapes.indexOf(signature(cls))}).${field(cls).name}`;
+            return [
+                `    public ${ret} ${name}(Node node)`, "    {",
+                "        var h = headers[node.Index].KindPayload;",
+                `        return ${test} ? ${at}${bang} : ${absent};`, "    }", "",
+                `    public void Set${name}(Node node, ${ret} value)`, "    {",
+                "        var h = headers[node.Index].KindPayload;",
+                `        if (!(${test}))`, "        {", `            ThrowNoField((SyntaxKind)(h & KindMask), nameof(${name}));`, "        }",
+                `        ${at} = value;`, "    }", ""];
+        }
+        // Several classes: the payload shape (high 5 bits) and the field's offset in the payload (low 11 bits) of the
+        // node's kind (0xFFFF: no such field).
+        const offsets = new Map(a.owners.map(cls => [cls, (shapes.indexOf(signature(cls)) << 11) | field(cls).byteOffset]));
+        const view = `Unsafe.As<byte, ${ret}>(ref PayloadByte(h, o))`;
         return [
             `    public ${ret} ${name}(Node node)`, "    {",
-            "        ref var r = ref records[node.Index];",
-            `        var o = ${name}Offsets[(int)r.Kind];`,
-            `        return o < 0 ? ${absent} : ${read};`, "    }", "",
+            "        var h = headers[node.Index].KindPayload;",
+            `        int o = ${name}Offsets[h & KindMask];`,
+            `        return o == NoField ? ${absent} : ${view}${bang};`, "    }", "",
             `    public void Set${name}(Node node, ${ret} value)`, "    {",
-            "        ref var r = ref records[node.Index];",
-            `        var o = ${name}Offsets[(int)r.Kind];`,
-            "        if (o < 0)", "        {", `            ThrowNoField(r.Kind, nameof(${name}));`, "        }",
-            `        ${write}`, "    }", "",
-            `    private static ReadOnlySpan<sbyte> ${name}Offsets =>`, "    [",
-            ...tableOf(k => a.offsets.has(kindClass[k]) ? a.offsets.get(kindClass[k]) : -1), "    ];", ""];
+            "        var h = headers[node.Index].KindPayload;",
+            `        int o = ${name}Offsets[h & KindMask];`,
+            "        if (o == NoField)", "        {", `            ThrowNoField((SyntaxKind)(h & KindMask), nameof(${name}));`, "        }",
+            `        ${view} = value;`, "    }", "",
+            `    private static ReadOnlySpan<ushort> ${name}Offsets =>`, "    [",
+            ...tableOf(k => offsets.has(kindClass[k]) ? offsets.get(kindClass[k]) : 0xFFFF, 512), "    ];", ""];
     };
     for (const [name, a] of [...accessors].sort((x, y) => x[0] < y[0] ? -1 : 1)) {
-        const owners = [...a.offsets.keys()];
+        const owners = a.owners;
         lines.push(`    // ${owners.length > 6 ? `${owners.slice(0, 6).join(", ")}, … (${owners.length} classes)` : owners.join(", ")}`);
-        lines.push(...getter(name, a));
+        lines.push(...accessor(name, a));
     }
     lines.push("    // Node classes of types.ts: whether a node's kind is one of the class's kinds.");
-    for (const cls of classes) lines.push(`    public bool Is${cls}(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == ${classId.get(cls)};`, "");
+    for (const cls of classes) lines.push(`    public bool Is${cls}(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == ${classId.get(cls)};`, "");
     lines.pop();
     lines.push("}", "");
     writeFileSync(join(outDir, "NodeStore.g.cs"), lines.join("\n"));

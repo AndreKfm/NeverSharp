@@ -11,42 +11,16 @@
 
 #nullable enable
 
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using NeverSharp.Generated;
 
 namespace NeverSharp.Optimized;
 
-/// <summary>The generated part of the node store: layout tables, field accessors and node class tests (O6a layout).</summary>
+/// <summary>The generated part of the node store: node classes, payload structs, field accessors and node class tests (O6b variant C).</summary>
 internal sealed partial class NodeStore
 {
     private const int KindCount = 359;
-
-    /// <summary>Int slots (child handles, scalar fields) per kind.</summary>
-    private static ReadOnlySpan<byte> SlotCounts =>
-    [
-        0,0,0,0,0,0,0,0,0,3,2,4,3,0,2,3,3,3,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-        0,0,0,0,0,0,0,2,1,4,5,1,4,5,4,7,3,7,7,7,4,4,4,3,1,3,3,1,0,1,0,1,1,0,0,5,1,1,0,2,
-        2,6,1,4,1,2,4,0,0,4,1,1,3,3,2,1,3,2,1,7,7,1,1,1,1,2,2,3,5,1,2,1,1,0,1,2,1,2,2,2,
-        2,1,2,0,1,1,3,2,2,5,4,5,1,1,1,2,3,2,1,3,0,4,0,7,1,1,3,1,3,0,1,1,3,4,4,1,0,3,3,6,
-        0,1,3,1,1,2,2,2,1,2,0,0,2,0,2,2,2,1,0,1,3,2,2,2,4,5,2,2,12,0,1,1,2,0,0,2,2,1,3,1,
-        1,0,0,1,2,1,1,1,1,2,2,1,1,1,1,1,1,1,1,5,2,3,5,2,2,2,2,5,2,5,2,2,4,0,0,2,1,0,2,
-    ];
-
-    /// <summary>Object slots (strings, node lists, other objects) per kind.</summary>
-    private static ReadOnlySpan<byte> RefCounts =>
-    [
-        0,1,0,0,0,0,0,0,0,1,1,1,1,0,1,2,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-        2,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-        0,0,0,0,0,0,0,0,0,2,2,0,2,2,5,5,2,5,5,5,4,4,5,0,1,5,5,1,1,0,1,0,0,1,1,0,0,0,0,0,
-        0,1,0,1,1,0,1,1,1,0,1,2,1,1,2,2,1,0,1,5,5,0,0,0,0,0,0,1,0,1,0,0,5,0,1,0,0,0,0,0,
-        0,1,2,1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,5,5,5,3,3,2,2,1,2,2,2,0,0,1,0,2,2,
-        1,0,1,2,0,1,1,1,0,1,0,0,0,1,0,0,0,2,1,1,0,1,0,0,2,2,1,1,26,1,0,0,0,0,0,0,0,0,4,0,
-        0,2,1,1,3,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,1,1,1,1,1,1,1,1,0,0,1,0,
-    ];
 
     /// <summary>The node class of each kind (index into the classes of types.ts, Token for kinds without one).</summary>
     private static ReadOnlySpan<byte> ClassIds =>
@@ -62,5612 +36,7495 @@ internal sealed partial class NodeStore
         106,90,123,127,121,101,102,103,130,92,99,93,96,95,116,113,115,117,111,94,110,97,112,118,124,128,122,129,120,114,125,119,100,209,165,166,178,31,211,
     ];
 
+    /// <summary>Bytes of a payload per kind (0: the kind's class has no fields in a payload).</summary>
+    private static ReadOnlySpan<ushort> PayloadSizes =>
+    [
+        0,0,0,0,0,0,0,0,0,16,16,16,16,0,16,24,24,24,24,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        8,8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,8,4,24,32,4,24,32,48,64,24,64,64,64,40,40,48,12,16,48,48,16,8,4,8,4,4,8,8,20,4,4,0,8,
+        8,32,4,16,16,8,24,8,8,16,16,16,12,12,24,24,24,8,4,64,64,4,4,4,4,8,8,12,20,16,8,4,40,0,16,8,4,8,8,8,
+        8,4,16,0,16,4,12,8,8,20,16,20,4,4,4,8,12,8,4,12,0,16,8,64,40,40,32,24,24,8,16,16,24,24,16,4,8,12,24,32,
+        8,4,12,16,4,16,16,16,4,16,0,0,8,8,8,8,8,16,8,16,12,16,8,8,24,32,8,8,256,8,4,4,8,0,0,8,8,4,40,4,
+        4,16,8,16,24,16,16,16,16,16,16,16,16,16,16,16,16,16,16,32,16,24,24,16,16,16,24,32,16,24,16,16,24,8,0,8,4,8,8,
+    ];
+
+    private const int ShapeCount = 17;
+
+    /// <summary>The payload shape of each kind, indexed by the header's kind bits (NoShape: none): the arena its payloads share with other kinds of the same shape.</summary>
+    private static ReadOnlySpan<byte> ShapeIds =>
+    [
+        255,255,255,255,255,255,255,255,255,5,5,5,5,255,5,9,9,9,9,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+        255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+        2,2,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+        255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+        255,255,255,255,255,255,255,1,0,8,10,0,8,10,14,15,8,15,15,15,12,12,14,3,5,14,14,5,2,0,2,0,0,2,2,7,0,0,255,1,
+        1,10,0,4,5,1,8,2,2,4,5,5,3,3,9,9,8,1,0,15,15,0,0,0,0,1,1,3,7,5,1,0,13,255,5,1,0,1,1,1,
+        1,0,5,255,5,0,3,1,1,7,4,7,0,0,0,1,3,1,0,3,255,4,2,15,13,13,11,9,8,2,5,5,8,8,4,0,2,3,8,10,
+        2,0,3,5,0,5,5,5,0,5,255,255,1,2,1,1,1,5,2,5,3,5,1,1,8,10,1,1,16,2,0,0,1,255,255,1,1,0,12,0,
+        0,6,2,5,9,5,5,5,5,5,5,5,5,5,5,5,5,5,5,10,5,8,8,5,5,5,9,10,5,8,5,5,8,2,255,1,0,2,1,255,
+        255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+        255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+        255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+        255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+    ];
+
+    /// <summary>The store's arenas, one per payload shape (created with the shape's first node).</summary>
+    [InlineArray(ShapeCount)]
+    private struct Arenas
+    {
+        private Arena arena;
+    }
+
+    /// <summary>Nodes of each shape per 65,536 nodes (tuning corpus): the first capacity of the shape's arena.</summary>
+    private static ReadOnlySpan<ushort> ShapeShares =>
+    [
+        3621,1130,24499,7034,1789,10528,32,240,2280,3048,1816,110,26,352,249,1148,0,
+    ];
+
+    /// <summary>Whether a kind's class has the field JsDoc (kept in a side table, not in the payload).</summary>
+    private static ReadOnlySpan<byte> JsDocOwners =>
+    [
+        0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,1,1,0,1,1,1,1,1,1,1,1,1,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,1,0,0,0,0,0,0,0,1,1,1,0,0,0,0,1,1,1,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,0,
+        0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0,1,1,1,0,0,0,0,1,1,
+        0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,1,0,
+        0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,
+    ];
+
+#pragma warning disable CS0169 // The fields of a shape only tell the collector where the references are.
+
+    [StructLayout(LayoutKind.Explicit, Size = 4)]
+    private struct Shape0
+    {
+        [FieldOffset(0)]
+        private int value;
+    }
+
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct Shape1
+    {
+        [FieldOffset(0)]
+        private int value;
+    }
+
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct Shape2
+    {
+        [FieldOffset(0)]
+        private object? reference0;
+    }
+
+    [StructLayout(LayoutKind.Explicit, Size = 12)]
+    private struct Shape3
+    {
+        [FieldOffset(0)]
+        private int value;
+    }
+
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct Shape4
+    {
+        [FieldOffset(0)]
+        private int value;
+    }
+
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct Shape5
+    {
+        [FieldOffset(0)]
+        private object? reference0;
+    }
+
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct Shape6
+    {
+        [FieldOffset(0)]
+        private object? reference0;
+
+        [FieldOffset(8)]
+        private object? reference8;
+    }
+
+    [StructLayout(LayoutKind.Explicit, Size = 20)]
+    private struct Shape7
+    {
+        [FieldOffset(0)]
+        private int value;
+    }
+
+    [StructLayout(LayoutKind.Explicit, Size = 24)]
+    private struct Shape8
+    {
+        [FieldOffset(0)]
+        private object? reference0;
+    }
+
+    [StructLayout(LayoutKind.Explicit, Size = 24)]
+    private struct Shape9
+    {
+        [FieldOffset(0)]
+        private object? reference0;
+
+        [FieldOffset(8)]
+        private object? reference8;
+    }
+
+    [StructLayout(LayoutKind.Explicit, Size = 32)]
+    private struct Shape10
+    {
+        [FieldOffset(0)]
+        private object? reference0;
+    }
+
+    [StructLayout(LayoutKind.Explicit, Size = 32)]
+    private struct Shape11
+    {
+        [FieldOffset(0)]
+        private object? reference0;
+
+        [FieldOffset(8)]
+        private object? reference8;
+    }
+
+    [StructLayout(LayoutKind.Explicit, Size = 40)]
+    private struct Shape12
+    {
+        [FieldOffset(0)]
+        private object? reference0;
+
+        [FieldOffset(8)]
+        private object? reference8;
+
+        [FieldOffset(16)]
+        private object? reference16;
+    }
+
+    [StructLayout(LayoutKind.Explicit, Size = 40)]
+    private struct Shape13
+    {
+        [FieldOffset(0)]
+        private object? reference0;
+
+        [FieldOffset(8)]
+        private object? reference8;
+
+        [FieldOffset(16)]
+        private object? reference16;
+
+        [FieldOffset(24)]
+        private object? reference24;
+    }
+
+    [StructLayout(LayoutKind.Explicit, Size = 48)]
+    private struct Shape14
+    {
+        [FieldOffset(0)]
+        private object? reference0;
+
+        [FieldOffset(8)]
+        private object? reference8;
+
+        [FieldOffset(16)]
+        private object? reference16;
+
+        [FieldOffset(24)]
+        private object? reference24;
+    }
+
+    [StructLayout(LayoutKind.Explicit, Size = 64)]
+    private struct Shape15
+    {
+        [FieldOffset(0)]
+        private object? reference0;
+
+        [FieldOffset(8)]
+        private object? reference8;
+
+        [FieldOffset(16)]
+        private object? reference16;
+
+        [FieldOffset(24)]
+        private object? reference24;
+    }
+
+    [StructLayout(LayoutKind.Explicit, Size = 256)]
+    private struct Shape16
+    {
+        [FieldOffset(0)]
+        private object? reference0;
+
+        [FieldOffset(8)]
+        private object? reference8;
+
+        [FieldOffset(16)]
+        private object? reference16;
+
+        [FieldOffset(24)]
+        private object? reference24;
+
+        [FieldOffset(32)]
+        private object? reference32;
+
+        [FieldOffset(40)]
+        private object? reference40;
+
+        [FieldOffset(48)]
+        private object? reference48;
+
+        [FieldOffset(56)]
+        private object? reference56;
+
+        [FieldOffset(64)]
+        private object? reference64;
+
+        [FieldOffset(72)]
+        private object? reference72;
+
+        [FieldOffset(80)]
+        private object? reference80;
+
+        [FieldOffset(88)]
+        private object? reference88;
+
+        [FieldOffset(96)]
+        private object? reference96;
+
+        [FieldOffset(104)]
+        private object? reference104;
+
+        [FieldOffset(112)]
+        private object? reference112;
+
+        [FieldOffset(120)]
+        private object? reference120;
+
+        [FieldOffset(128)]
+        private object? reference128;
+
+        [FieldOffset(136)]
+        private object? reference136;
+
+        [FieldOffset(144)]
+        private object? reference144;
+
+        [FieldOffset(152)]
+        private object? reference152;
+
+        [FieldOffset(160)]
+        private object? reference160;
+
+        [FieldOffset(168)]
+        private object? reference168;
+
+        [FieldOffset(176)]
+        private object? reference176;
+
+        [FieldOffset(184)]
+        private object? reference184;
+
+        [FieldOffset(192)]
+        private object? reference192;
+
+        [FieldOffset(200)]
+        private object? reference200;
+    }
+
+#pragma warning restore CS0169
+
+    // Shape2
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct ArrayBindingPatternPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Elements;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct ArrayLiteralExpressionPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Elements;
+
+        [FieldOffset(8)]
+        public bool MultiLine;
+    }
+
+    // Shape0
+    [StructLayout(LayoutKind.Explicit, Size = 4)]
+    private struct ArrayTypeNodePayload
+    {
+        [FieldOffset(0)]
+        public Node ElementType;
+    }
+
+    // Shape15
+    [StructLayout(LayoutKind.Explicit, Size = 64)]
+    private struct ArrowFunctionPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Modifiers;
+
+        [FieldOffset(8)]
+        public NodeArray? Parameters;
+
+        [FieldOffset(16)]
+        public NodeArray? TypeArguments;
+
+        [FieldOffset(24)]
+        public NodeArray? TypeParameters;
+
+        [FieldOffset(32)]
+        public Node AsteriskToken;
+
+        [FieldOffset(36)]
+        public Node Body;
+
+        [FieldOffset(40)]
+        public Node EqualsGreaterThanToken;
+
+        [FieldOffset(44)]
+        public Node ExclamationToken;
+
+        [FieldOffset(48)]
+        public Node NextContainer;
+
+        [FieldOffset(52)]
+        public Node QuestionToken;
+
+        [FieldOffset(56)]
+        public Node Type;
+    }
+
+    // Shape1
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct AsExpressionPayload
+    {
+        [FieldOffset(0)]
+        public Node Expression;
+
+        [FieldOffset(4)]
+        public Node Type;
+    }
+
+    // Shape0
+    [StructLayout(LayoutKind.Explicit, Size = 4)]
+    private struct AwaitExpressionPayload
+    {
+        [FieldOffset(0)]
+        public Node Expression;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct BigIntLiteralPayload
+    {
+        [FieldOffset(0)]
+        public string? Text;
+
+        [FieldOffset(8)]
+        public bool HasExtendedUnicodeEscape;
+
+        [FieldOffset(9)]
+        public bool IsUnterminated;
+    }
+
+    // Shape3
+    [StructLayout(LayoutKind.Explicit, Size = 12)]
+    private struct BinaryExpressionPayload
+    {
+        [FieldOffset(0)]
+        public Node Left;
+
+        [FieldOffset(4)]
+        public Node OperatorToken;
+
+        [FieldOffset(8)]
+        public Node Right;
+    }
+
+    // Shape4
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct BindingElementPayload
+    {
+        [FieldOffset(0)]
+        public Node DotDotDotToken;
+
+        [FieldOffset(4)]
+        public Node Initializer;
+
+        [FieldOffset(8)]
+        public Node Name;
+
+        [FieldOffset(12)]
+        public Node PropertyName;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct BlockPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Statements;
+
+        [FieldOffset(8)]
+        public Node NextContainer;
+
+        [FieldOffset(12)]
+        public bool MultiLine;
+    }
+
+    // Shape0
+    [StructLayout(LayoutKind.Explicit, Size = 4)]
+    private struct BreakStatementPayload
+    {
+        [FieldOffset(0)]
+        public Node Label;
+    }
+
+    // Shape2
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct BundlePayload
+    {
+        [FieldOffset(0)]
+        public Node[]? SourceFiles;
+    }
+
+    // Shape9
+    [StructLayout(LayoutKind.Explicit, Size = 24)]
+    private struct CallExpressionPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Arguments;
+
+        [FieldOffset(8)]
+        public NodeArray? TypeArguments;
+
+        [FieldOffset(16)]
+        public Node Expression;
+
+        [FieldOffset(20)]
+        public Node QuestionDotToken;
+    }
+
+    // Shape12
+    [StructLayout(LayoutKind.Explicit, Size = 40)]
+    private struct CallSignatureDeclarationPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Parameters;
+
+        [FieldOffset(8)]
+        public NodeArray? TypeArguments;
+
+        [FieldOffset(16)]
+        public NodeArray? TypeParameters;
+
+        [FieldOffset(24)]
+        public Node Name;
+
+        [FieldOffset(28)]
+        public Node NextContainer;
+
+        [FieldOffset(32)]
+        public Node QuestionToken;
+
+        [FieldOffset(36)]
+        public Node Type;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct CaseBlockPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Clauses;
+
+        [FieldOffset(8)]
+        public Node NextContainer;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct CaseClausePayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Statements;
+
+        [FieldOffset(8)]
+        public Node Expression;
+    }
+
+    // Shape3
+    [StructLayout(LayoutKind.Explicit, Size = 12)]
+    private struct CatchClausePayload
+    {
+        [FieldOffset(0)]
+        public Node Block;
+
+        [FieldOffset(4)]
+        public Node NextContainer;
+
+        [FieldOffset(8)]
+        public Node VariableDeclaration;
+    }
+
+    // Shape13
+    [StructLayout(LayoutKind.Explicit, Size = 40)]
+    private struct ClassDeclarationPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? HeritageClauses;
+
+        [FieldOffset(8)]
+        public NodeArray? Members;
+
+        [FieldOffset(16)]
+        public NodeArray? Modifiers;
+
+        [FieldOffset(24)]
+        public NodeArray? TypeParameters;
+
+        [FieldOffset(32)]
+        public Node Name;
+    }
+
+    // Shape13
+    [StructLayout(LayoutKind.Explicit, Size = 40)]
+    private struct ClassExpressionPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? HeritageClauses;
+
+        [FieldOffset(8)]
+        public NodeArray? Members;
+
+        [FieldOffset(16)]
+        public NodeArray? Modifiers;
+
+        [FieldOffset(24)]
+        public NodeArray? TypeParameters;
+
+        [FieldOffset(32)]
+        public Node Name;
+    }
+
+    // Shape8
+    [StructLayout(LayoutKind.Explicit, Size = 24)]
+    private struct ClassStaticBlockDeclarationPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Modifiers;
+
+        [FieldOffset(8)]
+        public Node Body;
+
+        [FieldOffset(12)]
+        public Node Name;
+
+        [FieldOffset(16)]
+        public Node NextContainer;
+    }
+
+    // Shape2
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct CommaListExpressionPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Elements;
+    }
+
+    // Shape0
+    [StructLayout(LayoutKind.Explicit, Size = 4)]
+    private struct ComputedPropertyNamePayload
+    {
+        [FieldOffset(0)]
+        public Node Expression;
+    }
+
+    // Shape7
+    [StructLayout(LayoutKind.Explicit, Size = 20)]
+    private struct ConditionalExpressionPayload
+    {
+        [FieldOffset(0)]
+        public Node ColonToken;
+
+        [FieldOffset(4)]
+        public Node Condition;
+
+        [FieldOffset(8)]
+        public Node QuestionToken;
+
+        [FieldOffset(12)]
+        public Node WhenFalse;
+
+        [FieldOffset(16)]
+        public Node WhenTrue;
+    }
+
+    // Shape7
+    [StructLayout(LayoutKind.Explicit, Size = 20)]
+    private struct ConditionalTypeNodePayload
+    {
+        [FieldOffset(0)]
+        public Node CheckType;
+
+        [FieldOffset(4)]
+        public Node ExtendsType;
+
+        [FieldOffset(8)]
+        public Node FalseType;
+
+        [FieldOffset(12)]
+        public Node NextContainer;
+
+        [FieldOffset(16)]
+        public Node TrueType;
+    }
+
+    // Shape12
+    [StructLayout(LayoutKind.Explicit, Size = 40)]
+    private struct ConstructSignatureDeclarationPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Parameters;
+
+        [FieldOffset(8)]
+        public NodeArray? TypeArguments;
+
+        [FieldOffset(16)]
+        public NodeArray? TypeParameters;
+
+        [FieldOffset(24)]
+        public Node Name;
+
+        [FieldOffset(28)]
+        public Node NextContainer;
+
+        [FieldOffset(32)]
+        public Node QuestionToken;
+
+        [FieldOffset(36)]
+        public Node Type;
+    }
+
+    // Shape15
+    [StructLayout(LayoutKind.Explicit, Size = 64)]
+    private struct ConstructorDeclarationPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Modifiers;
+
+        [FieldOffset(8)]
+        public NodeArray? Parameters;
+
+        [FieldOffset(16)]
+        public NodeArray? TypeArguments;
+
+        [FieldOffset(24)]
+        public NodeArray? TypeParameters;
+
+        [FieldOffset(32)]
+        public Node AsteriskToken;
+
+        [FieldOffset(36)]
+        public Node Body;
+
+        [FieldOffset(40)]
+        public Node ExclamationToken;
+
+        [FieldOffset(44)]
+        public Node Name;
+
+        [FieldOffset(48)]
+        public Node NextContainer;
+
+        [FieldOffset(52)]
+        public Node QuestionToken;
+
+        [FieldOffset(56)]
+        public Node Type;
+    }
+
+    // Shape14
+    [StructLayout(LayoutKind.Explicit, Size = 48)]
+    private struct ConstructorTypeNodePayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Modifiers;
+
+        [FieldOffset(8)]
+        public NodeArray? Parameters;
+
+        [FieldOffset(16)]
+        public NodeArray? TypeArguments;
+
+        [FieldOffset(24)]
+        public NodeArray? TypeParameters;
+
+        [FieldOffset(32)]
+        public Node Name;
+
+        [FieldOffset(36)]
+        public Node NextContainer;
+
+        [FieldOffset(40)]
+        public Node Type;
+    }
+
+    // Shape0
+    [StructLayout(LayoutKind.Explicit, Size = 4)]
+    private struct ContinueStatementPayload
+    {
+        [FieldOffset(0)]
+        public Node Label;
+    }
+
+    // Shape0
+    [StructLayout(LayoutKind.Explicit, Size = 4)]
+    private struct DecoratorPayload
+    {
+        [FieldOffset(0)]
+        public Node Expression;
+    }
+
+    // Shape2
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct DefaultClausePayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Statements;
+    }
+
+    // Shape0
+    [StructLayout(LayoutKind.Explicit, Size = 4)]
+    private struct DeleteExpressionPayload
+    {
+        [FieldOffset(0)]
+        public Node Expression;
+    }
+
+    // Shape1
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct DoStatementPayload
+    {
+        [FieldOffset(0)]
+        public Node Expression;
+
+        [FieldOffset(4)]
+        public Node Statement;
+    }
+
+    // Shape3
+    [StructLayout(LayoutKind.Explicit, Size = 12)]
+    private struct ElementAccessExpressionPayload
+    {
+        [FieldOffset(0)]
+        public Node ArgumentExpression;
+
+        [FieldOffset(4)]
+        public Node Expression;
+
+        [FieldOffset(8)]
+        public Node QuestionDotToken;
+    }
+
+    // Shape9
+    [StructLayout(LayoutKind.Explicit, Size = 24)]
+    private struct EnumDeclarationPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Members;
+
+        [FieldOffset(8)]
+        public NodeArray? Modifiers;
+
+        [FieldOffset(16)]
+        public Node Name;
+    }
+
+    // Shape1
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct EnumMemberPayload
+    {
+        [FieldOffset(0)]
+        public Node Initializer;
+
+        [FieldOffset(4)]
+        public Node Name;
+    }
+
+    // Shape8
+    [StructLayout(LayoutKind.Explicit, Size = 24)]
+    private struct ExportAssignmentPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Modifiers;
+
+        [FieldOffset(8)]
+        public Node Expression;
+
+        [FieldOffset(12)]
+        public Node Name;
+
+        [FieldOffset(16)]
+        public bool IsExportEquals;
+    }
+
+    // Shape10
+    [StructLayout(LayoutKind.Explicit, Size = 32)]
+    private struct ExportDeclarationPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Modifiers;
+
+        [FieldOffset(8)]
+        public Node AssertClause;
+
+        [FieldOffset(12)]
+        public Node Attributes;
+
+        [FieldOffset(16)]
+        public Node ExportClause;
+
+        [FieldOffset(20)]
+        public Node ModuleSpecifier;
+
+        [FieldOffset(24)]
+        public Node Name;
+
+        [FieldOffset(28)]
+        public bool IsTypeOnly;
+    }
+
+    // Shape3
+    [StructLayout(LayoutKind.Explicit, Size = 12)]
+    private struct ExportSpecifierPayload
+    {
+        [FieldOffset(0)]
+        public Node Name;
+
+        [FieldOffset(4)]
+        public Node PropertyName;
+
+        [FieldOffset(8)]
+        public bool IsTypeOnly;
+    }
+
+    // Shape0
+    [StructLayout(LayoutKind.Explicit, Size = 4)]
+    private struct ExpressionStatementPayload
+    {
+        [FieldOffset(0)]
+        public Node Expression;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct ExpressionWithTypeArgumentsPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? TypeArguments;
+
+        [FieldOffset(8)]
+        public Node Expression;
+    }
+
+    // Shape0
+    [StructLayout(LayoutKind.Explicit, Size = 4)]
+    private struct ExternalModuleReferencePayload
+    {
+        [FieldOffset(0)]
+        public Node Expression;
+    }
+
+    // Shape4
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct ForInStatementPayload
+    {
+        [FieldOffset(0)]
+        public Node Expression;
+
+        [FieldOffset(4)]
+        public Node Initializer;
+
+        [FieldOffset(8)]
+        public Node NextContainer;
+
+        [FieldOffset(12)]
+        public Node Statement;
+    }
+
+    // Shape7
+    [StructLayout(LayoutKind.Explicit, Size = 20)]
+    private struct ForOfStatementPayload
+    {
+        [FieldOffset(0)]
+        public Node AwaitModifier;
+
+        [FieldOffset(4)]
+        public Node Expression;
+
+        [FieldOffset(8)]
+        public Node Initializer;
+
+        [FieldOffset(12)]
+        public Node NextContainer;
+
+        [FieldOffset(16)]
+        public Node Statement;
+    }
+
+    // Shape7
+    [StructLayout(LayoutKind.Explicit, Size = 20)]
+    private struct ForStatementPayload
+    {
+        [FieldOffset(0)]
+        public Node Condition;
+
+        [FieldOffset(4)]
+        public Node Incrementor;
+
+        [FieldOffset(8)]
+        public Node Initializer;
+
+        [FieldOffset(12)]
+        public Node NextContainer;
+
+        [FieldOffset(16)]
+        public Node Statement;
+    }
+
+    // Shape15
+    [StructLayout(LayoutKind.Explicit, Size = 64)]
+    private struct FunctionDeclarationPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Modifiers;
+
+        [FieldOffset(8)]
+        public NodeArray? Parameters;
+
+        [FieldOffset(16)]
+        public NodeArray? TypeArguments;
+
+        [FieldOffset(24)]
+        public NodeArray? TypeParameters;
+
+        [FieldOffset(32)]
+        public Node AsteriskToken;
+
+        [FieldOffset(36)]
+        public Node Body;
+
+        [FieldOffset(40)]
+        public Node ExclamationToken;
+
+        [FieldOffset(44)]
+        public Node Name;
+
+        [FieldOffset(48)]
+        public Node NextContainer;
+
+        [FieldOffset(52)]
+        public Node QuestionToken;
+
+        [FieldOffset(56)]
+        public Node Type;
+    }
+
+    // Shape15
+    [StructLayout(LayoutKind.Explicit, Size = 64)]
+    private struct FunctionExpressionPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Modifiers;
+
+        [FieldOffset(8)]
+        public NodeArray? Parameters;
+
+        [FieldOffset(16)]
+        public NodeArray? TypeArguments;
+
+        [FieldOffset(24)]
+        public NodeArray? TypeParameters;
+
+        [FieldOffset(32)]
+        public Node AsteriskToken;
+
+        [FieldOffset(36)]
+        public Node Body;
+
+        [FieldOffset(40)]
+        public Node ExclamationToken;
+
+        [FieldOffset(44)]
+        public Node Name;
+
+        [FieldOffset(48)]
+        public Node NextContainer;
+
+        [FieldOffset(52)]
+        public Node QuestionToken;
+
+        [FieldOffset(56)]
+        public Node Type;
+    }
+
+    // Shape14
+    [StructLayout(LayoutKind.Explicit, Size = 48)]
+    private struct FunctionTypeNodePayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Modifiers;
+
+        [FieldOffset(8)]
+        public NodeArray? Parameters;
+
+        [FieldOffset(16)]
+        public NodeArray? TypeArguments;
+
+        [FieldOffset(24)]
+        public NodeArray? TypeParameters;
+
+        [FieldOffset(32)]
+        public Node Name;
+
+        [FieldOffset(36)]
+        public Node NextContainer;
+
+        [FieldOffset(40)]
+        public Node Type;
+    }
+
+    // Shape15
+    [StructLayout(LayoutKind.Explicit, Size = 64)]
+    private struct GetAccessorDeclarationPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Modifiers;
+
+        [FieldOffset(8)]
+        public NodeArray? Parameters;
+
+        [FieldOffset(16)]
+        public NodeArray? TypeArguments;
+
+        [FieldOffset(24)]
+        public NodeArray? TypeParameters;
+
+        [FieldOffset(32)]
+        public Node AsteriskToken;
+
+        [FieldOffset(36)]
+        public Node Body;
+
+        [FieldOffset(40)]
+        public Node ExclamationToken;
+
+        [FieldOffset(44)]
+        public Node Name;
+
+        [FieldOffset(48)]
+        public Node NextContainer;
+
+        [FieldOffset(52)]
+        public Node QuestionToken;
+
+        [FieldOffset(56)]
+        public Node Type;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct HeritageClausePayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Types;
+
+        [FieldOffset(8)]
+        public SyntaxKind Token;
+    }
+
+    // Shape2
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct IdentifierPayload
+    {
+        [FieldOffset(0)]
+        public string? EscapedText;
+    }
+
+    // Shape3
+    [StructLayout(LayoutKind.Explicit, Size = 12)]
+    private struct IfStatementPayload
+    {
+        [FieldOffset(0)]
+        public Node ElseStatement;
+
+        [FieldOffset(4)]
+        public Node Expression;
+
+        [FieldOffset(8)]
+        public Node ThenStatement;
+    }
+
+    // Shape1
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct ImportAttributePayload
+    {
+        [FieldOffset(0)]
+        public Node Name;
+
+        [FieldOffset(4)]
+        public Node Value;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct ImportAttributesPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Elements;
+
+        [FieldOffset(8)]
+        public SyntaxKind Token;
+
+        [FieldOffset(12)]
+        public bool MultiLine;
+    }
+
+    // Shape4
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct ImportClausePayload
+    {
+        [FieldOffset(0)]
+        public Node Name;
+
+        [FieldOffset(4)]
+        public Node NamedBindings;
+
+        [FieldOffset(8)]
+        public SyntaxKind PhaseModifier;
+
+        [FieldOffset(12)]
+        public bool IsTypeOnly;
+    }
+
+    // Shape8
+    [StructLayout(LayoutKind.Explicit, Size = 24)]
+    private struct ImportDeclarationPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Modifiers;
+
+        [FieldOffset(8)]
+        public Node AssertClause;
+
+        [FieldOffset(12)]
+        public Node Attributes;
+
+        [FieldOffset(16)]
+        public Node ImportClause;
+
+        [FieldOffset(20)]
+        public Node ModuleSpecifier;
+    }
+
+    // Shape8
+    [StructLayout(LayoutKind.Explicit, Size = 24)]
+    private struct ImportEqualsDeclarationPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Modifiers;
+
+        [FieldOffset(8)]
+        public Node ModuleReference;
+
+        [FieldOffset(12)]
+        public Node Name;
+
+        [FieldOffset(16)]
+        public bool IsTypeOnly;
+    }
+
+    // Shape3
+    [StructLayout(LayoutKind.Explicit, Size = 12)]
+    private struct ImportSpecifierPayload
+    {
+        [FieldOffset(0)]
+        public Node Name;
+
+        [FieldOffset(4)]
+        public Node PropertyName;
+
+        [FieldOffset(8)]
+        public bool IsTypeOnly;
+    }
+
+    // Shape1
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct ImportTypeAssertionContainerPayload
+    {
+        [FieldOffset(0)]
+        public Node AssertClause;
+
+        [FieldOffset(4)]
+        public bool MultiLine;
+    }
+
+    // Shape8
+    [StructLayout(LayoutKind.Explicit, Size = 24)]
+    private struct ImportTypeNodePayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? TypeArguments;
+
+        [FieldOffset(8)]
+        public Node Argument;
+
+        [FieldOffset(12)]
+        public Node Attributes;
+
+        [FieldOffset(16)]
+        public Node Qualifier;
+
+        [FieldOffset(20)]
+        public bool IsTypeOf;
+    }
+
+    // Shape14
+    [StructLayout(LayoutKind.Explicit, Size = 48)]
+    private struct IndexSignatureDeclarationPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Modifiers;
+
+        [FieldOffset(8)]
+        public NodeArray? Parameters;
+
+        [FieldOffset(16)]
+        public NodeArray? TypeArguments;
+
+        [FieldOffset(24)]
+        public NodeArray? TypeParameters;
+
+        [FieldOffset(32)]
+        public Node Name;
+
+        [FieldOffset(36)]
+        public Node NextContainer;
+
+        [FieldOffset(40)]
+        public Node QuestionToken;
+
+        [FieldOffset(44)]
+        public Node Type;
+    }
+
+    // Shape1
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct IndexedAccessTypeNodePayload
+    {
+        [FieldOffset(0)]
+        public Node IndexType;
+
+        [FieldOffset(4)]
+        public Node ObjectType;
+    }
+
+    // Shape0
+    [StructLayout(LayoutKind.Explicit, Size = 4)]
+    private struct InferTypeNodePayload
+    {
+        [FieldOffset(0)]
+        public Node TypeParameter;
+    }
+
+    // Shape13
+    [StructLayout(LayoutKind.Explicit, Size = 40)]
+    private struct InterfaceDeclarationPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? HeritageClauses;
+
+        [FieldOffset(8)]
+        public NodeArray? Members;
+
+        [FieldOffset(16)]
+        public NodeArray? Modifiers;
+
+        [FieldOffset(24)]
+        public NodeArray? TypeParameters;
+
+        [FieldOffset(32)]
+        public Node Name;
+    }
+
+    // Shape2
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct IntersectionTypeNodePayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Types;
+    }
+
+    // Shape6
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct JSDocPayload
+    {
+        [FieldOffset(0)]
+        public object? Comment;
+
+        [FieldOffset(8)]
+        public NodeArray? Tags;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct JSDocAugmentsTagPayload
+    {
+        [FieldOffset(0)]
+        public object? Comment;
+
+        [FieldOffset(8)]
+        public Node Class;
+
+        [FieldOffset(12)]
+        public Node TagName;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct JSDocAuthorTagPayload
+    {
+        [FieldOffset(0)]
+        public object? Comment;
+
+        [FieldOffset(8)]
+        public Node TagName;
+    }
+
+    // Shape10
+    [StructLayout(LayoutKind.Explicit, Size = 32)]
+    private struct JSDocCallbackTagPayload
+    {
+        [FieldOffset(0)]
+        public object? Comment;
+
+        [FieldOffset(8)]
+        public Node FullName;
+
+        [FieldOffset(12)]
+        public Node Name;
+
+        [FieldOffset(16)]
+        public Node NextContainer;
+
+        [FieldOffset(20)]
+        public Node TagName;
+
+        [FieldOffset(24)]
+        public Node TypeExpression;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct JSDocClassTagPayload
+    {
+        [FieldOffset(0)]
+        public object? Comment;
+
+        [FieldOffset(8)]
+        public Node TagName;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct JSDocDeprecatedTagPayload
+    {
+        [FieldOffset(0)]
+        public object? Comment;
+
+        [FieldOffset(8)]
+        public Node TagName;
+    }
+
+    // Shape8
+    [StructLayout(LayoutKind.Explicit, Size = 24)]
+    private struct JSDocEnumTagPayload
+    {
+        [FieldOffset(0)]
+        public object? Comment;
+
+        [FieldOffset(8)]
+        public Node NextContainer;
+
+        [FieldOffset(12)]
+        public Node TagName;
+
+        [FieldOffset(16)]
+        public Node TypeExpression;
+    }
+
+    // Shape12
+    [StructLayout(LayoutKind.Explicit, Size = 40)]
+    private struct JSDocFunctionTypePayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Parameters;
+
+        [FieldOffset(8)]
+        public NodeArray? TypeArguments;
+
+        [FieldOffset(16)]
+        public NodeArray? TypeParameters;
+
+        [FieldOffset(24)]
+        public Node Name;
+
+        [FieldOffset(28)]
+        public Node NextContainer;
+
+        [FieldOffset(32)]
+        public Node Type;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct JSDocImplementsTagPayload
+    {
+        [FieldOffset(0)]
+        public object? Comment;
+
+        [FieldOffset(8)]
+        public Node Class;
+
+        [FieldOffset(12)]
+        public Node TagName;
+    }
+
+    // Shape8
+    [StructLayout(LayoutKind.Explicit, Size = 24)]
+    private struct JSDocImportTagPayload
+    {
+        [FieldOffset(0)]
+        public object? Comment;
+
+        [FieldOffset(8)]
+        public Node Attributes;
+
+        [FieldOffset(12)]
+        public Node ImportClause;
+
+        [FieldOffset(16)]
+        public Node ModuleSpecifier;
+
+        [FieldOffset(20)]
+        public Node TagName;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct JSDocLinkPayload
+    {
+        [FieldOffset(0)]
+        public string? Text;
+
+        [FieldOffset(8)]
+        public Node Name;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct JSDocLinkCodePayload
+    {
+        [FieldOffset(0)]
+        public string? Text;
+
+        [FieldOffset(8)]
+        public Node Name;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct JSDocLinkPlainPayload
+    {
+        [FieldOffset(0)]
+        public string? Text;
+
+        [FieldOffset(8)]
+        public Node Name;
+    }
+
+    // Shape1
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct JSDocMemberNamePayload
+    {
+        [FieldOffset(0)]
+        public Node Left;
+
+        [FieldOffset(4)]
+        public Node Right;
+    }
+
+    // Shape0
+    [StructLayout(LayoutKind.Explicit, Size = 4)]
+    private struct JSDocNameReferencePayload
+    {
+        [FieldOffset(0)]
+        public Node Name;
+    }
+
+    // Shape0
+    [StructLayout(LayoutKind.Explicit, Size = 4)]
+    private struct JSDocNamepathTypePayload
+    {
+        [FieldOffset(0)]
+        public Node Type;
+    }
+
+    // Shape1
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct JSDocNonNullableTypePayload
+    {
+        [FieldOffset(0)]
+        public Node Type;
+
+        [FieldOffset(4)]
+        public bool Postfix;
+    }
+
+    // Shape1
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct JSDocNullableTypePayload
+    {
+        [FieldOffset(0)]
+        public Node Type;
+
+        [FieldOffset(4)]
+        public bool Postfix;
+    }
+
+    // Shape0
+    [StructLayout(LayoutKind.Explicit, Size = 4)]
+    private struct JSDocOptionalTypePayload
+    {
+        [FieldOffset(0)]
+        public Node Type;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct JSDocOverloadTagPayload
+    {
+        [FieldOffset(0)]
+        public object? Comment;
+
+        [FieldOffset(8)]
+        public Node TagName;
+
+        [FieldOffset(12)]
+        public Node TypeExpression;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct JSDocOverrideTagPayload
+    {
+        [FieldOffset(0)]
+        public object? Comment;
+
+        [FieldOffset(8)]
+        public Node TagName;
+    }
+
+    // Shape8
+    [StructLayout(LayoutKind.Explicit, Size = 24)]
+    private struct JSDocParameterTagPayload
+    {
+        [FieldOffset(0)]
+        public object? Comment;
+
+        [FieldOffset(8)]
+        public Node Name;
+
+        [FieldOffset(12)]
+        public Node TagName;
+
+        [FieldOffset(16)]
+        public Node TypeExpression;
+
+        [FieldOffset(20)]
+        public bool IsBracketed;
+
+        [FieldOffset(21)]
+        public bool IsNameFirst;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct JSDocPrivateTagPayload
+    {
+        [FieldOffset(0)]
+        public object? Comment;
+
+        [FieldOffset(8)]
+        public Node TagName;
+    }
+
+    // Shape8
+    [StructLayout(LayoutKind.Explicit, Size = 24)]
+    private struct JSDocPropertyTagPayload
+    {
+        [FieldOffset(0)]
+        public object? Comment;
+
+        [FieldOffset(8)]
+        public Node Name;
+
+        [FieldOffset(12)]
+        public Node TagName;
+
+        [FieldOffset(16)]
+        public Node TypeExpression;
+
+        [FieldOffset(20)]
+        public bool IsBracketed;
+
+        [FieldOffset(21)]
+        public bool IsNameFirst;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct JSDocProtectedTagPayload
+    {
+        [FieldOffset(0)]
+        public object? Comment;
+
+        [FieldOffset(8)]
+        public Node TagName;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct JSDocPublicTagPayload
+    {
+        [FieldOffset(0)]
+        public object? Comment;
+
+        [FieldOffset(8)]
+        public Node TagName;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct JSDocReadonlyTagPayload
+    {
+        [FieldOffset(0)]
+        public object? Comment;
+
+        [FieldOffset(8)]
+        public Node TagName;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct JSDocReturnTagPayload
+    {
+        [FieldOffset(0)]
+        public object? Comment;
+
+        [FieldOffset(8)]
+        public Node TagName;
+
+        [FieldOffset(12)]
+        public Node TypeExpression;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct JSDocSatisfiesTagPayload
+    {
+        [FieldOffset(0)]
+        public object? Comment;
+
+        [FieldOffset(8)]
+        public Node TagName;
+
+        [FieldOffset(12)]
+        public Node TypeExpression;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct JSDocSeeTagPayload
+    {
+        [FieldOffset(0)]
+        public object? Comment;
+
+        [FieldOffset(8)]
+        public Node Name;
+
+        [FieldOffset(12)]
+        public Node TagName;
+    }
+
+    // Shape9
+    [StructLayout(LayoutKind.Explicit, Size = 24)]
+    private struct JSDocSignaturePayload
+    {
+        [FieldOffset(0)]
+        public Node[]? Parameters;
+
+        [FieldOffset(8)]
+        public Node[]? TypeParameters;
+
+        [FieldOffset(16)]
+        public Node NextContainer;
+
+        [FieldOffset(20)]
+        public Node Type;
+    }
+
+    // Shape9
+    [StructLayout(LayoutKind.Explicit, Size = 24)]
+    private struct JSDocTemplateTagPayload
+    {
+        [FieldOffset(0)]
+        public object? Comment;
+
+        [FieldOffset(8)]
+        public NodeArray? TypeParameters;
+
+        [FieldOffset(16)]
+        public Node Constraint;
+
+        [FieldOffset(20)]
+        public Node TagName;
+    }
+
+    // Shape2
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct JSDocTextPayload
+    {
+        [FieldOffset(0)]
+        public string? Text;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct JSDocThisTagPayload
+    {
+        [FieldOffset(0)]
+        public object? Comment;
+
+        [FieldOffset(8)]
+        public Node TagName;
+
+        [FieldOffset(12)]
+        public Node TypeExpression;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct JSDocThrowsTagPayload
+    {
+        [FieldOffset(0)]
+        public object? Comment;
+
+        [FieldOffset(8)]
+        public Node TagName;
+
+        [FieldOffset(12)]
+        public Node TypeExpression;
+    }
+
+    // Shape0
+    [StructLayout(LayoutKind.Explicit, Size = 4)]
+    private struct JSDocTypeExpressionPayload
+    {
+        [FieldOffset(0)]
+        public Node Type;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct JSDocTypeLiteralPayload
+    {
+        [FieldOffset(0)]
+        public Node[]? JsDocPropertyTags;
+
+        [FieldOffset(8)]
+        public bool IsArrayType;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct JSDocTypeTagPayload
+    {
+        [FieldOffset(0)]
+        public object? Comment;
+
+        [FieldOffset(8)]
+        public Node TagName;
+
+        [FieldOffset(12)]
+        public Node TypeExpression;
+    }
+
+    // Shape10
+    [StructLayout(LayoutKind.Explicit, Size = 32)]
+    private struct JSDocTypedefTagPayload
+    {
+        [FieldOffset(0)]
+        public object? Comment;
+
+        [FieldOffset(8)]
+        public Node FullName;
+
+        [FieldOffset(12)]
+        public Node Name;
+
+        [FieldOffset(16)]
+        public Node NextContainer;
+
+        [FieldOffset(20)]
+        public Node TagName;
+
+        [FieldOffset(24)]
+        public Node TypeExpression;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct JSDocUnknownTagPayload
+    {
+        [FieldOffset(0)]
+        public object? Comment;
+
+        [FieldOffset(8)]
+        public Node TagName;
+    }
+
+    // Shape0
+    [StructLayout(LayoutKind.Explicit, Size = 4)]
+    private struct JSDocVariadicTypePayload
+    {
+        [FieldOffset(0)]
+        public Node Type;
+    }
+
+    // Shape1
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct JsxAttributePayload
+    {
+        [FieldOffset(0)]
+        public Node Initializer;
+
+        [FieldOffset(4)]
+        public Node Name;
+    }
+
+    // Shape2
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct JsxAttributesPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Properties;
+    }
+
+    // Shape0
+    [StructLayout(LayoutKind.Explicit, Size = 4)]
+    private struct JsxClosingElementPayload
+    {
+        [FieldOffset(0)]
+        public Node TagName;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct JsxElementPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Children;
+
+        [FieldOffset(8)]
+        public Node ClosingElement;
+
+        [FieldOffset(12)]
+        public Node OpeningElement;
+    }
+
+    // Shape1
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct JsxExpressionPayload
+    {
+        [FieldOffset(0)]
+        public Node DotDotDotToken;
+
+        [FieldOffset(4)]
+        public Node Expression;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct JsxFragmentPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Children;
+
+        [FieldOffset(8)]
+        public Node ClosingFragment;
+
+        [FieldOffset(12)]
+        public Node OpeningFragment;
+    }
+
+    // Shape1
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct JsxNamespacedNamePayload
+    {
+        [FieldOffset(0)]
+        public Node Name;
+
+        [FieldOffset(4)]
+        public Node Namespace;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct JsxOpeningElementPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? TypeArguments;
+
+        [FieldOffset(8)]
+        public Node Attributes;
+
+        [FieldOffset(12)]
+        public Node TagName;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct JsxSelfClosingElementPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? TypeArguments;
+
+        [FieldOffset(8)]
+        public Node Attributes;
+
+        [FieldOffset(12)]
+        public Node TagName;
+    }
+
+    // Shape1
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct JsxSpreadAttributePayload
+    {
+        [FieldOffset(0)]
+        public Node Expression;
+
+        [FieldOffset(4)]
+        public Node Name;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct JsxTextPayload
+    {
+        [FieldOffset(0)]
+        public string? Text;
+
+        [FieldOffset(8)]
+        public bool ContainsOnlyTriviaWhiteSpaces;
+
+        [FieldOffset(9)]
+        public bool HasExtendedUnicodeEscape;
+
+        [FieldOffset(10)]
+        public bool IsUnterminated;
+    }
+
+    // Shape1
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct LabeledStatementPayload
+    {
+        [FieldOffset(0)]
+        public Node Label;
+
+        [FieldOffset(4)]
+        public Node Statement;
+    }
+
+    // Shape0
+    [StructLayout(LayoutKind.Explicit, Size = 4)]
+    private struct LiteralTypeNodePayload
+    {
+        [FieldOffset(0)]
+        public Node Literal;
+    }
+
+    // Shape10
+    [StructLayout(LayoutKind.Explicit, Size = 32)]
+    private struct MappedTypeNodePayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Members;
+
+        [FieldOffset(8)]
+        public Node NameType;
+
+        [FieldOffset(12)]
+        public Node NextContainer;
+
+        [FieldOffset(16)]
+        public Node QuestionToken;
+
+        [FieldOffset(20)]
+        public Node ReadonlyToken;
+
+        [FieldOffset(24)]
+        public Node Type;
+
+        [FieldOffset(28)]
+        public Node TypeParameter;
+    }
+
+    // Shape1
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct MetaPropertyPayload
+    {
+        [FieldOffset(0)]
+        public SyntaxKind KeywordToken;
+
+        [FieldOffset(4)]
+        public Node Name;
+    }
+
+    // Shape15
+    [StructLayout(LayoutKind.Explicit, Size = 64)]
+    private struct MethodDeclarationPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Modifiers;
+
+        [FieldOffset(8)]
+        public NodeArray? Parameters;
+
+        [FieldOffset(16)]
+        public NodeArray? TypeArguments;
+
+        [FieldOffset(24)]
+        public NodeArray? TypeParameters;
+
+        [FieldOffset(32)]
+        public Node AsteriskToken;
+
+        [FieldOffset(36)]
+        public Node Body;
+
+        [FieldOffset(40)]
+        public Node ExclamationToken;
+
+        [FieldOffset(44)]
+        public Node Name;
+
+        [FieldOffset(48)]
+        public Node NextContainer;
+
+        [FieldOffset(52)]
+        public Node QuestionToken;
+
+        [FieldOffset(56)]
+        public Node Type;
+    }
+
+    // Shape14
+    [StructLayout(LayoutKind.Explicit, Size = 48)]
+    private struct MethodSignaturePayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Modifiers;
+
+        [FieldOffset(8)]
+        public NodeArray? Parameters;
+
+        [FieldOffset(16)]
+        public NodeArray? TypeArguments;
+
+        [FieldOffset(24)]
+        public NodeArray? TypeParameters;
+
+        [FieldOffset(32)]
+        public Node Name;
+
+        [FieldOffset(36)]
+        public Node NextContainer;
+
+        [FieldOffset(40)]
+        public Node QuestionToken;
+
+        [FieldOffset(44)]
+        public Node Type;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct MissingDeclarationPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Modifiers;
+
+        [FieldOffset(8)]
+        public Node Name;
+    }
+
+    // Shape2
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct ModuleBlockPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Statements;
+    }
+
+    // Shape8
+    [StructLayout(LayoutKind.Explicit, Size = 24)]
+    private struct ModuleDeclarationPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Modifiers;
+
+        [FieldOffset(8)]
+        public Node Body;
+
+        [FieldOffset(12)]
+        public Node Name;
+
+        [FieldOffset(16)]
+        public Node NextContainer;
+    }
+
+    // Shape2
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct NamedExportsPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Elements;
+    }
+
+    // Shape2
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct NamedImportsPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Elements;
+    }
+
+    // Shape4
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct NamedTupleMemberPayload
+    {
+        [FieldOffset(0)]
+        public Node DotDotDotToken;
+
+        [FieldOffset(4)]
+        public Node Name;
+
+        [FieldOffset(8)]
+        public Node QuestionToken;
+
+        [FieldOffset(12)]
+        public Node Type;
+    }
+
+    // Shape0
+    [StructLayout(LayoutKind.Explicit, Size = 4)]
+    private struct NamespaceExportPayload
+    {
+        [FieldOffset(0)]
+        public Node Name;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct NamespaceExportDeclarationPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Modifiers;
+
+        [FieldOffset(8)]
+        public Node Name;
+    }
+
+    // Shape0
+    [StructLayout(LayoutKind.Explicit, Size = 4)]
+    private struct NamespaceImportPayload
+    {
+        [FieldOffset(0)]
+        public Node Name;
+    }
+
+    // Shape9
+    [StructLayout(LayoutKind.Explicit, Size = 24)]
+    private struct NewExpressionPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Arguments;
+
+        [FieldOffset(8)]
+        public NodeArray? TypeArguments;
+
+        [FieldOffset(16)]
+        public Node Expression;
+    }
+
+    // Shape9
+    [StructLayout(LayoutKind.Explicit, Size = 24)]
+    private struct NoSubstitutionTemplateLiteralPayload
+    {
+        [FieldOffset(0)]
+        public string? RawText;
+
+        [FieldOffset(8)]
+        public string? Text;
+
+        [FieldOffset(16)]
+        public TokenFlags TemplateFlags;
+
+        [FieldOffset(20)]
+        public bool HasExtendedUnicodeEscape;
+
+        [FieldOffset(21)]
+        public bool IsUnterminated;
+    }
+
+    // Shape0
+    [StructLayout(LayoutKind.Explicit, Size = 4)]
+    private struct NonNullExpressionPayload
+    {
+        [FieldOffset(0)]
+        public Node Expression;
+    }
+
+    // Shape1
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct NotEmittedTypeElementPayload
+    {
+        [FieldOffset(0)]
+        public Node Name;
+
+        [FieldOffset(4)]
+        public Node QuestionToken;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct NumericLiteralPayload
+    {
+        [FieldOffset(0)]
+        public string? Text;
+
+        [FieldOffset(8)]
+        public TokenFlags NumericLiteralFlags;
+
+        [FieldOffset(12)]
+        public bool HasExtendedUnicodeEscape;
+
+        [FieldOffset(13)]
+        public bool IsUnterminated;
+    }
+
+    // Shape2
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct ObjectBindingPatternPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Elements;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct ObjectLiteralExpressionPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Properties;
+
+        [FieldOffset(8)]
+        public bool MultiLine;
+    }
+
+    // Shape0
+    [StructLayout(LayoutKind.Explicit, Size = 4)]
+    private struct OptionalTypeNodePayload
+    {
+        [FieldOffset(0)]
+        public Node Type;
+    }
+
+    // Shape10
+    [StructLayout(LayoutKind.Explicit, Size = 32)]
+    private struct ParameterDeclarationPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Modifiers;
+
+        [FieldOffset(8)]
+        public Node DotDotDotToken;
+
+        [FieldOffset(12)]
+        public Node Initializer;
+
+        [FieldOffset(16)]
+        public Node Name;
+
+        [FieldOffset(20)]
+        public Node QuestionToken;
+
+        [FieldOffset(24)]
+        public Node Type;
+    }
+
+    // Shape0
+    [StructLayout(LayoutKind.Explicit, Size = 4)]
+    private struct ParenthesizedExpressionPayload
+    {
+        [FieldOffset(0)]
+        public Node Expression;
+    }
+
+    // Shape0
+    [StructLayout(LayoutKind.Explicit, Size = 4)]
+    private struct ParenthesizedTypeNodePayload
+    {
+        [FieldOffset(0)]
+        public Node Type;
+    }
+
+    // Shape0
+    [StructLayout(LayoutKind.Explicit, Size = 4)]
+    private struct PartiallyEmittedExpressionPayload
+    {
+        [FieldOffset(0)]
+        public Node Expression;
+    }
+
+    // Shape1
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct PostfixUnaryExpressionPayload
+    {
+        [FieldOffset(0)]
+        public Node Operand;
+
+        [FieldOffset(4)]
+        public SyntaxKind Operator;
+    }
+
+    // Shape1
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct PrefixUnaryExpressionPayload
+    {
+        [FieldOffset(0)]
+        public Node Operand;
+
+        [FieldOffset(4)]
+        public SyntaxKind Operator;
+    }
+
+    // Shape2
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct PrivateIdentifierPayload
+    {
+        [FieldOffset(0)]
+        public string? EscapedText;
+    }
+
+    // Shape3
+    [StructLayout(LayoutKind.Explicit, Size = 12)]
+    private struct PropertyAccessExpressionPayload
+    {
+        [FieldOffset(0)]
+        public Node Expression;
+
+        [FieldOffset(4)]
+        public Node Name;
+
+        [FieldOffset(8)]
+        public Node QuestionDotToken;
+    }
+
+    // Shape8
+    [StructLayout(LayoutKind.Explicit, Size = 24)]
+    private struct PropertyAssignmentPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Modifiers;
+
+        [FieldOffset(8)]
+        public Node ExclamationToken;
+
+        [FieldOffset(12)]
+        public Node Initializer;
+
+        [FieldOffset(16)]
+        public Node Name;
+
+        [FieldOffset(20)]
+        public Node QuestionToken;
+    }
+
+    // Shape10
+    [StructLayout(LayoutKind.Explicit, Size = 32)]
+    private struct PropertyDeclarationPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Modifiers;
+
+        [FieldOffset(8)]
+        public Node ExclamationToken;
+
+        [FieldOffset(12)]
+        public Node Initializer;
+
+        [FieldOffset(16)]
+        public Node Name;
+
+        [FieldOffset(20)]
+        public Node QuestionToken;
+
+        [FieldOffset(24)]
+        public Node Type;
+    }
+
+    // Shape8
+    [StructLayout(LayoutKind.Explicit, Size = 24)]
+    private struct PropertySignaturePayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Modifiers;
+
+        [FieldOffset(8)]
+        public Node Initializer;
+
+        [FieldOffset(12)]
+        public Node Name;
+
+        [FieldOffset(16)]
+        public Node QuestionToken;
+
+        [FieldOffset(20)]
+        public Node Type;
+    }
+
+    // Shape1
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct QualifiedNamePayload
+    {
+        [FieldOffset(0)]
+        public Node Left;
+
+        [FieldOffset(4)]
+        public Node Right;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct RegularExpressionLiteralPayload
+    {
+        [FieldOffset(0)]
+        public string? Text;
+
+        [FieldOffset(8)]
+        public bool HasExtendedUnicodeEscape;
+
+        [FieldOffset(9)]
+        public bool IsUnterminated;
+    }
+
+    // Shape0
+    [StructLayout(LayoutKind.Explicit, Size = 4)]
+    private struct RestTypeNodePayload
+    {
+        [FieldOffset(0)]
+        public Node Type;
+    }
+
+    // Shape0
+    [StructLayout(LayoutKind.Explicit, Size = 4)]
+    private struct ReturnStatementPayload
+    {
+        [FieldOffset(0)]
+        public Node Expression;
+    }
+
+    // Shape1
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct SatisfiesExpressionPayload
+    {
+        [FieldOffset(0)]
+        public Node Expression;
+
+        [FieldOffset(4)]
+        public Node Type;
+    }
+
+    // Shape0
+    [StructLayout(LayoutKind.Explicit, Size = 4)]
+    private struct SemicolonClassElementPayload
+    {
+        [FieldOffset(0)]
+        public Node Name;
+    }
+
+    // Shape15
+    [StructLayout(LayoutKind.Explicit, Size = 64)]
+    private struct SetAccessorDeclarationPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Modifiers;
+
+        [FieldOffset(8)]
+        public NodeArray? Parameters;
+
+        [FieldOffset(16)]
+        public NodeArray? TypeArguments;
+
+        [FieldOffset(24)]
+        public NodeArray? TypeParameters;
+
+        [FieldOffset(32)]
+        public Node AsteriskToken;
+
+        [FieldOffset(36)]
+        public Node Body;
+
+        [FieldOffset(40)]
+        public Node ExclamationToken;
+
+        [FieldOffset(44)]
+        public Node Name;
+
+        [FieldOffset(48)]
+        public Node NextContainer;
+
+        [FieldOffset(52)]
+        public Node QuestionToken;
+
+        [FieldOffset(56)]
+        public Node Type;
+    }
+
+    // Shape10
+    [StructLayout(LayoutKind.Explicit, Size = 32)]
+    private struct ShorthandPropertyAssignmentPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Modifiers;
+
+        [FieldOffset(8)]
+        public Node EqualsToken;
+
+        [FieldOffset(12)]
+        public Node ExclamationToken;
+
+        [FieldOffset(16)]
+        public Node Name;
+
+        [FieldOffset(20)]
+        public Node ObjectAssignmentInitializer;
+
+        [FieldOffset(24)]
+        public Node QuestionToken;
+    }
+
+    // Shape16
+    [StructLayout(LayoutKind.Explicit, Size = 256)]
+    private struct SourceFilePayload
+    {
+        [FieldOffset(0)]
+        public IReadOnlyList<string>? AmbientModuleNames;
+
+        [FieldOffset(8)]
+        public IReadOnlyList<AmdDependency>? AmdDependencies;
+
+        [FieldOffset(16)]
+        public List<DiagnosticWithLocation>? BindDiagnostics;
+
+        [FieldOffset(24)]
+        public List<DiagnosticWithLocation>? BindSuggestionDiagnostics;
+
+        [FieldOffset(32)]
+        public CheckJsDirective? CheckJsDirective;
+
+        [FieldOffset(40)]
+        public List<CommentDirective>? CommentDirectives;
+
+        [FieldOffset(48)]
+        public object? ExternalModuleIndicator;
+
+        [FieldOffset(56)]
+        public string? FileName;
+
+        [FieldOffset(64)]
+        public Dictionary<string, string>? Identifiers;
+
+        [FieldOffset(72)]
+        public Node[]? Imports;
+
+        [FieldOffset(80)]
+        public List<DiagnosticWithLocation>? JsDocDiagnostics;
+
+        [FieldOffset(88)]
+        public IReadOnlyList<FileReference>? LibReferenceDirectives;
+
+        [FieldOffset(96)]
+        public IReadOnlyList<int>? LineMap;
+
+        [FieldOffset(104)]
+        public Node[]? ModuleAugmentations;
+
+        [FieldOffset(112)]
+        public string? ModuleName;
+
+        [FieldOffset(120)]
+        public string? OriginalFileName;
+
+        [FieldOffset(128)]
+        public IReadOnlyList<string>? PackageJsonLocations;
+
+        [FieldOffset(136)]
+        public List<DiagnosticWithLocation>? ParseDiagnostics;
+
+        [FieldOffset(144)]
+        public string? Path;
+
+        [FieldOffset(152)]
+        public PragmaMap? Pragmas;
+
+        [FieldOffset(160)]
+        public IReadOnlyList<FileReference>? ReferencedFiles;
+
+        [FieldOffset(168)]
+        public string? ResolvedPath;
+
+        [FieldOffset(176)]
+        public Action<Node>? SetExternalModuleIndicator;
+
+        [FieldOffset(184)]
+        public NodeArray? Statements;
+
+        [FieldOffset(192)]
+        public string? Text;
+
+        [FieldOffset(200)]
+        public IReadOnlyList<FileReference>? TypeReferenceDirectives;
+
+        [FieldOffset(208)]
+        public Node EndOfFileToken;
+
+        [FieldOffset(212)]
+        public int IdentifierCount;
+
+        [FieldOffset(216)]
+        public ModuleKind ImpliedNodeFormat;
+
+        [FieldOffset(220)]
+        public JSDocParsingMode JsDocParsingMode;
+
+        [FieldOffset(224)]
+        public LanguageVariant LanguageVariant;
+
+        [FieldOffset(228)]
+        public ScriptTarget LanguageVersion;
+
+        [FieldOffset(232)]
+        public Node NextContainer;
+
+        [FieldOffset(236)]
+        public int NodeCount;
+
+        [FieldOffset(240)]
+        public ScriptKind ScriptKind;
+
+        [FieldOffset(244)]
+        public int SymbolCount;
+
+        [FieldOffset(248)]
+        public bool HasNoDefaultLib;
+
+        [FieldOffset(249)]
+        public bool IsDeclarationFile;
+    }
+
+    // Shape1
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct SpreadAssignmentPayload
+    {
+        [FieldOffset(0)]
+        public Node Expression;
+
+        [FieldOffset(4)]
+        public Node Name;
+    }
+
+    // Shape0
+    [StructLayout(LayoutKind.Explicit, Size = 4)]
+    private struct SpreadElementPayload
+    {
+        [FieldOffset(0)]
+        public Node Expression;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct StringLiteralPayload
+    {
+        [FieldOffset(0)]
+        public string? Text;
+
+        [FieldOffset(8)]
+        public Node TextSourceNode;
+
+        [FieldOffset(12)]
+        public bool HasExtendedUnicodeEscape;
+
+        [FieldOffset(13)]
+        public bool IsUnterminated;
+
+        [FieldOffset(14)]
+        public bool SingleQuote;
+    }
+
+    // Shape3
+    [StructLayout(LayoutKind.Explicit, Size = 12)]
+    private struct SwitchStatementPayload
+    {
+        [FieldOffset(0)]
+        public Node CaseBlock;
+
+        [FieldOffset(4)]
+        public Node Expression;
+
+        [FieldOffset(8)]
+        public bool PossiblyExhaustive;
+    }
+
+    // Shape2
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct SyntaxListPayload
+    {
+        [FieldOffset(0)]
+        public Node[]? _children;
+    }
+
+    // Shape1
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct SyntheticExpressionPayload
+    {
+        [FieldOffset(0)]
+        public Node TupleNameSource;
+
+        [FieldOffset(4)]
+        public bool IsSpread;
+    }
+
+    // Shape1
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct SyntheticReferenceExpressionPayload
+    {
+        [FieldOffset(0)]
+        public Node Expression;
+
+        [FieldOffset(4)]
+        public Node ThisArg;
+    }
+
+    // Shape8
+    [StructLayout(LayoutKind.Explicit, Size = 24)]
+    private struct TaggedTemplateExpressionPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? TypeArguments;
+
+        [FieldOffset(8)]
+        public Node QuestionDotToken;
+
+        [FieldOffset(12)]
+        public Node Tag;
+
+        [FieldOffset(16)]
+        public Node Template;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct TemplateExpressionPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? TemplateSpans;
+
+        [FieldOffset(8)]
+        public Node Head;
+    }
+
+    // Shape9
+    [StructLayout(LayoutKind.Explicit, Size = 24)]
+    private struct TemplateHeadPayload
+    {
+        [FieldOffset(0)]
+        public string? RawText;
+
+        [FieldOffset(8)]
+        public string? Text;
+
+        [FieldOffset(16)]
+        public TokenFlags TemplateFlags;
+
+        [FieldOffset(20)]
+        public bool HasExtendedUnicodeEscape;
+
+        [FieldOffset(21)]
+        public bool IsUnterminated;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct TemplateLiteralTypeNodePayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? TemplateSpans;
+
+        [FieldOffset(8)]
+        public Node Head;
+    }
+
+    // Shape1
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct TemplateLiteralTypeSpanPayload
+    {
+        [FieldOffset(0)]
+        public Node Literal;
+
+        [FieldOffset(4)]
+        public Node Type;
+    }
+
+    // Shape9
+    [StructLayout(LayoutKind.Explicit, Size = 24)]
+    private struct TemplateMiddlePayload
+    {
+        [FieldOffset(0)]
+        public string? RawText;
+
+        [FieldOffset(8)]
+        public string? Text;
+
+        [FieldOffset(16)]
+        public TokenFlags TemplateFlags;
+
+        [FieldOffset(20)]
+        public bool HasExtendedUnicodeEscape;
+
+        [FieldOffset(21)]
+        public bool IsUnterminated;
+    }
+
+    // Shape1
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct TemplateSpanPayload
+    {
+        [FieldOffset(0)]
+        public Node Expression;
+
+        [FieldOffset(4)]
+        public Node Literal;
+    }
+
+    // Shape9
+    [StructLayout(LayoutKind.Explicit, Size = 24)]
+    private struct TemplateTailPayload
+    {
+        [FieldOffset(0)]
+        public string? RawText;
+
+        [FieldOffset(8)]
+        public string? Text;
+
+        [FieldOffset(16)]
+        public TokenFlags TemplateFlags;
+
+        [FieldOffset(20)]
+        public bool HasExtendedUnicodeEscape;
+
+        [FieldOffset(21)]
+        public bool IsUnterminated;
+    }
+
+    // Shape0
+    [StructLayout(LayoutKind.Explicit, Size = 4)]
+    private struct ThrowStatementPayload
+    {
+        [FieldOffset(0)]
+        public Node Expression;
+    }
+
+    // Shape3
+    [StructLayout(LayoutKind.Explicit, Size = 12)]
+    private struct TryStatementPayload
+    {
+        [FieldOffset(0)]
+        public Node CatchClause;
+
+        [FieldOffset(4)]
+        public Node FinallyBlock;
+
+        [FieldOffset(8)]
+        public Node TryBlock;
+    }
+
+    // Shape2
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct TupleTypeNodePayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Elements;
+    }
+
+    // Shape11
+    [StructLayout(LayoutKind.Explicit, Size = 32)]
+    private struct TypeAliasDeclarationPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Modifiers;
+
+        [FieldOffset(8)]
+        public NodeArray? TypeParameters;
+
+        [FieldOffset(16)]
+        public Node Name;
+
+        [FieldOffset(20)]
+        public Node NextContainer;
+
+        [FieldOffset(24)]
+        public Node Type;
+    }
+
+    // Shape1
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct TypeAssertionPayload
+    {
+        [FieldOffset(0)]
+        public Node Expression;
+
+        [FieldOffset(4)]
+        public Node Type;
+    }
+
+    // Shape2
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct TypeLiteralNodePayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Members;
+    }
+
+    // Shape0
+    [StructLayout(LayoutKind.Explicit, Size = 4)]
+    private struct TypeOfExpressionPayload
+    {
+        [FieldOffset(0)]
+        public Node Expression;
+    }
+
+    // Shape1
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct TypeOperatorNodePayload
+    {
+        [FieldOffset(0)]
+        public SyntaxKind Operator;
+
+        [FieldOffset(4)]
+        public Node Type;
+    }
+
+    // Shape8
+    [StructLayout(LayoutKind.Explicit, Size = 24)]
+    private struct TypeParameterDeclarationPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Modifiers;
+
+        [FieldOffset(8)]
+        public Node Constraint;
+
+        [FieldOffset(12)]
+        public Node Default;
+
+        [FieldOffset(16)]
+        public Node Expression;
+
+        [FieldOffset(20)]
+        public Node Name;
+    }
+
+    // Shape3
+    [StructLayout(LayoutKind.Explicit, Size = 12)]
+    private struct TypePredicateNodePayload
+    {
+        [FieldOffset(0)]
+        public Node AssertsModifier;
+
+        [FieldOffset(4)]
+        public Node ParameterName;
+
+        [FieldOffset(8)]
+        public Node Type;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct TypeQueryNodePayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? TypeArguments;
+
+        [FieldOffset(8)]
+        public Node ExprName;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct TypeReferenceNodePayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? TypeArguments;
+
+        [FieldOffset(8)]
+        public Node TypeName;
+    }
+
+    // Shape2
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct UnionTypeNodePayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Types;
+    }
+
+    // Shape4
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct VariableDeclarationPayload
+    {
+        [FieldOffset(0)]
+        public Node ExclamationToken;
+
+        [FieldOffset(4)]
+        public Node Initializer;
+
+        [FieldOffset(8)]
+        public Node Name;
+
+        [FieldOffset(12)]
+        public Node Type;
+    }
+
+    // Shape2
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct VariableDeclarationListPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Declarations;
+    }
+
+    // Shape5
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct VariableStatementPayload
+    {
+        [FieldOffset(0)]
+        public NodeArray? Modifiers;
+
+        [FieldOffset(8)]
+        public Node DeclarationList;
+    }
+
+    // Shape0
+    [StructLayout(LayoutKind.Explicit, Size = 4)]
+    private struct VoidExpressionPayload
+    {
+        [FieldOffset(0)]
+        public Node Expression;
+    }
+
+    // Shape1
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct WhileStatementPayload
+    {
+        [FieldOffset(0)]
+        public Node Expression;
+
+        [FieldOffset(4)]
+        public Node Statement;
+    }
+
+    // Shape1
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct WithStatementPayload
+    {
+        [FieldOffset(0)]
+        public Node Expression;
+
+        [FieldOffset(4)]
+        public Node Statement;
+    }
+
+    // Shape1
+    [StructLayout(LayoutKind.Explicit, Size = 8)]
+    private struct YieldExpressionPayload
+    {
+        [FieldOffset(0)]
+        public Node AsteriskToken;
+
+        [FieldOffset(4)]
+        public Node Expression;
+    }
+
+    /// <summary>An arena of the shape with the given capacity.</summary>
+    private static Array NewPayloads(int shapeId, int length)
+    {
+        switch (shapeId)
+        {
+            case 0:
+                return new Shape0[length];
+            case 1:
+                return new Shape1[length];
+            case 2:
+                return new Shape2[length];
+            case 3:
+                return new Shape3[length];
+            case 4:
+                return new Shape4[length];
+            case 5:
+                return new Shape5[length];
+            case 6:
+                return new Shape6[length];
+            case 7:
+                return new Shape7[length];
+            case 8:
+                return new Shape8[length];
+            case 9:
+                return new Shape9[length];
+            case 10:
+                return new Shape10[length];
+            case 11:
+                return new Shape11[length];
+            case 12:
+                return new Shape12[length];
+            case 13:
+                return new Shape13[length];
+            case 14:
+                return new Shape14[length];
+            case 15:
+                return new Shape15[length];
+            case 16:
+                return new Shape16[length];
+            default:
+                throw new InvalidOperationException("no payload");
+        }
+    }
+
     // SourceFile
     public IReadOnlyList<string>? AmbientModuleNames(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = AmbientModuleNamesOffsets[(int)r.Kind];
-        return o < 0 ? null : (IReadOnlyList<string>?)refs[r.Refs + o];
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SourceFile ? PayloadOf<SourceFilePayload>(h, 16).AmbientModuleNames : null;
     }
 
     public void SetAmbientModuleNames(Node node, IReadOnlyList<string>? value)
     {
-        ref var r = ref records[node.Index];
-        var o = AmbientModuleNamesOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SourceFile))
         {
-            ThrowNoField(r.Kind, nameof(AmbientModuleNames));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(AmbientModuleNames));
         }
-        refs[r.Refs + o] = value;
+        PayloadOf<SourceFilePayload>(h, 16).AmbientModuleNames = value;
     }
-
-    private static ReadOnlySpan<sbyte> AmbientModuleNamesOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // SourceFile
     public IReadOnlyList<AmdDependency> AmdDependencies(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = AmdDependenciesOffsets[(int)r.Kind];
-        return o < 0 ? null! : (IReadOnlyList<AmdDependency>)refs[r.Refs + o]!;
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SourceFile ? PayloadOf<SourceFilePayload>(h, 16).AmdDependencies! : null!;
     }
 
     public void SetAmdDependencies(Node node, IReadOnlyList<AmdDependency> value)
     {
-        ref var r = ref records[node.Index];
-        var o = AmdDependenciesOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SourceFile))
         {
-            ThrowNoField(r.Kind, nameof(AmdDependencies));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(AmdDependencies));
         }
-        refs[r.Refs + o] = value;
+        PayloadOf<SourceFilePayload>(h, 16).AmdDependencies = value;
     }
-
-    private static ReadOnlySpan<sbyte> AmdDependenciesOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // ImportTypeNode
     public Node Argument(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ArgumentOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.ImportType ? PayloadOf<ImportTypeNodePayload>(h, 8).Argument : default;
     }
 
     public void SetArgument(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ArgumentOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.ImportType))
         {
-            ThrowNoField(r.Kind, nameof(Argument));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Argument));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<ImportTypeNodePayload>(h, 8).Argument = value;
     }
-
-    private static ReadOnlySpan<sbyte> ArgumentOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // ElementAccessExpression
     public Node ArgumentExpression(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ArgumentExpressionOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.ElementAccessExpression ? PayloadOf<ElementAccessExpressionPayload>(h, 3).ArgumentExpression : default;
     }
 
     public void SetArgumentExpression(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ArgumentExpressionOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.ElementAccessExpression))
         {
-            ThrowNoField(r.Kind, nameof(ArgumentExpression));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(ArgumentExpression));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<ElementAccessExpressionPayload>(h, 3).ArgumentExpression = value;
     }
-
-    private static ReadOnlySpan<sbyte> ArgumentExpressionOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // CallExpression, NewExpression
     public NodeArray? Arguments(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ArgumentsOffsets[(int)r.Kind];
-        return o < 0 ? null : (NodeArray?)refs[r.Refs + o];
+        var h = headers[node.Index].KindPayload;
+        int o = ArgumentsOffsets[h & KindMask];
+        return o == NoField ? null : Unsafe.As<byte, NodeArray?>(ref PayloadByte(h, o));
     }
 
     public void SetArguments(Node node, NodeArray? value)
     {
-        ref var r = ref records[node.Index];
-        var o = ArgumentsOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = ArgumentsOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(Arguments));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Arguments));
         }
-        refs[r.Refs + o] = value;
+        Unsafe.As<byte, NodeArray?>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> ArgumentsOffsets =>
+    private static ReadOnlySpan<ushort> ArgumentsOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,18432,18432,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // ExportDeclaration, ImportDeclaration, ImportTypeAssertionContainer
     public Node AssertClause(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = AssertClauseOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        int o = AssertClauseOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, Node>(ref PayloadByte(h, o));
     }
 
     public void SetAssertClause(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = AssertClauseOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = AssertClauseOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(AssertClause));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(AssertClause));
         }
-        slots[r.Slots + o] = value.Index;
+        Unsafe.As<byte, Node>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> AssertClauseOffsets =>
+    private static ReadOnlySpan<ushort> AssertClauseOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,0,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,16392,65535,65535,65535,65535,65535,20488,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,2048,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // TypePredicateNode
     public Node AssertsModifier(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = AssertsModifierOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.TypePredicate ? PayloadOf<TypePredicateNodePayload>(h, 3).AssertsModifier : default;
     }
 
     public void SetAssertsModifier(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = AssertsModifierOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.TypePredicate))
         {
-            ThrowNoField(r.Kind, nameof(AssertsModifier));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(AssertsModifier));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<TypePredicateNodePayload>(h, 3).AssertsModifier = value;
     }
-
-    private static ReadOnlySpan<sbyte> AssertsModifierOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // ArrowFunction, ConstructorDeclaration, FunctionDeclaration, FunctionExpression, GetAccessorDeclaration, MethodDeclaration, … (8 classes)
     public Node AsteriskToken(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = AsteriskTokenOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        int o = AsteriskTokenOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, Node>(ref PayloadByte(h, o));
     }
 
     public void SetAsteriskToken(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = AsteriskTokenOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = AsteriskTokenOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(AsteriskToken));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(AsteriskToken));
         }
-        slots[r.Slots + o] = value.Index;
+        Unsafe.As<byte, Node>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> AsteriskTokenOffsets =>
+    private static ReadOnlySpan<ushort> AsteriskTokenOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,0,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,30752,65535,30752,30752,30752,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,30752,30752,65535,65535,65535,65535,65535,65535,65535,65535,65535,2048,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,30752,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // ExportDeclaration, ImportDeclaration, ImportTypeNode, JSDocImportTag, JsxOpeningElement, JsxSelfClosingElement
     public Node Attributes(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = AttributesOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        int o = AttributesOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, Node>(ref PayloadByte(h, o));
     }
 
     public void SetAttributes(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = AttributesOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = AttributesOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(Attributes));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Attributes));
         }
-        slots[r.Slots + o] = value.Index;
+        Unsafe.As<byte, Node>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> AttributesOffsets =>
+    private static ReadOnlySpan<ushort> AttributesOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,1,
-        -1,-1,-1,-1,-1,-1,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,16396,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,16396,65535,65535,65535,65535,65535,20492,
+        65535,65535,65535,65535,65535,65535,10248,10248,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,16392,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // ForOfStatement
     public Node AwaitModifier(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = AwaitModifierOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.ForOfStatement ? PayloadOf<ForOfStatementPayload>(h, 7).AwaitModifier : default;
     }
 
     public void SetAwaitModifier(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = AwaitModifierOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.ForOfStatement))
         {
-            ThrowNoField(r.Kind, nameof(AwaitModifier));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(AwaitModifier));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<ForOfStatementPayload>(h, 7).AwaitModifier = value;
     }
-
-    private static ReadOnlySpan<sbyte> AwaitModifierOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // SourceFile
     public List<DiagnosticWithLocation>? BindDiagnostics(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = BindDiagnosticsOffsets[(int)r.Kind];
-        return o < 0 ? null : (List<DiagnosticWithLocation>?)refs[r.Refs + o];
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SourceFile ? PayloadOf<SourceFilePayload>(h, 16).BindDiagnostics : null;
     }
 
     public void SetBindDiagnostics(Node node, List<DiagnosticWithLocation>? value)
     {
-        ref var r = ref records[node.Index];
-        var o = BindDiagnosticsOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SourceFile))
         {
-            ThrowNoField(r.Kind, nameof(BindDiagnostics));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(BindDiagnostics));
         }
-        refs[r.Refs + o] = value;
+        PayloadOf<SourceFilePayload>(h, 16).BindDiagnostics = value;
     }
-
-    private static ReadOnlySpan<sbyte> BindDiagnosticsOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // SourceFile
     public List<DiagnosticWithLocation>? BindSuggestionDiagnostics(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = BindSuggestionDiagnosticsOffsets[(int)r.Kind];
-        return o < 0 ? null : (List<DiagnosticWithLocation>?)refs[r.Refs + o];
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SourceFile ? PayloadOf<SourceFilePayload>(h, 16).BindSuggestionDiagnostics : null;
     }
 
     public void SetBindSuggestionDiagnostics(Node node, List<DiagnosticWithLocation>? value)
     {
-        ref var r = ref records[node.Index];
-        var o = BindSuggestionDiagnosticsOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SourceFile))
         {
-            ThrowNoField(r.Kind, nameof(BindSuggestionDiagnostics));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(BindSuggestionDiagnostics));
         }
-        refs[r.Refs + o] = value;
+        PayloadOf<SourceFilePayload>(h, 16).BindSuggestionDiagnostics = value;
     }
-
-    private static ReadOnlySpan<sbyte> BindSuggestionDiagnosticsOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // CatchClause
     public Node Block(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = BlockOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.CatchClause ? PayloadOf<CatchClausePayload>(h, 3).Block : default;
     }
 
     public void SetBlock(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = BlockOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.CatchClause))
         {
-            ThrowNoField(r.Kind, nameof(Block));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Block));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<CatchClausePayload>(h, 3).Block = value;
     }
-
-    private static ReadOnlySpan<sbyte> BlockOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // ArrowFunction, ClassStaticBlockDeclaration, ConstructorDeclaration, FunctionDeclaration, FunctionExpression, GetAccessorDeclaration, … (9 classes)
     public Node Body(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = BodyOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        int o = BodyOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, Node>(ref PayloadByte(h, o));
     }
 
     public void SetBody(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = BodyOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = BodyOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(Body));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Body));
         }
-        slots[r.Slots + o] = value.Index;
+        Unsafe.As<byte, Node>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> BodyOffsets =>
+    private static ReadOnlySpan<ushort> BodyOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,0,1,1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,30756,16392,30756,30756,30756,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,30756,30756,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,30756,65535,65535,65535,65535,16392,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // SwitchStatement
     public Node CaseBlock(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = CaseBlockOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SwitchStatement ? PayloadOf<SwitchStatementPayload>(h, 3).CaseBlock : default;
     }
 
     public void SetCaseBlock(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = CaseBlockOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SwitchStatement))
         {
-            ThrowNoField(r.Kind, nameof(CaseBlock));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(CaseBlock));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<SwitchStatementPayload>(h, 3).CaseBlock = value;
     }
-
-    private static ReadOnlySpan<sbyte> CaseBlockOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // TryStatement
     public Node CatchClause(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = CatchClauseOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.TryStatement ? PayloadOf<TryStatementPayload>(h, 3).CatchClause : default;
     }
 
     public void SetCatchClause(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = CatchClauseOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.TryStatement))
         {
-            ThrowNoField(r.Kind, nameof(CatchClause));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(CatchClause));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<TryStatementPayload>(h, 3).CatchClause = value;
     }
-
-    private static ReadOnlySpan<sbyte> CatchClauseOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // SourceFile
     public CheckJsDirective? CheckJsDirective(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = CheckJsDirectiveOffsets[(int)r.Kind];
-        return o < 0 ? null : (CheckJsDirective?)refs[r.Refs + o];
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SourceFile ? PayloadOf<SourceFilePayload>(h, 16).CheckJsDirective : null;
     }
 
     public void SetCheckJsDirective(Node node, CheckJsDirective? value)
     {
-        ref var r = ref records[node.Index];
-        var o = CheckJsDirectiveOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SourceFile))
         {
-            ThrowNoField(r.Kind, nameof(CheckJsDirective));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(CheckJsDirective));
         }
-        refs[r.Refs + o] = value;
+        PayloadOf<SourceFilePayload>(h, 16).CheckJsDirective = value;
     }
-
-    private static ReadOnlySpan<sbyte> CheckJsDirectiveOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,4,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // ConditionalTypeNode
     public Node CheckType(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = CheckTypeOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.ConditionalType ? PayloadOf<ConditionalTypeNodePayload>(h, 7).CheckType : default;
     }
 
     public void SetCheckType(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = CheckTypeOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.ConditionalType))
         {
-            ThrowNoField(r.Kind, nameof(CheckType));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(CheckType));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<ConditionalTypeNodePayload>(h, 7).CheckType = value;
     }
-
-    private static ReadOnlySpan<sbyte> CheckTypeOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // JsxElement, JsxFragment
     public NodeArray Children(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ChildrenOffsets[(int)r.Kind];
-        return o < 0 ? null! : (NodeArray)refs[r.Refs + o]!;
+        var h = headers[node.Index].KindPayload;
+        int o = ChildrenOffsets[h & KindMask];
+        return o == NoField ? null! : Unsafe.As<byte, NodeArray>(ref PayloadByte(h, o))!;
     }
 
     public void SetChildren(Node node, NodeArray value)
     {
-        ref var r = ref records[node.Index];
-        var o = ChildrenOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = ChildrenOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(Children));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Children));
         }
-        refs[r.Refs + o] = value;
+        Unsafe.As<byte, NodeArray>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> ChildrenOffsets =>
+    private static ReadOnlySpan<ushort> ChildrenOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,0,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,10240,65535,65535,65535,10240,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // JSDocAugmentsTag, JSDocImplementsTag
     public Node Class(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ClassOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        int o = ClassOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, Node>(ref PayloadByte(h, o));
     }
 
     public void SetClass(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ClassOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = ClassOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(Class));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Class));
         }
-        slots[r.Slots + o] = value.Index;
+        Unsafe.As<byte, Node>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> ClassOffsets =>
+    private static ReadOnlySpan<ushort> ClassOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,10248,10248,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // CaseBlock
     public NodeArray Clauses(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ClausesOffsets[(int)r.Kind];
-        return o < 0 ? null! : (NodeArray)refs[r.Refs + o]!;
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.CaseBlock ? PayloadOf<CaseBlockPayload>(h, 5).Clauses! : null!;
     }
 
     public void SetClauses(Node node, NodeArray value)
     {
-        ref var r = ref records[node.Index];
-        var o = ClausesOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.CaseBlock))
         {
-            ThrowNoField(r.Kind, nameof(Clauses));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Clauses));
         }
-        refs[r.Refs + o] = value;
+        PayloadOf<CaseBlockPayload>(h, 5).Clauses = value;
     }
-
-    private static ReadOnlySpan<sbyte> ClausesOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // JsxElement
     public Node ClosingElement(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ClosingElementOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.JsxElement ? PayloadOf<JsxElementPayload>(h, 5).ClosingElement : default;
     }
 
     public void SetClosingElement(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ClosingElementOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.JsxElement))
         {
-            ThrowNoField(r.Kind, nameof(ClosingElement));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(ClosingElement));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<JsxElementPayload>(h, 5).ClosingElement = value;
     }
-
-    private static ReadOnlySpan<sbyte> ClosingElementOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // JsxFragment
     public Node ClosingFragment(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ClosingFragmentOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.JsxFragment ? PayloadOf<JsxFragmentPayload>(h, 5).ClosingFragment : default;
     }
 
     public void SetClosingFragment(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ClosingFragmentOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.JsxFragment))
         {
-            ThrowNoField(r.Kind, nameof(ClosingFragment));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(ClosingFragment));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<JsxFragmentPayload>(h, 5).ClosingFragment = value;
     }
-
-    private static ReadOnlySpan<sbyte> ClosingFragmentOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // ConditionalExpression
     public Node ColonToken(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ColonTokenOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.ConditionalExpression ? PayloadOf<ConditionalExpressionPayload>(h, 7).ColonToken : default;
     }
 
     public void SetColonToken(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ColonTokenOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.ConditionalExpression))
         {
-            ThrowNoField(r.Kind, nameof(ColonToken));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(ColonToken));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<ConditionalExpressionPayload>(h, 7).ColonToken = value;
     }
-
-    private static ReadOnlySpan<sbyte> ColonTokenOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // JSDoc, JSDocAugmentsTag, JSDocAuthorTag, JSDocCallbackTag, JSDocClassTag, JSDocDeprecatedTag, … (26 classes)
     public object? Comment(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = CommentOffsets[(int)r.Kind];
-        return o < 0 ? null : (object?)refs[r.Refs + o];
+        var h = headers[node.Index].KindPayload;
+        int o = CommentOffsets[h & KindMask];
+        return o == NoField ? null : Unsafe.As<byte, object?>(ref PayloadByte(h, o));
     }
 
     public void SetComment(Node node, object? value)
     {
-        ref var r = ref records[node.Index];
-        var o = CommentOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = CommentOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(Comment));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Comment));
         }
-        refs[r.Refs + o] = value;
+        Unsafe.As<byte, object?>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> CommentOffsets =>
+    private static ReadOnlySpan<ushort> CommentOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,0,-1,-1,-1,-1,-1,-1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,12288,65535,65535,65535,65535,65535,65535,10240,10240,10240,10240,10240,10240,10240,10240,10240,10240,10240,20480,10240,16384,16384,10240,10240,10240,18432,20480,10240,16384,10240,10240,16384,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // SourceFile
     public List<CommentDirective>? CommentDirectives(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = CommentDirectivesOffsets[(int)r.Kind];
-        return o < 0 ? null : (List<CommentDirective>?)refs[r.Refs + o];
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SourceFile ? PayloadOf<SourceFilePayload>(h, 16).CommentDirectives : null;
     }
 
     public void SetCommentDirectives(Node node, List<CommentDirective>? value)
     {
-        ref var r = ref records[node.Index];
-        var o = CommentDirectivesOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SourceFile))
         {
-            ThrowNoField(r.Kind, nameof(CommentDirectives));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(CommentDirectives));
         }
-        refs[r.Refs + o] = value;
+        PayloadOf<SourceFilePayload>(h, 16).CommentDirectives = value;
     }
-
-    private static ReadOnlySpan<sbyte> CommentDirectivesOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // ConditionalExpression, ForStatement
     public Node Condition(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ConditionOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        int o = ConditionOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, Node>(ref PayloadByte(h, o));
     }
 
     public void SetCondition(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ConditionOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = ConditionOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(Condition));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Condition));
         }
-        slots[r.Slots + o] = value.Index;
+        Unsafe.As<byte, Node>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> ConditionOffsets =>
+    private static ReadOnlySpan<ushort> ConditionOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,14340,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,14336,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // JSDocTemplateTag, TypeParameterDeclaration
     public Node Constraint(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ConstraintOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        int o = ConstraintOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, Node>(ref PayloadByte(h, o));
     }
 
     public void SetConstraint(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ConstraintOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = ConstraintOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(Constraint));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Constraint));
         }
-        slots[r.Slots + o] = value.Index;
+        Unsafe.As<byte, Node>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> ConstraintOffsets =>
+    private static ReadOnlySpan<ushort> ConstraintOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,16392,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,18448,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // JsxText
     public bool ContainsOnlyTriviaWhiteSpaces(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ContainsOnlyTriviaWhiteSpacesOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.JsxText ? PayloadOf<JsxTextPayload>(h, 5).ContainsOnlyTriviaWhiteSpaces : default;
     }
 
     public void SetContainsOnlyTriviaWhiteSpaces(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = ContainsOnlyTriviaWhiteSpacesOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.JsxText))
         {
-            ThrowNoField(r.Kind, nameof(ContainsOnlyTriviaWhiteSpaces));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(ContainsOnlyTriviaWhiteSpaces));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        PayloadOf<JsxTextPayload>(h, 5).ContainsOnlyTriviaWhiteSpaces = value;
     }
-
-    private static ReadOnlySpan<sbyte> ContainsOnlyTriviaWhiteSpacesOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // VariableStatement
     public Node DeclarationList(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = DeclarationListOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.VariableStatement ? PayloadOf<VariableStatementPayload>(h, 5).DeclarationList : default;
     }
 
     public void SetDeclarationList(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = DeclarationListOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.VariableStatement))
         {
-            ThrowNoField(r.Kind, nameof(DeclarationList));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(DeclarationList));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<VariableStatementPayload>(h, 5).DeclarationList = value;
     }
-
-    private static ReadOnlySpan<sbyte> DeclarationListOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // VariableDeclarationList
     public NodeArray Declarations(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = DeclarationsOffsets[(int)r.Kind];
-        return o < 0 ? null! : (NodeArray)refs[r.Refs + o]!;
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.VariableDeclarationList ? PayloadOf<VariableDeclarationListPayload>(h, 2).Declarations! : null!;
     }
 
     public void SetDeclarations(Node node, NodeArray value)
     {
-        ref var r = ref records[node.Index];
-        var o = DeclarationsOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.VariableDeclarationList))
         {
-            ThrowNoField(r.Kind, nameof(Declarations));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Declarations));
         }
-        refs[r.Refs + o] = value;
+        PayloadOf<VariableDeclarationListPayload>(h, 2).Declarations = value;
     }
-
-    private static ReadOnlySpan<sbyte> DeclarationsOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // TypeParameterDeclaration
     public Node Default(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = DefaultOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.TypeParameter ? PayloadOf<TypeParameterDeclarationPayload>(h, 8).Default : default;
     }
 
     public void SetDefault(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = DefaultOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.TypeParameter))
         {
-            ThrowNoField(r.Kind, nameof(Default));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Default));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<TypeParameterDeclarationPayload>(h, 8).Default = value;
     }
-
-    private static ReadOnlySpan<sbyte> DefaultOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // BindingElement, JsxExpression, NamedTupleMember, ParameterDeclaration
     public Node DotDotDotToken(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = DotDotDotTokenOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        int o = DotDotDotTokenOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, Node>(ref PayloadByte(h, o));
     }
 
     public void SetDotDotDotToken(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = DotDotDotTokenOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = DotDotDotTokenOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(DotDotDotToken));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(DotDotDotToken));
         }
-        slots[r.Slots + o] = value.Index;
+        Unsafe.As<byte, Node>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> DotDotDotTokenOffsets =>
+    private static ReadOnlySpan<ushort> DotDotDotTokenOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,0,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,20488,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,8192,65535,65535,65535,65535,65535,8192,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,2048,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // ArrayTypeNode
     public Node ElementType(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ElementTypeOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.ArrayType ? PayloadOf<ArrayTypeNodePayload>(h, 0).ElementType : default;
     }
 
     public void SetElementType(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ElementTypeOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.ArrayType))
         {
-            ThrowNoField(r.Kind, nameof(ElementType));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(ElementType));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<ArrayTypeNodePayload>(h, 0).ElementType = value;
     }
-
-    private static ReadOnlySpan<sbyte> ElementTypeOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // ArrayBindingPattern, ArrayLiteralExpression, CommaListExpression, ImportAttributes, NamedExports, NamedImports, … (8 classes)
     public NodeArray Elements(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ElementsOffsets[(int)r.Kind];
-        return o < 0 ? null! : (NodeArray)refs[r.Refs + o]!;
+        var h = headers[node.Index].KindPayload;
+        int o = ElementsOffsets[h & KindMask];
+        return o == NoField ? null! : Unsafe.As<byte, NodeArray>(ref PayloadByte(h, o))!;
     }
 
     public void SetElements(Node node, NodeArray value)
     {
-        ref var r = ref records[node.Index];
-        var o = ElementsOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = ElementsOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(Elements));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Elements));
         }
-        refs[r.Refs + o] = value;
+        Unsafe.As<byte, NodeArray>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> ElementsOffsets =>
+    private static ReadOnlySpan<ushort> ElementsOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,0,0,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,
-        0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,4096,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,4096,4096,65535,10240,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,4096,65535,65535,65535,
+        4096,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,10240,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,4096,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // IfStatement
     public Node ElseStatement(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ElseStatementOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.IfStatement ? PayloadOf<IfStatementPayload>(h, 3).ElseStatement : default;
     }
 
     public void SetElseStatement(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ElseStatementOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.IfStatement))
         {
-            ThrowNoField(r.Kind, nameof(ElseStatement));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(ElseStatement));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<IfStatementPayload>(h, 3).ElseStatement = value;
     }
-
-    private static ReadOnlySpan<sbyte> ElseStatementOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // SourceFile
     public Node EndOfFileToken(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = EndOfFileTokenOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SourceFile ? PayloadOf<SourceFilePayload>(h, 16).EndOfFileToken : default;
     }
 
     public void SetEndOfFileToken(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = EndOfFileTokenOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SourceFile))
         {
-            ThrowNoField(r.Kind, nameof(EndOfFileToken));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(EndOfFileToken));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<SourceFilePayload>(h, 16).EndOfFileToken = value;
     }
-
-    private static ReadOnlySpan<sbyte> EndOfFileTokenOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // ArrowFunction
     public Node EqualsGreaterThanToken(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = EqualsGreaterThanTokenOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.ArrowFunction ? PayloadOf<ArrowFunctionPayload>(h, 15).EqualsGreaterThanToken : default;
     }
 
     public void SetEqualsGreaterThanToken(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = EqualsGreaterThanTokenOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.ArrowFunction))
         {
-            ThrowNoField(r.Kind, nameof(EqualsGreaterThanToken));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(EqualsGreaterThanToken));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<ArrowFunctionPayload>(h, 15).EqualsGreaterThanToken = value;
     }
-
-    private static ReadOnlySpan<sbyte> EqualsGreaterThanTokenOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // ShorthandPropertyAssignment
     public Node EqualsToken(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = EqualsTokenOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.ShorthandPropertyAssignment ? PayloadOf<ShorthandPropertyAssignmentPayload>(h, 10).EqualsToken : default;
     }
 
     public void SetEqualsToken(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = EqualsTokenOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.ShorthandPropertyAssignment))
         {
-            ThrowNoField(r.Kind, nameof(EqualsToken));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(EqualsToken));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<ShorthandPropertyAssignmentPayload>(h, 10).EqualsToken = value;
     }
-
-    private static ReadOnlySpan<sbyte> EqualsTokenOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // Identifier, PrivateIdentifier
     public string? EscapedText(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = EscapedTextOffsets[(int)r.Kind];
-        return o < 0 ? null : (string?)refs[r.Refs + o];
+        var h = headers[node.Index].KindPayload;
+        int o = EscapedTextOffsets[h & KindMask];
+        return o == NoField ? null : Unsafe.As<byte, string?>(ref PayloadByte(h, o));
     }
 
     public void SetEscapedText(Node node, string? value)
     {
-        ref var r = ref records[node.Index];
-        var o = EscapedTextOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = EscapedTextOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(EscapedText));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(EscapedText));
         }
-        refs[r.Refs + o] = value;
+        Unsafe.As<byte, string?>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> EscapedTextOffsets =>
+    private static ReadOnlySpan<ushort> EscapedTextOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        4096,4096,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // ArrowFunction, ConstructorDeclaration, FunctionDeclaration, FunctionExpression, GetAccessorDeclaration, MethodDeclaration, … (11 classes)
     public Node ExclamationToken(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ExclamationTokenOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        int o = ExclamationTokenOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, Node>(ref PayloadByte(h, o));
     }
 
     public void SetExclamationToken(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ExclamationTokenOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = ExclamationTokenOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(ExclamationToken));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(ExclamationToken));
         }
-        slots[r.Slots + o] = value.Index;
+        Unsafe.As<byte, Node>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> ExclamationTokenOffsets =>
+    private static ReadOnlySpan<ushort> ExclamationTokenOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,2,-1,2,2,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,20488,65535,30760,65535,30760,30760,30760,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,30760,30764,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,8192,65535,30760,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,16392,20492,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // ExportDeclaration
     public Node ExportClause(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ExportClauseOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.ExportDeclaration ? PayloadOf<ExportDeclarationPayload>(h, 10).ExportClause : default;
     }
 
     public void SetExportClause(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ExportClauseOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.ExportDeclaration))
         {
-            ThrowNoField(r.Kind, nameof(ExportClause));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(ExportClause));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<ExportDeclarationPayload>(h, 10).ExportClause = value;
     }
-
-    private static ReadOnlySpan<sbyte> ExportClauseOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // TypeQueryNode
     public Node ExprName(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ExprNameOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.TypeQuery ? PayloadOf<TypeQueryNodePayload>(h, 5).ExprName : default;
     }
 
     public void SetExprName(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ExprNameOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.TypeQuery))
         {
-            ThrowNoField(r.Kind, nameof(ExprName));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(ExprName));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<TypeQueryNodePayload>(h, 5).ExprName = value;
     }
-
-    private static ReadOnlySpan<sbyte> ExprNameOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // AsExpression, AwaitExpression, CallExpression, CaseClause, ComputedPropertyName, Decorator, … (38 classes)
     public Node Expression(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ExpressionOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        int o = ExpressionOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, Node>(ref PayloadByte(h, o));
     }
 
     public void SetExpression(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ExpressionOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = ExpressionOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(Expression));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Expression));
         }
-        slots[r.Slots + o] = value.Index;
+        Unsafe.As<byte, Node>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> ExpressionOffsets =>
+    private static ReadOnlySpan<ushort> ExpressionOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,0,2,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,1,0,0,-1,0,0,-1,-1,0,0,0,0,-1,-1,-1,-1,-1,1,0,-1,-1,0,0,0,-1,-1,0,
-        0,-1,-1,-1,-1,0,1,0,0,-1,0,1,-1,-1,0,0,1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,
-        -1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,0,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,0,16400,65535,0,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,6144,6148,18448,18448,65535,2048,0,65535,65535,0,0,0,0,65535,65535,65535,65535,65535,2052,0,65535,65535,10248,2048,0,65535,65535,2048,
+        2048,65535,65535,65535,65535,0,6148,2048,2048,65535,8192,14340,65535,65535,0,2048,6148,65535,0,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,16392,65535,
+        65535,65535,65535,65535,0,65535,65535,65535,65535,65535,65535,65535,65535,65535,2048,2052,65535,10248,65535,65535,65535,65535,65535,65535,65535,65535,2048,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,0,65535,2048,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // ConditionalTypeNode
     public Node ExtendsType(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ExtendsTypeOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.ConditionalType ? PayloadOf<ConditionalTypeNodePayload>(h, 7).ExtendsType : default;
     }
 
     public void SetExtendsType(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ExtendsTypeOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.ConditionalType))
         {
-            ThrowNoField(r.Kind, nameof(ExtendsType));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(ExtendsType));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<ConditionalTypeNodePayload>(h, 7).ExtendsType = value;
     }
-
-    private static ReadOnlySpan<sbyte> ExtendsTypeOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // SourceFile
     public object? ExternalModuleIndicator(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ExternalModuleIndicatorOffsets[(int)r.Kind];
-        return o < 0 ? null : (object?)refs[r.Refs + o];
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SourceFile ? PayloadOf<SourceFilePayload>(h, 16).ExternalModuleIndicator : null;
     }
 
     public void SetExternalModuleIndicator(Node node, object? value)
     {
-        ref var r = ref records[node.Index];
-        var o = ExternalModuleIndicatorOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SourceFile))
         {
-            ThrowNoField(r.Kind, nameof(ExternalModuleIndicator));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(ExternalModuleIndicator));
         }
-        refs[r.Refs + o] = value;
+        PayloadOf<SourceFilePayload>(h, 16).ExternalModuleIndicator = value;
     }
-
-    private static ReadOnlySpan<sbyte> ExternalModuleIndicatorOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // ConditionalTypeNode
     public Node FalseType(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = FalseTypeOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.ConditionalType ? PayloadOf<ConditionalTypeNodePayload>(h, 7).FalseType : default;
     }
 
     public void SetFalseType(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = FalseTypeOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.ConditionalType))
         {
-            ThrowNoField(r.Kind, nameof(FalseType));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(FalseType));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<ConditionalTypeNodePayload>(h, 7).FalseType = value;
     }
-
-    private static ReadOnlySpan<sbyte> FalseTypeOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // SourceFile
     public string FileName(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = FileNameOffsets[(int)r.Kind];
-        return o < 0 ? null! : (string)refs[r.Refs + o]!;
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SourceFile ? PayloadOf<SourceFilePayload>(h, 16).FileName! : null!;
     }
 
     public void SetFileName(Node node, string value)
     {
-        ref var r = ref records[node.Index];
-        var o = FileNameOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SourceFile))
         {
-            ThrowNoField(r.Kind, nameof(FileName));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(FileName));
         }
-        refs[r.Refs + o] = value;
+        PayloadOf<SourceFilePayload>(h, 16).FileName = value;
     }
-
-    private static ReadOnlySpan<sbyte> FileNameOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,7,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // TryStatement
     public Node FinallyBlock(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = FinallyBlockOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.TryStatement ? PayloadOf<TryStatementPayload>(h, 3).FinallyBlock : default;
     }
 
     public void SetFinallyBlock(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = FinallyBlockOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.TryStatement))
         {
-            ThrowNoField(r.Kind, nameof(FinallyBlock));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(FinallyBlock));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<TryStatementPayload>(h, 3).FinallyBlock = value;
     }
-
-    private static ReadOnlySpan<sbyte> FinallyBlockOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // JSDocCallbackTag, JSDocTypedefTag
     public Node FullName(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = FullNameOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        int o = FullNameOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, Node>(ref PayloadByte(h, o));
     }
 
     public void SetFullName(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = FullNameOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = FullNameOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(FullName));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(FullName));
         }
-        slots[r.Slots + o] = value.Index;
+        Unsafe.As<byte, Node>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> FullNameOffsets =>
+    private static ReadOnlySpan<ushort> FullNameOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,20488,65535,65535,65535,65535,65535,65535,65535,20488,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // BigIntLiteral, JsxText, NoSubstitutionTemplateLiteral, NumericLiteral, RegularExpressionLiteral, StringLiteral, … (9 classes)
     public bool HasExtendedUnicodeEscape(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = HasExtendedUnicodeEscapeOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var h = headers[node.Index].KindPayload;
+        int o = HasExtendedUnicodeEscapeOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, bool>(ref PayloadByte(h, o));
     }
 
     public void SetHasExtendedUnicodeEscape(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = HasExtendedUnicodeEscapeOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = HasExtendedUnicodeEscapeOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(HasExtendedUnicodeEscape));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(HasExtendedUnicodeEscape));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        Unsafe.As<byte, bool>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> HasExtendedUnicodeEscapeOffsets =>
+    private static ReadOnlySpan<ushort> HasExtendedUnicodeEscapeOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,0,0,0,1,-1,0,0,0,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,10252,10248,10252,10249,65535,10248,18452,18452,18452,18452,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // SourceFile
     public bool HasNoDefaultLib(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = HasNoDefaultLibOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SourceFile ? PayloadOf<SourceFilePayload>(h, 16).HasNoDefaultLib : default;
     }
 
     public void SetHasNoDefaultLib(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = HasNoDefaultLibOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SourceFile))
         {
-            ThrowNoField(r.Kind, nameof(HasNoDefaultLib));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(HasNoDefaultLib));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        PayloadOf<SourceFilePayload>(h, 16).HasNoDefaultLib = value;
     }
-
-    private static ReadOnlySpan<sbyte> HasNoDefaultLibOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // TemplateExpression, TemplateLiteralTypeNode
     public Node Head(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = HeadOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        int o = HeadOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, Node>(ref PayloadByte(h, o));
     }
 
     public void SetHead(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = HeadOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = HeadOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(Head));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Head));
         }
-        slots[r.Slots + o] = value.Index;
+        Unsafe.As<byte, Node>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> HeadOffsets =>
+    private static ReadOnlySpan<ushort> HeadOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,10248,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,10248,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // ClassDeclaration, ClassExpression, InterfaceDeclaration
     public NodeArray? HeritageClauses(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = HeritageClausesOffsets[(int)r.Kind];
-        return o < 0 ? null : (NodeArray?)refs[r.Refs + o];
+        var h = headers[node.Index].KindPayload;
+        int o = HeritageClausesOffsets[h & KindMask];
+        return o == NoField ? null : Unsafe.As<byte, NodeArray?>(ref PayloadByte(h, o));
     }
 
     public void SetHeritageClauses(Node node, NodeArray? value)
     {
-        ref var r = ref records[node.Index];
-        var o = HeritageClausesOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = HeritageClausesOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(HeritageClauses));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(HeritageClauses));
         }
-        refs[r.Refs + o] = value;
+        Unsafe.As<byte, NodeArray?>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> HeritageClausesOffsets =>
+    private static ReadOnlySpan<ushort> HeritageClausesOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,26624,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,26624,26624,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // SourceFile
     public int IdentifierCount(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IdentifierCountOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o];
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SourceFile ? PayloadOf<SourceFilePayload>(h, 16).IdentifierCount : default;
     }
 
     public void SetIdentifierCount(Node node, int value)
     {
-        ref var r = ref records[node.Index];
-        var o = IdentifierCountOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SourceFile))
         {
-            ThrowNoField(r.Kind, nameof(IdentifierCount));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(IdentifierCount));
         }
-        slots[r.Slots + o] = value;
+        PayloadOf<SourceFilePayload>(h, 16).IdentifierCount = value;
     }
-
-    private static ReadOnlySpan<sbyte> IdentifierCountOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // SourceFile
     public Dictionary<string, string>? Identifiers(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IdentifiersOffsets[(int)r.Kind];
-        return o < 0 ? null : (Dictionary<string, string>?)refs[r.Refs + o];
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SourceFile ? PayloadOf<SourceFilePayload>(h, 16).Identifiers : null;
     }
 
     public void SetIdentifiers(Node node, Dictionary<string, string>? value)
     {
-        ref var r = ref records[node.Index];
-        var o = IdentifiersOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SourceFile))
         {
-            ThrowNoField(r.Kind, nameof(Identifiers));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Identifiers));
         }
-        refs[r.Refs + o] = value;
+        PayloadOf<SourceFilePayload>(h, 16).Identifiers = value;
     }
-
-    private static ReadOnlySpan<sbyte> IdentifiersOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,8,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // SourceFile
     public ModuleKind ImpliedNodeFormat(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ImpliedNodeFormatOffsets[(int)r.Kind];
-        return o < 0 ? default : (ModuleKind)slots[r.Slots + o];
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SourceFile ? PayloadOf<SourceFilePayload>(h, 16).ImpliedNodeFormat : default;
     }
 
     public void SetImpliedNodeFormat(Node node, ModuleKind value)
     {
-        ref var r = ref records[node.Index];
-        var o = ImpliedNodeFormatOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SourceFile))
         {
-            ThrowNoField(r.Kind, nameof(ImpliedNodeFormat));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(ImpliedNodeFormat));
         }
-        slots[r.Slots + o] = (int)value;
+        PayloadOf<SourceFilePayload>(h, 16).ImpliedNodeFormat = value;
     }
-
-    private static ReadOnlySpan<sbyte> ImpliedNodeFormatOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // ImportDeclaration, JSDocImportTag
     public Node ImportClause(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ImportClauseOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        int o = ImportClauseOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, Node>(ref PayloadByte(h, o));
     }
 
     public void SetImportClause(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ImportClauseOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = ImportClauseOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(ImportClause));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(ImportClause));
         }
-        slots[r.Slots + o] = value.Index;
+        Unsafe.As<byte, Node>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> ImportClauseOffsets =>
+    private static ReadOnlySpan<ushort> ImportClauseOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,16400,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,16396,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // SourceFile
     public Node[]? Imports(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ImportsOffsets[(int)r.Kind];
-        return o < 0 ? null : (Node[]?)refs[r.Refs + o];
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SourceFile ? PayloadOf<SourceFilePayload>(h, 16).Imports : null;
     }
 
     public void SetImports(Node node, Node[]? value)
     {
-        ref var r = ref records[node.Index];
-        var o = ImportsOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SourceFile))
         {
-            ThrowNoField(r.Kind, nameof(Imports));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Imports));
         }
-        refs[r.Refs + o] = value;
+        PayloadOf<SourceFilePayload>(h, 16).Imports = value;
     }
-
-    private static ReadOnlySpan<sbyte> ImportsOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,9,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // ForStatement
     public Node Incrementor(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IncrementorOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.ForStatement ? PayloadOf<ForStatementPayload>(h, 7).Incrementor : default;
     }
 
     public void SetIncrementor(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = IncrementorOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.ForStatement))
         {
-            ThrowNoField(r.Kind, nameof(Incrementor));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Incrementor));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<ForStatementPayload>(h, 7).Incrementor = value;
     }
-
-    private static ReadOnlySpan<sbyte> IncrementorOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // IndexedAccessTypeNode
     public Node IndexType(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IndexTypeOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.IndexedAccessType ? PayloadOf<IndexedAccessTypeNodePayload>(h, 1).IndexType : default;
     }
 
     public void SetIndexType(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = IndexTypeOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.IndexedAccessType))
         {
-            ThrowNoField(r.Kind, nameof(IndexType));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(IndexType));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<IndexedAccessTypeNodePayload>(h, 1).IndexType = value;
     }
-
-    private static ReadOnlySpan<sbyte> IndexTypeOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // BindingElement, EnumMember, ForInStatement, ForOfStatement, ForStatement, JsxAttribute, … (11 classes)
     public Node Initializer(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = InitializerOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        int o = InitializerOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, Node>(ref PayloadByte(h, o));
     }
 
     public void SetInitializer(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = InitializerOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = InitializerOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(Initializer));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Initializer));
         }
-        slots[r.Slots + o] = value.Index;
+        Unsafe.As<byte, Node>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> InitializerOffsets =>
+    private static ReadOnlySpan<ushort> InitializerOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,0,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,2,1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,20492,65535,16392,20492,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,8196,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,14344,8196,14344,65535,65535,65535,65535,65535,65535,65535,65535,65535,8196,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,2048,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,16396,65535,65535,2048,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // JSDocTypeLiteral
     public bool IsArrayType(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IsArrayTypeOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.JSDocTypeLiteral ? PayloadOf<JSDocTypeLiteralPayload>(h, 5).IsArrayType : default;
     }
 
     public void SetIsArrayType(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = IsArrayTypeOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.JSDocTypeLiteral))
         {
-            ThrowNoField(r.Kind, nameof(IsArrayType));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(IsArrayType));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        PayloadOf<JSDocTypeLiteralPayload>(h, 5).IsArrayType = value;
     }
-
-    private static ReadOnlySpan<sbyte> IsArrayTypeOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // JSDocParameterTag, JSDocPropertyTag
     public bool IsBracketed(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IsBracketedOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var h = headers[node.Index].KindPayload;
+        int o = IsBracketedOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, bool>(ref PayloadByte(h, o));
     }
 
     public void SetIsBracketed(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = IsBracketedOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = IsBracketedOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(IsBracketed));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(IsBracketed));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        Unsafe.As<byte, bool>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> IsBracketedOffsets =>
+    private static ReadOnlySpan<ushort> IsBracketedOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,16404,65535,65535,65535,65535,65535,65535,16404,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // SourceFile
     public bool IsDeclarationFile(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IsDeclarationFileOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SourceFile ? PayloadOf<SourceFilePayload>(h, 16).IsDeclarationFile : default;
     }
 
     public void SetIsDeclarationFile(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = IsDeclarationFileOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SourceFile))
         {
-            ThrowNoField(r.Kind, nameof(IsDeclarationFile));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(IsDeclarationFile));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        PayloadOf<SourceFilePayload>(h, 16).IsDeclarationFile = value;
     }
-
-    private static ReadOnlySpan<sbyte> IsDeclarationFileOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,4,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // ExportAssignment
     public bool IsExportEquals(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IsExportEqualsOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.ExportAssignment ? PayloadOf<ExportAssignmentPayload>(h, 8).IsExportEquals : default;
     }
 
     public void SetIsExportEquals(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = IsExportEqualsOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.ExportAssignment))
         {
-            ThrowNoField(r.Kind, nameof(IsExportEquals));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(IsExportEquals));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        PayloadOf<ExportAssignmentPayload>(h, 8).IsExportEquals = value;
     }
-
-    private static ReadOnlySpan<sbyte> IsExportEqualsOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // JSDocParameterTag, JSDocPropertyTag
     public bool IsNameFirst(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IsNameFirstOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var h = headers[node.Index].KindPayload;
+        int o = IsNameFirstOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, bool>(ref PayloadByte(h, o));
     }
 
     public void SetIsNameFirst(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = IsNameFirstOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = IsNameFirstOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(IsNameFirst));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(IsNameFirst));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        Unsafe.As<byte, bool>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> IsNameFirstOffsets =>
+    private static ReadOnlySpan<ushort> IsNameFirstOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,16405,65535,65535,65535,65535,65535,65535,16405,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // SyntheticExpression
     public bool IsSpread(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IsSpreadOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SyntheticExpression ? PayloadOf<SyntheticExpressionPayload>(h, 1).IsSpread : default;
     }
 
     public void SetIsSpread(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = IsSpreadOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SyntheticExpression))
         {
-            ThrowNoField(r.Kind, nameof(IsSpread));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(IsSpread));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        PayloadOf<SyntheticExpressionPayload>(h, 1).IsSpread = value;
     }
-
-    private static ReadOnlySpan<sbyte> IsSpreadOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // ImportTypeNode
     public bool IsTypeOf(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IsTypeOfOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.ImportType ? PayloadOf<ImportTypeNodePayload>(h, 8).IsTypeOf : default;
     }
 
     public void SetIsTypeOf(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = IsTypeOfOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.ImportType))
         {
-            ThrowNoField(r.Kind, nameof(IsTypeOf));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(IsTypeOf));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        PayloadOf<ImportTypeNodePayload>(h, 8).IsTypeOf = value;
     }
-
-    private static ReadOnlySpan<sbyte> IsTypeOfOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // ExportDeclaration, ExportSpecifier, ImportClause, ImportEqualsDeclaration, ImportSpecifier
     public bool IsTypeOnly(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IsTypeOnlyOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var h = headers[node.Index].KindPayload;
+        int o = IsTypeOnlyOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, bool>(ref PayloadByte(h, o));
     }
 
     public void SetIsTypeOnly(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = IsTypeOnlyOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = IsTypeOnlyOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(IsTypeOnly));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(IsTypeOnly));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        Unsafe.As<byte, bool>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> IsTypeOnlyOffsets =>
+    private static ReadOnlySpan<ushort> IsTypeOnlyOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,0,-1,-1,0,-1,3,
-        -1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,16400,65535,8204,65535,65535,6152,65535,20508,
+        65535,65535,6152,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // BigIntLiteral, JsxText, NoSubstitutionTemplateLiteral, NumericLiteral, RegularExpressionLiteral, StringLiteral, … (9 classes)
     public bool IsUnterminated(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = IsUnterminatedOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var h = headers[node.Index].KindPayload;
+        int o = IsUnterminatedOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, bool>(ref PayloadByte(h, o));
     }
 
     public void SetIsUnterminated(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = IsUnterminatedOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = IsUnterminatedOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(IsUnterminated));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(IsUnterminated));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        Unsafe.As<byte, bool>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> IsUnterminatedOffsets =>
+    private static ReadOnlySpan<ushort> IsUnterminatedOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,1,1,1,2,-1,1,1,1,1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,10253,10249,10253,10250,65535,10249,18453,18453,18453,18453,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // JSDocSignature
     public Node[]? JSDocSignatureParameters(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = JSDocSignatureParametersOffsets[(int)r.Kind];
-        return o < 0 ? null : (Node[]?)refs[r.Refs + o];
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.JSDocSignature ? PayloadOf<JSDocSignaturePayload>(h, 9).Parameters : null;
     }
 
     public void SetJSDocSignatureParameters(Node node, Node[]? value)
     {
-        ref var r = ref records[node.Index];
-        var o = JSDocSignatureParametersOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.JSDocSignature))
         {
-            ThrowNoField(r.Kind, nameof(JSDocSignatureParameters));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(JSDocSignatureParameters));
         }
-        refs[r.Refs + o] = value;
+        PayloadOf<JSDocSignaturePayload>(h, 9).Parameters = value;
     }
-
-    private static ReadOnlySpan<sbyte> JSDocSignatureParametersOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // JSDocSignature
     public Node[]? JSDocSignatureTypeParameters(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = JSDocSignatureTypeParametersOffsets[(int)r.Kind];
-        return o < 0 ? null : (Node[]?)refs[r.Refs + o];
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.JSDocSignature ? PayloadOf<JSDocSignaturePayload>(h, 9).TypeParameters : null;
     }
 
     public void SetJSDocSignatureTypeParameters(Node node, Node[]? value)
     {
-        ref var r = ref records[node.Index];
-        var o = JSDocSignatureTypeParametersOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.JSDocSignature))
         {
-            ThrowNoField(r.Kind, nameof(JSDocSignatureTypeParameters));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(JSDocSignatureTypeParameters));
         }
-        refs[r.Refs + o] = value;
+        PayloadOf<JSDocSignaturePayload>(h, 9).TypeParameters = value;
     }
-
-    private static ReadOnlySpan<sbyte> JSDocSignatureTypeParametersOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // ArrowFunction, BinaryExpression, Block, BreakStatement, CallSignatureDeclaration, CaseClause, … (69 classes)
-    public List<Node>? JsDoc(Node node)
-    {
-        ref var r = ref records[node.Index];
-        var o = JsDocOffsets[(int)r.Kind];
-        return o < 0 ? null : (List<Node>?)refs[r.Refs + o];
-    }
+    public List<Node>? JsDoc(Node node) => JsDocEntry(node);
 
     public void SetJsDoc(Node node, List<Node>? value)
     {
-        ref var r = ref records[node.Index];
-        var o = JsDocOffsets[(int)r.Kind];
-        if (o < 0)
+        if (JsDocOwners[(int)Kind(node)] == 0)
         {
-            ThrowNoField(r.Kind, nameof(JsDoc));
+            ThrowNoField(Kind(node), nameof(JsDoc));
         }
-        refs[r.Refs + o] = value;
+        SetJsDocEntry(node, value);
     }
-
-    private static ReadOnlySpan<sbyte> JsDocOffsets =>
-    [
-        -1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,0,0,-1,0,0,0,0,0,0,0,0,0,0,0,-1,-1,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,0,0,0,-1,-1,-1,-1,0,0,0,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,
-        -1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,-1,0,1,1,0,0,0,0,-1,0,0,0,-1,-1,-1,-1,0,0,
-        -1,-1,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,0,0,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,
-        -1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,
-    ];
 
     // SourceFile
     public List<DiagnosticWithLocation>? JsDocDiagnostics(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = JsDocDiagnosticsOffsets[(int)r.Kind];
-        return o < 0 ? null : (List<DiagnosticWithLocation>?)refs[r.Refs + o];
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SourceFile ? PayloadOf<SourceFilePayload>(h, 16).JsDocDiagnostics : null;
     }
 
     public void SetJsDocDiagnostics(Node node, List<DiagnosticWithLocation>? value)
     {
-        ref var r = ref records[node.Index];
-        var o = JsDocDiagnosticsOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SourceFile))
         {
-            ThrowNoField(r.Kind, nameof(JsDocDiagnostics));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(JsDocDiagnostics));
         }
-        refs[r.Refs + o] = value;
+        PayloadOf<SourceFilePayload>(h, 16).JsDocDiagnostics = value;
     }
-
-    private static ReadOnlySpan<sbyte> JsDocDiagnosticsOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,10,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // SourceFile
     public JSDocParsingMode JsDocParsingMode(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = JsDocParsingModeOffsets[(int)r.Kind];
-        return o < 0 ? default : (JSDocParsingMode)slots[r.Slots + o];
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SourceFile ? PayloadOf<SourceFilePayload>(h, 16).JsDocParsingMode : default;
     }
 
     public void SetJsDocParsingMode(Node node, JSDocParsingMode value)
     {
-        ref var r = ref records[node.Index];
-        var o = JsDocParsingModeOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SourceFile))
         {
-            ThrowNoField(r.Kind, nameof(JsDocParsingMode));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(JsDocParsingMode));
         }
-        slots[r.Slots + o] = (int)value;
+        PayloadOf<SourceFilePayload>(h, 16).JsDocParsingMode = value;
     }
-
-    private static ReadOnlySpan<sbyte> JsDocParsingModeOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // JSDocTypeLiteral
     public Node[]? JsDocPropertyTags(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = JsDocPropertyTagsOffsets[(int)r.Kind];
-        return o < 0 ? null : (Node[]?)refs[r.Refs + o];
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.JSDocTypeLiteral ? PayloadOf<JSDocTypeLiteralPayload>(h, 5).JsDocPropertyTags : null;
     }
 
     public void SetJsDocPropertyTags(Node node, Node[]? value)
     {
-        ref var r = ref records[node.Index];
-        var o = JsDocPropertyTagsOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.JSDocTypeLiteral))
         {
-            ThrowNoField(r.Kind, nameof(JsDocPropertyTags));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(JsDocPropertyTags));
         }
-        refs[r.Refs + o] = value;
+        PayloadOf<JSDocTypeLiteralPayload>(h, 5).JsDocPropertyTags = value;
     }
-
-    private static ReadOnlySpan<sbyte> JsDocPropertyTagsOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // MetaProperty
     public SyntaxKind KeywordToken(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = KeywordTokenOffsets[(int)r.Kind];
-        return o < 0 ? default : (SyntaxKind)slots[r.Slots + o];
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.MetaProperty ? PayloadOf<MetaPropertyPayload>(h, 1).KeywordToken : default;
     }
 
     public void SetKeywordToken(Node node, SyntaxKind value)
     {
-        ref var r = ref records[node.Index];
-        var o = KeywordTokenOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.MetaProperty))
         {
-            ThrowNoField(r.Kind, nameof(KeywordToken));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(KeywordToken));
         }
-        slots[r.Slots + o] = (int)value;
+        PayloadOf<MetaPropertyPayload>(h, 1).KeywordToken = value;
     }
-
-    private static ReadOnlySpan<sbyte> KeywordTokenOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // BreakStatement, ContinueStatement, LabeledStatement
     public Node Label(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = LabelOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        int o = LabelOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, Node>(ref PayloadByte(h, o));
     }
 
     public void SetLabel(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = LabelOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = LabelOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(Label));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Label));
         }
-        slots[r.Slots + o] = value.Index;
+        Unsafe.As<byte, Node>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> LabelOffsets =>
+    private static ReadOnlySpan<ushort> LabelOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,0,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,0,0,65535,65535,65535,2048,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // SourceFile
     public LanguageVariant LanguageVariant(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = LanguageVariantOffsets[(int)r.Kind];
-        return o < 0 ? default : (LanguageVariant)slots[r.Slots + o];
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SourceFile ? PayloadOf<SourceFilePayload>(h, 16).LanguageVariant : default;
     }
 
     public void SetLanguageVariant(Node node, LanguageVariant value)
     {
-        ref var r = ref records[node.Index];
-        var o = LanguageVariantOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SourceFile))
         {
-            ThrowNoField(r.Kind, nameof(LanguageVariant));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(LanguageVariant));
         }
-        slots[r.Slots + o] = (int)value;
+        PayloadOf<SourceFilePayload>(h, 16).LanguageVariant = value;
     }
-
-    private static ReadOnlySpan<sbyte> LanguageVariantOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // SourceFile
     public ScriptTarget LanguageVersion(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = LanguageVersionOffsets[(int)r.Kind];
-        return o < 0 ? default : (ScriptTarget)slots[r.Slots + o];
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SourceFile ? PayloadOf<SourceFilePayload>(h, 16).LanguageVersion : default;
     }
 
     public void SetLanguageVersion(Node node, ScriptTarget value)
     {
-        ref var r = ref records[node.Index];
-        var o = LanguageVersionOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SourceFile))
         {
-            ThrowNoField(r.Kind, nameof(LanguageVersion));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(LanguageVersion));
         }
-        slots[r.Slots + o] = (int)value;
+        PayloadOf<SourceFilePayload>(h, 16).LanguageVersion = value;
     }
-
-    private static ReadOnlySpan<sbyte> LanguageVersionOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,7,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // BinaryExpression, JSDocMemberName, QualifiedName
     public Node Left(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = LeftOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        int o = LeftOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, Node>(ref PayloadByte(h, o));
     }
 
     public void SetLeft(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = LeftOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = LeftOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(Left));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Left));
         }
-        slots[r.Slots + o] = value.Index;
+        Unsafe.As<byte, Node>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> LeftOffsets =>
+    private static ReadOnlySpan<ushort> LeftOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,2048,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,6144,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,2048,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // SourceFile
     public IReadOnlyList<FileReference> LibReferenceDirectives(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = LibReferenceDirectivesOffsets[(int)r.Kind];
-        return o < 0 ? null! : (IReadOnlyList<FileReference>)refs[r.Refs + o]!;
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SourceFile ? PayloadOf<SourceFilePayload>(h, 16).LibReferenceDirectives! : null!;
     }
 
     public void SetLibReferenceDirectives(Node node, IReadOnlyList<FileReference> value)
     {
-        ref var r = ref records[node.Index];
-        var o = LibReferenceDirectivesOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SourceFile))
         {
-            ThrowNoField(r.Kind, nameof(LibReferenceDirectives));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(LibReferenceDirectives));
         }
-        refs[r.Refs + o] = value;
+        PayloadOf<SourceFilePayload>(h, 16).LibReferenceDirectives = value;
     }
-
-    private static ReadOnlySpan<sbyte> LibReferenceDirectivesOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,11,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // SourceFile
     public IReadOnlyList<int>? LineMap(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = LineMapOffsets[(int)r.Kind];
-        return o < 0 ? null : (IReadOnlyList<int>?)refs[r.Refs + o];
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SourceFile ? PayloadOf<SourceFilePayload>(h, 16).LineMap : null;
     }
 
     public void SetLineMap(Node node, IReadOnlyList<int>? value)
     {
-        ref var r = ref records[node.Index];
-        var o = LineMapOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SourceFile))
         {
-            ThrowNoField(r.Kind, nameof(LineMap));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(LineMap));
         }
-        refs[r.Refs + o] = value;
+        PayloadOf<SourceFilePayload>(h, 16).LineMap = value;
     }
-
-    private static ReadOnlySpan<sbyte> LineMapOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,12,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // LiteralTypeNode, TemplateLiteralTypeSpan, TemplateSpan
     public Node Literal(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = LiteralOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        int o = LiteralOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, Node>(ref PayloadByte(h, o));
     }
 
     public void SetLiteral(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = LiteralOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = LiteralOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(Literal));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Literal));
         }
-        slots[r.Slots + o] = value.Index;
+        Unsafe.As<byte, Node>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> LiteralOffsets =>
+    private static ReadOnlySpan<ushort> LiteralOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,0,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,0,65535,65535,2048,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        2052,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // ClassDeclaration, ClassExpression, EnumDeclaration, InterfaceDeclaration, MappedTypeNode, TypeLiteralNode
     public NodeArray? Members(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = MembersOffsets[(int)r.Kind];
-        return o < 0 ? null : (NodeArray?)refs[r.Refs + o];
+        var h = headers[node.Index].KindPayload;
+        int o = MembersOffsets[h & KindMask];
+        return o == NoField ? null : Unsafe.As<byte, NodeArray?>(ref PayloadByte(h, o));
     }
 
     public void SetMembers(Node node, NodeArray? value)
     {
-        ref var r = ref records[node.Index];
-        var o = MembersOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = MembersOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(Members));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Members));
         }
-        refs[r.Refs + o] = value;
+        Unsafe.As<byte, NodeArray?>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> MembersOffsets =>
+    private static ReadOnlySpan<ushort> MembersOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,2,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,4096,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,20480,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,26632,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,26632,26632,65535,18432,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // ArrowFunction, ClassDeclaration, ClassExpression, ClassStaticBlockDeclaration, ConstructorDeclaration, ConstructorTypeNode, … (31 classes)
     public NodeArray? Modifiers(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ModifiersOffsets[(int)r.Kind];
-        return o < 0 ? null : (NodeArray?)refs[r.Refs + o];
+        var h = headers[node.Index].KindPayload;
+        int o = ModifiersOffsets[h & KindMask];
+        return o == NoField ? null : Unsafe.As<byte, NodeArray?>(ref PayloadByte(h, o));
     }
 
     public void SetModifiers(Node node, NodeArray? value)
     {
-        ref var r = ref records[node.Index];
-        var o = ModifiersOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = ModifiersOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(Modifiers));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Modifiers));
         }
-        refs[r.Refs + o] = value;
+        Unsafe.As<byte, NodeArray?>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> ModifiersOffsets =>
+    private static ReadOnlySpan<ushort> ModifiersOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,1,1,-1,1,1,1,1,1,1,1,1,-1,-1,1,-1,-1,1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,3,3,1,2,1,-1,-1,1,1,1,-1,-1,-1,-1,1,1,
-        -1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,16384,20480,65535,16384,20480,28672,30720,16384,30720,30720,30720,65535,65535,28672,65535,65535,28672,28672,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,30720,30720,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,26640,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,10240,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,30720,26640,26640,22528,18440,16384,65535,65535,10240,16384,16384,65535,65535,65535,65535,16384,20480,
+        65535,65535,65535,10240,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,16384,20480,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // SourceFile
     public Node[]? ModuleAugmentations(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ModuleAugmentationsOffsets[(int)r.Kind];
-        return o < 0 ? null : (Node[]?)refs[r.Refs + o];
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SourceFile ? PayloadOf<SourceFilePayload>(h, 16).ModuleAugmentations : null;
     }
 
     public void SetModuleAugmentations(Node node, Node[]? value)
     {
-        ref var r = ref records[node.Index];
-        var o = ModuleAugmentationsOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SourceFile))
         {
-            ThrowNoField(r.Kind, nameof(ModuleAugmentations));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(ModuleAugmentations));
         }
-        refs[r.Refs + o] = value;
+        PayloadOf<SourceFilePayload>(h, 16).ModuleAugmentations = value;
     }
-
-    private static ReadOnlySpan<sbyte> ModuleAugmentationsOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,13,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // SourceFile
     public string? ModuleName(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ModuleNameOffsets[(int)r.Kind];
-        return o < 0 ? null : (string?)refs[r.Refs + o];
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SourceFile ? PayloadOf<SourceFilePayload>(h, 16).ModuleName : null;
     }
 
     public void SetModuleName(Node node, string? value)
     {
-        ref var r = ref records[node.Index];
-        var o = ModuleNameOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SourceFile))
         {
-            ThrowNoField(r.Kind, nameof(ModuleName));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(ModuleName));
         }
-        refs[r.Refs + o] = value;
+        PayloadOf<SourceFilePayload>(h, 16).ModuleName = value;
     }
-
-    private static ReadOnlySpan<sbyte> ModuleNameOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,14,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // ImportEqualsDeclaration
     public Node ModuleReference(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ModuleReferenceOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.ImportEqualsDeclaration ? PayloadOf<ImportEqualsDeclarationPayload>(h, 8).ModuleReference : default;
     }
 
     public void SetModuleReference(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ModuleReferenceOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.ImportEqualsDeclaration))
         {
-            ThrowNoField(r.Kind, nameof(ModuleReference));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(ModuleReference));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<ImportEqualsDeclarationPayload>(h, 8).ModuleReference = value;
     }
-
-    private static ReadOnlySpan<sbyte> ModuleReferenceOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // ExportDeclaration, ImportDeclaration, JSDocImportTag
     public Node ModuleSpecifier(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ModuleSpecifierOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        int o = ModuleSpecifierOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, Node>(ref PayloadByte(h, o));
     }
 
     public void SetModuleSpecifier(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ModuleSpecifierOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = ModuleSpecifierOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(ModuleSpecifier));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(ModuleSpecifier));
         }
-        slots[r.Slots + o] = value.Index;
+        Unsafe.As<byte, Node>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> ModuleSpecifierOffsets =>
+    private static ReadOnlySpan<ushort> ModuleSpecifierOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,-1,-1,-1,-1,4,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,16404,65535,65535,65535,65535,65535,20500,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,16400,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // ArrayLiteralExpression, Block, ImportAttributes, ImportTypeAssertionContainer, ObjectLiteralExpression
     public bool MultiLine(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = MultiLineOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var h = headers[node.Index].KindPayload;
+        int o = MultiLineOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, bool>(ref PayloadByte(h, o));
     }
 
     public void SetMultiLine(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = MultiLineOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = MultiLineOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(MultiLine));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(MultiLine));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        Unsafe.As<byte, bool>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> MultiLineOffsets =>
+    private static ReadOnlySpan<ushort> MultiLineOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,10248,10248,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,10252,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,10252,65535,2052,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // BindingElement, CallSignatureDeclaration, ClassDeclaration, ClassExpression, ClassStaticBlockDeclaration, ConstructSignatureDeclaration, … (58 classes)
     public Node Name(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = NameOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        int o = NameOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, Node>(ref PayloadByte(h, o));
     }
 
     public void SetName(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = NameOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = NameOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(Name));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Name));
         }
-        slots[r.Slots + o] = value.Index;
+        Unsafe.As<byte, Node>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> NameOffsets =>
+    private static ReadOnlySpan<ushort> NameOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,3,2,-1,1,2,0,3,1,3,3,3,0,0,0,-1,-1,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,1,-1,-1,-1,-1,-1,2,-1,-1,1,-1,-1,-1,-1,-1,-1,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,1,-1,-1,
-        -1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,3,0,0,0,0,1,-1,-1,0,2,-1,1,0,-1,1,2,5,
-        -1,0,1,0,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,1,-1,0,-1,-1,-1,-1,-1,0,-1,2,2,1,1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,0,-1,
-        -1,-1,-1,-1,-1,0,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,2,-1,-1,-1,-1,1,0,2,-1,-1,-1,-1,-1,0,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,16404,20496,65535,16396,20496,28704,30764,16396,30764,30764,30764,24600,24600,28704,65535,65535,28704,28704,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,8196,65535,65535,65535,65535,65535,8200,65535,65535,6148,65535,65535,65535,65535,65535,65535,30764,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,26656,65535,65535,65535,65535,2052,65535,65535,
+        65535,0,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,8200,65535,30764,26656,26656,22544,18448,16396,65535,65535,10248,16396,65535,8192,0,65535,6144,16396,20504,
+        65535,0,6144,10248,65535,65535,65535,65535,65535,65535,65535,65535,2052,65535,2052,65535,2048,65535,65535,65535,65535,65535,2048,65535,16400,20496,2052,2052,65535,65535,65535,0,65535,65535,65535,65535,65535,65535,24600,65535,
+        65535,65535,65535,65535,65535,10248,10248,10248,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,20492,65535,65535,16392,65535,65535,65535,65535,20492,10248,16392,65535,65535,65535,65535,65535,2048,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // MappedTypeNode
     public Node NameType(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = NameTypeOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.MappedType ? PayloadOf<MappedTypeNodePayload>(h, 10).NameType : default;
     }
 
     public void SetNameType(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = NameTypeOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.MappedType))
         {
-            ThrowNoField(r.Kind, nameof(NameType));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(NameType));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<MappedTypeNodePayload>(h, 10).NameType = value;
     }
-
-    private static ReadOnlySpan<sbyte> NameTypeOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // ImportClause
     public Node NamedBindings(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = NamedBindingsOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.ImportClause ? PayloadOf<ImportClausePayload>(h, 4).NamedBindings : default;
     }
 
     public void SetNamedBindings(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = NamedBindingsOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.ImportClause))
         {
-            ThrowNoField(r.Kind, nameof(NamedBindings));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(NamedBindings));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<ImportClausePayload>(h, 4).NamedBindings = value;
     }
-
-    private static ReadOnlySpan<sbyte> NamedBindingsOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // JsxNamespacedName
     public Node Namespace(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = NamespaceOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.JsxNamespacedName ? PayloadOf<JsxNamespacedNamePayload>(h, 1).Namespace : default;
     }
 
     public void SetNamespace(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = NamespaceOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.JsxNamespacedName))
         {
-            ThrowNoField(r.Kind, nameof(Namespace));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Namespace));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<JsxNamespacedNamePayload>(h, 1).Namespace = value;
     }
-
-    private static ReadOnlySpan<sbyte> NamespaceOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // ArrowFunction, Block, CallSignatureDeclaration, CaseBlock, CatchClause, ClassStaticBlockDeclaration, … (30 classes)
     public Node NextContainer(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = NextContainerOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        int o = NextContainerOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, Node>(ref PayloadByte(h, o));
     }
 
     public void SetNextContainer(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = NextContainerOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = NextContainerOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(NextContainer));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(NextContainer));
         }
-        slots[r.Slots + o] = value.Index;
+        Unsafe.As<byte, Node>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> NextContainerOffsets =>
+    private static ReadOnlySpan<ushort> NextContainerOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,4,2,4,4,4,1,1,1,-1,-1,1,1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,-1,-1,-1,
-        -1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,4,4,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,1,-1,-1,-1,-1,-1,-1,3,2,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,4,-1,-1,1,-1,2,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,8,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,
-        -1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,0,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,28708,30768,16400,30768,30768,30768,24604,24604,28708,65535,65535,28708,28708,65535,65535,65535,65535,65535,65535,65535,65535,14348,65535,65535,65535,65535,
+        65535,20492,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,30768,30768,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,10248,65535,65535,65535,65535,65535,65535,14348,8200,14348,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,30768,65535,65535,22548,65535,16400,65535,10248,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,6148,65535,65535,65535,65535,65535,65535,65535,33000,65535,65535,65535,65535,65535,65535,65535,65535,65535,24604,65535,
+        65535,65535,65535,65535,18448,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,20496,65535,16392,65535,65535,65535,65535,65535,20496,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // SourceFile
     public int NodeCount(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = NodeCountOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o];
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SourceFile ? PayloadOf<SourceFilePayload>(h, 16).NodeCount : default;
     }
 
     public void SetNodeCount(Node node, int value)
     {
-        ref var r = ref records[node.Index];
-        var o = NodeCountOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SourceFile))
         {
-            ThrowNoField(r.Kind, nameof(NodeCount));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(NodeCount));
         }
-        slots[r.Slots + o] = value;
+        PayloadOf<SourceFilePayload>(h, 16).NodeCount = value;
     }
-
-    private static ReadOnlySpan<sbyte> NodeCountOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,9,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // NumericLiteral
     public TokenFlags NumericLiteralFlags(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = NumericLiteralFlagsOffsets[(int)r.Kind];
-        return o < 0 ? default : (TokenFlags)slots[r.Slots + o];
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.NumericLiteral ? PayloadOf<NumericLiteralPayload>(h, 5).NumericLiteralFlags : default;
     }
 
     public void SetNumericLiteralFlags(Node node, TokenFlags value)
     {
-        ref var r = ref records[node.Index];
-        var o = NumericLiteralFlagsOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.NumericLiteral))
         {
-            ThrowNoField(r.Kind, nameof(NumericLiteralFlags));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(NumericLiteralFlags));
         }
-        slots[r.Slots + o] = (int)value;
+        PayloadOf<NumericLiteralPayload>(h, 5).NumericLiteralFlags = value;
     }
-
-    private static ReadOnlySpan<sbyte> NumericLiteralFlagsOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // ShorthandPropertyAssignment
     public Node ObjectAssignmentInitializer(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ObjectAssignmentInitializerOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.ShorthandPropertyAssignment ? PayloadOf<ShorthandPropertyAssignmentPayload>(h, 10).ObjectAssignmentInitializer : default;
     }
 
     public void SetObjectAssignmentInitializer(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ObjectAssignmentInitializerOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.ShorthandPropertyAssignment))
         {
-            ThrowNoField(r.Kind, nameof(ObjectAssignmentInitializer));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(ObjectAssignmentInitializer));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<ShorthandPropertyAssignmentPayload>(h, 10).ObjectAssignmentInitializer = value;
     }
-
-    private static ReadOnlySpan<sbyte> ObjectAssignmentInitializerOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // IndexedAccessTypeNode
     public Node ObjectType(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ObjectTypeOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.IndexedAccessType ? PayloadOf<IndexedAccessTypeNodePayload>(h, 1).ObjectType : default;
     }
 
     public void SetObjectType(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ObjectTypeOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.IndexedAccessType))
         {
-            ThrowNoField(r.Kind, nameof(ObjectType));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(ObjectType));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<IndexedAccessTypeNodePayload>(h, 1).ObjectType = value;
     }
-
-    private static ReadOnlySpan<sbyte> ObjectTypeOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // JsxElement
     public Node OpeningElement(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = OpeningElementOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.JsxElement ? PayloadOf<JsxElementPayload>(h, 5).OpeningElement : default;
     }
 
     public void SetOpeningElement(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = OpeningElementOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.JsxElement))
         {
-            ThrowNoField(r.Kind, nameof(OpeningElement));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(OpeningElement));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<JsxElementPayload>(h, 5).OpeningElement = value;
     }
-
-    private static ReadOnlySpan<sbyte> OpeningElementOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // JsxFragment
     public Node OpeningFragment(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = OpeningFragmentOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.JsxFragment ? PayloadOf<JsxFragmentPayload>(h, 5).OpeningFragment : default;
     }
 
     public void SetOpeningFragment(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = OpeningFragmentOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.JsxFragment))
         {
-            ThrowNoField(r.Kind, nameof(OpeningFragment));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(OpeningFragment));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<JsxFragmentPayload>(h, 5).OpeningFragment = value;
     }
-
-    private static ReadOnlySpan<sbyte> OpeningFragmentOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // PostfixUnaryExpression, PrefixUnaryExpression
     public Node Operand(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = OperandOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        int o = OperandOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, Node>(ref PayloadByte(h, o));
     }
 
     public void SetOperand(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = OperandOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = OperandOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(Operand));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Operand));
         }
-        slots[r.Slots + o] = value.Index;
+        Unsafe.As<byte, Node>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> OperandOffsets =>
+    private static ReadOnlySpan<ushort> OperandOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,2048,2048,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // PostfixUnaryExpression, PrefixUnaryExpression, TypeOperatorNode
     public SyntaxKind Operator(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = OperatorOffsets[(int)r.Kind];
-        return o < 0 ? default : (SyntaxKind)slots[r.Slots + o];
+        var h = headers[node.Index].KindPayload;
+        int o = OperatorOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, SyntaxKind>(ref PayloadByte(h, o));
     }
 
     public void SetOperator(Node node, SyntaxKind value)
     {
-        ref var r = ref records[node.Index];
-        var o = OperatorOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = OperatorOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(Operator));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Operator));
         }
-        slots[r.Slots + o] = (int)value;
+        Unsafe.As<byte, SyntaxKind>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> OperatorOffsets =>
+    private static ReadOnlySpan<ushort> OperatorOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,2048,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,2052,2052,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // BinaryExpression
     public Node OperatorToken(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = OperatorTokenOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.BinaryExpression ? PayloadOf<BinaryExpressionPayload>(h, 3).OperatorToken : default;
     }
 
     public void SetOperatorToken(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = OperatorTokenOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.BinaryExpression))
         {
-            ThrowNoField(r.Kind, nameof(OperatorToken));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(OperatorToken));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<BinaryExpressionPayload>(h, 3).OperatorToken = value;
     }
-
-    private static ReadOnlySpan<sbyte> OperatorTokenOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // SourceFile
     public string OriginalFileName(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = OriginalFileNameOffsets[(int)r.Kind];
-        return o < 0 ? null! : (string)refs[r.Refs + o]!;
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SourceFile ? PayloadOf<SourceFilePayload>(h, 16).OriginalFileName! : null!;
     }
 
     public void SetOriginalFileName(Node node, string value)
     {
-        ref var r = ref records[node.Index];
-        var o = OriginalFileNameOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SourceFile))
         {
-            ThrowNoField(r.Kind, nameof(OriginalFileName));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(OriginalFileName));
         }
-        refs[r.Refs + o] = value;
+        PayloadOf<SourceFilePayload>(h, 16).OriginalFileName = value;
     }
-
-    private static ReadOnlySpan<sbyte> OriginalFileNameOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,15,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // SourceFile
     public IReadOnlyList<string>? PackageJsonLocations(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = PackageJsonLocationsOffsets[(int)r.Kind];
-        return o < 0 ? null : (IReadOnlyList<string>?)refs[r.Refs + o];
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SourceFile ? PayloadOf<SourceFilePayload>(h, 16).PackageJsonLocations : null;
     }
 
     public void SetPackageJsonLocations(Node node, IReadOnlyList<string>? value)
     {
-        ref var r = ref records[node.Index];
-        var o = PackageJsonLocationsOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SourceFile))
         {
-            ThrowNoField(r.Kind, nameof(PackageJsonLocations));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(PackageJsonLocations));
         }
-        refs[r.Refs + o] = value;
+        PayloadOf<SourceFilePayload>(h, 16).PackageJsonLocations = value;
     }
-
-    private static ReadOnlySpan<sbyte> PackageJsonLocationsOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,16,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // TypePredicateNode
     public Node ParameterName(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ParameterNameOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.TypePredicate ? PayloadOf<TypePredicateNodePayload>(h, 3).ParameterName : default;
     }
 
     public void SetParameterName(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ParameterNameOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.TypePredicate))
         {
-            ThrowNoField(r.Kind, nameof(ParameterName));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(ParameterName));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<TypePredicateNodePayload>(h, 3).ParameterName = value;
     }
-
-    private static ReadOnlySpan<sbyte> ParameterNameOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // ArrowFunction, CallSignatureDeclaration, ConstructSignatureDeclaration, ConstructorDeclaration, ConstructorTypeNode, FunctionDeclaration, … (14 classes)
     public NodeArray Parameters(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ParametersOffsets[(int)r.Kind];
-        return o < 0 ? null! : (NodeArray)refs[r.Refs + o]!;
+        var h = headers[node.Index].KindPayload;
+        int o = ParametersOffsets[h & KindMask];
+        return o == NoField ? null! : Unsafe.As<byte, NodeArray>(ref PayloadByte(h, o))!;
     }
 
     public void SetParameters(Node node, NodeArray value)
     {
-        ref var r = ref records[node.Index];
-        var o = ParametersOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = ParametersOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(Parameters));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Parameters));
         }
-        refs[r.Refs + o] = value;
+        Unsafe.As<byte, NodeArray>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> ParametersOffsets =>
+    private static ReadOnlySpan<ushort> ParametersOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,2,-1,2,2,2,1,1,2,-1,-1,2,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,28680,30728,65535,30728,30728,30728,24576,24576,28680,65535,65535,28680,28680,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,30728,30728,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,30728,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,24576,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // SourceFile
     public List<DiagnosticWithLocation> ParseDiagnostics(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ParseDiagnosticsOffsets[(int)r.Kind];
-        return o < 0 ? null! : (List<DiagnosticWithLocation>)refs[r.Refs + o]!;
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SourceFile ? PayloadOf<SourceFilePayload>(h, 16).ParseDiagnostics! : null!;
     }
 
     public void SetParseDiagnostics(Node node, List<DiagnosticWithLocation> value)
     {
-        ref var r = ref records[node.Index];
-        var o = ParseDiagnosticsOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SourceFile))
         {
-            ThrowNoField(r.Kind, nameof(ParseDiagnostics));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(ParseDiagnostics));
         }
-        refs[r.Refs + o] = value;
+        PayloadOf<SourceFilePayload>(h, 16).ParseDiagnostics = value;
     }
-
-    private static ReadOnlySpan<sbyte> ParseDiagnosticsOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,17,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // SourceFile
     public string? Path(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = PathOffsets[(int)r.Kind];
-        return o < 0 ? null : (string?)refs[r.Refs + o];
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SourceFile ? PayloadOf<SourceFilePayload>(h, 16).Path : null;
     }
 
     public void SetPath(Node node, string? value)
     {
-        ref var r = ref records[node.Index];
-        var o = PathOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SourceFile))
         {
-            ThrowNoField(r.Kind, nameof(Path));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Path));
         }
-        refs[r.Refs + o] = value;
+        PayloadOf<SourceFilePayload>(h, 16).Path = value;
     }
-
-    private static ReadOnlySpan<sbyte> PathOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,18,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // ImportClause
     public SyntaxKind PhaseModifier(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = PhaseModifierOffsets[(int)r.Kind];
-        return o < 0 ? default : (SyntaxKind)slots[r.Slots + o];
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.ImportClause ? PayloadOf<ImportClausePayload>(h, 4).PhaseModifier : default;
     }
 
     public void SetPhaseModifier(Node node, SyntaxKind value)
     {
-        ref var r = ref records[node.Index];
-        var o = PhaseModifierOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.ImportClause))
         {
-            ThrowNoField(r.Kind, nameof(PhaseModifier));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(PhaseModifier));
         }
-        slots[r.Slots + o] = (int)value;
+        PayloadOf<ImportClausePayload>(h, 4).PhaseModifier = value;
     }
-
-    private static ReadOnlySpan<sbyte> PhaseModifierOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // SwitchStatement
     public bool PossiblyExhaustive(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = PossiblyExhaustiveOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SwitchStatement ? PayloadOf<SwitchStatementPayload>(h, 3).PossiblyExhaustive : default;
     }
 
     public void SetPossiblyExhaustive(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = PossiblyExhaustiveOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SwitchStatement))
         {
-            ThrowNoField(r.Kind, nameof(PossiblyExhaustive));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(PossiblyExhaustive));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        PayloadOf<SwitchStatementPayload>(h, 3).PossiblyExhaustive = value;
     }
-
-    private static ReadOnlySpan<sbyte> PossiblyExhaustiveOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // JSDocNonNullableType, JSDocNullableType
     public bool Postfix(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = PostfixOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var h = headers[node.Index].KindPayload;
+        int o = PostfixOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, bool>(ref PayloadByte(h, o));
     }
 
     public void SetPostfix(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = PostfixOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = PostfixOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(Postfix));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Postfix));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        Unsafe.As<byte, bool>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> PostfixOffsets =>
+    private static ReadOnlySpan<ushort> PostfixOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,0,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,2052,2052,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // SourceFile
     public PragmaMap Pragmas(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = PragmasOffsets[(int)r.Kind];
-        return o < 0 ? null! : (PragmaMap)refs[r.Refs + o]!;
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SourceFile ? PayloadOf<SourceFilePayload>(h, 16).Pragmas! : null!;
     }
 
     public void SetPragmas(Node node, PragmaMap value)
     {
-        ref var r = ref records[node.Index];
-        var o = PragmasOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SourceFile))
         {
-            ThrowNoField(r.Kind, nameof(Pragmas));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Pragmas));
         }
-        refs[r.Refs + o] = value;
+        PayloadOf<SourceFilePayload>(h, 16).Pragmas = value;
     }
-
-    private static ReadOnlySpan<sbyte> PragmasOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,19,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // JsxAttributes, ObjectLiteralExpression
     public NodeArray Properties(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = PropertiesOffsets[(int)r.Kind];
-        return o < 0 ? null! : (NodeArray)refs[r.Refs + o]!;
+        var h = headers[node.Index].KindPayload;
+        int o = PropertiesOffsets[h & KindMask];
+        return o == NoField ? null! : Unsafe.As<byte, NodeArray>(ref PayloadByte(h, o))!;
     }
 
     public void SetProperties(Node node, NodeArray value)
     {
-        ref var r = ref records[node.Index];
-        var o = PropertiesOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = PropertiesOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(Properties));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Properties));
         }
-        refs[r.Refs + o] = value;
+        Unsafe.As<byte, NodeArray>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> PropertiesOffsets =>
+    private static ReadOnlySpan<ushort> PropertiesOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,10240,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,4096,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // BindingElement, ExportSpecifier, ImportSpecifier
     public Node PropertyName(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = PropertyNameOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        int o = PropertyNameOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, Node>(ref PayloadByte(h, o));
     }
 
     public void SetPropertyName(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = PropertyNameOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = PropertyNameOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(PropertyName));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(PropertyName));
         }
-        slots[r.Slots + o] = value.Index;
+        Unsafe.As<byte, Node>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> PropertyNameOffsets =>
+    private static ReadOnlySpan<ushort> PropertyNameOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,
-        -1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,8204,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,6148,65535,65535,
+        65535,65535,6148,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // ImportTypeNode
     public Node Qualifier(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = QualifierOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.ImportType ? PayloadOf<ImportTypeNodePayload>(h, 8).Qualifier : default;
     }
 
     public void SetQualifier(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = QualifierOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.ImportType))
         {
-            ThrowNoField(r.Kind, nameof(Qualifier));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Qualifier));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<ImportTypeNodePayload>(h, 8).Qualifier = value;
     }
-
-    private static ReadOnlySpan<sbyte> QualifierOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // CallExpression, ElementAccessExpression, PropertyAccessExpression, TaggedTemplateExpression
     public Node QuestionDotToken(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = QuestionDotTokenOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        int o = QuestionDotTokenOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, Node>(ref PayloadByte(h, o));
     }
 
     public void SetQuestionDotToken(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = QuestionDotTokenOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = QuestionDotTokenOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(QuestionDotToken));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(QuestionDotToken));
         }
-        slots[r.Slots + o] = value.Index;
+        Unsafe.As<byte, Node>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> QuestionDotTokenOffsets =>
+    private static ReadOnlySpan<ushort> QuestionDotTokenOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,2,1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,6152,6152,18452,65535,16392,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // ArrowFunction, CallSignatureDeclaration, ConditionalExpression, ConstructSignatureDeclaration, ConstructorDeclaration, FunctionDeclaration, … (20 classes)
     public Node QuestionToken(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = QuestionTokenOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        int o = QuestionTokenOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, Node>(ref PayloadByte(h, o));
     }
 
     public void SetQuestionToken(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = QuestionTokenOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = QuestionTokenOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(QuestionToken));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(QuestionToken));
         }
-        slots[r.Slots + o] = value.Index;
+        Unsafe.As<byte, Node>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> QuestionTokenOffsets =>
+    private static ReadOnlySpan<ushort> QuestionTokenOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,2,3,2,5,-1,5,5,5,2,2,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,2,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,5,5,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,4,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,20500,65535,16400,20500,28712,30772,65535,30772,30772,30772,24608,24608,28712,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,20496,65535,8200,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,30772,30772,65535,65535,65535,65535,65535,65535,65535,14344,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,30772,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,16404,20504,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,2052,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // NoSubstitutionTemplateLiteral, TemplateHead, TemplateMiddle, TemplateTail
     public string? RawText(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = RawTextOffsets[(int)r.Kind];
-        return o < 0 ? null : (string?)refs[r.Refs + o];
+        var h = headers[node.Index].KindPayload;
+        int o = RawTextOffsets[h & KindMask];
+        return o == NoField ? null : Unsafe.As<byte, string?>(ref PayloadByte(h, o));
     }
 
     public void SetRawText(Node node, string? value)
     {
-        ref var r = ref records[node.Index];
-        var o = RawTextOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = RawTextOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(RawText));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(RawText));
         }
-        refs[r.Refs + o] = value;
+        Unsafe.As<byte, string?>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> RawTextOffsets =>
+    private static ReadOnlySpan<ushort> RawTextOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,0,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,18432,18432,18432,18432,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // MappedTypeNode
     public Node ReadonlyToken(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ReadonlyTokenOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.MappedType ? PayloadOf<MappedTypeNodePayload>(h, 10).ReadonlyToken : default;
     }
 
     public void SetReadonlyToken(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ReadonlyTokenOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.MappedType))
         {
-            ThrowNoField(r.Kind, nameof(ReadonlyToken));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(ReadonlyToken));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<MappedTypeNodePayload>(h, 10).ReadonlyToken = value;
     }
-
-    private static ReadOnlySpan<sbyte> ReadonlyTokenOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // SourceFile
     public IReadOnlyList<FileReference> ReferencedFiles(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ReferencedFilesOffsets[(int)r.Kind];
-        return o < 0 ? null! : (IReadOnlyList<FileReference>)refs[r.Refs + o]!;
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SourceFile ? PayloadOf<SourceFilePayload>(h, 16).ReferencedFiles! : null!;
     }
 
     public void SetReferencedFiles(Node node, IReadOnlyList<FileReference> value)
     {
-        ref var r = ref records[node.Index];
-        var o = ReferencedFilesOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SourceFile))
         {
-            ThrowNoField(r.Kind, nameof(ReferencedFiles));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(ReferencedFiles));
         }
-        refs[r.Refs + o] = value;
+        PayloadOf<SourceFilePayload>(h, 16).ReferencedFiles = value;
     }
-
-    private static ReadOnlySpan<sbyte> ReferencedFilesOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,20,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // SourceFile
     public string? ResolvedPath(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ResolvedPathOffsets[(int)r.Kind];
-        return o < 0 ? null : (string?)refs[r.Refs + o];
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SourceFile ? PayloadOf<SourceFilePayload>(h, 16).ResolvedPath : null;
     }
 
     public void SetResolvedPath(Node node, string? value)
     {
-        ref var r = ref records[node.Index];
-        var o = ResolvedPathOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SourceFile))
         {
-            ThrowNoField(r.Kind, nameof(ResolvedPath));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(ResolvedPath));
         }
-        refs[r.Refs + o] = value;
+        PayloadOf<SourceFilePayload>(h, 16).ResolvedPath = value;
     }
-
-    private static ReadOnlySpan<sbyte> ResolvedPathOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,21,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // BinaryExpression, JSDocMemberName, QualifiedName
     public Node Right(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = RightOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        int o = RightOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, Node>(ref PayloadByte(h, o));
     }
 
     public void SetRight(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = RightOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = RightOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(Right));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Right));
         }
-        slots[r.Slots + o] = value.Index;
+        Unsafe.As<byte, Node>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> RightOffsets =>
+    private static ReadOnlySpan<ushort> RightOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,2052,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,6152,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,2052,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // SourceFile
     public ScriptKind ScriptKind(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ScriptKindOffsets[(int)r.Kind];
-        return o < 0 ? default : (ScriptKind)slots[r.Slots + o];
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SourceFile ? PayloadOf<SourceFilePayload>(h, 16).ScriptKind : default;
     }
 
     public void SetScriptKind(Node node, ScriptKind value)
     {
-        ref var r = ref records[node.Index];
-        var o = ScriptKindOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SourceFile))
         {
-            ThrowNoField(r.Kind, nameof(ScriptKind));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(ScriptKind));
         }
-        slots[r.Slots + o] = (int)value;
+        PayloadOf<SourceFilePayload>(h, 16).ScriptKind = value;
     }
-
-    private static ReadOnlySpan<sbyte> ScriptKindOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,10,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // SourceFile
     public Action<Node>? SetExternalModuleIndicator(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = SetExternalModuleIndicatorOffsets[(int)r.Kind];
-        return o < 0 ? null : (Action<Node>?)refs[r.Refs + o];
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SourceFile ? PayloadOf<SourceFilePayload>(h, 16).SetExternalModuleIndicator : null;
     }
 
     public void SetSetExternalModuleIndicator(Node node, Action<Node>? value)
     {
-        ref var r = ref records[node.Index];
-        var o = SetExternalModuleIndicatorOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SourceFile))
         {
-            ThrowNoField(r.Kind, nameof(SetExternalModuleIndicator));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(SetExternalModuleIndicator));
         }
-        refs[r.Refs + o] = value;
+        PayloadOf<SourceFilePayload>(h, 16).SetExternalModuleIndicator = value;
     }
-
-    private static ReadOnlySpan<sbyte> SetExternalModuleIndicatorOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,22,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // StringLiteral
     public bool SingleQuote(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = SingleQuoteOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o] != 0;
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.StringLiteral ? PayloadOf<StringLiteralPayload>(h, 5).SingleQuote : default;
     }
 
     public void SetSingleQuote(Node node, bool value)
     {
-        ref var r = ref records[node.Index];
-        var o = SingleQuoteOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.StringLiteral))
         {
-            ThrowNoField(r.Kind, nameof(SingleQuote));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(SingleQuote));
         }
-        slots[r.Slots + o] = value ? 1 : 0;
+        PayloadOf<StringLiteralPayload>(h, 5).SingleQuote = value;
     }
-
-    private static ReadOnlySpan<sbyte> SingleQuoteOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // Bundle
     public Node[]? SourceFiles(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = SourceFilesOffsets[(int)r.Kind];
-        return o < 0 ? null : (Node[]?)refs[r.Refs + o];
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.Bundle ? PayloadOf<BundlePayload>(h, 2).SourceFiles : null;
     }
 
     public void SetSourceFiles(Node node, Node[]? value)
     {
-        ref var r = ref records[node.Index];
-        var o = SourceFilesOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.Bundle))
         {
-            ThrowNoField(r.Kind, nameof(SourceFiles));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(SourceFiles));
         }
-        refs[r.Refs + o] = value;
+        PayloadOf<BundlePayload>(h, 2).SourceFiles = value;
     }
-
-    private static ReadOnlySpan<sbyte> SourceFilesOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // DoStatement, ForInStatement, ForOfStatement, ForStatement, LabeledStatement, WhileStatement, … (7 classes)
     public Node Statement(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = StatementOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        int o = StatementOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, Node>(ref PayloadByte(h, o));
     }
 
     public void SetStatement(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = StatementOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = StatementOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(Statement));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Statement));
         }
-        slots[r.Slots + o] = value.Index;
+        Unsafe.As<byte, Node>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> StatementOffsets =>
+    private static ReadOnlySpan<ushort> StatementOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,1,1,4,3,4,-1,-1,-1,1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,2052,2052,14352,8204,14352,65535,65535,65535,2052,65535,2052,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // Block, CaseClause, DefaultClause, ModuleBlock, SourceFile
     public NodeArray Statements(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = StatementsOffsets[(int)r.Kind];
-        return o < 0 ? null! : (NodeArray)refs[r.Refs + o]!;
+        var h = headers[node.Index].KindPayload;
+        int o = StatementsOffsets[h & KindMask];
+        return o == NoField ? null! : Unsafe.As<byte, NodeArray>(ref PayloadByte(h, o))!;
     }
 
     public void SetStatements(Node node, NodeArray value)
     {
-        ref var r = ref records[node.Index];
-        var o = StatementsOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = StatementsOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(Statements));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Statements));
         }
-        refs[r.Refs + o] = value;
+        Unsafe.As<byte, NodeArray>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> StatementsOffsets =>
+    private static ReadOnlySpan<ushort> StatementsOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,23,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,10240,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,4096,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,10240,4096,65535,65535,65535,65535,65535,65535,65535,65535,65535,32952,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // SourceFile
     public int SymbolCount(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = SymbolCountOffsets[(int)r.Kind];
-        return o < 0 ? default : slots[r.Slots + o];
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SourceFile ? PayloadOf<SourceFilePayload>(h, 16).SymbolCount : default;
     }
 
     public void SetSymbolCount(Node node, int value)
     {
-        ref var r = ref records[node.Index];
-        var o = SymbolCountOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SourceFile))
         {
-            ThrowNoField(r.Kind, nameof(SymbolCount));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(SymbolCount));
         }
-        slots[r.Slots + o] = value;
+        PayloadOf<SourceFilePayload>(h, 16).SymbolCount = value;
     }
-
-    private static ReadOnlySpan<sbyte> SymbolCountOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,11,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // TaggedTemplateExpression
     public Node Tag(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TagOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.TaggedTemplateExpression ? PayloadOf<TaggedTemplateExpressionPayload>(h, 8).Tag : default;
     }
 
     public void SetTag(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = TagOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.TaggedTemplateExpression))
         {
-            ThrowNoField(r.Kind, nameof(Tag));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Tag));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<TaggedTemplateExpressionPayload>(h, 8).Tag = value;
     }
-
-    private static ReadOnlySpan<sbyte> TagOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // JSDocAugmentsTag, JSDocAuthorTag, JSDocCallbackTag, JSDocClassTag, JSDocDeprecatedTag, JSDocEnumTag, … (28 classes)
     public Node TagName(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TagNameOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        int o = TagNameOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, Node>(ref PayloadByte(h, o));
     }
 
     public void SetTagName(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = TagNameOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = TagNameOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(TagName));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(TagName));
         }
-        slots[r.Slots + o] = value.Index;
+        Unsafe.As<byte, Node>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> TagNameOffsets =>
+    private static ReadOnlySpan<ushort> TagNameOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,1,1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,0,1,1,0,0,0,0,0,0,0,0,3,0,1,3,0,0,0,1,3,1,3,0,0,3,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,10252,10252,0,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,10248,10252,10252,10248,10248,10248,10248,10248,10248,10248,10248,20500,10248,16396,16396,10248,10248,10248,18452,20500,10252,16396,10248,10248,16404,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // JSDoc
     public NodeArray? Tags(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TagsOffsets[(int)r.Kind];
-        return o < 0 ? null : (NodeArray?)refs[r.Refs + o];
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.JSDoc ? PayloadOf<JSDocPayload>(h, 6).Tags : null;
     }
 
     public void SetTags(Node node, NodeArray? value)
     {
-        ref var r = ref records[node.Index];
-        var o = TagsOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.JSDoc))
         {
-            ThrowNoField(r.Kind, nameof(Tags));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Tags));
         }
-        refs[r.Refs + o] = value;
+        PayloadOf<JSDocPayload>(h, 6).Tags = value;
     }
-
-    private static ReadOnlySpan<sbyte> TagsOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // TaggedTemplateExpression
     public Node Template(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TemplateOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.TaggedTemplateExpression ? PayloadOf<TaggedTemplateExpressionPayload>(h, 8).Template : default;
     }
 
     public void SetTemplate(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = TemplateOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.TaggedTemplateExpression))
         {
-            ThrowNoField(r.Kind, nameof(Template));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Template));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<TaggedTemplateExpressionPayload>(h, 8).Template = value;
     }
-
-    private static ReadOnlySpan<sbyte> TemplateOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // NoSubstitutionTemplateLiteral, TemplateHead, TemplateMiddle, TemplateTail
     public TokenFlags TemplateFlags(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TemplateFlagsOffsets[(int)r.Kind];
-        return o < 0 ? default : (TokenFlags)slots[r.Slots + o];
+        var h = headers[node.Index].KindPayload;
+        int o = TemplateFlagsOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, TokenFlags>(ref PayloadByte(h, o));
     }
 
     public void SetTemplateFlags(Node node, TokenFlags value)
     {
-        ref var r = ref records[node.Index];
-        var o = TemplateFlagsOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = TemplateFlagsOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(TemplateFlags));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(TemplateFlags));
         }
-        slots[r.Slots + o] = (int)value;
+        Unsafe.As<byte, TokenFlags>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> TemplateFlagsOffsets =>
+    private static ReadOnlySpan<ushort> TemplateFlagsOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,2,2,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,18448,18448,18448,18448,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // TemplateExpression, TemplateLiteralTypeNode
     public NodeArray TemplateSpans(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TemplateSpansOffsets[(int)r.Kind];
-        return o < 0 ? null! : (NodeArray)refs[r.Refs + o]!;
+        var h = headers[node.Index].KindPayload;
+        int o = TemplateSpansOffsets[h & KindMask];
+        return o == NoField ? null! : Unsafe.As<byte, NodeArray>(ref PayloadByte(h, o))!;
     }
 
     public void SetTemplateSpans(Node node, NodeArray value)
     {
-        ref var r = ref records[node.Index];
-        var o = TemplateSpansOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = TemplateSpansOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(TemplateSpans));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(TemplateSpans));
         }
-        refs[r.Refs + o] = value;
+        Unsafe.As<byte, NodeArray>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> TemplateSpansOffsets =>
+    private static ReadOnlySpan<ushort> TemplateSpansOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,10240,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,10240,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // BigIntLiteral, JSDocLink, JSDocLinkCode, JSDocLinkPlain, JSDocText, JsxText, … (14 classes)
     public string Text(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TextOffsets[(int)r.Kind];
-        return o < 0 ? null! : (string)refs[r.Refs + o]!;
+        var h = headers[node.Index].KindPayload;
+        int o = TextOffsets[h & KindMask];
+        return o == NoField ? null! : Unsafe.As<byte, string>(ref PayloadByte(h, o))!;
     }
 
     public void SetText(Node node, string value)
     {
-        ref var r = ref records[node.Index];
-        var o = TextOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = TextOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(Text));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Text));
         }
-        refs[r.Refs + o] = value;
+        Unsafe.As<byte, string>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> TextOffsets =>
+    private static ReadOnlySpan<ushort> TextOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,0,0,0,0,-1,0,1,1,1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,24,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,0,-1,-1,0,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,10240,10240,10240,10240,65535,10240,18440,18440,18440,18440,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,32960,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,4096,65535,65535,10240,10240,10240,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // StringLiteral
     public Node TextSourceNode(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TextSourceNodeOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.StringLiteral ? PayloadOf<StringLiteralPayload>(h, 5).TextSourceNode : default;
     }
 
     public void SetTextSourceNode(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = TextSourceNodeOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.StringLiteral))
         {
-            ThrowNoField(r.Kind, nameof(TextSourceNode));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(TextSourceNode));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<StringLiteralPayload>(h, 5).TextSourceNode = value;
     }
-
-    private static ReadOnlySpan<sbyte> TextSourceNodeOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // IfStatement
     public Node ThenStatement(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ThenStatementOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.IfStatement ? PayloadOf<IfStatementPayload>(h, 3).ThenStatement : default;
     }
 
     public void SetThenStatement(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ThenStatementOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.IfStatement))
         {
-            ThrowNoField(r.Kind, nameof(ThenStatement));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(ThenStatement));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<IfStatementPayload>(h, 3).ThenStatement = value;
     }
-
-    private static ReadOnlySpan<sbyte> ThenStatementOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // SyntheticReferenceExpression
     public Node ThisArg(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ThisArgOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SyntheticReferenceExpression ? PayloadOf<SyntheticReferenceExpressionPayload>(h, 1).ThisArg : default;
     }
 
     public void SetThisArg(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ThisArgOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SyntheticReferenceExpression))
         {
-            ThrowNoField(r.Kind, nameof(ThisArg));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(ThisArg));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<SyntheticReferenceExpressionPayload>(h, 1).ThisArg = value;
     }
-
-    private static ReadOnlySpan<sbyte> ThisArgOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,
-    ];
 
     // HeritageClause, ImportAttributes
     public SyntaxKind Token(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TokenOffsets[(int)r.Kind];
-        return o < 0 ? default : (SyntaxKind)slots[r.Slots + o];
+        var h = headers[node.Index].KindPayload;
+        int o = TokenOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, SyntaxKind>(ref PayloadByte(h, o));
     }
 
     public void SetToken(Node node, SyntaxKind value)
     {
-        ref var r = ref records[node.Index];
-        var o = TokenOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = TokenOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(Token));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Token));
         }
-        slots[r.Slots + o] = (int)value;
+        Unsafe.As<byte, SyntaxKind>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> TokenOffsets =>
+    private static ReadOnlySpan<ushort> TokenOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,10248,65535,10248,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // ConditionalTypeNode
     public Node TrueType(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TrueTypeOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.ConditionalType ? PayloadOf<ConditionalTypeNodePayload>(h, 7).TrueType : default;
     }
 
     public void SetTrueType(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = TrueTypeOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.ConditionalType))
         {
-            ThrowNoField(r.Kind, nameof(TrueType));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(TrueType));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<ConditionalTypeNodePayload>(h, 7).TrueType = value;
     }
-
-    private static ReadOnlySpan<sbyte> TrueTypeOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,4,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // TryStatement
     public Node TryBlock(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TryBlockOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.TryStatement ? PayloadOf<TryStatementPayload>(h, 3).TryBlock : default;
     }
 
     public void SetTryBlock(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = TryBlockOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.TryStatement))
         {
-            ThrowNoField(r.Kind, nameof(TryBlock));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(TryBlock));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<TryStatementPayload>(h, 3).TryBlock = value;
     }
-
-    private static ReadOnlySpan<sbyte> TryBlockOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // SyntheticExpression
     public Node TupleNameSource(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TupleNameSourceOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SyntheticExpression ? PayloadOf<SyntheticExpressionPayload>(h, 1).TupleNameSource : default;
     }
 
     public void SetTupleNameSource(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = TupleNameSourceOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SyntheticExpression))
         {
-            ThrowNoField(r.Kind, nameof(TupleNameSource));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(TupleNameSource));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<SyntheticExpressionPayload>(h, 1).TupleNameSource = value;
     }
-
-    private static ReadOnlySpan<sbyte> TupleNameSourceOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // ArrowFunction, AsExpression, CallSignatureDeclaration, ConstructSignatureDeclaration, ConstructorDeclaration, ConstructorTypeNode, … (37 classes)
     public Node Type(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        int o = TypeOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, Node>(ref PayloadByte(h, o));
     }
 
     public void SetType(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = TypeOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(Type));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Type));
         }
-        slots[r.Slots + o] = value.Index;
+        Unsafe.As<byte, Node>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> TypeOffsets =>
+    private static ReadOnlySpan<ushort> TypeOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,4,-1,3,4,3,6,-1,6,6,6,3,3,3,2,-1,2,2,-1,-1,-1,-1,0,0,-1,-1,-1,-1,0,-1,1,
-        -1,4,-1,3,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,6,6,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,6,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,1,1,0,2,0,
-        0,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,20504,65535,16404,20504,28716,30776,65535,30776,30776,30776,24612,24612,28716,6152,65535,28712,28712,65535,65535,65535,65535,0,0,65535,65535,65535,65535,0,65535,2052,
+        65535,20504,65535,8204,65535,2052,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,2052,65535,30776,30776,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,2052,65535,65535,65535,2052,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,8204,65535,30776,65535,65535,22552,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,0,65535,65535,65535,65535,2048,2048,0,24608,0,
+        0,65535,65535,65535,18452,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // ArrowFunction, CallExpression, CallSignatureDeclaration, ConstructSignatureDeclaration, ConstructorDeclaration, ConstructorTypeNode, … (23 classes)
     public NodeArray? TypeArguments(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeArgumentsOffsets[(int)r.Kind];
-        return o < 0 ? null : (NodeArray?)refs[r.Refs + o];
+        var h = headers[node.Index].KindPayload;
+        int o = TypeArgumentsOffsets[h & KindMask];
+        return o == NoField ? null : Unsafe.As<byte, NodeArray?>(ref PayloadByte(h, o));
     }
 
     public void SetTypeArguments(Node node, NodeArray? value)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeArgumentsOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = TypeArgumentsOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(TypeArguments));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(TypeArguments));
         }
-        refs[r.Refs + o] = value;
+        Unsafe.As<byte, NodeArray?>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> TypeArgumentsOffsets =>
+    private static ReadOnlySpan<ushort> TypeArgumentsOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,3,-1,3,3,3,2,2,3,-1,0,3,3,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,1,1,0,-1,-1,3,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,28688,30736,65535,30736,30736,30736,24584,24584,28688,65535,10240,28688,28688,10240,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,16384,65535,65535,65535,65535,65535,65535,65535,18440,18440,16384,65535,65535,30736,30736,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,10240,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,30736,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,10240,10240,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,24584,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // JSDocCallbackTag, JSDocEnumTag, JSDocOverloadTag, JSDocParameterTag, JSDocPropertyTag, JSDocReturnTag, … (11 classes)
     public Node TypeExpression(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeExpressionOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        int o = TypeExpressionOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, Node>(ref PayloadByte(h, o));
     }
 
     public void SetTypeExpression(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeExpressionOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = TypeExpressionOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(TypeExpression));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(TypeExpression));
         }
-        slots[r.Slots + o] = value.Index;
+        Unsafe.As<byte, Node>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> TypeExpressionOffsets =>
+    private static ReadOnlySpan<ushort> TypeExpressionOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,4,1,2,4,1,1,1,-1,4,-1,4,1,1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,20504,10252,16400,16400,10252,10252,10252,65535,20504,65535,16400,10252,10252,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // TypeReferenceNode
     public Node TypeName(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeNameOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.TypeReference ? PayloadOf<TypeReferenceNodePayload>(h, 5).TypeName : default;
     }
 
     public void SetTypeName(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeNameOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.TypeReference))
         {
-            ThrowNoField(r.Kind, nameof(TypeName));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(TypeName));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<TypeReferenceNodePayload>(h, 5).TypeName = value;
     }
-
-    private static ReadOnlySpan<sbyte> TypeNameOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // InferTypeNode, MappedTypeNode
     public Node TypeParameter(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeParameterOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        int o = TypeParameterOffsets[h & KindMask];
+        return o == NoField ? default : Unsafe.As<byte, Node>(ref PayloadByte(h, o));
     }
 
     public void SetTypeParameter(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeParameterOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = TypeParameterOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(TypeParameter));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(TypeParameter));
         }
-        slots[r.Slots + o] = value.Index;
+        Unsafe.As<byte, Node>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> TypeParameterOffsets =>
+    private static ReadOnlySpan<ushort> TypeParameterOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,
-        -1,5,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,0,65535,65535,65535,
+        65535,20508,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // ArrowFunction, CallSignatureDeclaration, ClassDeclaration, ClassExpression, ConstructSignatureDeclaration, ConstructorDeclaration, … (19 classes)
     public NodeArray? TypeParameters(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeParametersOffsets[(int)r.Kind];
-        return o < 0 ? null : (NodeArray?)refs[r.Refs + o];
+        var h = headers[node.Index].KindPayload;
+        int o = TypeParametersOffsets[h & KindMask];
+        return o == NoField ? null : Unsafe.As<byte, NodeArray?>(ref PayloadByte(h, o));
     }
 
     public void SetTypeParameters(Node node, NodeArray? value)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeParametersOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = TypeParametersOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(TypeParameters));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(TypeParameters));
         }
-        refs[r.Refs + o] = value;
+        Unsafe.As<byte, NodeArray?>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> TypeParametersOffsets =>
+    private static ReadOnlySpan<ushort> TypeParametersOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,4,4,-1,4,4,4,3,3,4,-1,-1,4,4,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,4,4,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,4,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,4,4,4,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,28696,30744,65535,30744,30744,30744,24592,24592,28696,65535,65535,28696,28696,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,30744,30744,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,26648,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,30744,26648,26648,22536,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,24592,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,18440,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // SourceFile
     public IReadOnlyList<FileReference> TypeReferenceDirectives(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeReferenceDirectivesOffsets[(int)r.Kind];
-        return o < 0 ? null! : (IReadOnlyList<FileReference>)refs[r.Refs + o]!;
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SourceFile ? PayloadOf<SourceFilePayload>(h, 16).TypeReferenceDirectives! : null!;
     }
 
     public void SetTypeReferenceDirectives(Node node, IReadOnlyList<FileReference> value)
     {
-        ref var r = ref records[node.Index];
-        var o = TypeReferenceDirectivesOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SourceFile))
         {
-            ThrowNoField(r.Kind, nameof(TypeReferenceDirectives));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(TypeReferenceDirectives));
         }
-        refs[r.Refs + o] = value;
+        PayloadOf<SourceFilePayload>(h, 16).TypeReferenceDirectives = value;
     }
-
-    private static ReadOnlySpan<sbyte> TypeReferenceDirectivesOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,25,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // HeritageClause, IntersectionTypeNode, UnionTypeNode
     public NodeArray Types(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = TypesOffsets[(int)r.Kind];
-        return o < 0 ? null! : (NodeArray)refs[r.Refs + o]!;
+        var h = headers[node.Index].KindPayload;
+        int o = TypesOffsets[h & KindMask];
+        return o == NoField ? null! : Unsafe.As<byte, NodeArray>(ref PayloadByte(h, o))!;
     }
 
     public void SetTypes(Node node, NodeArray value)
     {
-        ref var r = ref records[node.Index];
-        var o = TypesOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        int o = TypesOffsets[h & KindMask];
+        if (o == NoField)
         {
-            ThrowNoField(r.Kind, nameof(Types));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Types));
         }
-        refs[r.Refs + o] = value;
+        Unsafe.As<byte, NodeArray>(ref PayloadByte(h, o)) = value;
     }
 
-    private static ReadOnlySpan<sbyte> TypesOffsets =>
+    private static ReadOnlySpan<ushort> TypesOffsets =>
     [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,0,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,4096,4096,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,10240,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
+        65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,
     ];
 
     // ImportAttribute
     public Node Value(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = ValueOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.ImportAttribute ? PayloadOf<ImportAttributePayload>(h, 1).Value : default;
     }
 
     public void SetValue(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = ValueOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.ImportAttribute))
         {
-            ThrowNoField(r.Kind, nameof(Value));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(Value));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<ImportAttributePayload>(h, 1).Value = value;
     }
-
-    private static ReadOnlySpan<sbyte> ValueOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // CatchClause
     public Node VariableDeclaration(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = VariableDeclarationOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.CatchClause ? PayloadOf<CatchClausePayload>(h, 3).VariableDeclaration : default;
     }
 
     public void SetVariableDeclaration(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = VariableDeclarationOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.CatchClause))
         {
-            ThrowNoField(r.Kind, nameof(VariableDeclaration));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(VariableDeclaration));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<CatchClausePayload>(h, 3).VariableDeclaration = value;
     }
-
-    private static ReadOnlySpan<sbyte> VariableDeclarationOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // ConditionalExpression
     public Node WhenFalse(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = WhenFalseOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.ConditionalExpression ? PayloadOf<ConditionalExpressionPayload>(h, 7).WhenFalse : default;
     }
 
     public void SetWhenFalse(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = WhenFalseOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.ConditionalExpression))
         {
-            ThrowNoField(r.Kind, nameof(WhenFalse));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(WhenFalse));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<ConditionalExpressionPayload>(h, 7).WhenFalse = value;
     }
-
-    private static ReadOnlySpan<sbyte> WhenFalseOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // ConditionalExpression
     public Node WhenTrue(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = WhenTrueOffsets[(int)r.Kind];
-        return o < 0 ? default : new Node(slots[r.Slots + o]);
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.ConditionalExpression ? PayloadOf<ConditionalExpressionPayload>(h, 7).WhenTrue : default;
     }
 
     public void SetWhenTrue(Node node, Node value)
     {
-        ref var r = ref records[node.Index];
-        var o = WhenTrueOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.ConditionalExpression))
         {
-            ThrowNoField(r.Kind, nameof(WhenTrue));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(WhenTrue));
         }
-        slots[r.Slots + o] = value.Index;
+        PayloadOf<ConditionalExpressionPayload>(h, 7).WhenTrue = value;
     }
-
-    private static ReadOnlySpan<sbyte> WhenTrueOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,4,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-    ];
 
     // SyntaxList
     public Node[]? _children(Node node)
     {
-        ref var r = ref records[node.Index];
-        var o = _childrenOffsets[(int)r.Kind];
-        return o < 0 ? null : (Node[]?)refs[r.Refs + o];
+        var h = headers[node.Index].KindPayload;
+        return (h & KindMask) == (int)SyntaxKind.SyntaxList ? PayloadOf<SyntaxListPayload>(h, 2)._children : null;
     }
 
     public void Set_children(Node node, Node[]? value)
     {
-        ref var r = ref records[node.Index];
-        var o = _childrenOffsets[(int)r.Kind];
-        if (o < 0)
+        var h = headers[node.Index].KindPayload;
+        if (!((h & KindMask) == (int)SyntaxKind.SyntaxList))
         {
-            ThrowNoField(r.Kind, nameof(_children));
+            ThrowNoField((SyntaxKind)(h & KindMask), nameof(_children));
         }
-        refs[r.Refs + o] = value;
+        PayloadOf<SyntaxListPayload>(h, 2)._children = value;
     }
 
-    private static ReadOnlySpan<sbyte> _childrenOffsets =>
-    [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,-1,-1,-1,-1,
-    ];
-
     // Node classes of types.ts: whether a node's kind is one of the class's kinds.
-    public bool IsAbstractKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 0;
+    public bool IsAbstractKeyword(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 0;
 
-    public bool IsAccessorKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 1;
+    public bool IsAccessorKeyword(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 1;
 
-    public bool IsAmpersandAmpersandEqualsToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 2;
+    public bool IsAmpersandAmpersandEqualsToken(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 2;
 
-    public bool IsArrayBindingPattern(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 3;
+    public bool IsArrayBindingPattern(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 3;
 
-    public bool IsArrayLiteralExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 4;
+    public bool IsArrayLiteralExpression(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 4;
 
-    public bool IsArrayTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 5;
+    public bool IsArrayTypeNode(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 5;
 
-    public bool IsArrowFunction(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 6;
+    public bool IsArrowFunction(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 6;
 
-    public bool IsAsExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 7;
+    public bool IsAsExpression(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 7;
 
-    public bool IsAssertKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 8;
+    public bool IsAssertKeyword(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 8;
 
-    public bool IsAssertsKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 9;
+    public bool IsAssertsKeyword(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 9;
 
-    public bool IsAsteriskToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 10;
+    public bool IsAsteriskToken(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 10;
 
-    public bool IsAsyncKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 11;
+    public bool IsAsyncKeyword(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 11;
 
-    public bool IsAwaitExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 12;
+    public bool IsAwaitExpression(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 12;
 
-    public bool IsAwaitKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 13;
+    public bool IsAwaitKeyword(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 13;
 
-    public bool IsBarBarEqualsToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 14;
+    public bool IsBarBarEqualsToken(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 14;
 
-    public bool IsBigIntLiteral(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 15;
+    public bool IsBigIntLiteral(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 15;
 
-    public bool IsBinaryExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 16;
+    public bool IsBinaryExpression(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 16;
 
-    public bool IsBindingElement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 17;
+    public bool IsBindingElement(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 17;
 
-    public bool IsBlock(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 18;
+    public bool IsBlock(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 18;
 
-    public bool IsBreakStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 19;
+    public bool IsBreakStatement(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 19;
 
-    public bool IsBundle(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 20;
+    public bool IsBundle(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 20;
 
-    public bool IsCallExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 21;
+    public bool IsCallExpression(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 21;
 
-    public bool IsCallSignatureDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 22;
+    public bool IsCallSignatureDeclaration(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 22;
 
-    public bool IsCaseBlock(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 23;
+    public bool IsCaseBlock(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 23;
 
-    public bool IsCaseClause(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 24;
+    public bool IsCaseClause(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 24;
 
-    public bool IsCaseKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 25;
+    public bool IsCaseKeyword(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 25;
 
-    public bool IsCatchClause(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 26;
+    public bool IsCatchClause(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 26;
 
-    public bool IsClassDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 27;
+    public bool IsClassDeclaration(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 27;
 
-    public bool IsClassExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 28;
+    public bool IsClassExpression(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 28;
 
-    public bool IsClassStaticBlockDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 29;
+    public bool IsClassStaticBlockDeclaration(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 29;
 
-    public bool IsColonToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 30;
+    public bool IsColonToken(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 30;
 
-    public bool IsCommaListExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 31;
+    public bool IsCommaListExpression(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 31;
 
-    public bool IsComputedPropertyName(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 32;
+    public bool IsComputedPropertyName(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 32;
 
-    public bool IsConditionalExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 33;
+    public bool IsConditionalExpression(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 33;
 
-    public bool IsConditionalTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 34;
+    public bool IsConditionalTypeNode(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 34;
 
-    public bool IsConstKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 35;
+    public bool IsConstKeyword(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 35;
 
-    public bool IsConstructSignatureDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 36;
+    public bool IsConstructSignatureDeclaration(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 36;
 
-    public bool IsConstructorDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 37;
+    public bool IsConstructorDeclaration(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 37;
 
-    public bool IsConstructorTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 38;
+    public bool IsConstructorTypeNode(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 38;
 
-    public bool IsContinueStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 39;
+    public bool IsContinueStatement(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 39;
 
-    public bool IsDebuggerStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 40;
+    public bool IsDebuggerStatement(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 40;
 
-    public bool IsDeclareKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 41;
+    public bool IsDeclareKeyword(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 41;
 
-    public bool IsDecorator(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 42;
+    public bool IsDecorator(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 42;
 
-    public bool IsDefaultClause(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 43;
+    public bool IsDefaultClause(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 43;
 
-    public bool IsDefaultKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 44;
+    public bool IsDefaultKeyword(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 44;
 
-    public bool IsDeleteExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 45;
+    public bool IsDeleteExpression(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 45;
 
-    public bool IsDoStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 46;
+    public bool IsDoStatement(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 46;
 
-    public bool IsDotDotDotToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 47;
+    public bool IsDotDotDotToken(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 47;
 
-    public bool IsDotToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 48;
+    public bool IsDotToken(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 48;
 
-    public bool IsElementAccessExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 49;
+    public bool IsElementAccessExpression(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 49;
 
-    public bool IsEmptyStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 50;
+    public bool IsEmptyStatement(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 50;
 
-    public bool IsEndOfFileToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 51;
+    public bool IsEndOfFileToken(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 51;
 
-    public bool IsEnumDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 52;
+    public bool IsEnumDeclaration(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 52;
 
-    public bool IsEnumMember(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 53;
+    public bool IsEnumMember(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 53;
 
-    public bool IsEqualsGreaterThanToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 54;
+    public bool IsEqualsGreaterThanToken(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 54;
 
-    public bool IsEqualsToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 55;
+    public bool IsEqualsToken(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 55;
 
-    public bool IsExclamationToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 56;
+    public bool IsExclamationToken(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 56;
 
-    public bool IsExportAssignment(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 57;
+    public bool IsExportAssignment(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 57;
 
-    public bool IsExportDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 58;
+    public bool IsExportDeclaration(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 58;
 
-    public bool IsExportKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 59;
+    public bool IsExportKeyword(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 59;
 
-    public bool IsExportSpecifier(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 60;
+    public bool IsExportSpecifier(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 60;
 
-    public bool IsExpressionStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 61;
+    public bool IsExpressionStatement(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 61;
 
-    public bool IsExpressionWithTypeArguments(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 62;
+    public bool IsExpressionWithTypeArguments(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 62;
 
-    public bool IsExternalModuleReference(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 63;
+    public bool IsExternalModuleReference(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 63;
 
-    public bool IsFalseLiteral(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 64;
+    public bool IsFalseLiteral(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 64;
 
-    public bool IsForInStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 65;
+    public bool IsForInStatement(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 65;
 
-    public bool IsForOfStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 66;
+    public bool IsForOfStatement(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 66;
 
-    public bool IsForStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 67;
+    public bool IsForStatement(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 67;
 
-    public bool IsFunctionDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 68;
+    public bool IsFunctionDeclaration(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 68;
 
-    public bool IsFunctionExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 69;
+    public bool IsFunctionExpression(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 69;
 
-    public bool IsFunctionTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 70;
+    public bool IsFunctionTypeNode(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 70;
 
-    public bool IsGetAccessorDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 71;
+    public bool IsGetAccessorDeclaration(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 71;
 
-    public bool IsHeritageClause(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 72;
+    public bool IsHeritageClause(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 72;
 
-    public bool IsIdentifier(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 73;
+    public bool IsIdentifier(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 73;
 
-    public bool IsIfStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 74;
+    public bool IsIfStatement(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 74;
 
-    public bool IsImportAttribute(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 75;
+    public bool IsImportAttribute(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 75;
 
-    public bool IsImportAttributes(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 76;
+    public bool IsImportAttributes(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 76;
 
-    public bool IsImportClause(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 77;
+    public bool IsImportClause(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 77;
 
-    public bool IsImportDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 78;
+    public bool IsImportDeclaration(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 78;
 
-    public bool IsImportEqualsDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 79;
+    public bool IsImportEqualsDeclaration(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 79;
 
-    public bool IsImportExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 80;
+    public bool IsImportExpression(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 80;
 
-    public bool IsImportSpecifier(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 81;
+    public bool IsImportSpecifier(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 81;
 
-    public bool IsImportTypeAssertionContainer(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 82;
+    public bool IsImportTypeAssertionContainer(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 82;
 
-    public bool IsImportTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 83;
+    public bool IsImportTypeNode(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 83;
 
-    public bool IsInKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 84;
+    public bool IsInKeyword(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 84;
 
-    public bool IsIndexSignatureDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 85;
+    public bool IsIndexSignatureDeclaration(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 85;
 
-    public bool IsIndexedAccessTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 86;
+    public bool IsIndexedAccessTypeNode(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 86;
 
-    public bool IsInferTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 87;
+    public bool IsInferTypeNode(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 87;
 
-    public bool IsInterfaceDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 88;
+    public bool IsInterfaceDeclaration(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 88;
 
-    public bool IsIntersectionTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 89;
+    public bool IsIntersectionTypeNode(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 89;
 
-    public bool IsJSDoc(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 90;
+    public bool IsJSDoc(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 90;
 
-    public bool IsJSDocAllType(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 91;
+    public bool IsJSDocAllType(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 91;
 
-    public bool IsJSDocAugmentsTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 92;
+    public bool IsJSDocAugmentsTag(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 92;
 
-    public bool IsJSDocAuthorTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 93;
+    public bool IsJSDocAuthorTag(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 93;
 
-    public bool IsJSDocCallbackTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 94;
+    public bool IsJSDocCallbackTag(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 94;
 
-    public bool IsJSDocClassTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 95;
+    public bool IsJSDocClassTag(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 95;
 
-    public bool IsJSDocDeprecatedTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 96;
+    public bool IsJSDocDeprecatedTag(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 96;
 
-    public bool IsJSDocEnumTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 97;
+    public bool IsJSDocEnumTag(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 97;
 
-    public bool IsJSDocFunctionType(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 98;
+    public bool IsJSDocFunctionType(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 98;
 
-    public bool IsJSDocImplementsTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 99;
+    public bool IsJSDocImplementsTag(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 99;
 
-    public bool IsJSDocImportTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 100;
+    public bool IsJSDocImportTag(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 100;
 
-    public bool IsJSDocLink(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 101;
+    public bool IsJSDocLink(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 101;
 
-    public bool IsJSDocLinkCode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 102;
+    public bool IsJSDocLinkCode(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 102;
 
-    public bool IsJSDocLinkPlain(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 103;
+    public bool IsJSDocLinkPlain(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 103;
 
-    public bool IsJSDocMemberName(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 104;
+    public bool IsJSDocMemberName(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 104;
 
-    public bool IsJSDocNameReference(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 105;
+    public bool IsJSDocNameReference(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 105;
 
-    public bool IsJSDocNamepathType(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 106;
+    public bool IsJSDocNamepathType(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 106;
 
-    public bool IsJSDocNonNullableType(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 107;
+    public bool IsJSDocNonNullableType(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 107;
 
-    public bool IsJSDocNullableType(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 108;
+    public bool IsJSDocNullableType(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 108;
 
-    public bool IsJSDocOptionalType(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 109;
+    public bool IsJSDocOptionalType(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 109;
 
-    public bool IsJSDocOverloadTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 110;
+    public bool IsJSDocOverloadTag(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 110;
 
-    public bool IsJSDocOverrideTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 111;
+    public bool IsJSDocOverrideTag(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 111;
 
-    public bool IsJSDocParameterTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 112;
+    public bool IsJSDocParameterTag(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 112;
 
-    public bool IsJSDocPrivateTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 113;
+    public bool IsJSDocPrivateTag(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 113;
 
-    public bool IsJSDocPropertyTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 114;
+    public bool IsJSDocPropertyTag(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 114;
 
-    public bool IsJSDocProtectedTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 115;
+    public bool IsJSDocProtectedTag(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 115;
 
-    public bool IsJSDocPublicTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 116;
+    public bool IsJSDocPublicTag(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 116;
 
-    public bool IsJSDocReadonlyTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 117;
+    public bool IsJSDocReadonlyTag(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 117;
 
-    public bool IsJSDocReturnTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 118;
+    public bool IsJSDocReturnTag(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 118;
 
-    public bool IsJSDocSatisfiesTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 119;
+    public bool IsJSDocSatisfiesTag(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 119;
 
-    public bool IsJSDocSeeTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 120;
+    public bool IsJSDocSeeTag(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 120;
 
-    public bool IsJSDocSignature(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 121;
+    public bool IsJSDocSignature(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 121;
 
-    public bool IsJSDocTemplateTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 122;
+    public bool IsJSDocTemplateTag(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 122;
 
-    public bool IsJSDocText(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 123;
+    public bool IsJSDocText(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 123;
 
-    public bool IsJSDocThisTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 124;
+    public bool IsJSDocThisTag(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 124;
 
-    public bool IsJSDocThrowsTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 125;
+    public bool IsJSDocThrowsTag(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 125;
 
-    public bool IsJSDocTypeExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 126;
+    public bool IsJSDocTypeExpression(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 126;
 
-    public bool IsJSDocTypeLiteral(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 127;
+    public bool IsJSDocTypeLiteral(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 127;
 
-    public bool IsJSDocTypeTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 128;
+    public bool IsJSDocTypeTag(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 128;
 
-    public bool IsJSDocTypedefTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 129;
+    public bool IsJSDocTypedefTag(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 129;
 
-    public bool IsJSDocUnknownTag(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 130;
+    public bool IsJSDocUnknownTag(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 130;
 
-    public bool IsJSDocUnknownType(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 131;
+    public bool IsJSDocUnknownType(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 131;
 
-    public bool IsJSDocVariadicType(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 132;
+    public bool IsJSDocVariadicType(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 132;
 
-    public bool IsJsxAttribute(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 133;
+    public bool IsJsxAttribute(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 133;
 
-    public bool IsJsxAttributes(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 134;
+    public bool IsJsxAttributes(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 134;
 
-    public bool IsJsxClosingElement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 135;
+    public bool IsJsxClosingElement(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 135;
 
-    public bool IsJsxClosingFragment(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 136;
+    public bool IsJsxClosingFragment(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 136;
 
-    public bool IsJsxElement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 137;
+    public bool IsJsxElement(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 137;
 
-    public bool IsJsxExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 138;
+    public bool IsJsxExpression(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 138;
 
-    public bool IsJsxFragment(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 139;
+    public bool IsJsxFragment(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 139;
 
-    public bool IsJsxNamespacedName(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 140;
+    public bool IsJsxNamespacedName(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 140;
 
-    public bool IsJsxOpeningElement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 141;
+    public bool IsJsxOpeningElement(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 141;
 
-    public bool IsJsxOpeningFragment(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 142;
+    public bool IsJsxOpeningFragment(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 142;
 
-    public bool IsJsxSelfClosingElement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 143;
+    public bool IsJsxSelfClosingElement(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 143;
 
-    public bool IsJsxSpreadAttribute(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 144;
+    public bool IsJsxSpreadAttribute(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 144;
 
-    public bool IsJsxText(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 145;
+    public bool IsJsxText(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 145;
 
-    public bool IsLabeledStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 146;
+    public bool IsLabeledStatement(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 146;
 
-    public bool IsLiteralTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 147;
+    public bool IsLiteralTypeNode(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 147;
 
-    public bool IsMappedTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 148;
+    public bool IsMappedTypeNode(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 148;
 
-    public bool IsMetaProperty(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 149;
+    public bool IsMetaProperty(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 149;
 
-    public bool IsMethodDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 150;
+    public bool IsMethodDeclaration(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 150;
 
-    public bool IsMethodSignature(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 151;
+    public bool IsMethodSignature(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 151;
 
-    public bool IsMinusToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 152;
+    public bool IsMinusToken(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 152;
 
-    public bool IsMissingDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 153;
+    public bool IsMissingDeclaration(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 153;
 
-    public bool IsModuleBlock(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 154;
+    public bool IsModuleBlock(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 154;
 
-    public bool IsModuleDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 155;
+    public bool IsModuleDeclaration(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 155;
 
-    public bool IsNamedExports(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 156;
+    public bool IsNamedExports(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 156;
 
-    public bool IsNamedImports(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 157;
+    public bool IsNamedImports(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 157;
 
-    public bool IsNamedTupleMember(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 158;
+    public bool IsNamedTupleMember(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 158;
 
-    public bool IsNamespaceExport(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 159;
+    public bool IsNamespaceExport(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 159;
 
-    public bool IsNamespaceExportDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 160;
+    public bool IsNamespaceExportDeclaration(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 160;
 
-    public bool IsNamespaceImport(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 161;
+    public bool IsNamespaceImport(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 161;
 
-    public bool IsNewExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 162;
+    public bool IsNewExpression(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 162;
 
-    public bool IsNoSubstitutionTemplateLiteral(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 163;
+    public bool IsNoSubstitutionTemplateLiteral(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 163;
 
-    public bool IsNonNullExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 164;
+    public bool IsNonNullExpression(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 164;
 
-    public bool IsNotEmittedStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 165;
+    public bool IsNotEmittedStatement(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 165;
 
-    public bool IsNotEmittedTypeElement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 166;
+    public bool IsNotEmittedTypeElement(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 166;
 
-    public bool IsNullLiteral(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 167;
+    public bool IsNullLiteral(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 167;
 
-    public bool IsNumericLiteral(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 168;
+    public bool IsNumericLiteral(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 168;
 
-    public bool IsObjectBindingPattern(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 169;
+    public bool IsObjectBindingPattern(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 169;
 
-    public bool IsObjectLiteralExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 170;
+    public bool IsObjectLiteralExpression(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 170;
 
-    public bool IsOmittedExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 171;
+    public bool IsOmittedExpression(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 171;
 
-    public bool IsOptionalTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 172;
+    public bool IsOptionalTypeNode(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 172;
 
-    public bool IsOutKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 173;
+    public bool IsOutKeyword(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 173;
 
-    public bool IsOverrideKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 174;
+    public bool IsOverrideKeyword(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 174;
 
-    public bool IsParameterDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 175;
+    public bool IsParameterDeclaration(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 175;
 
-    public bool IsParenthesizedExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 176;
+    public bool IsParenthesizedExpression(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 176;
 
-    public bool IsParenthesizedTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 177;
+    public bool IsParenthesizedTypeNode(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 177;
 
-    public bool IsPartiallyEmittedExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 178;
+    public bool IsPartiallyEmittedExpression(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 178;
 
-    public bool IsPlusToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 179;
+    public bool IsPlusToken(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 179;
 
-    public bool IsPostfixUnaryExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 180;
+    public bool IsPostfixUnaryExpression(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 180;
 
-    public bool IsPrefixUnaryExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 181;
+    public bool IsPrefixUnaryExpression(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 181;
 
-    public bool IsPrivateIdentifier(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 182;
+    public bool IsPrivateIdentifier(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 182;
 
-    public bool IsPrivateKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 183;
+    public bool IsPrivateKeyword(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 183;
 
-    public bool IsPropertyAccessExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 184;
+    public bool IsPropertyAccessExpression(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 184;
 
-    public bool IsPropertyAssignment(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 185;
+    public bool IsPropertyAssignment(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 185;
 
-    public bool IsPropertyDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 186;
+    public bool IsPropertyDeclaration(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 186;
 
-    public bool IsPropertySignature(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 187;
+    public bool IsPropertySignature(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 187;
 
-    public bool IsProtectedKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 188;
+    public bool IsProtectedKeyword(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 188;
 
-    public bool IsPublicKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 189;
+    public bool IsPublicKeyword(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 189;
 
-    public bool IsQualifiedName(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 190;
+    public bool IsQualifiedName(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 190;
 
-    public bool IsQuestionDotToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 191;
+    public bool IsQuestionDotToken(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 191;
 
-    public bool IsQuestionQuestionEqualsToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 192;
+    public bool IsQuestionQuestionEqualsToken(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 192;
 
-    public bool IsQuestionToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 193;
+    public bool IsQuestionToken(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 193;
 
-    public bool IsReadonlyKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 194;
+    public bool IsReadonlyKeyword(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 194;
 
-    public bool IsRegularExpressionLiteral(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 195;
+    public bool IsRegularExpressionLiteral(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 195;
 
-    public bool IsRestTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 196;
+    public bool IsRestTypeNode(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 196;
 
-    public bool IsReturnStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 197;
+    public bool IsReturnStatement(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 197;
 
-    public bool IsSatisfiesExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 198;
+    public bool IsSatisfiesExpression(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 198;
 
-    public bool IsSemicolonClassElement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 199;
+    public bool IsSemicolonClassElement(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 199;
 
-    public bool IsSetAccessorDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 200;
+    public bool IsSetAccessorDeclaration(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 200;
 
-    public bool IsShorthandPropertyAssignment(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 201;
+    public bool IsShorthandPropertyAssignment(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 201;
 
-    public bool IsSourceFile(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 202;
+    public bool IsSourceFile(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 202;
 
-    public bool IsSpreadAssignment(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 203;
+    public bool IsSpreadAssignment(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 203;
 
-    public bool IsSpreadElement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 204;
+    public bool IsSpreadElement(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 204;
 
-    public bool IsStaticKeyword(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 205;
+    public bool IsStaticKeyword(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 205;
 
-    public bool IsStringLiteral(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 206;
+    public bool IsStringLiteral(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 206;
 
-    public bool IsSuperExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 207;
+    public bool IsSuperExpression(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 207;
 
-    public bool IsSwitchStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 208;
+    public bool IsSwitchStatement(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 208;
 
-    public bool IsSyntaxList(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 209;
+    public bool IsSyntaxList(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 209;
 
-    public bool IsSyntheticExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 210;
+    public bool IsSyntheticExpression(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 210;
 
-    public bool IsSyntheticReferenceExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 211;
+    public bool IsSyntheticReferenceExpression(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 211;
 
-    public bool IsTaggedTemplateExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 212;
+    public bool IsTaggedTemplateExpression(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 212;
 
-    public bool IsTemplateExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 213;
+    public bool IsTemplateExpression(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 213;
 
-    public bool IsTemplateHead(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 214;
+    public bool IsTemplateHead(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 214;
 
-    public bool IsTemplateLiteralTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 215;
+    public bool IsTemplateLiteralTypeNode(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 215;
 
-    public bool IsTemplateLiteralTypeSpan(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 216;
+    public bool IsTemplateLiteralTypeSpan(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 216;
 
-    public bool IsTemplateMiddle(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 217;
+    public bool IsTemplateMiddle(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 217;
 
-    public bool IsTemplateSpan(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 218;
+    public bool IsTemplateSpan(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 218;
 
-    public bool IsTemplateTail(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 219;
+    public bool IsTemplateTail(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 219;
 
-    public bool IsThisExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 220;
+    public bool IsThisExpression(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 220;
 
-    public bool IsThisTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 221;
+    public bool IsThisTypeNode(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 221;
 
-    public bool IsThrowStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 222;
+    public bool IsThrowStatement(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 222;
 
-    public bool IsToken(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 223;
+    public bool IsToken(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 223;
 
-    public bool IsTrueLiteral(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 224;
+    public bool IsTrueLiteral(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 224;
 
-    public bool IsTryStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 225;
+    public bool IsTryStatement(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 225;
 
-    public bool IsTupleTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 226;
+    public bool IsTupleTypeNode(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 226;
 
-    public bool IsTypeAliasDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 227;
+    public bool IsTypeAliasDeclaration(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 227;
 
-    public bool IsTypeAssertion(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 228;
+    public bool IsTypeAssertion(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 228;
 
-    public bool IsTypeLiteralNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 229;
+    public bool IsTypeLiteralNode(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 229;
 
-    public bool IsTypeOfExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 230;
+    public bool IsTypeOfExpression(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 230;
 
-    public bool IsTypeOperatorNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 231;
+    public bool IsTypeOperatorNode(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 231;
 
-    public bool IsTypeParameterDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 232;
+    public bool IsTypeParameterDeclaration(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 232;
 
-    public bool IsTypePredicateNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 233;
+    public bool IsTypePredicateNode(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 233;
 
-    public bool IsTypeQueryNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 234;
+    public bool IsTypeQueryNode(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 234;
 
-    public bool IsTypeReferenceNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 235;
+    public bool IsTypeReferenceNode(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 235;
 
-    public bool IsUnionTypeNode(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 236;
+    public bool IsUnionTypeNode(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 236;
 
-    public bool IsVariableDeclaration(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 237;
+    public bool IsVariableDeclaration(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 237;
 
-    public bool IsVariableDeclarationList(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 238;
+    public bool IsVariableDeclarationList(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 238;
 
-    public bool IsVariableStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 239;
+    public bool IsVariableStatement(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 239;
 
-    public bool IsVoidExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 240;
+    public bool IsVoidExpression(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 240;
 
-    public bool IsWhileStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 241;
+    public bool IsWhileStatement(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 241;
 
-    public bool IsWithStatement(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 242;
+    public bool IsWithStatement(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 242;
 
-    public bool IsYieldExpression(Node node) => !node.IsNone && ClassIds[(int)records[node.Index].Kind] == 243;
+    public bool IsYieldExpression(Node node) => !node.IsNone && ClassIds[(int)Kind(node)] == 243;
 }
