@@ -20,6 +20,7 @@ internal sealed partial class NodeFactory
     //
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateArrayLiteralExpression(NodeList elements = default, bool? multiLine = null)
     {
         var node = CreateBaseNode(SyntaxKind.ArrayLiteralExpression);
@@ -35,6 +36,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateObjectLiteralExpression(NodeList properties = default, bool? multiLine = null)
     {
         var node = CreateBaseDeclaration(SyntaxKind.ObjectLiteralExpression);
@@ -45,6 +47,7 @@ internal sealed partial class NodeFactory
         return node;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node CreateBasePropertyAccessExpression(Node expression, Node questionDotToken, Node name)
     {
         var node = CreateBaseDeclaration(SyntaxKind.PropertyAccessExpression);
@@ -62,7 +65,8 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreatePropertyAccessExpression(Node expression, object name)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal Node CreatePropertyAccessExpression(Node expression, Node name)
     {
         var node = CreateBasePropertyAccessExpression(
             Parenthesizer.ParenthesizeLeftSideOfAccess(expression, /*optionalChain*/ false),
@@ -79,7 +83,8 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreatePropertyAccessChain(Node expression, Node questionDotToken, object name)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal Node CreatePropertyAccessChain(Node expression, Node questionDotToken, Node name)
     {
         var node = CreateBasePropertyAccessExpression(
             Parenthesizer.ParenthesizeLeftSideOfAccess(expression, /*optionalChain*/ true),
@@ -90,6 +95,7 @@ internal sealed partial class NodeFactory
         return node;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node CreateBaseElementAccessExpression(Node expression, Node questionDotToken, Node argumentExpression)
     {
         var node = CreateBaseDeclaration(SyntaxKind.ElementAccessExpression);
@@ -105,7 +111,8 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateElementAccessExpression(Node expression, object index)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal Node CreateElementAccessExpression(Node expression, Node index)
     {
         var node = CreateBaseElementAccessExpression(
             Parenthesizer.ParenthesizeLeftSideOfAccess(expression, /*optionalChain*/ false),
@@ -122,7 +129,8 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateElementAccessChain(Node expression, Node questionDotToken, object index)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal Node CreateElementAccessChain(Node expression, Node questionDotToken, Node index)
     {
         var node = CreateBaseElementAccessExpression(
             Parenthesizer.ParenthesizeLeftSideOfAccess(expression, /*optionalChain*/ true),
@@ -133,6 +141,7 @@ internal sealed partial class NodeFactory
         return node;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node CreateBaseCallExpression(Node expression, Node questionDotToken, NodeList typeArguments, NodeList argumentsArray)
     {
         var node = CreateBaseDeclaration(SyntaxKind.CallExpression);
@@ -156,6 +165,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateCallExpression(Node expression, NodeList typeArguments, NodeList argumentsArray)
     {
         var node = CreateBaseCallExpression(
@@ -171,6 +181,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node UpdateCallExpression(Node node, Node expression, NodeList typeArguments, NodeList argumentsArray)
     {
         if (UtilitiesPublic.IsCallChain(store, node))
@@ -185,6 +196,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateCallChain(Node expression, Node questionDotToken, NodeList typeArguments, NodeList argumentsArray)
     {
         var node = CreateBaseCallExpression(
@@ -198,6 +210,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node UpdateCallChain(Node node, Node expression, Node questionDotToken, NodeList typeArguments, NodeList argumentsArray)
     {
         Debug.Assert((store.Flags(node) & NodeFlags.OptionalChain) != 0, "Cannot update a CallExpression using updateCallChain. Use updateCall instead.");
@@ -210,6 +223,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateNewExpression(Node expression, NodeList typeArguments, NodeList argumentsArray)
     {
         var node = CreateBaseDeclaration(SyntaxKind.NewExpression);
@@ -228,6 +242,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateTaggedTemplateExpression(Node tag, NodeList typeArguments, Node template)
     {
         var node = CreateBaseNode(SyntaxKind.TaggedTemplateExpression);
@@ -250,6 +265,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateTypeAssertion(Node type, Node expression)
     {
         var node = CreateBaseNode(SyntaxKind.TypeAssertionExpression);
@@ -262,6 +278,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node UpdateTypeAssertion(Node node, Node type, Node expression)
     {
         return store.Type(node) != type
@@ -271,6 +288,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateParenthesizedExpression(Node expression)
     {
         var node = CreateBaseNode(SyntaxKind.ParenthesizedExpression);
@@ -281,6 +299,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node UpdateParenthesizedExpression(Node node, Node expression)
     {
         return store.Expression(node) != expression
@@ -289,10 +308,11 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateFunctionExpression(
         NodeList modifiers,
         Node asteriskToken,
-        object? name,
+        Node name,
         NodeList typeParameters,
         NodeList parameters,
         Node type,
@@ -333,6 +353,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateArrowFunction(
         NodeList modifiers,
         NodeList typeParameters,
@@ -369,6 +390,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateDeleteExpression(Node expression)
     {
         var node = CreateBaseNode(SyntaxKind.DeleteExpression);
@@ -378,6 +400,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateTypeOfExpression(Node expression)
     {
         var node = CreateBaseNode(SyntaxKind.TypeOfExpression);
@@ -387,6 +410,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateVoidExpression(Node expression)
     {
         var node = CreateBaseNode(SyntaxKind.VoidExpression);
@@ -396,6 +420,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateAwaitExpression(Node expression)
     {
         var node = CreateBaseNode(SyntaxKind.AwaitExpression);
@@ -408,6 +433,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreatePrefixUnaryExpression(SyntaxKind @operator, Node operand)
     {
         var node = CreateBaseNode(SyntaxKind.PrefixUnaryExpression);
@@ -428,6 +454,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreatePostfixUnaryExpression(Node operand, SyntaxKind @operator)
     {
         var node = CreateBaseNode(SyntaxKind.PostfixUnaryExpression);
@@ -448,7 +475,8 @@ internal sealed partial class NodeFactory
 
     /// <summary>`createBinaryExpression(left, operator: BinaryOperator | BinaryOperatorToken, right)`.</summary>
     // @api
-    internal Node CreateBinaryExpression(Node left, object @operator, Node right)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal Node CreateBinaryExpression(Node left, Node @operator, Node right)
     {
         var node = CreateBaseDeclaration(SyntaxKind.BinaryExpression);
         var operatorToken = AsToken(@operator);
@@ -495,12 +523,14 @@ internal sealed partial class NodeFactory
         return node;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static TransformFlags PropagateAssignmentPatternFlags(NodeStore store, Node node)
     {
         return FactoryUtilities.ContainsObjectRestOrSpread(store, node) ? TransformFlags.ContainsObjectRestOrSpread : TransformFlags.None;
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateConditionalExpression(Node condition, Node questionToken, Node whenTrue, Node colonToken, Node whenFalse)
     {
         var node = CreateBaseNode(SyntaxKind.ConditionalExpression);
@@ -520,6 +550,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateTemplateExpression(Node head, NodeList templateSpans)
     {
         var node = CreateBaseNode(SyntaxKind.TemplateExpression);
@@ -532,6 +563,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateYieldExpression(Node asteriskToken, Node expression)
     {
         Debug.Assert(asteriskToken.IsNone || !expression.IsNone, "A `YieldExpression` with an asteriskToken must have an expression.");
@@ -547,6 +579,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateSpreadElement(Node expression)
     {
         var node = CreateBaseNode(SyntaxKind.SpreadElement);
@@ -558,9 +591,10 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateClassExpression(
         NodeList modifiers,
-        object? name,
+        Node name,
         NodeList typeParameters,
         NodeList heritageClauses,
         NodeList members)
@@ -583,12 +617,14 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateOmittedExpression()
     {
         return CreateBaseNode(SyntaxKind.OmittedExpression);
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateExpressionWithTypeArguments(Node expression, NodeList typeArguments)
     {
         var node = CreateBaseNode(SyntaxKind.ExpressionWithTypeArguments);
@@ -601,6 +637,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node UpdateExpressionWithTypeArguments(Node node, Node expression, NodeList typeArguments)
     {
         return store.Expression(node) != expression
@@ -610,6 +647,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateAsExpression(Node expression, Node type)
     {
         var node = CreateBaseNode(SyntaxKind.AsExpression);
@@ -622,6 +660,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node UpdateAsExpression(Node node, Node expression, Node type)
     {
         return store.Expression(node) != expression
@@ -631,6 +670,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateNonNullExpression(Node expression)
     {
         var node = CreateBaseNode(SyntaxKind.NonNullExpression);
@@ -641,6 +681,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node UpdateNonNullExpression(Node node, Node expression)
     {
         if (UtilitiesPublic.IsNonNullChain(store, node))
@@ -653,6 +694,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateSatisfiesExpression(Node expression, Node type)
     {
         var node = CreateBaseNode(SyntaxKind.SatisfiesExpression);
@@ -665,6 +707,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node UpdateSatisfiesExpression(Node node, Node expression, Node type)
     {
         return store.Expression(node) != expression
@@ -674,6 +717,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateNonNullChain(Node expression)
     {
         var node = CreateBaseNode(SyntaxKind.NonNullExpression);
@@ -685,6 +729,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node UpdateNonNullChain(Node node, Node expression)
     {
         Debug.Assert((store.Flags(node) & NodeFlags.OptionalChain) != 0, "Cannot update a NonNullExpression using updateNonNullChain. Use updateNonNullExpression instead.");
@@ -694,6 +739,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateMetaProperty(SyntaxKind keywordToken, Node name)
     {
         var node = CreateBaseNode(SyntaxKind.MetaProperty);
@@ -721,6 +767,7 @@ internal sealed partial class NodeFactory
     //
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateTemplateSpan(Node expression, Node literal)
     {
         var node = CreateBaseNode(SyntaxKind.TemplateSpan);
@@ -733,6 +780,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateSemicolonClassElement()
     {
         var node = CreateBaseNode(SyntaxKind.SemicolonClassElement);
@@ -741,6 +789,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreatePartiallyEmittedExpression(Node expression, Node original = default)
     {
         var node = CreateBaseNode(SyntaxKind.PartiallyEmittedExpression);
@@ -753,6 +802,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node UpdatePartiallyEmittedExpression(Node node, Node expression)
     {
         return store.Expression(node) != expression

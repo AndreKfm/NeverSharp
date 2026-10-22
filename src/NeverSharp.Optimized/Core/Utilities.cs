@@ -13,6 +13,7 @@ namespace NeverSharp.Optimized;
 /// <summary>utilities.ts.</summary>
 internal static partial class Utilities
 {
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool PositionIsSynthesized(int pos)
     {
         // This is a fast way of testing the following conditions:
@@ -55,28 +56,33 @@ internal static partial class Utilities
 
     // Track O: a node's or a node list's range is set through its store (the TextRange versions above serve the
     // other text ranges).
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static Node SetTextRangePos(NodeStore store, Node node, int pos)
     {
         store.SetPos(node, pos);
         return node;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static Node SetTextRangeEnd(NodeStore store, Node node, int end)
     {
         store.SetEnd(node, end);
         return node;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static Node SetTextRangePosEnd(NodeStore store, Node node, int pos, int end)
     {
         return SetTextRangeEnd(store, SetTextRangePos(store, node, pos), end);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static Node SetTextRangePosWidth(NodeStore store, Node node, int pos, int width)
     {
         return SetTextRangePosEnd(store, node, pos, pos + width);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static NodeList SetTextRangePosEnd(NodeStore store, NodeList list, int pos, int end)
     {
         store.SetPos(list, pos);

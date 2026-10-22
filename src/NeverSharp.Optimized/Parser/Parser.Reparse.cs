@@ -37,6 +37,50 @@ internal sealed partial class Parser
     // A non-null result for NodeVisitor.ForEachChild: `return true` from a visitor ends the iteration.
     private static readonly object StopVisiting = new();
 
+    // The variable `pos` of reparseTopLevelAwait while the callback of its speculationHelper runs.
+    private int reparsePos;
+
+    // The callback of speculationHelper in reparseTopLevelAwait: reparses the statements from nextStatement on.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private bool ReparseStatements(ListBuilder statements, Node sourceFile, Node nextStatement)
+    {
+        var savedContextFlags = contextFlags;
+        contextFlags |= NodeFlags.AwaitContext;
+        scanner.ResetTokenState(store.Pos(nextStatement));
+        NextToken();
+
+        while (Token() != SyntaxKind.EndOfFileToken)
+        {
+            var startPos = scanner.GetTokenFullStart();
+            var statement = ParseListElement(ParsingContext.SourceElements, new F.ParseStatement());
+            store.Push(statements, statement);
+            if (startPos == scanner.GetTokenFullStart())
+            {
+                NextToken();
+            }
+
+            if (reparsePos >= 0)
+            {
+                var nonAwaitStatement = store.Element(store.Statements(sourceFile), reparsePos);
+                if (store.End(statement) == store.Pos(nonAwaitStatement))
+                {
+                    // done reparsing this section
+                    break;
+                }
+                if (store.End(statement) > store.Pos(nonAwaitStatement))
+                {
+                    // we ate into the next statement, so we must reparse it.
+                    reparsePos = FindNextStatementWithoutAwait(store.Statements(sourceFile), reparsePos + 1);
+                }
+            }
+        }
+
+        contextFlags = savedContextFlags;
+        // (TypeScript's callback returns undefined.)
+        return false;
+    }
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IntersectsIncrementalChange(Node node)
     {
         return intersectingChangeSet.Contains(node);
@@ -80,43 +124,10 @@ internal sealed partial class Parser
             }
 
             // reparse all statements between start and pos. We skip existing diagnostics for the same range and allow the parser to generate new ones.
-            SpeculationHelper(p =>
-            {
-                var savedContextFlags = contextFlags;
-                contextFlags |= NodeFlags.AwaitContext;
-                scanner.ResetTokenState(store.Pos(nextStatement));
-                NextToken();
-
-                while (Token() != SyntaxKind.EndOfFileToken)
-                {
-                    var startPos = scanner.GetTokenFullStart();
-                    var statement = ParseListElement(ParsingContext.SourceElements, static p => p.ParseStatement());
-                    store.Push(statements, statement);
-                    if (startPos == scanner.GetTokenFullStart())
-                    {
-                        NextToken();
-                    }
-
-                    if (pos >= 0)
-                    {
-                        var nonAwaitStatement = store.Element(store.Statements(sourceFile), pos);
-                        if (store.End(statement) == store.Pos(nonAwaitStatement))
-                        {
-                            // done reparsing this section
-                            break;
-                        }
-                        if (store.End(statement) > store.Pos(nonAwaitStatement))
-                        {
-                            // we ate into the next statement, so we must reparse it.
-                            pos = FindNextStatementWithoutAwait(store.Statements(sourceFile), pos + 1);
-                        }
-                    }
-                }
-
-                contextFlags = savedContextFlags;
-                // (TypeScript's callback returns undefined.)
-                return false;
-            }, SpeculationKind.Reparse);
+            // (Track O, O-NA: the callback is a struct; `pos`, which it advances, is the parser's field reparsePos meanwhile.)
+            reparsePos = pos;
+            SpeculationHelper<F.ReparseStatements, bool>(new F.ReparseStatements(statements, sourceFile, nextStatement), SpeculationKind.Reparse);
+            pos = reparsePos;
 
             // find the next statement containing an `await`
             start = pos >= 0 ? FindNextStatementWithAwait(store.Statements(sourceFile), pos) : -1;
@@ -143,36 +154,6 @@ internal sealed partial class Parser
         intersectingChangeSet.Clear();
         return factory.UpdateSourceFile(sourceFile, FactoryUtilitiesPublic.SetTextRange(store, NodeFactory.CreateNodeArray(store, statements), store.Statements(sourceFile)));
 
-        bool ContainsPossibleTopLevelAwait(Node node)
-        {
-            return (store.Flags(node) & NodeFlags.AwaitContext) == 0
-                && (store.TransformFlags(node) & TransformFlags.ContainsPossibleTopLevelAwait) != 0;
-        }
-
-        int FindNextStatementWithAwait(NodeList statements, int start)
-        {
-            for (var i = start; i < store.Length(statements); i++)
-            {
-                if (ContainsPossibleTopLevelAwait(store.Element(statements, i)))
-                {
-                    return i;
-                }
-            }
-            return -1;
-        }
-
-        int FindNextStatementWithoutAwait(NodeList statements, int start)
-        {
-            for (var i = start; i < store.Length(statements); i++)
-            {
-                if (!ContainsPossibleTopLevelAwait(store.Element(statements, i)))
-                {
-                    return i;
-                }
-            }
-            return -1;
-        }
-
         // TypeScript: the inner function currentNode, the syntax cursor of the reparse.
         Node ReparseCurrentNode(int position)
         {
@@ -183,6 +164,40 @@ internal sealed partial class Parser
             }
             return node;
         }
+    }
+
+    // The inner functions of reparseTopLevelAwait that its speculation callback also calls (Track O: methods).
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private bool ContainsPossibleTopLevelAwait(Node node)
+    {
+        return (store.Flags(node) & NodeFlags.AwaitContext) == 0
+            && (store.TransformFlags(node) & TransformFlags.ContainsPossibleTopLevelAwait) != 0;
+    }
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private int FindNextStatementWithAwait(NodeList statements, int start)
+    {
+        for (var i = start; i < store.Length(statements); i++)
+        {
+            if (ContainsPossibleTopLevelAwait(store.Element(statements, i)))
+            {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private int FindNextStatementWithoutAwait(NodeList statements, int start)
+    {
+        for (var i = start; i < store.Length(statements); i++)
+        {
+            if (!ContainsPossibleTopLevelAwait(store.Element(statements, i)))
+            {
+                return i;
+            }
+        }
+        return -1;
     }
 
     /// <summary>

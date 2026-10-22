@@ -10,6 +10,10 @@
     <Compile Include="$(RepoRoot)src/Generated/*.g.cs" LinkBase="Generated" />
   </ItemGroup>
   <ItemGroup>
+    <!-- NoAlloc allowlist of Track O (step O-NA): runtime members and the [NoAllocUnchecked] exceptions. -->
+    <AdditionalFiles Include="NeverSharp.Optimized.noalloc-allowlist.toml" />
+  </ItemGroup>
+  <ItemGroup>
     <!-- Ported code is internal; the gates, the dump tool, the drivers and the benchmarks reach it as for Track F. -->
     <InternalsVisibleTo Include="NeverSharp.Optimized.Tests" />
     <InternalsVisibleTo Include="NeverSharp.Dump.Optimized" />

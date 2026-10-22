@@ -54,7 +54,7 @@ internal sealed partial class Parser
                         expression = ParseTokenNode();
                         break;
                     case SyntaxKind.MinusToken:
-                        if (LookAhead(static p => p.NextToken() == SyntaxKind.NumericLiteral && p.NextToken() != SyntaxKind.ColonToken))
+                        if (LookAhead(new F.NextTokenIsNumericLiteralNotFollowedByColon()))
                         {
                             expression = ParsePrefixUnaryExpression();
                         }
@@ -65,7 +65,7 @@ internal sealed partial class Parser
                         break;
                     case SyntaxKind.NumericLiteral:
                     case SyntaxKind.StringLiteral:
-                        if (LookAhead(static p => p.NextToken() != SyntaxKind.ColonToken))
+                        if (LookAhead(new F.NextTokenIsNotColon()))
                         {
                             expression = ParseLiteralNode();
                             break;

@@ -88,6 +88,7 @@ internal sealed partial class Parser : BaseNodeFactory
 
     // The function scanError, passed to the scanner (TypeScript passes the same function object each time).
     private readonly ErrorCallback scanErrorCallback;
+    private readonly Action<int, int, DiagnosticMessage> reportPragmaDiagnosticCallback;
 
     private string fileName = null!;
     private NodeFlags sourceFlags;
@@ -201,8 +202,10 @@ internal sealed partial class Parser : BaseNodeFactory
     {
         factory = NodeFactory.CreateNodeFactory(NodeFactoryFlags.NoParenthesizerRules | NodeFactoryFlags.NoNodeConverters | NodeFactoryFlags.NoOriginalNode, this);
         scanErrorCallback = ScanError;
+        reportPragmaDiagnosticCallback = ReportPragmaDiagnostic;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node CountNode(Node node)
     {
         nodeCount++;
@@ -223,6 +226,7 @@ internal sealed partial class Parser : BaseNodeFactory
     Node BaseNodeFactory.CreateBaseNode(SyntaxKind kind) => CountNode(NewNode(store, kind));
 
     /// <summary>`new XConstructor(kind, /*pos*/ 0, /*end*/ 0)` (utilities.ts: Node, Token, Identifier constructors).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static Node NewNode(NodeStore store, SyntaxKind kind)
     {
         var node = store.Create(kind);
@@ -232,6 +236,7 @@ internal sealed partial class Parser : BaseNodeFactory
     }
 
     /// <summary>Makes <paramref name="nodeStore"/> the store the parser and its factory create nodes in.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal void UseStore(NodeStore nodeStore)
     {
         store = nodeStore;
@@ -316,6 +321,7 @@ internal sealed partial class Parser : BaseNodeFactory
         scanner.SetJSDocParsingMode(jsDocParsingMode);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private void ClearState()
     {
         // Clear out the text the scanner is pointing at, so it doesn't keep anything alive unnecessarily.
@@ -352,7 +358,7 @@ internal sealed partial class Parser : BaseNodeFactory
         // Prime the scanner.
         NextToken();
 
-        var statements = ParseList(ParsingContext.SourceElements, static p => p.ParseStatement());
+        var statements = ParseList(ParsingContext.SourceElements, new F.ParseStatement());
         Debug.Assert(Token() == SyntaxKind.EndOfFileToken);
         var endHasJSDoc = HasPrecedingJSDocComment();
         var endOfFileToken = WithJSDoc(ParseTokenNode(), endHasJSDoc);
@@ -361,7 +367,7 @@ internal sealed partial class Parser : BaseNodeFactory
 
         // A member of ReadonlyArray<T> isn't assignable to a member of T[] (and prevents a direct cast) - but this is where we set up those members so they can be readonly in the future
         ProcessCommentPragmas(store, sourceFile, sourceText);
-        ProcessPragmasIntoFields(store, sourceFile, ReportPragmaDiagnostic);
+        ProcessPragmasIntoFields(store, sourceFile, reportPragmaDiagnosticCallback);
 
         store.SetCommentDirectives(sourceFile, scanner.GetCommentDirectives());
         store.SetNodeCount(sourceFile, nodeCount);
@@ -380,13 +386,16 @@ internal sealed partial class Parser : BaseNodeFactory
         }
 
         return sourceFile;
-
-        void ReportPragmaDiagnostic(int pos, int end, DiagnosticMessage diagnostic)
-        {
-            parseDiagnostics.Add(Utilities.CreateDetachedDiagnostic(fileName, sourceText, pos, end, diagnostic));
-        }
     }
 
+    // The inner function reportPragmaDiagnostic of parseSourceFileWorker (Track O, O-NA: a method, its delegate created
+    // once per parser; it reads the state of the current parse).
+    private void ReportPragmaDiagnostic(int pos, int end, DiagnosticMessage diagnostic)
+    {
+        parseDiagnostics.Add(Utilities.CreateDetachedDiagnostic(fileName, sourceText, pos, end, diagnostic));
+    }
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node WithJSDoc(Node node, bool hasJSDoc)
     {
         if (!hasJSDoc)
@@ -395,8 +404,24 @@ internal sealed partial class Parser : BaseNodeFactory
         }
 
         Debug.Assert(store.JsDoc(node) == null); // Should only be called once per node
-        var jsDoc = Core.MapDefined(Utilities.GetJSDocCommentRanges(store, node, sourceText), (comment, _) => JSDocParserParseJSDocComment(node, comment.Pos, comment.End - comment.Pos));
-        if (jsDoc.Count != 0)
+        // TypeScript: `mapDefined(getJSDocCommentRanges(node, sourceText), comment => JSDocParser.parseJSDocComment(node,
+        // comment.pos, comment.end - comment.pos))`, set as the node's jsDoc if not empty. Track O (O-NA): the comment
+        // ranges of getJSDocCommentRanges are iterated without a list, and the jsDoc list starts with its first comment.
+        List<Node>? jsDoc = null;
+        if (Utilities.HasTrailingJSDocCommentRanges(store.Kind(node)))
+        {
+            var trailing = new Scanner.CommentRangeIterator(sourceText, store.Pos(node), /*trailing*/ true);
+            while (trailing.MoveNext(out var range))
+            {
+                jsDoc = AddJSDocComment(jsDoc, node, range);
+            }
+        }
+        var leading = new Scanner.CommentRangeIterator(sourceText, store.Pos(node), /*trailing*/ false);
+        while (leading.MoveNext(out var range))
+        {
+            jsDoc = AddJSDocComment(jsDoc, node, range);
+        }
+        if (jsDoc != null)
         {
             store.SetJsDoc(node, jsDoc);
         }
@@ -408,6 +433,27 @@ internal sealed partial class Parser : BaseNodeFactory
         return node;
     }
 
+    // A comment range of getJSDocCommentRanges (it passes the filter there) parsed and added to the node's jsDoc list.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private List<Node>? AddJSDocComment(List<Node>? jsDoc, Node node, CommentRange range)
+    {
+        if (!Utilities.IsJSDocCommentRange(sourceText, range, store.End(node)))
+        {
+            return jsDoc;
+        }
+        var comment = JSDocParserParseJSDocComment(node, range.Pos, range.End - range.Pos);
+        return comment.IsNone ? jsDoc : AppendJSDoc(jsDoc, comment);
+    }
+
+    [NoAllocUnchecked("per-file result: the jsDoc list of a node")]
+    private static List<Node> AppendJSDoc(List<Node>? jsDoc, Node comment)
+    {
+        jsDoc ??= [];
+        jsDoc.Add(comment);
+        return jsDoc;
+    }
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static void FixupParentReferences(NodeStore store, Node rootNode)
     {
         // normally parent references are set during binding. However, for clients that only need
@@ -462,6 +508,7 @@ internal sealed partial class Parser : BaseNodeFactory
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private void SetContextFlag(bool val, NodeFlags flag)
     {
         if (val)
@@ -474,27 +521,49 @@ internal sealed partial class Parser : BaseNodeFactory
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private void SetDisallowInContext(bool val)
     {
         SetContextFlag(val, NodeFlags.DisallowInContext);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private void SetYieldContext(bool val)
     {
         SetContextFlag(val, NodeFlags.YieldContext);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private void SetDecoratorContext(bool val)
     {
         SetContextFlag(val, NodeFlags.DecoratorContext);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private void SetAwaitContext(bool val)
     {
         SetContextFlag(val, NodeFlags.AwaitContext);
     }
 
-    private T DoOutsideOfContext<T>(NodeFlags context, Func<Parser, T> func)
+    // Track O (O-NA): the functions passed to the context helpers below are callback structs (IParserCallback); the
+    // overloads without a result type argument are for callbacks that return a node.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private Node DoOutsideOfContext<TCallback>(NodeFlags context, TCallback func)
+        where TCallback : struct, IParserCallback<Node>
+    {
+        return DoOutsideOfContext<TCallback, Node>(context, func);
+    }
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private Node DoInsideOfContext<TCallback>(NodeFlags context, TCallback func)
+        where TCallback : struct, IParserCallback<Node>
+    {
+        return DoInsideOfContext<TCallback, Node>(context, func);
+    }
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private T DoOutsideOfContext<TCallback, T>(NodeFlags context, TCallback func)
+        where TCallback : struct, IParserCallback<T>
     {
         // contextFlagsToClear will contain only the context flags that are
         // currently set that we need to temporarily clear
@@ -507,17 +576,19 @@ internal sealed partial class Parser : BaseNodeFactory
         {
             // clear the requested context flags
             SetContextFlag(/*val*/ false, contextFlagsToClear);
-            var result = func(this);
+            var result = func.Invoke(this);
             // restore the context flags we just cleared
             SetContextFlag(/*val*/ true, contextFlagsToClear);
             return result;
         }
 
         // no need to do anything special as we are not in any of the requested contexts
-        return func(this);
+        return func.Invoke(this);
     }
 
-    private T DoInsideOfContext<T>(NodeFlags context, Func<Parser, T> func)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private T DoInsideOfContext<TCallback, T>(NodeFlags context, TCallback func)
+        where TCallback : struct, IParserCallback<T>
     {
         // contextFlagsToSet will contain only the context flags that
         // are not currently set that we need to temporarily enable.
@@ -530,101 +601,182 @@ internal sealed partial class Parser : BaseNodeFactory
         {
             // set the requested context flags
             SetContextFlag(/*val*/ true, contextFlagsToSet);
-            var result = func(this);
+            var result = func.Invoke(this);
             // reset the context flags we just set
             SetContextFlag(/*val*/ false, contextFlagsToSet);
             return result;
         }
 
         // no need to do anything special as we are already in all of the requested contexts
-        return func(this);
+        return func.Invoke(this);
     }
 
-    private T AllowInAnd<T>(Func<Parser, T> func)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private Node AllowInAnd<TCallback>(TCallback func)
+        where TCallback : struct, IParserCallback<Node>
     {
-        return DoOutsideOfContext(NodeFlags.DisallowInContext, func);
+        return DoOutsideOfContext<TCallback, Node>(NodeFlags.DisallowInContext, func);
     }
 
-    private T DisallowInAnd<T>(Func<Parser, T> func)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private T AllowInAnd<TCallback, T>(TCallback func)
+        where TCallback : struct, IParserCallback<T>
     {
-        return DoInsideOfContext(NodeFlags.DisallowInContext, func);
+        return DoOutsideOfContext<TCallback, T>(NodeFlags.DisallowInContext, func);
     }
 
-    private T AllowConditionalTypesAnd<T>(Func<Parser, T> func)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private Node DisallowInAnd<TCallback>(TCallback func)
+        where TCallback : struct, IParserCallback<Node>
     {
-        return DoOutsideOfContext(NodeFlags.DisallowConditionalTypesContext, func);
+        return DoInsideOfContext<TCallback, Node>(NodeFlags.DisallowInContext, func);
     }
 
-    private T DisallowConditionalTypesAnd<T>(Func<Parser, T> func)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private Node AllowConditionalTypesAnd<TCallback>(TCallback func)
+        where TCallback : struct, IParserCallback<Node>
     {
-        return DoInsideOfContext(NodeFlags.DisallowConditionalTypesContext, func);
+        return DoOutsideOfContext<TCallback, Node>(NodeFlags.DisallowConditionalTypesContext, func);
     }
 
-    private T DoInYieldContext<T>(Func<Parser, T> func)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private Node DisallowConditionalTypesAnd<TCallback>(TCallback func)
+        where TCallback : struct, IParserCallback<Node>
     {
-        return DoInsideOfContext(NodeFlags.YieldContext, func);
+        return DoInsideOfContext<TCallback, Node>(NodeFlags.DisallowConditionalTypesContext, func);
     }
 
-    private T DoInDecoratorContext<T>(Func<Parser, T> func)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private Node DoInYieldContext<TCallback>(TCallback func)
+        where TCallback : struct, IParserCallback<Node>
     {
-        return DoInsideOfContext(NodeFlags.DecoratorContext, func);
+        return DoInsideOfContext<TCallback, Node>(NodeFlags.YieldContext, func);
     }
 
-    private T DoInAwaitContext<T>(Func<Parser, T> func)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private Node DoInDecoratorContext<TCallback>(TCallback func)
+        where TCallback : struct, IParserCallback<Node>
     {
-        return DoInsideOfContext(NodeFlags.AwaitContext, func);
+        return DoInsideOfContext<TCallback, Node>(NodeFlags.DecoratorContext, func);
     }
 
-    private T DoOutsideOfAwaitContext<T>(Func<Parser, T> func)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private T DoInAwaitContext<TCallback, T>(TCallback func)
+        where TCallback : struct, IParserCallback<T>
     {
-        return DoOutsideOfContext(NodeFlags.AwaitContext, func);
+        return DoInsideOfContext<TCallback, T>(NodeFlags.AwaitContext, func);
     }
 
-    private T DoInYieldAndAwaitContext<T>(Func<Parser, T> func)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private T DoOutsideOfAwaitContext<TCallback, T>(TCallback func)
+        where TCallback : struct, IParserCallback<T>
     {
-        return DoInsideOfContext(NodeFlags.YieldContext | NodeFlags.AwaitContext, func);
+        return DoOutsideOfContext<TCallback, T>(NodeFlags.AwaitContext, func);
     }
 
-    private T DoOutsideOfYieldAndAwaitContext<T>(Func<Parser, T> func)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private Node DoInYieldAndAwaitContext<TCallback>(TCallback func)
+        where TCallback : struct, IParserCallback<Node>
     {
-        return DoOutsideOfContext(NodeFlags.YieldContext | NodeFlags.AwaitContext, func);
+        return DoInsideOfContext<TCallback, Node>(NodeFlags.YieldContext | NodeFlags.AwaitContext, func);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private T DoOutsideOfYieldAndAwaitContext<TCallback, T>(TCallback func)
+        where TCallback : struct, IParserCallback<T>
+    {
+        return DoOutsideOfContext<TCallback, T>(NodeFlags.YieldContext | NodeFlags.AwaitContext, func);
+    }
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool InContext(NodeFlags flags)
     {
         return (contextFlags & flags) != 0;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool InYieldContext()
     {
         return InContext(NodeFlags.YieldContext);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool InDisallowInContext()
     {
         return InContext(NodeFlags.DisallowInContext);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool InDisallowConditionalTypesContext()
     {
         return InContext(NodeFlags.DisallowConditionalTypesContext);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool InDecoratorContext()
     {
         return InContext(NodeFlags.DecoratorContext);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool InAwaitContext()
     {
         return InContext(NodeFlags.AwaitContext);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private DiagnosticWithDetachedLocation? ParseErrorAtCurrentToken(DiagnosticMessage message, params object?[] args)
     {
         return ParseErrorAt(scanner.GetTokenStart(), scanner.GetTokenEnd(), message, args);
     }
 
+    // Track O (O-NA): overloads with string arguments instead of a params array, so the callers allocate no array (the
+    // diagnostic and its arguments are created on the error path below).
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private DiagnosticWithDetachedLocation? ParseErrorAtCurrentToken(DiagnosticMessage message, string? arg0)
+    {
+        return ParseErrorAtPositionWithArguments(scanner.GetTokenStart(), scanner.GetTokenEnd() - scanner.GetTokenStart(), message, arg0, null, 1);
+    }
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private DiagnosticWithDetachedLocation? ParseErrorAtCurrentToken(DiagnosticMessage message, string? arg0, string? arg1)
+    {
+        return ParseErrorAtPositionWithArguments(scanner.GetTokenStart(), scanner.GetTokenEnd() - scanner.GetTokenStart(), message, arg0, arg1, 2);
+    }
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private DiagnosticWithDetachedLocation? ParseErrorAt(int start, int end, DiagnosticMessage message, string? arg0)
+    {
+        return ParseErrorAtPositionWithArguments(start, end - start, message, arg0, null, 1);
+    }
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private DiagnosticWithDetachedLocation? ParseErrorAt(int start, int end, DiagnosticMessage message, string? arg0, string? arg1)
+    {
+        return ParseErrorAtPositionWithArguments(start, end - start, message, arg0, arg1, 2);
+    }
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private void ParseErrorAtRange(Node range, DiagnosticMessage message, string? arg0)
+    {
+        ParseErrorAtPositionWithArguments(store.Pos(range), store.End(range) - store.Pos(range), message, arg0, null, 1);
+    }
+
+    // `parseErrorAt(start, end, message, getTextOfNodeFromSourceText(sourceText, node))` (Track O: the text is taken on
+    // the error path).
+    [NoAllocUnchecked("error path: the message names the text of a node")]
+    private void ParseErrorWithTextOfNode(int start, int end, DiagnosticMessage message, Node node)
+    {
+        ParseErrorAt(start, end, message, Utilities.GetTextOfNodeFromSourceText(store, sourceText, node));
+    }
+
+    [NoAllocUnchecked("error path: creates a diagnostic and its argument array")]
+    private DiagnosticWithDetachedLocation? ParseErrorAtPositionWithArguments(int start, int length, DiagnosticMessage message, string? arg0, string? arg1, int count)
+    {
+        return count == 1 ? ParseErrorAtPosition(start, length, message, arg0) : ParseErrorAtPosition(start, length, message, arg0, arg1);
+    }
+
+    [NoAllocUnchecked("error path: creates a diagnostic")]
     private DiagnosticWithDetachedLocation? ParseErrorAtPosition(int start, int length, DiagnosticMessage message, params object?[] args)
     {
         // Don't report another error if it would just be at the same position as the last error.
@@ -642,11 +794,13 @@ internal sealed partial class Parser : BaseNodeFactory
         return result;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private DiagnosticWithDetachedLocation? ParseErrorAt(int start, int end, DiagnosticMessage message, params object?[] args)
     {
         return ParseErrorAtPosition(start, end - start, message, args);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private void ParseErrorAtRange(Node range, DiagnosticMessage message, params object?[] args)
     {
         ParseErrorAt(store.Pos(range), store.End(range), message, args);
@@ -659,11 +813,13 @@ internal sealed partial class Parser : BaseNodeFactory
         ParseErrorAtPosition(scanner.GetTokenEnd(), length, message, arg0);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private int GetNodePos()
     {
         return scanner.GetTokenFullStart();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool HasPrecedingJSDocComment()
     {
         return scanner.HasPrecedingJSDocComment();
@@ -675,22 +831,27 @@ internal sealed partial class Parser : BaseNodeFactory
     // token (e.g. a call to nextToken() changes the current token but the checker doesn't
     // reason about this side effect).  Mainstream VMs inline simple functions like this, so
     // there is no performance penalty.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private SyntaxKind Token()
     {
         return currentToken;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private SyntaxKind NextTokenWithoutCheck()
     {
         return currentToken = scanner.Scan();
     }
 
-    private T NextTokenAnd<T>(Func<Parser, T> func)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private Node NextTokenAnd<TCallback>(TCallback func)
+        where TCallback : struct, IParserCallback<Node>
     {
         NextToken();
-        return func(this);
+        return func.Invoke(this);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private SyntaxKind NextToken()
     {
         // if the keyword had an escape
@@ -702,51 +863,61 @@ internal sealed partial class Parser : BaseNodeFactory
         return NextTokenWithoutCheck();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private SyntaxKind NextTokenJSDoc()
     {
         return currentToken = scanner.ScanJsDocToken();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private SyntaxKind NextJSDocCommentTextToken(bool inBackticks)
     {
         return currentToken = scanner.ScanJSDocCommentTextToken(inBackticks);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private SyntaxKind ReScanGreaterToken()
     {
         return currentToken = scanner.ReScanGreaterToken();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private SyntaxKind ReScanSlashToken()
     {
         return currentToken = scanner.ReScanSlashToken();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private SyntaxKind ReScanTemplateToken(bool isTaggedTemplate)
     {
         return currentToken = scanner.ReScanTemplateToken(isTaggedTemplate);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private SyntaxKind ReScanLessThanToken()
     {
         return currentToken = scanner.ReScanLessThanToken();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private SyntaxKind ReScanHashToken()
     {
         return currentToken = scanner.ReScanHashToken();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private SyntaxKind ScanJsxIdentifier()
     {
         return currentToken = scanner.ScanJsxIdentifier();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private SyntaxKind ScanJsxText()
     {
         return currentToken = scanner.ScanJsxToken();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private SyntaxKind ScanJsxAttributeValue()
     {
         return currentToken = scanner.ScanJsxAttributeValue();
@@ -754,88 +925,44 @@ internal sealed partial class Parser : BaseNodeFactory
 
     /// <summary>
     /// The scanner's lookAhead and tryScan take a callback without arguments, the parser's callbacks take the parser
-    /// (as typescript-go's `lookAhead(callback func(p *Parser) bool)`, internal/parser/parser.go, which passes method
-    /// expressions such as `(*Parser).nextTokenIsSlash` instead of closures). The adapter hands the parser's callback
-    /// to the scanner through one delegate per adapter instead of a closure per call.
+    /// (as typescript-go's `lookAhead(callback func(p *Parser) bool)`, internal/parser/parser.go). Track O (O-NA): both
+    /// are structs; this one hands the parser's callback to the scanner.
     /// </summary>
-    private sealed class SpeculationAdapter<T>
+    private readonly struct ScannerSpeculation<TCallback, T> : IScannerCallback<T>
+        where TCallback : struct, IParserCallback<T>
     {
         private readonly Parser parser;
-        private readonly Func<T> invoke;
-        private Func<Parser, T>? callback;
+        private readonly TCallback callback;
 
-        internal SpeculationAdapter(Parser parser)
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+        internal ScannerSpeculation(Parser parser, TCallback callback)
         {
             this.parser = parser;
-            invoke = Run;
-        }
-
-        internal Func<T> Prepare(Func<Parser, T> callback)
-        {
             this.callback = callback;
-            return invoke;
         }
 
-        private T Run()
-        {
-            // Read before running: the callback may speculate again through this adapter.
-            var cb = callback!;
-            callback = null;
-            return cb(parser);
-        }
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+        public T Invoke() => callback.Invoke(parser);
     }
 
-    private SpeculationAdapter<bool>? boolSpeculationAdapter;
-    private SpeculationAdapter<Tristate>? tristateSpeculationAdapter;
-    private SpeculationAdapter<object?>? objectSpeculationAdapter;
-    private SpeculationAdapter<Node>? nodeSpeculationAdapter;
-    private SpeculationAdapter<NodeList>? listSpeculationAdapter;
-
-    /// <summary>`scanner.lookAhead(callback)` or `scanner.tryScan(callback)` with the parser's callback.</summary>
-    private T ScannerSpeculate<T>(Func<Parser, T> callback, bool isLookahead)
+    // `() => scanner.reScanInvalidIdentifier() === SyntaxKind.Identifier` (createIdentifier).
+    private readonly struct ReScanInvalidIdentifierIsIdentifier : IScannerCallback<bool>
     {
-        if (typeof(T) == typeof(bool))
+        private readonly Scanner scanner;
+
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+        internal ReScanInvalidIdentifierIsIdentifier(Scanner scanner)
         {
-            var adapter = boolSpeculationAdapter ??= new SpeculationAdapter<bool>(this);
-            var invoke = adapter.Prepare((Func<Parser, bool>)(object)callback);
-            return (T)(object)(isLookahead ? scanner.LookAhead(invoke) : scanner.TryScan(invoke));
+            this.scanner = scanner;
         }
-        if (typeof(T) == typeof(Tristate))
-        {
-            var adapter = tristateSpeculationAdapter ??= new SpeculationAdapter<Tristate>(this);
-            var invoke = adapter.Prepare((Func<Parser, Tristate>)(object)callback);
-            return (T)(object)(isLookahead ? scanner.LookAhead(invoke) : scanner.TryScan(invoke));
-        }
-        if (typeof(T) == typeof(Node))
-        {
-            var adapter = nodeSpeculationAdapter ??= new SpeculationAdapter<Node>(this);
-            var invoke = adapter.Prepare((Func<Parser, Node>)(object)callback);
-            return (T)(object)(isLookahead ? scanner.LookAhead(invoke) : scanner.TryScan(invoke));
-        }
-        if (typeof(T) == typeof(NodeList))
-        {
-            var adapter = listSpeculationAdapter ??= new SpeculationAdapter<NodeList>(this);
-            var invoke = adapter.Prepare((Func<Parser, NodeList>)(object)callback);
-            return (T)(object)(isLookahead ? scanner.LookAhead(invoke) : scanner.TryScan(invoke));
-        }
-        if (!typeof(T).IsValueType)
-        {
-            // Func<Parser, TNode> converts to Func<Parser, object?> by delegate variance (no allocation).
-            var adapter = objectSpeculationAdapter ??= new SpeculationAdapter<object?>(this);
-            var invoke = adapter.Prepare((Func<Parser, object?>)(object)callback);
-            return (T)(isLookahead ? scanner.LookAhead(invoke) : scanner.TryScan(invoke))!;
-        }
-        return ScannerSpeculateWithClosure(callback, isLookahead);
+
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+        public bool Invoke() => scanner.ReScanInvalidIdentifier() == SyntaxKind.Identifier;
     }
 
-    // Other value types (none at present): a closure per call. (A separate method, so that the closure of the
-    // fallback is not allocated on the paths above.)
-    private T ScannerSpeculateWithClosure<T>(Func<Parser, T> callback, bool isLookahead)
-    {
-        return isLookahead ? scanner.LookAhead(() => callback(this)) : scanner.TryScan(() => callback(this));
-    }
-
-    private T SpeculationHelper<T>(Func<Parser, T> callback, SpeculationKind speculationKind)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private T SpeculationHelper<TCallback, T>(TCallback callback, SpeculationKind speculationKind)
+        where TCallback : struct, IParserCallback<T>
     {
         // Keep track of the state we'll need to rollback to if lookahead fails (or if the
         // caller asked us to always reset our state).
@@ -855,18 +982,21 @@ internal sealed partial class Parser : BaseNodeFactory
         // If we're only looking ahead, then tell the scanner to only lookahead as well.
         // Otherwise, if we're actually speculatively parsing, then tell the scanner to do the
         // same.
-        var result = ScannerSpeculate(callback, /*isLookahead*/ speculationKind != SpeculationKind.TryParse);
+        var speculation = new ScannerSpeculation<TCallback, T>(this, callback);
+        var result = speculationKind != SpeculationKind.TryParse
+            ? scanner.LookAhead<ScannerSpeculation<TCallback, T>, T>(speculation)
+            : scanner.TryScan<ScannerSpeculation<TCallback, T>, T>(speculation);
 
         Debug.Assert(saveContextFlags == contextFlags);
 
         // If our callback returned something 'falsy' or we're just looking ahead,
         // then unconditionally restore us to where we were.
-        if (!IsTruthy(result) || speculationKind != SpeculationKind.TryParse)
+        if (!Core.IsTruthyValue(result) || speculationKind != SpeculationKind.TryParse)
         {
             currentToken = saveToken;
             if (speculationKind != SpeculationKind.Reparse)
             {
-                parseDiagnostics.RemoveRange(saveParseDiagnosticsLength, parseDiagnostics.Count - saveParseDiagnosticsLength);
+                RemoveParseDiagnosticsFrom(saveParseDiagnosticsLength);
 
                 // Nothing refers to the nodes of a rolled-back lookahead or tryParse (a reparse keeps its nodes).
                 store.Truncate(saveStoreMark);
@@ -877,14 +1007,34 @@ internal sealed partial class Parser : BaseNodeFactory
         return result;
     }
 
+    // `parseDiagnostics.length = length` (the diagnostics of a rolled-back speculation are dropped).
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private void RemoveParseDiagnosticsFrom(int length)
+    {
+        if (parseDiagnostics.Count > length)
+        {
+            parseDiagnostics.RemoveRange(length, parseDiagnostics.Count - length);
+        }
+    }
+
     /// <summary>
     /// Invokes the provided callback then unconditionally restores the parser to the state it
     /// was in immediately prior to invoking the callback.  The result of invoking the callback
     /// is returned from this function.
+    /// (Track O: for callbacks that return a boolean; the overload with a result type argument for the others.)
     /// </summary>
-    private T LookAhead<T>(Func<Parser, T> callback)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private bool LookAhead<TCallback>(TCallback callback)
+        where TCallback : struct, IParserCallback<bool>
     {
-        return SpeculationHelper(callback, SpeculationKind.Lookahead);
+        return SpeculationHelper<TCallback, bool>(callback, SpeculationKind.Lookahead);
+    }
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private T LookAhead<TCallback, T>(TCallback callback)
+        where TCallback : struct, IParserCallback<T>
+    {
+        return SpeculationHelper<TCallback, T>(callback, SpeculationKind.Lookahead);
     }
 
     /// <summary>
@@ -892,12 +1042,23 @@ internal sealed partial class Parser : BaseNodeFactory
     /// the parser to the state it was in immediately prior to invoking the callback.  If the
     /// callback returns something truthy, then the parser state is not rolled back.  The result
     /// of invoking the callback is returned from this function.
+    /// (Track O: for callbacks that return a node; the overload with a result type argument for the others.)
     /// </summary>
-    private T TryParse<T>(Func<Parser, T> callback)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private Node TryParse<TCallback>(TCallback callback)
+        where TCallback : struct, IParserCallback<Node>
     {
-        return SpeculationHelper(callback, SpeculationKind.TryParse);
+        return SpeculationHelper<TCallback, Node>(callback, SpeculationKind.TryParse);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private T TryParse<TCallback, T>(TCallback callback)
+        where TCallback : struct, IParserCallback<T>
+    {
+        return SpeculationHelper<TCallback, T>(callback, SpeculationKind.TryParse);
+    }
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsBindingIdentifier()
     {
         if (Token() == SyntaxKind.Identifier)
@@ -910,6 +1071,7 @@ internal sealed partial class Parser : BaseNodeFactory
     }
 
     // Ignore strict mode flag because we will report an error in type checker instead.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsIdentifier()
     {
         if (Token() == SyntaxKind.Identifier)
@@ -934,6 +1096,7 @@ internal sealed partial class Parser : BaseNodeFactory
         return Token() > SyntaxKind.LastReservedWord;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool ParseExpected(SyntaxKind kind, DiagnosticMessage? diagnosticMessage = null, bool shouldAdvance = true)
     {
         if (Token() == kind)
@@ -978,6 +1141,7 @@ internal sealed partial class Parser : BaseNodeFactory
     /// known common variants of a missing semicolon, such as from a mispelled names.
     /// </summary>
     /// <param name="node">Node preceding the expected semicolon location.</param>
+    [NoAllocUnchecked("error path: finds a better message for a missing semicolon (strings, spelling suggestions)")]
     private void ParseErrorForMissingSemicolonAfter(Node node)
     {
         // Tagged template literals are sometimes used in places where only simple strings are allowed, i.e.:
@@ -1055,6 +1219,7 @@ internal sealed partial class Parser : BaseNodeFactory
     /// <param name="nameDiagnostic">Diagnostic to report for all other cases.</param>
     /// <param name="blankDiagnostic">Diagnostic to report for the case of the name being blank (matched tokenIfBlankName).</param>
     /// <param name="tokenIfBlankName">Current token if the name was invalid for being blank (not provided / skipped).</param>
+    [NoAllocUnchecked("error path: the message names the token text")]
     private void ParseErrorForInvalidName(DiagnosticMessage nameDiagnostic, DiagnosticMessage blankDiagnostic, SyntaxKind tokenIfBlankName)
     {
         if (Token() == tokenIfBlankName)
@@ -1080,6 +1245,7 @@ internal sealed partial class Parser : BaseNodeFactory
         return null;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private void ParseSemicolonAfterPropertyName(Node name, Node type, Node initializer)
     {
         if (Token() == SyntaxKind.AtToken && !scanner.HasPrecedingLineBreak())
@@ -1122,6 +1288,7 @@ internal sealed partial class Parser : BaseNodeFactory
         ParseErrorForMissingSemicolonAfter(name);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool ParseExpectedJSDoc(SyntaxKind kind)
     {
         if (Token() == kind)
@@ -1134,6 +1301,7 @@ internal sealed partial class Parser : BaseNodeFactory
         return false;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private void ParseExpectedMatchingBrackets(SyntaxKind openKind, SyntaxKind closeKind, bool openParsed, int openPosition)
     {
         if (Token() == closeKind)
@@ -1148,12 +1316,19 @@ internal sealed partial class Parser : BaseNodeFactory
         }
         if (lastError != null)
         {
-            Utilities.AddRelatedInfo(
-                lastError,
-                Utilities.CreateDetachedDiagnostic(fileName, sourceText, openPosition, 1, Diagnostics.The_parser_expected_to_find_a_1_to_match_the_0_token_here, Scanner.TokenToString(openKind), Scanner.TokenToString(closeKind)));
+            AddMatchingBracketInfo(lastError, openKind, closeKind, openPosition);
         }
     }
 
+    [NoAllocUnchecked("error path: adds related information to a diagnostic")]
+    private void AddMatchingBracketInfo(DiagnosticWithDetachedLocation lastError, SyntaxKind openKind, SyntaxKind closeKind, int openPosition)
+    {
+        Utilities.AddRelatedInfo(
+            lastError,
+            Utilities.CreateDetachedDiagnostic(fileName, sourceText, openPosition, 1, Diagnostics.The_parser_expected_to_find_a_1_to_match_the_0_token_here, Scanner.TokenToString(openKind), Scanner.TokenToString(closeKind)));
+    }
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool ParseOptional(SyntaxKind t)
     {
         if (Token() == t)
@@ -1164,6 +1339,7 @@ internal sealed partial class Parser : BaseNodeFactory
         return false;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseOptionalToken(SyntaxKind t)
     {
         if (Token() == t)
@@ -1173,6 +1349,7 @@ internal sealed partial class Parser : BaseNodeFactory
         return default;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseOptionalTokenJSDoc(SyntaxKind t)
     {
         if (Token() == t)
@@ -1182,11 +1359,13 @@ internal sealed partial class Parser : BaseNodeFactory
         return default;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseExpectedToken(SyntaxKind t, DiagnosticMessage? diagnosticMessage = null, string? arg0 = null)
     {
         return (ParseOptionalToken(t) is { IsNone: false } __t1 ? __t1 : CreateMissingNode(t, /*reportAtCurrentPosition*/ false, diagnosticMessage ?? Diagnostics._0_expected, !string.IsNullOrEmpty(arg0) ? arg0 : Scanner.TokenToString(t)!));
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseExpectedTokenJSDoc(SyntaxKind t)
     {
         var optional = ParseOptionalTokenJSDoc(t);
@@ -1198,6 +1377,7 @@ internal sealed partial class Parser : BaseNodeFactory
         return CreateMissingNode(t, /*reportAtCurrentPosition*/ false, Diagnostics._0_expected, Scanner.TokenToString(t));
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseTokenNode()
     {
         var pos = GetNodePos();
@@ -1206,6 +1386,7 @@ internal sealed partial class Parser : BaseNodeFactory
         return FinishNode(factory.CreateToken(kind), pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseTokenNodeJSDoc()
     {
         var pos = GetNodePos();
@@ -1214,6 +1395,7 @@ internal sealed partial class Parser : BaseNodeFactory
         return FinishNode(factory.CreateToken(kind), pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool CanParseSemicolon()
     {
         // If there's a real semicolon, then we can always parse it out.
@@ -1226,6 +1408,7 @@ internal sealed partial class Parser : BaseNodeFactory
         return Token() == SyntaxKind.CloseBraceToken || Token() == SyntaxKind.EndOfFileToken || scanner.HasPrecedingLineBreak();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool TryParseSemicolon()
     {
         if (!CanParseSemicolon())
@@ -1242,6 +1425,7 @@ internal sealed partial class Parser : BaseNodeFactory
         return true;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool ParseSemicolon()
     {
         return TryParseSemicolon() || ParseExpected(SyntaxKind.SemicolonToken);
@@ -1251,6 +1435,7 @@ internal sealed partial class Parser : BaseNodeFactory
     /// TypeScript: `createNodeArray(elements: T[], pos, end?, hasTrailingComma?)`. The elements are a plain array: a
     /// list under construction (Track O, step O7a), which the list store copies into its arena.
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private NodeList CreateNodeArray(ListBuilder elements, int pos, int? end = null, bool? hasTrailingComma = null)
     {
         var array = NodeFactory.CreateNodeArray(store, elements, hasTrailingComma);
@@ -1259,6 +1444,7 @@ internal sealed partial class Parser : BaseNodeFactory
     }
 
     /// <summary>`createNodeArray([...], pos, end?)` with an array literal.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private NodeList CreateNodeArray(ReadOnlySpan<Node> elements, int pos, int? end = null)
     {
         var array = NodeFactory.CreateNodeArray(store, elements);
@@ -1266,6 +1452,7 @@ internal sealed partial class Parser : BaseNodeFactory
         return array;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node FinishNode(Node node, int pos, int? end = null)
     {
         Utilities.SetTextRangePosEnd(store, node, pos, end ?? scanner.GetTokenFullStart());
@@ -1286,6 +1473,7 @@ internal sealed partial class Parser : BaseNodeFactory
         return node;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node CreateMissingNode(SyntaxKind kind, bool reportAtCurrentPosition, DiagnosticMessage? diagnosticMessage = null, params object?[] args)
     {
         if (reportAtCurrentPosition)
@@ -1297,6 +1485,29 @@ internal sealed partial class Parser : BaseNodeFactory
             ParseErrorAtCurrentToken(diagnosticMessage, args);
         }
 
+        return CreateMissingNodeWorker(kind);
+    }
+
+    // Track O (O-NA): createMissingNode with one string argument for the message (no params array).
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private Node CreateMissingNode(SyntaxKind kind, bool reportAtCurrentPosition, DiagnosticMessage? diagnosticMessage, string? arg0)
+    {
+        if (reportAtCurrentPosition)
+        {
+            ParseErrorAtPositionWithArguments(scanner.GetTokenFullStart(), 0, diagnosticMessage!, arg0, null, 1);
+        }
+        else if (diagnosticMessage != null)
+        {
+            ParseErrorAtCurrentToken(diagnosticMessage, arg0);
+        }
+
+        return CreateMissingNodeWorker(kind);
+    }
+
+    // The node createMissingNode creates.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private Node CreateMissingNodeWorker(SyntaxKind kind)
+    {
         var pos = GetNodePos();
         var result = kind == SyntaxKind.Identifier ? factory.CreateIdentifier(TextRef.Empty, /*originalKeywordKind*/ null) :
             UtilitiesPublic.IsTemplateLiteralKind(kind) ? factory.CreateTemplateLiteralLikeNode(kind, TextRef.Empty, TextRef.Empty, /*templateFlags*/ null) :
@@ -1308,6 +1519,7 @@ internal sealed partial class Parser : BaseNodeFactory
     }
 
     // Track O (O5a): the interning table of the parse's texts (TextTable.Intern), keyed by the characters of a span.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private TextRef InternIdentifier(TextRef text)
     {
         return texts.Intern(text);
@@ -1316,6 +1528,7 @@ internal sealed partial class Parser : BaseNodeFactory
     // An identifier that starts with two underscores has an extra underscore character prepended to it to avoid issues
     // with magic property names like '__proto__'. The 'identifiers' object is used to share a single string instance for
     // each identifier in order to reduce memory consumption.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node CreateIdentifier(bool isIdentifier, DiagnosticMessage? diagnosticMessage = null, DiagnosticMessage? privateIdentifierDiagnosticMessage = null)
     {
         if (isIdentifier)
@@ -1336,12 +1549,19 @@ internal sealed partial class Parser : BaseNodeFactory
             return CreateIdentifier(/*isIdentifier*/ true);
         }
 
-        if (Token() == SyntaxKind.Unknown && scanner.TryScan(() => scanner.ReScanInvalidIdentifier() == SyntaxKind.Identifier))
+        if (Token() == SyntaxKind.Unknown && scanner.TryScan<ReScanInvalidIdentifierIsIdentifier, bool>(new ReScanInvalidIdentifierIsIdentifier(scanner)))
         {
             // Scanner has already recorded an 'Invalid character' error, so no need to add another from the parser.
             return CreateIdentifier(/*isIdentifier*/ true);
         }
 
+        return CreateMissingIdentifier(diagnosticMessage);
+    }
+
+    // The missing identifier of createIdentifier (Track O: a method of its own, as the message needs the token text).
+    [NoAllocUnchecked("error path: the message names the token text")]
+    private Node CreateMissingIdentifier(DiagnosticMessage? diagnosticMessage)
+    {
         identifierCount++;
         // Only for end of file because the error gets reported incorrectly on embedded script tags.
         var reportAtCurrentPosition = Token() == SyntaxKind.EndOfFileToken;
@@ -1356,21 +1576,25 @@ internal sealed partial class Parser : BaseNodeFactory
         return CreateMissingNode(SyntaxKind.Identifier, reportAtCurrentPosition, diagnosticMessage ?? defaultMessage, msgArg);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseBindingIdentifier(DiagnosticMessage? privateIdentifierDiagnosticMessage = null)
     {
         return CreateIdentifier(IsBindingIdentifier(), /*diagnosticMessage*/ null, privateIdentifierDiagnosticMessage);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseIdentifier(DiagnosticMessage? diagnosticMessage = null, DiagnosticMessage? privateIdentifierDiagnosticMessage = null)
     {
         return CreateIdentifier(IsIdentifier(), diagnosticMessage, privateIdentifierDiagnosticMessage);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseIdentifierName(DiagnosticMessage? diagnosticMessage = null)
     {
         return CreateIdentifier(Scanner.TokenIsIdentifierOrKeyword(Token()), diagnosticMessage);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseIdentifierNameErrorOnUnicodeEscapeSequence()
     {
         if (scanner.HasUnicodeEscape() || scanner.HasExtendedUnicodeEscape())
@@ -1380,6 +1604,7 @@ internal sealed partial class Parser : BaseNodeFactory
         return CreateIdentifier(Scanner.TokenIsIdentifierOrKeyword(Token()));
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsLiteralPropertyName()
     {
         return Scanner.TokenIsIdentifierOrKeyword(Token()) ||
@@ -1388,11 +1613,13 @@ internal sealed partial class Parser : BaseNodeFactory
             Token() == SyntaxKind.BigIntLiteral;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsImportAttributeName()
     {
         return Scanner.TokenIsIdentifierOrKeyword(Token()) || Token() == SyntaxKind.StringLiteral;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParsePropertyNameWorker(bool allowComputedPropertyNames)
     {
         if (Token() == SyntaxKind.StringLiteral || Token() == SyntaxKind.NumericLiteral || Token() == SyntaxKind.BigIntLiteral)
@@ -1423,11 +1650,13 @@ internal sealed partial class Parser : BaseNodeFactory
         return ParseIdentifierName();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParsePropertyName()
     {
         return ParsePropertyNameWorker(/*allowComputedPropertyNames*/ true);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseComputedPropertyName()
     {
         // PropertyName [Yield]:
@@ -1438,11 +1667,12 @@ internal sealed partial class Parser : BaseNodeFactory
         // We parse any expression (including a comma expression). But the grammar
         // says that only an assignment expression is allowed, so the grammar checker
         // will error if it sees a comma expression.
-        var expression = AllowInAnd(static p => p.ParseExpression());
+        var expression = AllowInAnd(new F.ParseExpression());
         ParseExpected(SyntaxKind.CloseBracketToken);
         return FinishNode(factory.CreateComputedPropertyName(expression), pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParsePrivateIdentifier()
     {
         var pos = GetNodePos();
@@ -1451,11 +1681,13 @@ internal sealed partial class Parser : BaseNodeFactory
         return FinishNode(node, pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool ParseContextualModifier(SyntaxKind t)
     {
-        return Token() == t && TryParse(static p => p.NextTokenCanFollowModifier());
+        return Token() == t && TryParse<F.NextTokenCanFollowModifier, bool>(new F.NextTokenCanFollowModifier());
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool NextTokenIsOnSameLineAndCanFollowModifier()
     {
         NextToken();
@@ -1466,6 +1698,7 @@ internal sealed partial class Parser : BaseNodeFactory
         return CanFollowModifier();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool NextTokenCanFollowModifier()
     {
         switch (Token())
@@ -1477,11 +1710,11 @@ internal sealed partial class Parser : BaseNodeFactory
                 NextToken();
                 if (Token() == SyntaxKind.DefaultKeyword)
                 {
-                    return LookAhead(static p => p.NextTokenCanFollowDefaultKeyword());
+                    return LookAhead(new F.NextTokenCanFollowDefaultKeyword());
                 }
                 if (Token() == SyntaxKind.TypeKeyword)
                 {
-                    return LookAhead(static p => p.NextTokenCanFollowExportModifier());
+                    return LookAhead(new F.NextTokenCanFollowExportModifier());
                 }
                 return CanFollowExportModifier();
             case SyntaxKind.DefaultKeyword:
@@ -1498,6 +1731,7 @@ internal sealed partial class Parser : BaseNodeFactory
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool CanFollowExportModifier()
     {
         return Token() == SyntaxKind.AtToken
@@ -1507,17 +1741,20 @@ internal sealed partial class Parser : BaseNodeFactory
                 && CanFollowModifier();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool NextTokenCanFollowExportModifier()
     {
         NextToken();
         return CanFollowExportModifier();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool ParseAnyContextualModifier()
     {
-        return UtilitiesPublic.IsModifierKind(Token()) && TryParse(static p => p.NextTokenCanFollowModifier());
+        return UtilitiesPublic.IsModifierKind(Token()) && TryParse<F.NextTokenCanFollowModifier, bool>(new F.NextTokenCanFollowModifier());
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool CanFollowModifier()
     {
         return Token() == SyntaxKind.OpenBracketToken
@@ -1527,12 +1764,14 @@ internal sealed partial class Parser : BaseNodeFactory
             || IsLiteralPropertyName();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool CanFollowGetOrSetKeyword()
     {
         return Token() == SyntaxKind.OpenBracketToken
             || IsLiteralPropertyName();
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool NextTokenCanFollowDefaultKeyword()
     {
         NextToken();
@@ -1540,7 +1779,7 @@ internal sealed partial class Parser : BaseNodeFactory
             || Token() == SyntaxKind.FunctionKeyword
             || Token() == SyntaxKind.InterfaceKeyword
             || Token() == SyntaxKind.AtToken
-            || (Token() == SyntaxKind.AbstractKeyword && LookAhead(static p => p.NextTokenIsClassKeywordOnSameLine()))
-            || (Token() == SyntaxKind.AsyncKeyword && LookAhead(static p => p.NextTokenIsFunctionKeywordOnSameLine()));
+            || (Token() == SyntaxKind.AbstractKeyword && LookAhead(new F.NextTokenIsClassKeywordOnSameLine()))
+            || (Token() == SyntaxKind.AsyncKeyword && LookAhead(new F.NextTokenIsFunctionKeywordOnSameLine()));
     }
 }

@@ -704,6 +704,1090 @@ internal static partial class NodeVisitor
         }
     }
 
+    /// <summary>
+    /// parser.ts forEachChild with a struct visitor (Track O, O-NA): <c>cbNode</c> is <see cref="INodeVisitor{T}.VisitNode"/>,
+    /// <c>cbNodes</c> <see cref="INodeVisitor{T}.VisitNodes"/>; returns the first truthy result (default if there is none).
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    public static T? ForEachChild<TVisitor, T>(NodeStore store, Node node, TVisitor visitor) where TVisitor : struct, INodeVisitor<T>
+    {
+        if (node.IsNone || store.Kind(node) <= SyntaxKind.LastToken)
+        {
+            return default;
+        }
+        T result = default!;
+        switch (store.Kind(node))
+        {
+            case SyntaxKind.QualifiedName:
+                return Visit(ref visitor, store.Left(node), ref result)
+                || Visit(ref visitor, store.Right(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.TypeParameter:
+                return VisitList(ref visitor, store.Modifiers(node), ref result)
+                || Visit(ref visitor, store.Name(node), ref result)
+                || Visit(ref visitor, store.Constraint(node), ref result)
+                || Visit(ref visitor, store.Default(node), ref result)
+                || Visit(ref visitor, store.Expression(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ShorthandPropertyAssignment:
+                return VisitList(ref visitor, store.Modifiers(node), ref result)
+                || Visit(ref visitor, store.Name(node), ref result)
+                || Visit(ref visitor, store.QuestionToken(node), ref result)
+                || Visit(ref visitor, store.ExclamationToken(node), ref result)
+                || Visit(ref visitor, store.EqualsToken(node), ref result)
+                || Visit(ref visitor, store.ObjectAssignmentInitializer(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.SpreadAssignment:
+                return Visit(ref visitor, store.Expression(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.Parameter:
+                return VisitList(ref visitor, store.Modifiers(node), ref result)
+                || Visit(ref visitor, store.DotDotDotToken(node), ref result)
+                || Visit(ref visitor, store.Name(node), ref result)
+                || Visit(ref visitor, store.QuestionToken(node), ref result)
+                || Visit(ref visitor, store.Type(node), ref result)
+                || Visit(ref visitor, store.Initializer(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.PropertyDeclaration:
+                return VisitList(ref visitor, store.Modifiers(node), ref result)
+                || Visit(ref visitor, store.Name(node), ref result)
+                || Visit(ref visitor, store.QuestionToken(node), ref result)
+                || Visit(ref visitor, store.ExclamationToken(node), ref result)
+                || Visit(ref visitor, store.Type(node), ref result)
+                || Visit(ref visitor, store.Initializer(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.PropertySignature:
+                return VisitList(ref visitor, store.Modifiers(node), ref result)
+                || Visit(ref visitor, store.Name(node), ref result)
+                || Visit(ref visitor, store.QuestionToken(node), ref result)
+                || Visit(ref visitor, store.Type(node), ref result)
+                || Visit(ref visitor, store.Initializer(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.PropertyAssignment:
+                return VisitList(ref visitor, store.Modifiers(node), ref result)
+                || Visit(ref visitor, store.Name(node), ref result)
+                || Visit(ref visitor, store.QuestionToken(node), ref result)
+                || Visit(ref visitor, store.ExclamationToken(node), ref result)
+                || Visit(ref visitor, store.Initializer(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.VariableDeclaration:
+                return Visit(ref visitor, store.Name(node), ref result)
+                || Visit(ref visitor, store.ExclamationToken(node), ref result)
+                || Visit(ref visitor, store.Type(node), ref result)
+                || Visit(ref visitor, store.Initializer(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.BindingElement:
+                return Visit(ref visitor, store.DotDotDotToken(node), ref result)
+                || Visit(ref visitor, store.PropertyName(node), ref result)
+                || Visit(ref visitor, store.Name(node), ref result)
+                || Visit(ref visitor, store.Initializer(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.IndexSignature:
+                return VisitList(ref visitor, store.Modifiers(node), ref result)
+                || VisitList(ref visitor, store.TypeParameters(node), ref result)
+                || VisitList(ref visitor, store.Parameters(node), ref result)
+                || Visit(ref visitor, store.Type(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ConstructorType:
+                return VisitList(ref visitor, store.Modifiers(node), ref result)
+                || VisitList(ref visitor, store.TypeParameters(node), ref result)
+                || VisitList(ref visitor, store.Parameters(node), ref result)
+                || Visit(ref visitor, store.Type(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.FunctionType:
+                return VisitList(ref visitor, store.Modifiers(node), ref result)
+                || VisitList(ref visitor, store.TypeParameters(node), ref result)
+                || VisitList(ref visitor, store.Parameters(node), ref result)
+                || Visit(ref visitor, store.Type(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.CallSignature:
+                return VisitList(ref visitor, store.TypeParameters(node), ref result)
+                || VisitList(ref visitor, store.Parameters(node), ref result)
+                || Visit(ref visitor, store.Type(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ConstructSignature:
+                return VisitList(ref visitor, store.TypeParameters(node), ref result)
+                || VisitList(ref visitor, store.Parameters(node), ref result)
+                || Visit(ref visitor, store.Type(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.MethodDeclaration:
+                return VisitList(ref visitor, store.Modifiers(node), ref result)
+                || Visit(ref visitor, store.AsteriskToken(node), ref result)
+                || Visit(ref visitor, store.Name(node), ref result)
+                || Visit(ref visitor, store.QuestionToken(node), ref result)
+                || Visit(ref visitor, store.ExclamationToken(node), ref result)
+                || VisitList(ref visitor, store.TypeParameters(node), ref result)
+                || VisitList(ref visitor, store.Parameters(node), ref result)
+                || Visit(ref visitor, store.Type(node), ref result)
+                || Visit(ref visitor, store.Body(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.MethodSignature:
+                return VisitList(ref visitor, store.Modifiers(node), ref result)
+                || Visit(ref visitor, store.Name(node), ref result)
+                || Visit(ref visitor, store.QuestionToken(node), ref result)
+                || VisitList(ref visitor, store.TypeParameters(node), ref result)
+                || VisitList(ref visitor, store.Parameters(node), ref result)
+                || Visit(ref visitor, store.Type(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.Constructor:
+                return VisitList(ref visitor, store.Modifiers(node), ref result)
+                || Visit(ref visitor, store.Name(node), ref result)
+                || VisitList(ref visitor, store.TypeParameters(node), ref result)
+                || VisitList(ref visitor, store.Parameters(node), ref result)
+                || Visit(ref visitor, store.Type(node), ref result)
+                || Visit(ref visitor, store.Body(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.GetAccessor:
+                return VisitList(ref visitor, store.Modifiers(node), ref result)
+                || Visit(ref visitor, store.Name(node), ref result)
+                || VisitList(ref visitor, store.TypeParameters(node), ref result)
+                || VisitList(ref visitor, store.Parameters(node), ref result)
+                || Visit(ref visitor, store.Type(node), ref result)
+                || Visit(ref visitor, store.Body(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.SetAccessor:
+                return VisitList(ref visitor, store.Modifiers(node), ref result)
+                || Visit(ref visitor, store.Name(node), ref result)
+                || VisitList(ref visitor, store.TypeParameters(node), ref result)
+                || VisitList(ref visitor, store.Parameters(node), ref result)
+                || Visit(ref visitor, store.Type(node), ref result)
+                || Visit(ref visitor, store.Body(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.FunctionDeclaration:
+                return VisitList(ref visitor, store.Modifiers(node), ref result)
+                || Visit(ref visitor, store.AsteriskToken(node), ref result)
+                || Visit(ref visitor, store.Name(node), ref result)
+                || VisitList(ref visitor, store.TypeParameters(node), ref result)
+                || VisitList(ref visitor, store.Parameters(node), ref result)
+                || Visit(ref visitor, store.Type(node), ref result)
+                || Visit(ref visitor, store.Body(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.FunctionExpression:
+                return VisitList(ref visitor, store.Modifiers(node), ref result)
+                || Visit(ref visitor, store.AsteriskToken(node), ref result)
+                || Visit(ref visitor, store.Name(node), ref result)
+                || VisitList(ref visitor, store.TypeParameters(node), ref result)
+                || VisitList(ref visitor, store.Parameters(node), ref result)
+                || Visit(ref visitor, store.Type(node), ref result)
+                || Visit(ref visitor, store.Body(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ArrowFunction:
+                return VisitList(ref visitor, store.Modifiers(node), ref result)
+                || VisitList(ref visitor, store.TypeParameters(node), ref result)
+                || VisitList(ref visitor, store.Parameters(node), ref result)
+                || Visit(ref visitor, store.Type(node), ref result)
+                || Visit(ref visitor, store.EqualsGreaterThanToken(node), ref result)
+                || Visit(ref visitor, store.Body(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ClassStaticBlockDeclaration:
+                return VisitList(ref visitor, store.Modifiers(node), ref result)
+                || Visit(ref visitor, store.Body(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.TypeReference:
+                return Visit(ref visitor, store.TypeName(node), ref result)
+                || VisitList(ref visitor, store.TypeArguments(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.TypePredicate:
+                return Visit(ref visitor, store.AssertsModifier(node), ref result)
+                || Visit(ref visitor, store.ParameterName(node), ref result)
+                || Visit(ref visitor, store.Type(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.TypeQuery:
+                return Visit(ref visitor, store.ExprName(node), ref result)
+                || VisitList(ref visitor, store.TypeArguments(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.TypeLiteral:
+                return VisitList(ref visitor, store.Members(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ArrayType:
+                return Visit(ref visitor, store.ElementType(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.TupleType:
+                return VisitList(ref visitor, store.Elements(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.UnionType:
+                return VisitList(ref visitor, store.Types(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.IntersectionType:
+                return VisitList(ref visitor, store.Types(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ConditionalType:
+                return Visit(ref visitor, store.CheckType(node), ref result)
+                || Visit(ref visitor, store.ExtendsType(node), ref result)
+                || Visit(ref visitor, store.TrueType(node), ref result)
+                || Visit(ref visitor, store.FalseType(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.InferType:
+                return Visit(ref visitor, store.TypeParameter(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ImportType:
+                return Visit(ref visitor, store.Argument(node), ref result)
+                || Visit(ref visitor, store.Attributes(node), ref result)
+                || Visit(ref visitor, store.Qualifier(node), ref result)
+                || VisitList(ref visitor, store.TypeArguments(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ImportTypeAssertionContainer:
+                return Visit(ref visitor, store.AssertClause(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ParenthesizedType:
+                return Visit(ref visitor, store.Type(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.TypeOperator:
+                return Visit(ref visitor, store.Type(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.IndexedAccessType:
+                return Visit(ref visitor, store.ObjectType(node), ref result)
+                || Visit(ref visitor, store.IndexType(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.MappedType:
+                return Visit(ref visitor, store.ReadonlyToken(node), ref result)
+                || Visit(ref visitor, store.TypeParameter(node), ref result)
+                || Visit(ref visitor, store.NameType(node), ref result)
+                || Visit(ref visitor, store.QuestionToken(node), ref result)
+                || Visit(ref visitor, store.Type(node), ref result)
+                || VisitList(ref visitor, store.Members(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.LiteralType:
+                return Visit(ref visitor, store.Literal(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.NamedTupleMember:
+                return Visit(ref visitor, store.DotDotDotToken(node), ref result)
+                || Visit(ref visitor, store.Name(node), ref result)
+                || Visit(ref visitor, store.QuestionToken(node), ref result)
+                || Visit(ref visitor, store.Type(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ObjectBindingPattern:
+                return VisitList(ref visitor, store.Elements(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ArrayBindingPattern:
+                return VisitList(ref visitor, store.Elements(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ArrayLiteralExpression:
+                return VisitList(ref visitor, store.Elements(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ObjectLiteralExpression:
+                return VisitList(ref visitor, store.Properties(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.PropertyAccessExpression:
+                return Visit(ref visitor, store.Expression(node), ref result)
+                || Visit(ref visitor, store.QuestionDotToken(node), ref result)
+                || Visit(ref visitor, store.Name(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ElementAccessExpression:
+                return Visit(ref visitor, store.Expression(node), ref result)
+                || Visit(ref visitor, store.QuestionDotToken(node), ref result)
+                || Visit(ref visitor, store.ArgumentExpression(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.CallExpression:
+                return Visit(ref visitor, store.Expression(node), ref result)
+                || Visit(ref visitor, store.QuestionDotToken(node), ref result)
+                || VisitList(ref visitor, store.TypeArguments(node), ref result)
+                || VisitList(ref visitor, store.Arguments(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.NewExpression:
+                return Visit(ref visitor, store.Expression(node), ref result)
+                || false
+                || VisitList(ref visitor, store.TypeArguments(node), ref result)
+                || VisitList(ref visitor, store.Arguments(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.TaggedTemplateExpression:
+                return Visit(ref visitor, store.Tag(node), ref result)
+                || Visit(ref visitor, store.QuestionDotToken(node), ref result)
+                || VisitList(ref visitor, store.TypeArguments(node), ref result)
+                || Visit(ref visitor, store.Template(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.TypeAssertionExpression:
+                return Visit(ref visitor, store.Type(node), ref result)
+                || Visit(ref visitor, store.Expression(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ParenthesizedExpression:
+                return Visit(ref visitor, store.Expression(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.DeleteExpression:
+                return Visit(ref visitor, store.Expression(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.TypeOfExpression:
+                return Visit(ref visitor, store.Expression(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.VoidExpression:
+                return Visit(ref visitor, store.Expression(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.PrefixUnaryExpression:
+                return Visit(ref visitor, store.Operand(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.YieldExpression:
+                return Visit(ref visitor, store.AsteriskToken(node), ref result)
+                || Visit(ref visitor, store.Expression(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.AwaitExpression:
+                return Visit(ref visitor, store.Expression(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.PostfixUnaryExpression:
+                return Visit(ref visitor, store.Operand(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.BinaryExpression:
+                return Visit(ref visitor, store.Left(node), ref result)
+                || Visit(ref visitor, store.OperatorToken(node), ref result)
+                || Visit(ref visitor, store.Right(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.AsExpression:
+                return Visit(ref visitor, store.Expression(node), ref result)
+                || Visit(ref visitor, store.Type(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.NonNullExpression:
+                return Visit(ref visitor, store.Expression(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.SatisfiesExpression:
+                return Visit(ref visitor, store.Expression(node), ref result)
+                || Visit(ref visitor, store.Type(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.MetaProperty:
+                return Visit(ref visitor, store.Name(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ConditionalExpression:
+                return Visit(ref visitor, store.Condition(node), ref result)
+                || Visit(ref visitor, store.QuestionToken(node), ref result)
+                || Visit(ref visitor, store.WhenTrue(node), ref result)
+                || Visit(ref visitor, store.ColonToken(node), ref result)
+                || Visit(ref visitor, store.WhenFalse(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.SpreadElement:
+                return Visit(ref visitor, store.Expression(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.Block:
+                return VisitList(ref visitor, store.Statements(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ModuleBlock:
+                return VisitList(ref visitor, store.Statements(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.SourceFile:
+                return VisitList(ref visitor, store.Statements(node), ref result)
+                || Visit(ref visitor, store.EndOfFileToken(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.VariableStatement:
+                return VisitList(ref visitor, store.Modifiers(node), ref result)
+                || Visit(ref visitor, store.DeclarationList(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.VariableDeclarationList:
+                return VisitList(ref visitor, store.Declarations(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ExpressionStatement:
+                return Visit(ref visitor, store.Expression(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.IfStatement:
+                return Visit(ref visitor, store.Expression(node), ref result)
+                || Visit(ref visitor, store.ThenStatement(node), ref result)
+                || Visit(ref visitor, store.ElseStatement(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.DoStatement:
+                return Visit(ref visitor, store.Statement(node), ref result)
+                || Visit(ref visitor, store.Expression(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.WhileStatement:
+                return Visit(ref visitor, store.Expression(node), ref result)
+                || Visit(ref visitor, store.Statement(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ForStatement:
+                return Visit(ref visitor, store.Initializer(node), ref result)
+                || Visit(ref visitor, store.Condition(node), ref result)
+                || Visit(ref visitor, store.Incrementor(node), ref result)
+                || Visit(ref visitor, store.Statement(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ForInStatement:
+                return Visit(ref visitor, store.Initializer(node), ref result)
+                || Visit(ref visitor, store.Expression(node), ref result)
+                || Visit(ref visitor, store.Statement(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ForOfStatement:
+                return Visit(ref visitor, store.AwaitModifier(node), ref result)
+                || Visit(ref visitor, store.Initializer(node), ref result)
+                || Visit(ref visitor, store.Expression(node), ref result)
+                || Visit(ref visitor, store.Statement(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ContinueStatement:
+                return Visit(ref visitor, store.Label(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.BreakStatement:
+                return Visit(ref visitor, store.Label(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ReturnStatement:
+                return Visit(ref visitor, store.Expression(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.WithStatement:
+                return Visit(ref visitor, store.Expression(node), ref result)
+                || Visit(ref visitor, store.Statement(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.SwitchStatement:
+                return Visit(ref visitor, store.Expression(node), ref result)
+                || Visit(ref visitor, store.CaseBlock(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.CaseBlock:
+                return VisitList(ref visitor, store.Clauses(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.CaseClause:
+                return Visit(ref visitor, store.Expression(node), ref result)
+                || VisitList(ref visitor, store.Statements(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.DefaultClause:
+                return VisitList(ref visitor, store.Statements(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.LabeledStatement:
+                return Visit(ref visitor, store.Label(node), ref result)
+                || Visit(ref visitor, store.Statement(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ThrowStatement:
+                return Visit(ref visitor, store.Expression(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.TryStatement:
+                return Visit(ref visitor, store.TryBlock(node), ref result)
+                || Visit(ref visitor, store.CatchClause(node), ref result)
+                || Visit(ref visitor, store.FinallyBlock(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.CatchClause:
+                return Visit(ref visitor, store.VariableDeclaration(node), ref result)
+                || Visit(ref visitor, store.Block(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.Decorator:
+                return Visit(ref visitor, store.Expression(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ClassDeclaration:
+                return VisitList(ref visitor, store.Modifiers(node), ref result)
+                || Visit(ref visitor, store.Name(node), ref result)
+                || VisitList(ref visitor, store.TypeParameters(node), ref result)
+                || VisitList(ref visitor, store.HeritageClauses(node), ref result)
+                || VisitList(ref visitor, store.Members(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ClassExpression:
+                return VisitList(ref visitor, store.Modifiers(node), ref result)
+                || Visit(ref visitor, store.Name(node), ref result)
+                || VisitList(ref visitor, store.TypeParameters(node), ref result)
+                || VisitList(ref visitor, store.HeritageClauses(node), ref result)
+                || VisitList(ref visitor, store.Members(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.InterfaceDeclaration:
+                return VisitList(ref visitor, store.Modifiers(node), ref result)
+                || Visit(ref visitor, store.Name(node), ref result)
+                || VisitList(ref visitor, store.TypeParameters(node), ref result)
+                || VisitList(ref visitor, store.HeritageClauses(node), ref result)
+                || VisitList(ref visitor, store.Members(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.TypeAliasDeclaration:
+                return VisitList(ref visitor, store.Modifiers(node), ref result)
+                || Visit(ref visitor, store.Name(node), ref result)
+                || VisitList(ref visitor, store.TypeParameters(node), ref result)
+                || Visit(ref visitor, store.Type(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.EnumDeclaration:
+                return VisitList(ref visitor, store.Modifiers(node), ref result)
+                || Visit(ref visitor, store.Name(node), ref result)
+                || VisitList(ref visitor, store.Members(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.EnumMember:
+                return Visit(ref visitor, store.Name(node), ref result)
+                || Visit(ref visitor, store.Initializer(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ModuleDeclaration:
+                return VisitList(ref visitor, store.Modifiers(node), ref result)
+                || Visit(ref visitor, store.Name(node), ref result)
+                || Visit(ref visitor, store.Body(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ImportEqualsDeclaration:
+                return VisitList(ref visitor, store.Modifiers(node), ref result)
+                || Visit(ref visitor, store.Name(node), ref result)
+                || Visit(ref visitor, store.ModuleReference(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ImportDeclaration:
+                return VisitList(ref visitor, store.Modifiers(node), ref result)
+                || Visit(ref visitor, store.ImportClause(node), ref result)
+                || Visit(ref visitor, store.ModuleSpecifier(node), ref result)
+                || Visit(ref visitor, store.Attributes(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ImportClause:
+                return Visit(ref visitor, store.Name(node), ref result)
+                || Visit(ref visitor, store.NamedBindings(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ImportAttributes:
+                return VisitList(ref visitor, store.Elements(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ImportAttribute:
+                return Visit(ref visitor, store.Name(node), ref result)
+                || Visit(ref visitor, store.Value(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.NamespaceExportDeclaration:
+                return VisitList(ref visitor, store.Modifiers(node), ref result)
+                || Visit(ref visitor, store.Name(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.NamespaceImport:
+                return Visit(ref visitor, store.Name(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.NamespaceExport:
+                return Visit(ref visitor, store.Name(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.NamedImports:
+                return VisitList(ref visitor, store.Elements(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.NamedExports:
+                return VisitList(ref visitor, store.Elements(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ExportDeclaration:
+                return VisitList(ref visitor, store.Modifiers(node), ref result)
+                || Visit(ref visitor, store.ExportClause(node), ref result)
+                || Visit(ref visitor, store.ModuleSpecifier(node), ref result)
+                || Visit(ref visitor, store.Attributes(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ImportSpecifier:
+                return Visit(ref visitor, store.PropertyName(node), ref result)
+                || Visit(ref visitor, store.Name(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ExportSpecifier:
+                return Visit(ref visitor, store.PropertyName(node), ref result)
+                || Visit(ref visitor, store.Name(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ExportAssignment:
+                return VisitList(ref visitor, store.Modifiers(node), ref result)
+                || Visit(ref visitor, store.Expression(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.TemplateExpression:
+                return Visit(ref visitor, store.Head(node), ref result)
+                || VisitList(ref visitor, store.TemplateSpans(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.TemplateSpan:
+                return Visit(ref visitor, store.Expression(node), ref result)
+                || Visit(ref visitor, store.Literal(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.TemplateLiteralType:
+                return Visit(ref visitor, store.Head(node), ref result)
+                || VisitList(ref visitor, store.TemplateSpans(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.TemplateLiteralTypeSpan:
+                return Visit(ref visitor, store.Type(node), ref result)
+                || Visit(ref visitor, store.Literal(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ComputedPropertyName:
+                return Visit(ref visitor, store.Expression(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.HeritageClause:
+                return VisitList(ref visitor, store.Types(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ExpressionWithTypeArguments:
+                return Visit(ref visitor, store.Expression(node), ref result)
+                || VisitList(ref visitor, store.TypeArguments(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.ExternalModuleReference:
+                return Visit(ref visitor, store.Expression(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.MissingDeclaration:
+                return VisitList(ref visitor, store.Modifiers(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.CommaListExpression:
+                return VisitList(ref visitor, store.Elements(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.JsxElement:
+                return Visit(ref visitor, store.OpeningElement(node), ref result)
+                || VisitList(ref visitor, store.Children(node), ref result)
+                || Visit(ref visitor, store.ClosingElement(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.JsxFragment:
+                return Visit(ref visitor, store.OpeningFragment(node), ref result)
+                || VisitList(ref visitor, store.Children(node), ref result)
+                || Visit(ref visitor, store.ClosingFragment(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.JsxSelfClosingElement:
+                return Visit(ref visitor, store.TagName(node), ref result)
+                || VisitList(ref visitor, store.TypeArguments(node), ref result)
+                || Visit(ref visitor, store.Attributes(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.JsxOpeningElement:
+                return Visit(ref visitor, store.TagName(node), ref result)
+                || VisitList(ref visitor, store.TypeArguments(node), ref result)
+                || Visit(ref visitor, store.Attributes(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.JsxAttributes:
+                return VisitList(ref visitor, store.Properties(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.JsxAttribute:
+                return Visit(ref visitor, store.Name(node), ref result)
+                || Visit(ref visitor, store.Initializer(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.JsxSpreadAttribute:
+                return Visit(ref visitor, store.Expression(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.JsxExpression:
+                return Visit(ref visitor, store.DotDotDotToken(node), ref result)
+                || Visit(ref visitor, store.Expression(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.JsxClosingElement:
+                return Visit(ref visitor, store.TagName(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.JsxNamespacedName:
+                return Visit(ref visitor, store.Namespace(node), ref result)
+                || Visit(ref visitor, store.Name(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.OptionalType:
+                return Visit(ref visitor, store.Type(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.RestType:
+                return Visit(ref visitor, store.Type(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.JSDocTypeExpression:
+                return Visit(ref visitor, store.Type(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.JSDocNonNullableType:
+                return Visit(ref visitor, store.Type(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.JSDocNullableType:
+                return Visit(ref visitor, store.Type(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.JSDocOptionalType:
+                return Visit(ref visitor, store.Type(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.JSDocVariadicType:
+                return Visit(ref visitor, store.Type(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.JSDocFunctionType:
+                return VisitList(ref visitor, store.Parameters(node), ref result)
+                || Visit(ref visitor, store.Type(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.JSDoc:
+                return (store.Comment(node).IsText
+                ? false
+                : VisitList(ref visitor, store.Comment(node).List, ref result))
+                || VisitList(ref visitor, store.Tags(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.JSDocSeeTag:
+                return Visit(ref visitor, store.TagName(node), ref result)
+                || Visit(ref visitor, store.Name(node), ref result)
+                || (store.Comment(node).IsText
+                ? false
+                : VisitList(ref visitor, store.Comment(node).List, ref result))
+                ? result
+                : default;
+            case SyntaxKind.JSDocNameReference:
+                return Visit(ref visitor, store.Name(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.JSDocMemberName:
+                return Visit(ref visitor, store.Left(node), ref result)
+                || Visit(ref visitor, store.Right(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.JSDocParameterTag:
+                return Visit(ref visitor, store.TagName(node), ref result)
+                || (store.IsNameFirst(node)
+                ? Visit(ref visitor, store.Name(node), ref result)
+                || Visit(ref visitor, store.TypeExpression(node), ref result)
+                : Visit(ref visitor, store.TypeExpression(node), ref result)
+                || Visit(ref visitor, store.Name(node), ref result))
+                || (store.Comment(node).IsText
+                ? false
+                : VisitList(ref visitor, store.Comment(node).List, ref result))
+                ? result
+                : default;
+            case SyntaxKind.JSDocPropertyTag:
+                return Visit(ref visitor, store.TagName(node), ref result)
+                || (store.IsNameFirst(node)
+                ? Visit(ref visitor, store.Name(node), ref result)
+                || Visit(ref visitor, store.TypeExpression(node), ref result)
+                : Visit(ref visitor, store.TypeExpression(node), ref result)
+                || Visit(ref visitor, store.Name(node), ref result))
+                || (store.Comment(node).IsText
+                ? false
+                : VisitList(ref visitor, store.Comment(node).List, ref result))
+                ? result
+                : default;
+            case SyntaxKind.JSDocAuthorTag:
+                return Visit(ref visitor, store.TagName(node), ref result)
+                || (store.Comment(node).IsText
+                ? false
+                : VisitList(ref visitor, store.Comment(node).List, ref result))
+                ? result
+                : default;
+            case SyntaxKind.JSDocImplementsTag:
+                return Visit(ref visitor, store.TagName(node), ref result)
+                || Visit(ref visitor, store.Class(node), ref result)
+                || (store.Comment(node).IsText
+                ? false
+                : VisitList(ref visitor, store.Comment(node).List, ref result))
+                ? result
+                : default;
+            case SyntaxKind.JSDocAugmentsTag:
+                return Visit(ref visitor, store.TagName(node), ref result)
+                || Visit(ref visitor, store.Class(node), ref result)
+                || (store.Comment(node).IsText
+                ? false
+                : VisitList(ref visitor, store.Comment(node).List, ref result))
+                ? result
+                : default;
+            case SyntaxKind.JSDocTemplateTag:
+                return Visit(ref visitor, store.TagName(node), ref result)
+                || Visit(ref visitor, store.Constraint(node), ref result)
+                || VisitList(ref visitor, store.TypeParameters(node), ref result)
+                || (store.Comment(node).IsText
+                ? false
+                : VisitList(ref visitor, store.Comment(node).List, ref result))
+                ? result
+                : default;
+            case SyntaxKind.JSDocTypedefTag:
+                return Visit(ref visitor, store.TagName(node), ref result)
+                || ((!store.TypeExpression(node).IsNone && store.Kind(store.TypeExpression(node)) == SyntaxKind.JSDocTypeExpression)
+                ? Visit(ref visitor, store.TypeExpression(node), ref result)
+                || Visit(ref visitor, store.FullName(node), ref result)
+                || (store.Comment(node).IsText
+                ? false
+                : VisitList(ref visitor, store.Comment(node).List, ref result))
+                : Visit(ref visitor, store.FullName(node), ref result)
+                || Visit(ref visitor, store.TypeExpression(node), ref result)
+                || (store.Comment(node).IsText
+                ? false
+                : VisitList(ref visitor, store.Comment(node).List, ref result)))
+                ? result
+                : default;
+            case SyntaxKind.JSDocCallbackTag:
+                return Visit(ref visitor, store.TagName(node), ref result)
+                || Visit(ref visitor, store.FullName(node), ref result)
+                || Visit(ref visitor, store.TypeExpression(node), ref result)
+                || (store.Comment(node).IsText
+                ? false
+                : VisitList(ref visitor, store.Comment(node).List, ref result))
+                ? result
+                : default;
+            case SyntaxKind.JSDocReturnTag:
+                return Visit(ref visitor, store.TagName(node), ref result)
+                || Visit(ref visitor, store.TypeExpression(node), ref result)
+                || (store.Comment(node).IsText
+                ? false
+                : VisitList(ref visitor, store.Comment(node).List, ref result))
+                ? result
+                : default;
+            case SyntaxKind.JSDocTypeTag:
+                return Visit(ref visitor, store.TagName(node), ref result)
+                || Visit(ref visitor, store.TypeExpression(node), ref result)
+                || (store.Comment(node).IsText
+                ? false
+                : VisitList(ref visitor, store.Comment(node).List, ref result))
+                ? result
+                : default;
+            case SyntaxKind.JSDocThisTag:
+                return Visit(ref visitor, store.TagName(node), ref result)
+                || Visit(ref visitor, store.TypeExpression(node), ref result)
+                || (store.Comment(node).IsText
+                ? false
+                : VisitList(ref visitor, store.Comment(node).List, ref result))
+                ? result
+                : default;
+            case SyntaxKind.JSDocEnumTag:
+                return Visit(ref visitor, store.TagName(node), ref result)
+                || Visit(ref visitor, store.TypeExpression(node), ref result)
+                || (store.Comment(node).IsText
+                ? false
+                : VisitList(ref visitor, store.Comment(node).List, ref result))
+                ? result
+                : default;
+            case SyntaxKind.JSDocSatisfiesTag:
+                return Visit(ref visitor, store.TagName(node), ref result)
+                || Visit(ref visitor, store.TypeExpression(node), ref result)
+                || (store.Comment(node).IsText
+                ? false
+                : VisitList(ref visitor, store.Comment(node).List, ref result))
+                ? result
+                : default;
+            case SyntaxKind.JSDocThrowsTag:
+                return Visit(ref visitor, store.TagName(node), ref result)
+                || Visit(ref visitor, store.TypeExpression(node), ref result)
+                || (store.Comment(node).IsText
+                ? false
+                : VisitList(ref visitor, store.Comment(node).List, ref result))
+                ? result
+                : default;
+            case SyntaxKind.JSDocOverloadTag:
+                return Visit(ref visitor, store.TagName(node), ref result)
+                || Visit(ref visitor, store.TypeExpression(node), ref result)
+                || (store.Comment(node).IsText
+                ? false
+                : VisitList(ref visitor, store.Comment(node).List, ref result))
+                ? result
+                : default;
+            case SyntaxKind.JSDocSignature:
+                return VisitEach(ref visitor, store.JSDocSignatureTypeParameters(node), ref result)
+                || VisitEach(ref visitor, store.JSDocSignatureParameters(node), ref result)
+                || Visit(ref visitor, store.Type(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.JSDocLink:
+                return Visit(ref visitor, store.Name(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.JSDocLinkCode:
+                return Visit(ref visitor, store.Name(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.JSDocLinkPlain:
+                return Visit(ref visitor, store.Name(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.JSDocTypeLiteral:
+                return VisitEach(ref visitor, store.JsDocPropertyTags(node), ref result)
+                ? result
+                : default;
+            case SyntaxKind.JSDocTag:
+                return Visit(ref visitor, store.TagName(node), ref result)
+                || (store.Comment(node).IsText
+                ? false
+                : VisitList(ref visitor, store.Comment(node).List, ref result))
+                ? result
+                : default;
+            case SyntaxKind.JSDocClassTag:
+                return Visit(ref visitor, store.TagName(node), ref result)
+                || (store.Comment(node).IsText
+                ? false
+                : VisitList(ref visitor, store.Comment(node).List, ref result))
+                ? result
+                : default;
+            case SyntaxKind.JSDocPublicTag:
+                return Visit(ref visitor, store.TagName(node), ref result)
+                || (store.Comment(node).IsText
+                ? false
+                : VisitList(ref visitor, store.Comment(node).List, ref result))
+                ? result
+                : default;
+            case SyntaxKind.JSDocPrivateTag:
+                return Visit(ref visitor, store.TagName(node), ref result)
+                || (store.Comment(node).IsText
+                ? false
+                : VisitList(ref visitor, store.Comment(node).List, ref result))
+                ? result
+                : default;
+            case SyntaxKind.JSDocProtectedTag:
+                return Visit(ref visitor, store.TagName(node), ref result)
+                || (store.Comment(node).IsText
+                ? false
+                : VisitList(ref visitor, store.Comment(node).List, ref result))
+                ? result
+                : default;
+            case SyntaxKind.JSDocReadonlyTag:
+                return Visit(ref visitor, store.TagName(node), ref result)
+                || (store.Comment(node).IsText
+                ? false
+                : VisitList(ref visitor, store.Comment(node).List, ref result))
+                ? result
+                : default;
+            case SyntaxKind.JSDocDeprecatedTag:
+                return Visit(ref visitor, store.TagName(node), ref result)
+                || (store.Comment(node).IsText
+                ? false
+                : VisitList(ref visitor, store.Comment(node).List, ref result))
+                ? result
+                : default;
+            case SyntaxKind.JSDocOverrideTag:
+                return Visit(ref visitor, store.TagName(node), ref result)
+                || (store.Comment(node).IsText
+                ? false
+                : VisitList(ref visitor, store.Comment(node).List, ref result))
+                ? result
+                : default;
+            case SyntaxKind.JSDocImportTag:
+                return Visit(ref visitor, store.TagName(node), ref result)
+                || Visit(ref visitor, store.ImportClause(node), ref result)
+                || Visit(ref visitor, store.ModuleSpecifier(node), ref result)
+                || Visit(ref visitor, store.Attributes(node), ref result)
+                || (store.Comment(node).IsText
+                ? false
+                : VisitList(ref visitor, store.Comment(node).List, ref result))
+                ? result
+                : default;
+            case SyntaxKind.PartiallyEmittedExpression:
+                return Visit(ref visitor, store.Expression(node), ref result)
+                ? result
+                : default;
+            default:
+                return default;
+        }
+    }
+
+    // parser.ts visitNode
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private static bool Visit<TVisitor, T>(ref TVisitor visitor, Node node, ref T result) where TVisitor : struct, INodeVisitor<T>
+    {
+        if (node.IsNone)
+        {
+            return false;
+        }
+        result = visitor.VisitNode(node);
+        return Core.IsTruthyValue(result);
+    }
+
+    // parser.ts visitNodes
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private static bool VisitList<TVisitor, T>(ref TVisitor visitor, NodeList nodes, ref T result) where TVisitor : struct, INodeVisitor<T>
+    {
+        if (nodes.IsNone)
+        {
+            return false;
+        }
+        result = visitor.VisitNodes(nodes);
+        return Core.IsTruthyValue(result);
+    }
+
+    // core.ts forEach(array, callback): every element through cbNode
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private static bool VisitEach<TVisitor, T>(ref TVisitor visitor, IReadOnlyList<Node>? array, ref T result) where TVisitor : struct, INodeVisitor<T>
+    {
+        if (array is not null)
+        {
+            for (var i = 0; i < array.Count; i++)
+            {
+                result = visitor.VisitNode(array[i]);
+                if (Core.IsTruthyValue(result))
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     // parser.ts visitNode
     private static T? VisitNode<T>(Func<Node, T?> cbNode, Node node) where T : class => node.IsNone ? null : cbNode(node);
 
@@ -744,4 +1828,14 @@ internal static partial class NodeVisitor
         }
         return null;
     }
+}
+
+/// <summary>The two callbacks of forEachChild (<c>cbNode</c>, <c>cbNodes</c>) as a struct (Track O, O-NA).</summary>
+internal interface INodeVisitor<out T>
+{
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    T VisitNode(Node node);
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    T VisitNodes(NodeList nodes);
 }

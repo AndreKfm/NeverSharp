@@ -52,6 +52,7 @@ internal sealed class PragmaArguments : OrderedDictionary<string, object?>
     }
 
     /// <summary>`arguments[name]`: undefined (null) when the argument is absent.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public object? Get(string name)
     {
         return TryGetValue(name, out var value) ? value : null;
@@ -199,7 +200,10 @@ internal sealed partial class Parser
     {
         var pragmas = new List<PragmaPseudoMapEntry>();
 
-        foreach (var range in (IReadOnlyList<CommentRange>?)Scanner.GetLeadingCommentRanges(sourceText, 0) ?? Core.EmptyArray<CommentRange>())
+        // TypeScript: `for (const range of getLeadingCommentRanges(sourceText, 0) || emptyArray)`; Track O (O-NA): the
+        // ranges are iterated without a list of range objects.
+        var ranges = new Scanner.CommentRangeIterator(sourceText, 0, /*trailing*/ false);
+        while (ranges.MoveNext(out var range))
         {
             var comment = sourceText.AsSpan(range.Pos, range.End - range.Pos); // (TypeScript: `sourceText.substring(range.pos, range.end)`)
             ExtractPragmas(pragmas, range, comment);
@@ -495,6 +499,7 @@ internal sealed partial class Parser
         return argMap;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool TagNamesAreEquivalent(NodeStore store, Node lhs, Node rhs)
     {
         if (store.Kind(lhs) != store.Kind(rhs))
@@ -526,6 +531,7 @@ internal sealed partial class Parser
     }
 
     /// <summary>`(name as MemberName).escapedText` (Identifier or PrivateIdentifier).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static TextRef EscapedTextOfMemberName(NodeStore store, Node name)
     {
         return (name is var identifier && store.IsIdentifier(identifier)) ? store.EscapedText(identifier) : store.EscapedText(name);
@@ -535,12 +541,14 @@ internal sealed partial class Parser
     //// System.Text.RegularExpressions). `\s` is JavaScript's WhiteSpace or LineTerminator; `.` and the `m` flag's `^`/`$`
     //// use JavaScript's line terminators (LF, CR, U+2028, U+2029).
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsJsLineTerminator(char ch)
     {
         return ch == (char)0x000A || ch == (char)0x000D || ch == (char)0x2028 || ch == (char)0x2029;
     }
 
     /// <summary>Positions where `^` matches under the `m` flag: the start, and after each line terminator.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsLineStart(ReadOnlySpan<char> text, int p)
     {
         return p == 0 || IsJsLineTerminator(text[p - 1]);
@@ -550,6 +558,7 @@ internal sealed partial class Parser
     /// tripleSlashXMLCommentStartRegEx = /^\/\/\/\s*&lt;(\S+)\s.*?\/&gt;/m: returns group 1 of the first match, or null
     /// (Track O: as a range of the text).
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static (int Start, int Length)? MatchTripleSlashXMLCommentStart(ReadOnlySpan<char> text)
     {
         var len = text.Length;

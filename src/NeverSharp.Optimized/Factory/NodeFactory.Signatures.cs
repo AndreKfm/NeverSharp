@@ -20,7 +20,8 @@ internal sealed partial class NodeFactory
     //
 
     // @api
-    internal Node CreateQualifiedName(Node left, object right)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal Node CreateQualifiedName(Node left, Node right)
     {
         var node = CreateBaseNode(SyntaxKind.QualifiedName);
         store.SetLeft(node, left);
@@ -32,6 +33,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateComputedPropertyName(Node expression)
     {
         var node = CreateBaseNode(SyntaxKind.ComputedPropertyName);
@@ -47,7 +49,8 @@ internal sealed partial class NodeFactory
     //
 
     // @api
-    internal Node CreateTypeParameterDeclaration(NodeList modifiers, object name, Node constraint = default, Node defaultType = default)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal Node CreateTypeParameterDeclaration(NodeList modifiers, Node name, Node constraint = default, Node defaultType = default)
     {
         var node = CreateBaseDeclaration(SyntaxKind.TypeParameter);
         store.SetModifiers(node, AsNodeArray(store, modifiers));
@@ -61,10 +64,11 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateParameterDeclaration(
         NodeList modifiers,
         Node dotDotDotToken,
-        object name,
+        Node name,
         Node questionToken = default,
         Node type = default,
         Node initializer = default)
@@ -96,6 +100,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateDecorator(Node expression)
     {
         var node = CreateBaseNode(SyntaxKind.Decorator);
@@ -112,9 +117,10 @@ internal sealed partial class NodeFactory
     //
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreatePropertySignature(
         NodeList modifiers,
-        object name,
+        Node name,
         Node questionToken,
         Node type)
     {
@@ -130,9 +136,10 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreatePropertyDeclaration(
         NodeList modifiers,
-        object name,
+        Node name,
         Node questionOrExclamationToken,
         Node type,
         Node initializer)
@@ -156,9 +163,10 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateMethodSignature(
         NodeList modifiers,
-        object name,
+        Node name,
         Node questionToken,
         NodeList typeParameters,
         NodeList parameters,
@@ -180,10 +188,11 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateMethodDeclaration(
         NodeList modifiers,
         Node asteriskToken,
-        object name,
+        Node name,
         Node questionToken,
         NodeList typeParameters,
         NodeList parameters,
@@ -235,6 +244,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateClassStaticBlockDeclaration(
         Node body)
     {
@@ -251,6 +261,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateConstructorDeclaration(
         NodeList modifiers,
         NodeList parameters,
@@ -283,9 +294,10 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateGetAccessorDeclaration(
         NodeList modifiers,
-        object name,
+        Node name,
         NodeList parameters,
         Node type,
         Node body)
@@ -321,9 +333,10 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateSetAccessorDeclaration(
         NodeList modifiers,
-        object name,
+        Node name,
         NodeList parameters,
         Node body)
     {
@@ -357,6 +370,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateCallSignature(
         NodeList typeParameters,
         NodeList parameters,
@@ -375,6 +389,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateConstructSignature(
         NodeList typeParameters,
         NodeList parameters,
@@ -393,6 +408,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateIndexSignature(
         NodeList modifiers,
         NodeList parameters,
@@ -411,6 +427,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateTemplateLiteralTypeSpan(Node type, Node literal)
     {
         var node = CreateBaseNode(SyntaxKind.TemplateLiteralTypeSpan);

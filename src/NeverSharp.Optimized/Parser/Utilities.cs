@@ -223,6 +223,7 @@ internal static partial class Utilities
     // class, and Parser.NewNode gives it TypeScript's (kind, pos 0, end 0); there is no object to allocate the
     // constructors from, so objectAllocator has no C# counterpart.
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static int GetFullWidth(NodeStore store, Node node)
     {
         return store.End(node) - store.Pos(node);
@@ -257,6 +258,7 @@ internal static partial class Utilities
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static Node GetSourceFileOfNode(NodeStore store, Node node)
     {
         while (!node.IsNone && store.Kind(node) != SyntaxKind.SourceFile)
@@ -297,6 +299,7 @@ internal static partial class Utilities
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool NodeIsMissing(NodeStore store, Node node)
     {
         if (node.IsNone)
@@ -307,6 +310,7 @@ internal static partial class Utilities
         return store.Pos(node) == store.End(node) && store.Pos(node) >= 0 && store.Kind(node) != SyntaxKind.EndOfFileToken;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool NodeIsPresent(NodeStore store, Node node)
     {
         return !NodeIsMissing(store, node);
@@ -381,18 +385,21 @@ internal static partial class Utilities
         return text.Substring(start, end - start);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static EmitFlags GetEmitFlags(NodeStore store, Node node)
     {
         var emitNode = (EmitNode?)store.EmitNode(node);
         return emitNode != null ? emitNode.Flags : 0;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsComputedNonLiteralName(NodeStore store, Node name)
     {
         return store.Kind(name) == SyntaxKind.ComputedPropertyName && !IsStringOrNumericLiteralLike(store, store.Expression(name));
     }
 
     /// <returns>The text (Track O: a text value; <see cref="TextRef.None"/> for undefined).</returns>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static TextRef TryGetTextOfPropertyName(NodeStore store, Node name)
     {
         switch (store.Kind(name))
@@ -421,6 +428,7 @@ internal static partial class Utilities
     }
 
     /// <summary>`(name as LiteralLikeNode).text` for the literal kinds read above.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static TextRef GetLiteralText(NodeStore store, Node node)
     {
         return node switch
@@ -429,10 +437,11 @@ internal static partial class Utilities
             var n when store.IsNumericLiteral(n) => store.Text(n),
             var n when store.IsBigIntLiteral(n) => store.Text(n),
             var n when store.IsNoSubstitutionTemplateLiteral(n) => store.Text(n),
-            _ => throw new InvalidCastException(store.Kind(node).ToString()),
+            _ => throw Debug.InvalidCast(store.Kind(node)),
         };
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static TextRef GetTextOfPropertyName(NodeStore store, Node name)
     {
         var text = TryGetTextOfPropertyName(store, name);
@@ -578,6 +587,29 @@ internal static partial class Utilities
         return UtilitiesPublic.CreateTextSpanFromBounds(errorPos, store.End(errorNode));
     }
 
+    /// <summary>Track O (O-NA): whether getJSDocCommentRanges takes the trailing comment ranges of a node of this kind too.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal static bool HasTrailingJSDocCommentRanges(SyntaxKind kind)
+    {
+        return kind == SyntaxKind.Parameter ||
+            kind == SyntaxKind.TypeParameter ||
+            kind == SyntaxKind.FunctionExpression ||
+            kind == SyntaxKind.ArrowFunction ||
+            kind == SyntaxKind.ParenthesizedExpression ||
+            kind == SyntaxKind.VariableDeclaration ||
+            kind == SyntaxKind.ExportSpecifier;
+    }
+
+    /// <summary>Track O (O-NA): the filter of getJSDocCommentRanges for one comment range of a node ending at <paramref name="nodeEnd"/>.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal static bool IsJSDocCommentRange(string text, CommentRange comment, int nodeEnd)
+    {
+        return comment.End <= nodeEnd && // Due to parse errors sometime empty parameter may get comments assigned to it that end up not in parameter range
+            CharCodeAtOrNaN(text, comment.Pos + 1) == (int)CharacterCodes.asterisk &&
+            CharCodeAtOrNaN(text, comment.Pos + 2) == (int)CharacterCodes.asterisk &&
+            CharCodeAtOrNaN(text, comment.Pos + 3) != (int)CharacterCodes.slash;
+    }
+
     internal static List<CommentRange>? GetJSDocCommentRanges(NodeStore store, Node node, string text)
     {
         var commentRanges = (store.Kind(node) == SyntaxKind.Parameter ||
@@ -597,6 +629,7 @@ internal static partial class Utilities
             CharCodeAtOrNaN(text, comment.Pos + 3) != (int)CharacterCodes.slash);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsVariableLike(NodeStore store, Node node)
     {
         if (!node.IsNone)
@@ -617,6 +650,7 @@ internal static partial class Utilities
         return false;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsSuperProperty(NodeStore store, Node node)
     {
         var kind = store.Kind(node);
@@ -625,11 +659,13 @@ internal static partial class Utilities
     }
 
     /// <summary>`(node as PropertyAccessExpression | ElementAccessExpression).expression`.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static Node GetAccessExpressionExpression(NodeStore store, Node node)
     {
         return (node is var propertyAccess && store.IsPropertyAccessExpression(propertyAccess)) ? store.Expression(propertyAccess) : store.Expression(node);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsInJSFile(NodeStore store, Node node)
     {
         return !node.IsNone && (store.Flags(node) & NodeFlags.JavaScriptFile) != 0;
@@ -650,6 +686,7 @@ internal static partial class Utilities
         return CharCodeAtOrNaN(GetSourceTextOfNodeFromSourceFile(store, sourceFile, str), 0) == (int)CharacterCodes.doubleQuote;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static Node GetRightMostAssignedExpression(NodeStore store, Node node)
     {
         while (IsAssignmentExpression(store, node, /*excludeCompoundAssignment*/ true))
@@ -659,16 +696,19 @@ internal static partial class Utilities
         return node;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsExportsIdentifier(NodeStore store, Node node)
     {
         return FactoryNodeTests.IsIdentifier(store, node) && store.Texts.Equals(store.EscapedText(node), "exports");
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsModuleIdentifier(NodeStore store, Node node)
     {
         return FactoryNodeTests.IsIdentifier(store, node) && store.Texts.Equals(store.EscapedText(node), "module");
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsModuleExportsAccessExpression(NodeStore store, Node node)
     {
         return (FactoryNodeTests.IsPropertyAccessExpression(store, node) || IsLiteralLikeElementAccess(store, node))
@@ -678,12 +718,14 @@ internal static partial class Utilities
 
     // Given a BinaryExpression, returns SpecialPropertyAssignmentKind for the various kinds of property
     // assignments we treat as special in the binder
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static AssignmentDeclarationKind GetAssignmentDeclarationKind(NodeStore store, Node expr)
     {
         var special = GetAssignmentDeclarationKindWorker(store, expr);
         return special == AssignmentDeclarationKind.Property || IsInJSFile(store, expr) ? special : AssignmentDeclarationKind.None;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsBindableObjectDefinePropertyCall(NodeStore store, Node expr)
     {
         return store.Length(store.Arguments(expr)) == 3 &&
@@ -698,6 +740,7 @@ internal static partial class Utilities
     /// <summary>
     /// x[0] OR x['a'] OR x[Symbol.y]
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsLiteralLikeElementAccess(NodeStore store, Node node)
     {
         return FactoryNodeTests.IsElementAccessExpression(store, node) && IsStringOrNumericLiteralLike(store, store.ArgumentExpression(node));
@@ -706,6 +749,7 @@ internal static partial class Utilities
     /// <summary>
     /// Any series of property and element accesses.
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsBindableStaticAccessExpression(NodeStore store, Node node, bool? excludeThisKeyword = null)
     {
         return FactoryNodeTests.IsPropertyAccessExpression(store, node) && (excludeThisKeyword != true && store.Kind(store.Expression(node)) == SyntaxKind.ThisKeyword || FactoryNodeTests.IsIdentifier(store, store.Name(node)) && IsBindableStaticNameExpression(store, store.Expression(node), /*excludeThisKeyword*/ true))
@@ -715,6 +759,7 @@ internal static partial class Utilities
     /// <summary>
     /// Any series of property and element accesses, ending in a literal element access
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsBindableStaticElementAccessExpression(NodeStore store, Node node, bool? excludeThisKeyword = null)
     {
         return IsLiteralLikeElementAccess(store, node)
@@ -723,11 +768,13 @@ internal static partial class Utilities
                 IsBindableStaticAccessExpression(store, store.Expression(node), /*excludeThisKeyword*/ true));
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsBindableStaticNameExpression(NodeStore store, Node node, bool? excludeThisKeyword = null)
     {
         return IsEntityNameExpression(store, node) || IsBindableStaticAccessExpression(store, node, excludeThisKeyword);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static AssignmentDeclarationKind GetAssignmentDeclarationKindWorker(NodeStore store, Node expr)
     {
         if (FactoryNodeTests.IsCallExpression(store, expr))
@@ -761,6 +808,7 @@ internal static partial class Utilities
         return GetAssignmentDeclarationPropertyAccessKind(store, store.Left(binary));
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsVoidZero(NodeStore store, Node node)
     {
         return FactoryNodeTests.IsVoidExpression(store, node) && FactoryNodeTests.IsNumericLiteral(store, store.Expression(node)) && store.Texts.Equals(store.Text(store.Expression(node)), "0");
@@ -770,6 +818,7 @@ internal static partial class Utilities
     /// Does not handle signed numeric names like `a[+0]` - handling those would require handling prefix unary expressions
     /// throughout late binding handling as well, which is awkward (but ultimately probably doable if there is demand)
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static Node GetElementOrPropertyAccessArgumentExpressionOrName(NodeStore store, Node node)
     {
         if (FactoryNodeTests.IsPropertyAccessExpression(store, node))
@@ -785,6 +834,7 @@ internal static partial class Utilities
     }
 
     /// <returns>The name (Track O: a text value; <see cref="TextRef.None"/> for undefined).</returns>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static TextRef GetElementOrPropertyAccessName(NodeStore store, Node node)
     {
         var name = GetElementOrPropertyAccessArgumentExpressionOrName(store, node);
@@ -802,6 +852,7 @@ internal static partial class Utilities
         return default;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static AssignmentDeclarationKind GetAssignmentDeclarationPropertyAccessKind(NodeStore store, Node lhs)
     {
         if (store.Kind(GetAccessExpressionExpression(store, lhs)) == SyntaxKind.ThisKeyword)
@@ -846,6 +897,7 @@ internal static partial class Utilities
         return AssignmentDeclarationKind.None;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static Node GetInitializerOfBinaryExpression(NodeStore store, Node expr)
     {
         while (FactoryNodeTests.IsBinaryExpression(store, store.Right(expr)))
@@ -855,6 +907,7 @@ internal static partial class Utilities
         return store.Right(expr);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static Node GetSourceOfDefaultedAssignment(NodeStore store, Node node)
     {
         if (FactoryNodeTests.IsExpressionStatement(store, node) &&
@@ -871,6 +924,7 @@ internal static partial class Utilities
         return default;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static Node GetSingleInitializerOfVariableStatementOrPropertyDeclaration(NodeStore store, Node node)
     {
         switch (store.Kind(node))
@@ -886,11 +940,13 @@ internal static partial class Utilities
         return default;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static Node GetSingleVariableOfVariableStatement(NodeStore store, Node node)
     {
         return FactoryNodeTests.IsVariableStatement(store, node) ? Core.FirstOrUndefined(store.Nodes(store.Declarations(store.DeclarationList(node)))) : default;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static Node GetNestedModuleDeclaration(NodeStore store, Node node)
     {
         return FactoryNodeTests.IsModuleDeclaration(store, node) &&
@@ -900,6 +956,7 @@ internal static partial class Utilities
             : default;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool CanHaveJSDoc(NodeStore store, Node node)
     {
         switch (store.Kind(node))
@@ -1084,6 +1141,7 @@ internal static partial class Utilities
     /// Determines whether a host node owns a jsDoc tag. A `@type`/`@satisfies` tag attached to a
     /// a ParenthesizedExpression belongs only to the ParenthesizedExpression.
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool OwnsJSDocTag(NodeStore store, Node hostNode, Node tag)
     {
         return !(FactoryNodeTests.IsJSDocTypeTag(store, tag) || FactoryNodeTests.IsJSDocSatisfiesTag(store, tag))
@@ -1093,6 +1151,7 @@ internal static partial class Utilities
             || store.Parent(store.Parent(tag)) == hostNode;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static Node GetNextJSDocCommentLocation(NodeStore store, Node node)
     {
         var parent = store.Parent(node);
@@ -1130,6 +1189,7 @@ internal static partial class Utilities
         return default;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static Node SkipParentheses(NodeStore store, Node node, bool? excludeJSDocTypeAssertions = null)
     {
         var flags = excludeJSDocTypeAssertions == true ?
@@ -1138,31 +1198,37 @@ internal static partial class Utilities
         return FactoryUtilities.SkipOuterExpressions(store, node, flags);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsKeyword(SyntaxKind token)
     {
         return SyntaxKind.FirstKeyword <= token && token <= SyntaxKind.LastKeyword;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsPunctuation(SyntaxKind token)
     {
         return SyntaxKind.FirstPunctuation <= token && token <= SyntaxKind.LastPunctuation;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsKeywordOrPunctuation(SyntaxKind token)
     {
         return IsKeyword(token) || IsPunctuation(token);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsStringOrNumericLiteralLike(NodeStore store, Node node)
     {
         return UtilitiesPublic.IsStringLiteralLike(store, node) || FactoryNodeTests.IsNumericLiteral(store, node);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsSignedNumericLiteral(NodeStore store, Node node)
     {
         return FactoryNodeTests.IsPrefixUnaryExpression(store, node) && (store.Operator(node) == SyntaxKind.PlusToken || store.Operator(node) == SyntaxKind.MinusToken) && FactoryNodeTests.IsNumericLiteral(store, store.Operand(node));
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsDynamicName(NodeStore store, Node name)
     {
         if (!(store.Kind(name) == SyntaxKind.ComputedPropertyName || store.Kind(name) == SyntaxKind.ElementAccessExpression))
@@ -1180,12 +1246,14 @@ internal static partial class Utilities
             || PositionIsSynthesized(range.End);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool NodeIsSynthesized(NodeStore store, Node node)
     {
         return PositionIsSynthesized(store.Pos(node))
             || PositionIsSynthesized(store.End(node));
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static Associativity GetExpressionAssociativity(NodeStore store, Node expression)
     {
         var @operator = GetOperator(store, expression);
@@ -1193,6 +1261,7 @@ internal static partial class Utilities
         return GetOperatorAssociativity(store.Kind(expression), @operator, hasArguments);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static Associativity GetOperatorAssociativity(SyntaxKind kind, SyntaxKind @operator, bool? hasArguments = null)
     {
         switch (kind)
@@ -1236,6 +1305,7 @@ internal static partial class Utilities
         return Associativity.Left;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static OperatorPrecedence GetExpressionPrecedence(NodeStore store, Node expression)
     {
         var @operator = GetOperator(store, expression);
@@ -1243,6 +1313,7 @@ internal static partial class Utilities
         return GetOperatorPrecedence(store.Kind(expression), @operator, hasArguments);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static SyntaxKind GetOperator(NodeStore store, Node expression)
     {
         if (store.Kind(expression) == SyntaxKind.BinaryExpression)
@@ -1259,6 +1330,7 @@ internal static partial class Utilities
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static OperatorPrecedence GetOperatorPrecedence(SyntaxKind nodeKind, SyntaxKind operatorKind, bool? hasArguments = null)
     {
         switch (nodeKind)
@@ -1362,6 +1434,7 @@ internal static partial class Utilities
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static OperatorPrecedence GetBinaryOperatorPrecedence(SyntaxKind kind)
     {
         switch (kind)
@@ -1413,6 +1486,7 @@ internal static partial class Utilities
     }
 
     /// <summary>`node.templateFlags` of a TemplateLiteralToken (NoSubstitutionTemplateLiteral, TemplateHead/Middle/Tail).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static TokenFlags GetTemplateFlags(NodeStore store, Node node)
     {
         return node switch
@@ -1425,23 +1499,41 @@ internal static partial class Utilities
         };
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool ContainsInvalidEscapeFlag(NodeStore store, Node node)
     {
         return (GetTemplateFlags(store, node) & TokenFlags.ContainsInvalidEscape) != 0;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool HasInvalidEscape(NodeStore store, Node template)
     {
         return !template.IsNone && (FactoryNodeTests.IsNoSubstitutionTemplateLiteral(store, template)
             ? ContainsInvalidEscapeFlag(store, template)
-            : (ContainsInvalidEscapeFlag(store, store.Head(template)) || Core.Some(store.Nodes(store.TemplateSpans(template)), span => ContainsInvalidEscapeFlag(store, store.Literal(span)))));
+            : (ContainsInvalidEscapeFlag(store, store.Head(template)) || SomeSpanContainsInvalidEscape(store, store.TemplateSpans(template))));
     }
 
+    // `some(template.templateSpans, span => containsInvalidEscapeFlag(span.literal))` (Track O, O-NA: a loop).
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private static bool SomeSpanContainsInvalidEscape(NodeStore store, NodeList spans)
+    {
+        foreach (var span in store.Nodes(spans))
+        {
+            if (ContainsInvalidEscapeFlag(store, store.Literal(span)))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsThisIdentifier(NodeStore store, Node node)
     {
         return !node.IsNone && store.Kind(node) == SyntaxKind.Identifier && IdentifierIsThisKeyword(store, node);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IdentifierIsThisKeyword(NodeStore store, Node id)
     {
         return store.Texts.Equals(store.EscapedText(id), "this");
@@ -1528,11 +1620,13 @@ internal static partial class Utilities
         return flags;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static ModifierFlags SelectSyntacticModifierFlags(ModifierFlags flags)
     {
         return flags & ModifierFlags.SyntacticModifiers;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static ModifierFlags SelectEffectiveModifierFlags(ModifierFlags flags)
     {
         return (flags & ModifierFlags.NonCacheOnlyModifiers) |
@@ -1544,6 +1638,7 @@ internal static partial class Utilities
     ///
     /// NOTE: This function does not use `parent` pointers and will not include modifiers from JSDoc.
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static ModifierFlags GetSyntacticModifierFlagsNoCache(NodeStore store, Node node)
     {
         var flags = FactoryUtilitiesPublic.CanHaveModifiers(store, node) ? ModifiersToFlags(store, store.Modifiers(node)) : ModifierFlags.None;
@@ -1554,6 +1649,7 @@ internal static partial class Utilities
         return flags;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static ModifierFlags ModifiersToFlags(NodeStore store, NodeList modifiers)
     {
         var flags = ModifierFlags.None;
@@ -1567,6 +1663,7 @@ internal static partial class Utilities
         return flags;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static ModifierFlags ModifierToFlag(SyntaxKind token)
     {
         switch (token)
@@ -1607,6 +1704,7 @@ internal static partial class Utilities
         return ModifierFlags.None;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsLogicalOrCoalescingAssignmentOperator(SyntaxKind token)
     {
         return token == SyntaxKind.BarBarEqualsToken
@@ -1614,11 +1712,13 @@ internal static partial class Utilities
             || token == SyntaxKind.QuestionQuestionEqualsToken;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsAssignmentOperator(SyntaxKind token)
     {
         return token >= SyntaxKind.FirstAssignment && token <= SyntaxKind.LastAssignment;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsAssignmentExpression(NodeStore store, Node node, bool? excludeCompoundAssignment = null)
     {
         return FactoryNodeTests.IsBinaryExpression(store, node)
@@ -1628,26 +1728,31 @@ internal static partial class Utilities
             && UtilitiesPublic.IsLeftHandSideExpression(store, store.Left(node));
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsEntityNameExpression(NodeStore store, Node node)
     {
         return store.Kind(node) == SyntaxKind.Identifier || IsPropertyAccessEntityNameExpression(store, node);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsPropertyAccessEntityNameExpression(NodeStore store, Node node)
     {
         return FactoryNodeTests.IsPropertyAccessExpression(store, node) && FactoryNodeTests.IsIdentifier(store, store.Name(node)) && IsEntityNameExpression(store, store.Expression(node));
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsPrototypeAccess(NodeStore store, Node node)
     {
         return IsBindableStaticAccessExpression(store, node) && store.Texts.Equals(GetElementOrPropertyAccessName(store, node), "prototype");
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsAccessExpression(NodeStore store, Node node)
     {
         return store.Kind(node) == SyntaxKind.PropertyAccessExpression || store.Kind(node) == SyntaxKind.ElementAccessExpression;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static Node GetLeftmostExpression(NodeStore store, Node node, bool stopAtCallExpressions)
     {
         while (true)
@@ -1703,6 +1808,7 @@ internal static partial class Utilities
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static LanguageVariant GetLanguageVariant(ScriptKind scriptKind)
     {
         // .tsx and .jsx files are treated as jsx language variant.
@@ -1763,6 +1869,7 @@ internal static partial class Utilities
     /// <summary>
     /// Bypasses immutability and directly sets the `parent` property of a `Node`.
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static Node SetParent(NodeStore store, Node child, Node parent)
     {
         if (!child.IsNone && !parent.IsNone)
@@ -1778,45 +1885,84 @@ internal static partial class Utilities
     /// <param name="rootNode">The root node from which to start the recursion.</param>
     /// <param name="incremental">When `true`, only recursively descends through nodes whose `parent` pointers are incorrect.
     /// This allows us to quickly bail out of setting `parent` for subtrees during incremental parsing.</param>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static Node SetParentRecursive(NodeStore store, Node rootNode, bool incremental)
     {
         if (rootNode.IsNone)
         {
             return rootNode;
         }
-        Func<Node, Node, object?> cbNode = UtilitiesPublic.IsJSDocNode(store, rootNode) ? BindParentToChildIgnoringJSDoc : BindParentToChild;
-        Parser.ForEachChildRecursively<object>(store, rootNode, cbNode);
+        // TypeScript: `forEachChildRecursively(rootNode, isJSDocNode(rootNode) ? bindParentToChildIgnoringJSDoc :
+        // bindParentToChild)`. Track O (O-NA): a recursive walk with a struct visitor instead of forEachChildRecursively's
+        // queues and the closures of the inner functions (the walk recurses as deep as the parse that built the tree did).
+        // The order of the visits differs; the parents set do not ("skip" depends only on a node's own parent).
+        NodeVisitor.ForEachChild<ParentBinder, bool>(store, rootNode, new ParentBinder(store, rootNode, incremental, UtilitiesPublic.IsJSDocNode(store, rootNode)));
         return rootNode;
+    }
 
-        object? BindParentToChildIgnoringJSDoc(Node child, Node parent)
+    /// <summary>The callbacks of setParentRecursive for the children of <c>parent</c>.</summary>
+    private readonly struct ParentBinder : INodeVisitor<bool>
+    {
+        private readonly NodeStore store;
+        private readonly Node parent;
+        private readonly bool incremental;
+        private readonly bool ignoringJSDoc;
+
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+        internal ParentBinder(NodeStore store, Node parent, bool incremental, bool ignoringJSDoc)
         {
-            if (incremental && store.Parent(child) == parent)
-            {
-                return "skip";
-            }
-            SetParent(store, child, parent);
-            return null;
+            this.store = store;
+            this.parent = parent;
+            this.incremental = incremental;
+            this.ignoringJSDoc = ignoringJSDoc;
         }
 
-        object? BindJSDoc(Node child)
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+        public bool VisitNode(Node node)
         {
-            if (UtilitiesPublic.HasJSDocNodes(store, child))
-            {
-                foreach (var doc in store.JsDoc(child)!)
-                {
-                    BindParentToChildIgnoringJSDoc(doc, child);
-                    Parser.ForEachChildRecursively<object>(store, doc, BindParentToChildIgnoringJSDoc);
-                }
-            }
-            return null;
+            BindParentToChild(store, node, parent, incremental, ignoringJSDoc);
+            return false;
         }
 
-        object? BindParentToChild(Node child, Node parent)
+        // (forEachChildRecursively has no cbNodes here: the elements of a list are visited one by one.)
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+        public bool VisitNodes(NodeList nodes)
         {
-            return BindParentToChildIgnoringJSDoc(child, parent) ?? BindJSDoc(child);
+            foreach (var node in store.Nodes(nodes))
+            {
+                BindParentToChild(store, node, parent, incremental, ignoringJSDoc);
+            }
+            return false;
         }
     }
 
+    // bindParentToChildIgnoringJSDoc (ignoringJSDoc) or bindParentToChild, then the child's own children unless skipped.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private static void BindParentToChild(NodeStore store, Node child, Node parent, bool incremental, bool ignoringJSDoc)
+    {
+        if (incremental && store.Parent(child) == parent)
+        {
+            return; // "skip"
+        }
+        SetParent(store, child, parent);
+        if (!ignoringJSDoc && UtilitiesPublic.HasJSDocNodes(store, child))
+        {
+            // bindJSDoc: every JSDoc comment of the child, and everything below it, ignoring JSDoc.
+            var jsDoc = store.JsDoc(child)!;
+            for (var i = 0; i < jsDoc.Count; i++)
+            {
+                var doc = jsDoc[i];
+                if (!(incremental && store.Parent(doc) == child))
+                {
+                    SetParent(store, doc, child);
+                }
+                NodeVisitor.ForEachChild<ParentBinder, bool>(store, doc, new ParentBinder(store, doc, incremental, /*ignoringJSDoc*/ true));
+            }
+        }
+        NodeVisitor.ForEachChild<ParentBinder, bool>(store, child, new ParentBinder(store, child, incremental, ignoringJSDoc));
+    }
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static TextRef GetEscapedTextOfJsxNamespacedName(NodeStore store, Node node)
     {
         // `${namespace.escapedText}:${idText(name)}` (Track O: a span of the source text when the three parts are adjacent there).
@@ -1830,6 +1976,7 @@ internal static partial class Utilities
     //// JavaScript semantics the ported functions rely on.
 
     /// <summary>JavaScript's WhiteSpace or LineTerminator (the characters of `\s` and of String.prototype.trim).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsJsWhiteSpaceOrLineTerminator(char ch)
     {
         switch (ch)

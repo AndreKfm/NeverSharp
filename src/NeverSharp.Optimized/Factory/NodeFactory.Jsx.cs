@@ -20,6 +20,7 @@ internal sealed partial class NodeFactory
     //
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJsxElement(Node openingElement, NodeList children, Node closingElement)
     {
         var node = CreateBaseNode(SyntaxKind.JsxElement);
@@ -34,6 +35,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJsxSelfClosingElement(Node tagName, NodeList typeArguments, Node attributes)
     {
         var node = CreateBaseNode(SyntaxKind.JsxSelfClosingElement);
@@ -52,6 +54,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJsxOpeningElement(Node tagName, NodeList typeArguments, Node attributes)
     {
         var node = CreateBaseNode(SyntaxKind.JsxOpeningElement);
@@ -70,6 +73,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJsxClosingElement(Node tagName)
     {
         var node = CreateBaseNode(SyntaxKind.JsxClosingElement);
@@ -80,6 +84,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJsxFragment(Node openingFragment, NodeList children, Node closingFragment)
     {
         var node = CreateBaseNode(SyntaxKind.JsxFragment);
@@ -94,6 +99,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJsxText(TextRef text, bool? containsOnlyTriviaWhiteSpaces = null)
     {
         var node = CreateBaseNode(SyntaxKind.JsxText);
@@ -104,6 +110,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJsxOpeningFragment()
     {
         var node = CreateBaseNode(SyntaxKind.JsxOpeningFragment);
@@ -112,6 +119,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJsxJsxClosingFragment()
     {
         var node = CreateBaseNode(SyntaxKind.JsxClosingFragment);
@@ -120,6 +128,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJsxAttribute(Node name, Node initializer)
     {
         var node = CreateBaseDeclaration(SyntaxKind.JsxAttribute);
@@ -132,6 +141,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJsxAttributes(NodeList properties)
     {
         var node = CreateBaseDeclaration(SyntaxKind.JsxAttributes);
@@ -142,6 +152,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJsxSpreadAttribute(Node expression)
     {
         var node = CreateBaseNode(SyntaxKind.JsxSpreadAttribute);
@@ -152,6 +163,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJsxExpression(Node dotDotDotToken, Node expression)
     {
         var node = CreateBaseNode(SyntaxKind.JsxExpression);
@@ -164,6 +176,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateJsxNamespacedName(Node @namespace, Node name)
     {
         var node = CreateBaseNode(SyntaxKind.JsxNamespacedName);
@@ -180,6 +193,7 @@ internal sealed partial class NodeFactory
     //
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateCaseClause(Node expression, NodeList statements)
     {
         var node = CreateBaseNode(SyntaxKind.CaseClause);
@@ -192,6 +206,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateDefaultClause(NodeList statements)
     {
         var node = CreateBaseNode(SyntaxKind.DefaultClause);
@@ -201,6 +216,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateHeritageClause(SyntaxKind token, NodeList types)
     {
         var node = CreateBaseNode(SyntaxKind.HeritageClause);
@@ -224,16 +240,16 @@ internal sealed partial class NodeFactory
 
     /// <summary>`createCatchClause(variableDeclaration: string | BindingName | VariableDeclaration | undefined, block)`.</summary>
     // @api
-    internal Node CreateCatchClause(object? variableDeclaration, Node block)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal Node CreateCatchClause(Node variableDeclaration, Node block)
     {
-        // Track O: a node handle passed as an object; None is undefined.
-        variableDeclaration = variableDeclaration is Node { IsNone: true } ? null : variableDeclaration;
+        // Track O: a node handle (O-NA: not boxed as an object); None is undefined.
         var node = CreateBaseNode(SyntaxKind.CatchClause);
         store.SetVariableDeclaration(node, AsVariableDeclaration(variableDeclaration));
         store.SetBlock(node, block);
         store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.VariableDeclaration(node)) |
             PropagateChildFlags(store, store.Block(node)) |
-            (variableDeclaration == null || variableDeclaration is "" ? TransformFlags.ContainsES2019 : TransformFlags.None)));
+            (variableDeclaration.IsNone ? TransformFlags.ContainsES2019 : TransformFlags.None)));
         // node.locals = undefined; // initialized by binder (LocalsContainer)
         // node.nextContainer = undefined; // initialized by binder (LocalsContainer)
         return node;
@@ -244,7 +260,8 @@ internal sealed partial class NodeFactory
     //
 
     // @api
-    internal Node CreatePropertyAssignment(object name, Node initializer)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal Node CreatePropertyAssignment(Node name, Node initializer)
     {
         var node = CreateBaseDeclaration(SyntaxKind.PropertyAssignment);
         store.SetName(node, AsName(name));
@@ -259,7 +276,8 @@ internal sealed partial class NodeFactory
     }
 
     // @api
-    internal Node CreateShorthandPropertyAssignment(object name, Node objectAssignmentInitializer = default)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal Node CreateShorthandPropertyAssignment(Node name, Node objectAssignmentInitializer = default)
     {
         var node = CreateBaseDeclaration(SyntaxKind.ShorthandPropertyAssignment);
         store.SetName(node, AsName(name));
@@ -276,6 +294,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateSpreadAssignment(Node expression)
     {
         var node = CreateBaseDeclaration(SyntaxKind.SpreadAssignment);
@@ -292,7 +311,8 @@ internal sealed partial class NodeFactory
     //
 
     // @api
-    internal Node CreateEnumMember(object name, Node initializer = default)
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal Node CreateEnumMember(Node name, Node initializer = default)
     {
         var node = CreateBaseDeclaration(SyntaxKind.EnumMember);
         store.SetName(node, AsName(name));

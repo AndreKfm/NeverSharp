@@ -476,11 +476,13 @@ internal static partial class Core
         return [value];
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static List<T> ToArray<T>(List<T> value)
     {
         return value;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static IReadOnlyList<T> ToArray<T>(IReadOnlyList<T> value)
     {
         return value;
@@ -500,11 +502,13 @@ internal static partial class Core
     }
 
     /// <summary>Does nothing.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static void Noop(object? _ = null)
     {
     }
 
     /// <summary>Returns its argument.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static T Identity<T>(T x)
     {
         return x;
@@ -589,6 +593,7 @@ internal static partial class Core
             Comparison.GreaterThan;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static Comparison CompareComparableValues(int? a, int? b)
     {
         return a == b ? Comparison.EqualTo :
@@ -598,6 +603,7 @@ internal static partial class Core
             Comparison.GreaterThan;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static Comparison CompareComparableValues(double? a, double? b)
     {
         return a == b ? Comparison.EqualTo :
@@ -611,6 +617,7 @@ internal static partial class Core
     /// Compare two numeric values for their order relative to each other.
     /// To compare strings, use any of the `compareStrings` functions.
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static Comparison CompareValues(int? a, int? b)
     {
         return CompareComparableValues(a, b);
@@ -620,6 +627,7 @@ internal static partial class Core
     /// Compare two numeric values for their order relative to each other.
     /// To compare strings, use any of the `compareStrings` functions.
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static Comparison CompareValues(double? a, double? b)
     {
         return CompareComparableValues(a, b);
@@ -746,6 +754,7 @@ internal static partial class Core
     /// <summary>
     /// core.ts tests for Node.js (`process`, `require`). A .NET process is not a Node-like system.
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsNodeLikeSystem()
     {
         return false;
@@ -754,6 +763,7 @@ internal static partial class Core
     //// JavaScript semantics the ported functions rely on.
 
     /// <summary>`value !== undefined` (and not null) for a generic value; Track O: a node handle is undefined when it is None.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsDefined<T>([NotNullWhen(true)] T? value)
     {
         return value is not null && !(value is Node node && node.IsNone);
@@ -830,6 +840,7 @@ internal static partial class Core
     }
 
     /// <summary>JavaScript's `typeof` for the primitive arguments memoizeOne accepts.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static string JsTypeOf<T>(T value)
     {
         return value switch
@@ -874,6 +885,7 @@ internal static partial class Core
         return default;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool Some<T>(ReadOnlySpan<T> array)
     {
         return array.Length > 0;
@@ -895,12 +907,14 @@ internal static partial class Core
         return false;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static T? FirstOrUndefined<T>(ReadOnlySpan<T> array)
     {
         return array.Length == 0 ? default : array[0];
     }
 
     /// <summary>Returns the last element of an array if non-empty, `undefined` otherwise.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static T? LastOrUndefined<T>(ReadOnlySpan<T> array)
     {
         return array.Length == 0 ? default : array[^1];

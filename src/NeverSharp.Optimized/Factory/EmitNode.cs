@@ -106,6 +106,7 @@ internal static class FactoryEmitNode
     /// <summary>
     /// Gets a custom text range to use when emitting comments.
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool? GetStartsOnNewLine(NodeStore store, Node node)
     {
         return (store.EmitNode(node) as EmitNode)?.StartsOnNewLine;
@@ -128,11 +129,13 @@ internal static class FactoryEmitNode
         return (store.EmitNode(node) as EmitNode)?.CommentRange ?? new ObjectTextRange { Pos = store.Pos(node), End = store.End(node) };
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static List<SynthesizedComment>? GetSyntheticLeadingComments(NodeStore store, Node node)
     {
         return (store.EmitNode(node) as EmitNode)?.LeadingComments;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static List<SynthesizedComment>? GetSyntheticTrailingComments(NodeStore store, Node node)
     {
         return (store.EmitNode(node) as EmitNode)?.TrailingComments;

@@ -31,6 +31,7 @@ internal static partial class TsPath
     //// Path Tests
 
     /// <summary>Determines whether a charCode corresponds to `/` or `\`.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsAnyDirectorySeparator(int charCode)
     {
         return charCode == (int)CharacterCodes.slash || charCode == (int)CharacterCodes.backslash;
@@ -42,6 +43,7 @@ internal static partial class TsPath
     }
 
     /// <summary>Determines whether a path has a trailing separator (`/` or `\\`).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool HasTrailingDirectorySeparator(string path)
     {
         return path.Length > 0 && IsAnyDirectorySeparator(path[path.Length - 1]);
@@ -49,12 +51,14 @@ internal static partial class TsPath
 
     //// Path Parsing
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsVolumeCharacter(int charCode)
     {
         return (charCode >= (int)CharacterCodes.a && charCode <= (int)CharacterCodes.z) ||
             (charCode >= (int)CharacterCodes.A && charCode <= (int)CharacterCodes.Z);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static int GetFileUrlVolumeSeparatorEnd(string url, int start)
     {
         var ch0 = CharCodeAt(url, start);
@@ -594,6 +598,7 @@ internal static partial class TsPath
     /// "//", or a "." or ".." segment that starts at the beginning or after a "/" and ends at the end or
     /// before a "/".
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool RelativePathSegmentRegExpTest(string path)
     {
         var length = path.Length;
@@ -631,6 +636,7 @@ internal static partial class TsPath
     /// String.prototype.charCodeAt: NaN for an index outside the string. -1 stands for NaN: like NaN it is
     /// unequal to every character code and outside every character range.
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static int CharCodeAt(string text, int index)
     {
         return (uint)index < (uint)text.Length ? text[index] : -1;

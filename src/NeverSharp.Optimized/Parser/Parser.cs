@@ -64,6 +64,7 @@ internal sealed partial class Parser
         ParserPool.Add(parser);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsJSDocLikeText(string text, int start)
     {
         return CharCodeAt(text, start + 1) == (int)CharacterCodes.asterisk &&
@@ -71,13 +72,24 @@ internal sealed partial class Parser
             CharCodeAt(text, start + 3) != (int)CharacterCodes.slash;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static Node IsFileProbablyExternalModule(NodeStore store, Node sourceFile)
     {
         // Try to use the first top-level import/export when available, then
         // fall back to looking for an 'import.meta' somewhere in the tree if necessary.
-        return (Core.ForEach(store.Nodes(store.Statements(sourceFile)), (statement, _) => IsAnExternalModuleIndicatorNode(store, statement)) is { IsNone: false } __t1 ? __t1 : GetImportMetaIfNecessary(store, sourceFile));
+        // (Track O, O-NA: `forEach(sourceFile.statements, isAnExternalModuleIndicatorNode)` as a loop.)
+        foreach (var statement in store.Nodes(store.Statements(sourceFile)))
+        {
+            var indicator = IsAnExternalModuleIndicatorNode(store, statement);
+            if (!indicator.IsNone)
+            {
+                return indicator;
+            }
+        }
+        return GetImportMetaIfNecessary(store, sourceFile);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static Node IsAnExternalModuleIndicatorNode(NodeStore store, Node node)
     {
         return FactoryUtilitiesPublic.CanHaveModifiers(store, node) && HasModifierOfKind(store, node, SyntaxKind.ExportKeyword)
@@ -87,6 +99,7 @@ internal sealed partial class Parser
                 || FactoryNodeTests.IsExportDeclaration(store, node) ? node : default;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static Node GetImportMetaIfNecessary(NodeStore store, Node sourceFile)
     {
         return (store.Flags(sourceFile) & NodeFlags.PossiblyContainsImportMeta) != 0 ?
@@ -94,23 +107,62 @@ internal sealed partial class Parser
             default;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static Node WalkTreeForImportMeta(NodeStore store, Node node)
     {
         if (IsImportMeta(store, node))
         {
             return node;
         }
-        // (ForEachChild's callbacks return a reference or null: the node found is returned boxed.)
-        var found = NodeVisitor.ForEachChild<object>(store, node, child => WalkTreeForImportMeta(store, child) is { IsNone: false } meta ? meta : null);
-        return found is Node n ? n : default;
+        // (Track O, O-NA: forEachChild with a struct visitor, which returns the node found without boxing it.)
+        return NodeVisitor.ForEachChild<ImportMetaVisitor, Node>(store, node, new ImportMetaVisitor(store));
+    }
+
+    // `child => walkTreeForImportMeta(child)` of walkTreeForImportMeta (lists are visited element by element).
+    private readonly struct ImportMetaVisitor : INodeVisitor<Node>
+    {
+        private readonly NodeStore store;
+
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+        internal ImportMetaVisitor(NodeStore store)
+        {
+            this.store = store;
+        }
+
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+        public Node VisitNode(Node node) => WalkTreeForImportMeta(store, node);
+
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+        public Node VisitNodes(NodeList nodes)
+        {
+            foreach (var node in store.Nodes(nodes))
+            {
+                var found = WalkTreeForImportMeta(store, node);
+                if (!found.IsNone)
+                {
+                    return found;
+                }
+            }
+            return default;
+        }
     }
 
     /// <summary>Do not use hasModifier inside the parser; it relies on parent pointers. Use this instead.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool HasModifierOfKind(NodeStore store, Node node, SyntaxKind kind)
     {
-        return Core.Some(store.Nodes(store.Modifiers(node)), m => store.Kind(m) == kind);
+        // (Track O, O-NA: `some(node.modifiers, m => m.kind === kind)` as a loop.)
+        foreach (var m in store.Nodes(store.Modifiers(node)))
+        {
+            if (store.Kind(m) == kind)
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsImportMeta(NodeStore store, Node node)
     {
         return FactoryNodeTests.IsMetaProperty(store, node) && store.KeywordToken(node) == SyntaxKind.ImportKeyword && store.Texts.Equals(store.EscapedText(store.Name(node)), "meta");
@@ -229,18 +281,7 @@ internal sealed partial class Parser
             }
             else
             {
-                Action<Node>? setIndicator = format == null ? overrideSetExternalModuleIndicator : file =>
-                {
-                    store.SetImpliedNodeFormat(file, format.Value);
-                    if (overrideSetExternalModuleIndicator != null)
-                    {
-                        overrideSetExternalModuleIndicator(file);
-                    }
-                    else
-                    {
-                        SetExternalModuleIndicator(store, file);
-                    }
-                };
+                var setIndicator = format == null ? overrideSetExternalModuleIndicator : SetIndicatorWithFormat(store, format.Value, overrideSetExternalModuleIndicator);
                 result = parser.ParseSourceFile(store, fileName, sourceText, languageVersion, /*syntaxCursor*/ null, setParentNodes, scriptKind, setIndicator, jsDocParsingMode ?? JSDocParsingMode.ParseAll);
             }
         }
@@ -252,6 +293,24 @@ internal sealed partial class Parser
         }
 
         return new SourceFile(store, result);
+    }
+
+    // The setExternalModuleIndicator of createSourceFile with an impliedNodeFormat (Track O: a method of its own, so the
+    // closure is created only when there is a format).
+    private static Action<Node> SetIndicatorWithFormat(NodeStore store, ModuleKind format, Action<Node>? overrideSetExternalModuleIndicator)
+    {
+        return file =>
+        {
+            store.SetImpliedNodeFormat(file, format);
+            if (overrideSetExternalModuleIndicator != null)
+            {
+                overrideSetExternalModuleIndicator(file);
+            }
+            else
+            {
+                SetExternalModuleIndicator(store, file);
+            }
+        };
     }
 
     /// <summary>
@@ -274,6 +333,7 @@ internal sealed partial class Parser
     }
 
     // See also `isExternalOrCommonJsModule` in utilities.ts
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsExternalModule(NodeStore store, Node file)
     {
         return store.ExternalModuleIndicator(file) != null;
@@ -282,12 +342,14 @@ internal sealed partial class Parser
     //// JavaScript semantics the ported functions rely on.
 
     /// <summary>`text.charCodeAt(index)`; NaN (outside the string) is -1, which equals no character code.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static int CharCodeAt(string text, int index)
     {
         return (uint)index < (uint)text.Length ? text[index] : -1;
     }
 
     /// <summary>JavaScript truthiness of a value (`if (value)`): undefined, null, false, 0 and "" are falsy.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsTruthy<T>(T value)
     {
         return value switch

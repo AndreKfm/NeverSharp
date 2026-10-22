@@ -1,0 +1,490 @@
+# Copyright 2026 Andre Kaufmann
+# SPDX-License-Identifier: Apache-2.0
+#
+# NoAlloc allowlist of Track O (pre-registration §5.4; step O-NA), an AdditionalFile of NeverSharp.Optimized.csproj.
+#
+# Part 1: runtime library members the ported code calls from [NoAlloc] members that the analyzer's built-in BCL
+# baseline (and eng/simd.noalloc-allowlist.toml) does not list. None of them allocates, locks or blocks.
+#
+# Part 2: the exceptions. Each entry is a member of Track O marked [NoAllocUnchecked(reason)] (arena growth, the
+# per-file result, error paths, regex checking, rare numeric forms): the analyzer does not verify it, and this entry
+# lets the [NoAlloc] members that call it on their rare paths keep their contract (without it the analyzer reports
+# NS013 at every call). The list is the [NoAllocUnchecked] list of harness/port/noalloc-report.mjs, entry by entry.
+
+# ---- Part 1: runtime library ----
+
+[[member]]
+symbol = "cs:*/M:System.Array.Copy(System.Array,System.Array,System.Int32)"
+constraints = ["All"]
+runtime = "*"
+reason = "copies between existing arrays"
+
+[[member]]
+symbol = "cs:*/M:System.Array.Copy(System.Array,System.Int32,System.Array,System.Int32,System.Int32)"
+constraints = ["All"]
+runtime = "*"
+reason = "copies between existing arrays"
+
+[[member]]
+symbol = "cs:*/M:System.Array.Clear(System.Array)"
+constraints = ["All"]
+runtime = "*"
+reason = "clears an existing array"
+
+[[member]]
+symbol = "cs:*/M:System.MemoryExtensions.AsSpan``1(``0[],System.Int32)"
+constraints = ["All"]
+runtime = "*"
+reason = "returns a span over an existing array"
+
+[[member]]
+symbol = "cs:*/M:System.MemoryExtensions.AsSpan``1(``0[],System.Int32,System.Int32)"
+constraints = ["All"]
+runtime = "*"
+reason = "returns a span over an existing array"
+
+[[member]]
+symbol = "cs:*/M:System.MemoryExtensions.AsSpan(System.String,System.Int32)"
+constraints = ["All"]
+runtime = "*"
+reason = "returns a span over an existing string"
+
+[[member]]
+symbol = "cs:*/M:System.MemoryExtensions.AsSpan(System.String,System.Int32,System.Int32)"
+constraints = ["All"]
+runtime = "*"
+reason = "returns a span over an existing string"
+
+[[member]]
+symbol = "cs:*/M:System.MemoryExtensions.SequenceEqual``1(System.ReadOnlySpan{``0},System.ReadOnlySpan{``0})"
+constraints = ["All"]
+runtime = "*"
+reason = "compares two spans element by element"
+
+[[member]]
+symbol = "cs:*/M:System.MemoryExtensions.StartsWith``1(System.ReadOnlySpan{``0},System.ReadOnlySpan{``0})"
+constraints = ["All"]
+runtime = "*"
+reason = "compares two spans element by element"
+
+[[member]]
+symbol = "cs:*/P:System.ReadOnlySpan`1.Empty"
+constraints = ["All"]
+runtime = "*"
+reason = "the empty span (no memory)"
+
+[[member]]
+symbol = "cs:*/P:System.Nullable`1.Value"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "reads the value of a nullable value type; the callers test it for a value first (it throws only when there is none)"
+
+[[member]]
+symbol = "cs:*/M:System.String.IsNullOrEmpty(System.String)"
+constraints = ["All"]
+runtime = "*"
+reason = "tests a reference and a length"
+
+[[member]]
+symbol = "cs:*/M:System.String.LastIndexOf(System.Char,System.Int32)"
+constraints = ["All"]
+runtime = "*"
+reason = "searches an existing string"
+
+[[member]]
+symbol = "cs:*/M:System.String.CompareOrdinal(System.String,System.Int32,System.String,System.Int32,System.Int32)"
+constraints = ["All"]
+runtime = "*"
+reason = "compares characters of existing strings"
+
+[[member]]
+symbol = "cs:*/M:System.Type.op_Equality(System.Type,System.Type)"
+constraints = ["All"]
+runtime = "*"
+reason = "typeof(T) == typeof(X) of generic code: compares type handles (folded by the compiler for value types)"
+
+[[member]]
+symbol = "cs:*/M:System.Collections.Generic.Dictionary`2.TryGetValue(`0,`1@)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "a lookup in an existing dictionary"
+
+[[member]]
+symbol = "cs:*/M:System.Collections.Generic.Dictionary`2.Remove(`0)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "removes an entry of an existing dictionary (the entry is kept for reuse)"
+
+[[member]]
+symbol = "cs:*/M:System.Collections.Generic.Dictionary`2.AlternateLookup`1.TryGetValue(`2,`1@)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "a lookup by span in an existing dictionary"
+
+[[member]]
+symbol = "cs:*/M:System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrNullRef``2(System.Collections.Generic.Dictionary{``0,``1},``0)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "a lookup in an existing dictionary, returning a reference to the value"
+
+[[member]]
+symbol = "cs:*/M:System.Collections.Generic.OrderedDictionary`2.TryGetValue(`0,`1@)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "a lookup in an existing dictionary"
+
+[[member]]
+symbol = "cs:*/M:System.Collections.Generic.HashSet`1.Contains(`0)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "a lookup in an existing set"
+
+[[member]]
+symbol = "cs:*/P:System.Collections.Generic.List`1.Count"
+constraints = ["All"]
+runtime = "*"
+reason = "reads the count of an existing list"
+
+[[member]]
+symbol = "cs:*/P:System.Collections.Generic.List`1.Item(System.Int32)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "reads or writes an element of an existing list"
+
+[[member]]
+symbol = "cs:*/M:System.Collections.Generic.List`1.RemoveRange(System.Int32,System.Int32)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "removes elements of an existing list (the capacity stays)"
+
+# ---- Part 2: Track O exceptions ([NoAllocUnchecked] members called from [NoAlloc] code) ----
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.NodeStore.GrowLists"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] arena growth: the list header array doubles"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.NodeStore.GrowListElements(System.Int32)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] arena growth: the list element array doubles"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.NodeStore.GrowFrames"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] arena growth: the frame array of lists under construction doubles"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.NodeStore.GrowScratch(System.Int32,System.Int32)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] arena growth: the scratch stack of lists under construction doubles"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.NodeStore.RentScratch"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] arena growth: the scratch arrays of lists under construction, from the pool"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.NodeStore.SealLists"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] per-file result: the exact list arrays the finished tree keeps"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.NodeStore.Seal(System.Int32,System.Int32)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] per-file result: the exact arrays the finished tree keeps"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.NodeStore.GrowData(System.Int32)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] arena growth: the record array doubles"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.NodeStore.GrowRefs(System.Int32)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] arena growth: the object slot array doubles"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.NodeStore.AddSide(System.Int32,System.Int32)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] arena growth: a new side table entry (rare fields)"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.NodeStore.ThrowNoField(System.Int32,System.String)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] error path: reading or writing a field the node's kind does not have throws"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.TextTable.Seal"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] per-file result: the exact arrays of characters and interned texts the finished tree keeps"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.TextTable.GrowChars(System.Int32)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] arena growth: the character arena doubles"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.TextTable.CreateHashTable"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] arena growth: the interning table's first arrays, from the pool"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.TextTable.GrowEntries(System.Int32)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] arena growth: the interning table's entry array doubles"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.TextTable.Rehash(System.Int32)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] arena growth: the interning table's bucket array doubles"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.Debug.UnexpectedKind(NeverSharp.Generated.SyntaxKind,System.String)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] error path: the exception for a node of an unexpected kind"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.Debug.InvalidCast(NeverSharp.Generated.SyntaxKind)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] error path: the exception for a node of an unexpected kind"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.Debug.Fail(System.String)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] error path: a failed assertion throws"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.Debug.AssertFailed(System.String,System.String,System.Func{System.String})"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] error path: a failed assertion throws"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.Debug.FailComparison(System.Int32,System.String,System.Int32)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] error path: a failed assertion throws"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.Debug.AssertNever``1(``0,System.String)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] error path: a failed assertion throws"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.Core.IsTruthyOther``1(``0)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] other types: a value type other than the ones IsTruthyValue tests is boxed for the type test"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.NodeFactory.FailUnsupportedKind(NeverSharp.Generated.SyntaxKind)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] error path: a failed assertion throws"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.NodeFactory.SetOriginalNode(NeverSharp.Optimized.NodeStore,NeverSharp.Optimized.Node,NeverSharp.Optimized.Node)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] rare path: not reached by the parser's factory, which sets no original nodes (NoOriginalNode)"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.NodeFactory.ToArray(NeverSharp.Optimized.NodeList)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] per-file result: the array of a JSDoc type literal's property tags"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.NodeFactory.FailPrivateIdentifier(NeverSharp.Optimized.TextRef)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] error path: a failed assertion throws"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.Parser.AddMatchingBraceInfo(System.Int32)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] error path: adds related information to a diagnostic"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.Parser.AddNotParenthesizedArrow(System.Int32)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] arena growth: the parse's set of positions that do not start an arrow function"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.Parser.AddJSDocDiagnostics(System.Int32)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] per-file result: the JSDoc diagnostics of the SourceFile"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.Parser.GrowTextParts"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] arena growth: the stack of JSDoc comment parts doubles"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.Parser.AddTagFirstSpecifiedInfo(NeverSharp.Optimized.DiagnosticWithDetachedLocation)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] error path: adds related information to a diagnostic"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.Parser.ReportTagAlreadySpecified(NeverSharp.Optimized.Node)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] error path: the message names the tag"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.Parser.CurrentNodeOfSyntaxCursor(NeverSharp.Optimized.Parser.ParsingContext,System.Nullable{System.Int32})"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] rare path: nodes are reused through the syntax cursor only while top-level await is reparsed"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.Parser.AppendJSDoc(System.Collections.Generic.List{NeverSharp.Optimized.Node},NeverSharp.Optimized.Node)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] per-file result: the jsDoc list of a node"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.Parser.ParseErrorWithTextOfNode(System.Int32,System.Int32,NeverSharp.Generated.DiagnosticMessage,NeverSharp.Optimized.Node)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] error path: the message names the text of a node"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.Parser.ParseErrorAtPositionWithArguments(System.Int32,System.Int32,NeverSharp.Generated.DiagnosticMessage,System.String,System.String,System.Int32)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] error path: creates a diagnostic and its argument array"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.Parser.ParseErrorAtPosition(System.Int32,System.Int32,NeverSharp.Generated.DiagnosticMessage,System.Object[])"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] error path: creates a diagnostic"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.Parser.ParseErrorForMissingSemicolonAfter(NeverSharp.Optimized.Node)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] error path: finds a better message for a missing semicolon (strings, spelling suggestions)"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.Parser.ParseErrorForInvalidName(NeverSharp.Generated.DiagnosticMessage,NeverSharp.Generated.DiagnosticMessage,NeverSharp.Generated.SyntaxKind)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] error path: the message names the token text"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.Parser.AddMatchingBracketInfo(NeverSharp.Optimized.DiagnosticWithDetachedLocation,NeverSharp.Generated.SyntaxKind,NeverSharp.Generated.SyntaxKind,System.Int32)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] error path: adds related information to a diagnostic"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.Parser.CreateMissingIdentifier(NeverSharp.Generated.DiagnosticMessage)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] error path: the message names the token text"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.UtilitiesPublic.GetJSDocTypeTag(NeverSharp.Optimized.NodeStore,NeverSharp.Optimized.Node)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] rare path: the JSDoc tags of a node in a JavaScript file are looked up (and cached) through lists"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.Scanner.Error(NeverSharp.Generated.DiagnosticMessage,System.Int32,System.Int32,System.Object)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] error path: reports through the error callback (the parser creates a diagnostic)"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.Scanner.ScanLegacyOctalLiteral(System.Int32)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] rare numeric form: a legacy octal literal (an error) converts its value through strings"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.Scanner.NumericStringValueSlow(NeverSharp.Optimized.TextRef)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] rare numeric form: a literal not in canonical form converts through a double and strings"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.Scanner.ReportOctalEscape(NeverSharp.Optimized.Scanner.EscapeSequenceScanningFlags,System.Int32,System.Int32)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] error path: an octal escape sequence is reported with its hexadecimal form as a string"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.Scanner.ReportEscapeNotAllowed(System.Int32)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] error path: the escape sequence is reported as a string"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.Scanner.ScanEscapeSequenceString(NeverSharp.Optimized.Scanner.EscapeSequenceScanningFlags)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] regex checking: the escape's characters as a string"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.Scanner.BinaryOrOctalBigIntValue"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] rare numeric form: a binary or octal bigint literal is converted through strings"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.Scanner.BinaryOrOctalValueSlow(System.Int32)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] rare numeric form: a binary or octal literal beyond 2^53 is converted through strings"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.Scanner.ScanHexLiteralValueSlow(System.Int32)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] rare numeric form: a hexadecimal bigint literal or a value beyond 2^53 is built as a string"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.Scanner.CheckRegularExpressionBody(System.Int32,System.Int32,NeverSharp.Generated.RegularExpressionFlags,System.Boolean)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] regex checking: the regular expression checker builds strings and lists"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.Scanner.ReportFlagNotAvailable(NeverSharp.Generated.ScriptTarget,System.Int32)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] error path: the diagnostic names the script target"
+
+[[member]]
+symbol = "cs:NeverSharp.Optimized/M:NeverSharp.Optimized.Scanner.AppendCommentDirective(System.Collections.Generic.List{NeverSharp.Optimized.CommentDirective},System.Int32,NeverSharp.Generated.CommentDirectiveType)"
+constraints = ["NoAlloc", "NoLock", "NoBlock"]
+runtime = "*"
+reason = "[NoAllocUnchecked] per-file result: a comment directive of the SourceFile"

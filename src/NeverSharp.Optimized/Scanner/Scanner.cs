@@ -16,6 +16,16 @@ namespace NeverSharp.Optimized;
 internal delegate void ErrorCallback(DiagnosticMessage message, int length, object? arg0);
 
 /// <summary>
+/// Track O (O-NA): the callback of the scanner's lookAhead and tryScan (TypeScript: `() => T`) as a struct, so a call
+/// creates no delegate or closure and binds statically (the caller's state is in the struct's fields).
+/// </summary>
+internal interface IScannerCallback<out T>
+{
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    T Invoke();
+}
+
+/// <summary>
 /// scanner.ts. Instances are the objects `createScanner` returns (TypeScript's `interface Scanner`); the
 /// file-level functions and constants of scanner.ts are the static members.
 /// </summary>
@@ -28,11 +38,13 @@ internal sealed partial class Scanner
     /// </summary>
     private const int NaN = int.MinValue;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool TokenIsIdentifierOrKeyword(SyntaxKind token)
     {
         return token >= SyntaxKind.Identifier;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool TokenIsIdentifierOrKeywordOrGreaterThan(SyntaxKind token)
     {
         return token == SyntaxKind.GreaterThanToken || TokenIsIdentifierOrKeyword(token);
@@ -234,6 +246,7 @@ internal sealed partial class Scanner
     /// Regular expressions are banned in Track F: this is a hand-written matcher with the regex's semantics
     /// over `text[start..end)`, returning capture group 1 (undefined when the regex does not match).
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static string? CommentDirectiveRegExSingleLine(string text, int start, int end)
     {
         var p = start;
@@ -256,6 +269,7 @@ internal sealed partial class Scanner
     /// scanner.ts: <c>const commentDirectiveRegExMultiLine = /^(?:\/|\*)*\s*@(ts-expect-error|ts-ignore)/;</c>
     /// (hand-written matcher, see CommentDirectiveRegExSingleLine).
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static string? CommentDirectiveRegExMultiLine(string text, int start, int end)
     {
         var p = start;
@@ -268,6 +282,7 @@ internal sealed partial class Scanner
     }
 
     // \s*@(ts-expect-error|ts-ignore): the tail the two directive regexes share.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static string? MatchDirectiveAfterSlashes(string text, int p, int end)
     {
         while (p < end && IsRegExpWhiteSpace(text[p]))
@@ -295,6 +310,7 @@ internal sealed partial class Scanner
     /// (hand-written matcher, see CommentDirectiveRegExSingleLine). Without the `u` flag, `i` canonicalizes by
     /// toUpperCase but never maps a non-ASCII character to an ASCII one, so only ASCII letters fold.
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool JsDocSeeOrLinkTest(string text, int start, int end)
     {
         for (var p = start; p < end; p++)
@@ -311,6 +327,7 @@ internal sealed partial class Scanner
         return false;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool MatchesAsciiIgnoreCase(string text, int p, int end, string lowerWord)
     {
         if (p + lowerWord.Length > end)
@@ -336,6 +353,7 @@ internal sealed partial class Scanner
     /// The characters JavaScript's `\s` (and String.prototype.trimStart) matches: WhiteSpace and LineTerminator
     /// (ECMA-262 12.2, 12.3), with the Space_Separator (Zs) characters of Unicode 16.
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsRegExpWhiteSpace(int ch)
     {
         switch (ch)
@@ -360,6 +378,7 @@ internal sealed partial class Scanner
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool LookupInUnicodeMap(int code, int[] map)
     {
         // Bail out quickly if it couldn't possibly be in the map.
@@ -399,6 +418,7 @@ internal sealed partial class Scanner
         return false;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsUnicodeIdentifierStart(int code, ScriptTarget? languageVersion)
     {
         return languageVersion >= ScriptTarget.ES2015 ?
@@ -406,6 +426,7 @@ internal sealed partial class Scanner
             LookupInUnicodeMap(code, UnicodeES5IdentifierStart);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsUnicodeIdentifierPart(int code, ScriptTarget? languageVersion)
     {
         return languageVersion >= ScriptTarget.ES2015 ?
@@ -438,11 +459,13 @@ internal sealed partial class Scanner
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static string? TokenToString(SyntaxKind t)
     {
         return (uint)t < (uint)TokenStrings.Length ? TokenStrings[(int)t] : null;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static SyntaxKind? StringToToken(string s)
     {
         return TextToToken.TryGetValue(s, out var kind) ? kind : null;
@@ -477,11 +500,13 @@ internal sealed partial class Scanner
         return [.. result];
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static CharacterCodes? RegularExpressionFlagToCharacterCode(RegularExpressionFlags f)
     {
         return (uint)f < (uint)RegExpFlagCharCodes.Length ? RegExpFlagCharCodes[(int)f] : null;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static RegularExpressionFlags? CharacterCodeToRegularExpressionFlag(int ch)
     {
         return CharCodeToRegExpFlag.TryGetValue((CharacterCodes)ch, out var flag) ? flag : null;
@@ -564,12 +589,14 @@ internal sealed partial class Scanner
         return ComputeLineAndCharacterOfPosition(GetLineStarts(sourceFile), position);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsWhiteSpaceLike(int ch)
     {
         return IsWhiteSpaceSingleLine(ch) || IsLineBreak(ch);
     }
 
     /// <summary>Does not include line breaks. For that, see isWhiteSpaceLike.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsWhiteSpaceSingleLine(int ch)
     {
         // Note: nextLine is in the Zs space, and should be considered to be a whitespace.
@@ -588,6 +615,7 @@ internal sealed partial class Scanner
             ch == (int)CharacterCodes.byteOrderMark;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsLineBreak(int ch)
     {
         // ES5 7.3:
@@ -607,32 +635,38 @@ internal sealed partial class Scanner
             ch == (int)CharacterCodes.paragraphSeparator;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsDigit(int ch)
     {
         return ch >= (int)CharacterCodes._0 && ch <= (int)CharacterCodes._9;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsHexDigit(int ch)
     {
         return IsDigit(ch) || (ch >= (int)CharacterCodes.A && ch <= (int)CharacterCodes.F) || (ch >= (int)CharacterCodes.a && ch <= (int)CharacterCodes.f);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsASCIILetter(int ch)
     {
         return (ch >= (int)CharacterCodes.A && ch <= (int)CharacterCodes.Z) || (ch >= (int)CharacterCodes.a && ch <= (int)CharacterCodes.z);
     }
 
     // Section 6.1.4
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsWordCharacter(int ch)
     {
         return IsASCIILetter(ch) || IsDigit(ch) || ch == (int)CharacterCodes._;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsOctalDigit(int ch)
     {
         return ch >= (int)CharacterCodes._0 && ch <= (int)CharacterCodes._7;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static int SkipTrivia(string text, int pos, bool stopAfterLineBreak = false, bool stopAtComments = false, bool inJSDoc = false)
     {
         if (Utilities.PositionIsSynthesized(pos))
@@ -749,6 +783,7 @@ internal sealed partial class Scanner
     // a <<<<<<< or >>>>>>> marker then it is also followed by a space.
     private static readonly int MergeConflictMarkerLength = "<<<<<<<".Length;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsConflictMarkerTrivia(string text, int pos)
     {
         Debug.Assert(pos >= 0);
@@ -776,9 +811,12 @@ internal sealed partial class Scanner
         return false;
     }
 
-    private static int ScanConflictMarkerTrivia(string text, int pos, Action<DiagnosticMessage, int, int>? error = null)
+    // Track O (O-NA): TypeScript's `error` callback is the scanner's own error function or absent; the scanner is
+    // passed instead of a closure over it.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private static int ScanConflictMarkerTrivia(string text, int pos, Scanner? errorScanner = null)
     {
-        error?.Invoke(Diagnostics.Merge_conflict_marker_encountered, pos, MergeConflictMarkerLength);
+        errorScanner?.Error(Diagnostics.Merge_conflict_marker_encountered, pos, MergeConflictMarkerLength);
 
         var ch = CharCodeAt(text, pos);
         var len = text.Length;
@@ -815,6 +853,7 @@ internal sealed partial class Scanner
     /// expressions are banned in Track F: this returns the length of the match ("#!" and every following
     /// character up to a line terminator, which `.` does not match), or -1 when it does not match.
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static int ShebangTriviaRegexExec(string text)
     {
         if (!(text.Length >= 2 && text[0] == '#' && text[1] == '!'))
@@ -829,6 +868,7 @@ internal sealed partial class Scanner
         return end;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsShebangTrivia(string text, int pos)
     {
         // Shebangs check must only be done at the start of the file
@@ -836,6 +876,7 @@ internal sealed partial class Scanner
         return ShebangTriviaRegexExec(text) >= 0;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static int ScanShebangTrivia(string text, int pos)
     {
         var shebangLength = ShebangTriviaRegexExec(text);
@@ -867,129 +908,164 @@ internal sealed partial class Scanner
     ///      return value of the callback.</returns>
     private static TResult? IterateCommentRanges<TState, TResult>(bool reduce, string text, int pos, bool trailing, CommentRangeCallback<TState, TResult> cb, TState state, TResult? initial = default)
     {
-        var pendingPos = 0;
-        var pendingEnd = 0;
-        var pendingKind = SyntaxKind.Unknown;
-        var pendingHasTrailingNewLine = false;
-        var hasPendingCommentRange = false;
-        var collecting = trailing;
+        // Track O (O-NA): the loop of iterateCommentRanges is CommentRangeIterator, which yields the ranges one by one
+        // (the callback gets each pending range when the next comment is found, and the last one at the end).
         var accumulator = initial;
-        if (pos == 0)
+        var iterator = new CommentRangeIterator(text, pos, trailing);
+        while (iterator.MoveNext(out var range))
         {
-            collecting = true;
-            var shebang = GetShebang(text);
-            if (!string.IsNullOrEmpty(shebang))
+            accumulator = cb(range.Pos, range.End, range.Kind, range.HasTrailingNewLine, state, accumulator);
+            if (!reduce && IsTruthy(accumulator))
             {
-                pos = shebang.Length;
+                // If we are not reducing and we have a truthy result, return it.
+                return accumulator;
             }
         }
-        while (pos >= 0 && pos < text.Length)
-        {
-            int ch = text[pos];
-            switch (ch)
-            {
-                case (int)CharacterCodes.carriageReturn:
-                    if (CharCodeAt(text, pos + 1) == (int)CharacterCodes.lineFeed)
-                    {
-                        pos++;
-                    }
-                    goto case (int)CharacterCodes.lineFeed;
-                case (int)CharacterCodes.lineFeed:
-                    pos++;
-                    if (trailing)
-                    {
-                        goto scanEnd;
-                    }
-
-                    collecting = true;
-                    if (hasPendingCommentRange)
-                    {
-                        pendingHasTrailingNewLine = true;
-                    }
-
-                    continue;
-                case (int)CharacterCodes.tab:
-                case (int)CharacterCodes.verticalTab:
-                case (int)CharacterCodes.formFeed:
-                case (int)CharacterCodes.space:
-                    pos++;
-                    continue;
-                case (int)CharacterCodes.slash:
-                    var nextChar = CharCodeAt(text, pos + 1);
-                    var hasTrailingNewLine = false;
-                    if (nextChar == (int)CharacterCodes.slash || nextChar == (int)CharacterCodes.asterisk)
-                    {
-                        var kind = nextChar == (int)CharacterCodes.slash ? SyntaxKind.SingleLineCommentTrivia : SyntaxKind.MultiLineCommentTrivia;
-                        var startPos = pos;
-                        pos += 2;
-                        if (nextChar == (int)CharacterCodes.slash)
-                        {
-                            while (pos < text.Length)
-                            {
-                                if (IsLineBreak(text[pos]))
-                                {
-                                    hasTrailingNewLine = true;
-                                    break;
-                                }
-                                pos++;
-                            }
-                        }
-                        else
-                        {
-                            while (pos < text.Length)
-                            {
-                                if (text[pos] == (int)CharacterCodes.asterisk && CharCodeAt(text, pos + 1) == (int)CharacterCodes.slash)
-                                {
-                                    pos += 2;
-                                    break;
-                                }
-                                pos++;
-                            }
-                        }
-
-                        if (collecting)
-                        {
-                            if (hasPendingCommentRange)
-                            {
-                                accumulator = cb(pendingPos, pendingEnd, pendingKind, pendingHasTrailingNewLine, state, accumulator);
-                                if (!reduce && IsTruthy(accumulator))
-                                {
-                                    // If we are not reducing and we have a truthy result, return it.
-                                    return accumulator;
-                                }
-                            }
-
-                            pendingPos = startPos;
-                            pendingEnd = pos;
-                            pendingKind = kind;
-                            pendingHasTrailingNewLine = hasTrailingNewLine;
-                            hasPendingCommentRange = true;
-                        }
-
-                        continue;
-                    }
-                    goto scanEnd;
-                default:
-                    if (ch > (int)CharacterCodes.maxAsciiCharacter && IsWhiteSpaceLike(ch))
-                    {
-                        if (hasPendingCommentRange && IsLineBreak(ch))
-                        {
-                            pendingHasTrailingNewLine = true;
-                        }
-                        pos++;
-                        continue;
-                    }
-                    goto scanEnd;
-            }
-        }
-    scanEnd:
-
-        if (hasPendingCommentRange)
-        {
-            accumulator = cb(pendingPos, pendingEnd, pendingKind, pendingHasTrailingNewLine, state, accumulator);
-        }
-
         return accumulator;
+    }
+
+    /// <summary>
+    /// Track O (O-NA): the loop of iterateCommentRanges as an iterator over the comment ranges after a position, without a
+    /// callback or a list: the leading (<c>trailing</c> false) or trailing comment ranges, in order. A mutable struct,
+    /// used as a local variable.
+    /// </summary>
+    internal struct CommentRangeIterator
+    {
+        private readonly string text;
+        private readonly bool trailing;
+        private int pos;
+        private bool collecting;
+        private bool hasPendingCommentRange;
+        private bool done;
+        private CommentRange pending;
+
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+        internal CommentRangeIterator(string text, int pos, bool trailing)
+        {
+            this.text = text;
+            this.trailing = trailing;
+            collecting = trailing;
+            if (pos == 0)
+            {
+                collecting = true;
+                var shebangLength = ShebangTriviaRegexExec(text);
+                if (shebangLength > 0)
+                {
+                    pos = shebangLength;
+                }
+            }
+            this.pos = pos;
+        }
+
+        /// <summary>The next comment range (false when there is none).</summary>
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+        internal bool MoveNext(out CommentRange range)
+        {
+            while (!done && pos >= 0 && pos < text.Length)
+            {
+                int ch = text[pos];
+                switch (ch)
+                {
+                    case (int)CharacterCodes.carriageReturn:
+                        if (CharCodeAt(text, pos + 1) == (int)CharacterCodes.lineFeed)
+                        {
+                            pos++;
+                        }
+                        goto case (int)CharacterCodes.lineFeed;
+                    case (int)CharacterCodes.lineFeed:
+                        pos++;
+                        if (trailing)
+                        {
+                            done = true;
+                            continue;
+                        }
+
+                        collecting = true;
+                        if (hasPendingCommentRange)
+                        {
+                            pending.HasTrailingNewLine = true;
+                        }
+
+                        continue;
+                    case (int)CharacterCodes.tab:
+                    case (int)CharacterCodes.verticalTab:
+                    case (int)CharacterCodes.formFeed:
+                    case (int)CharacterCodes.space:
+                        pos++;
+                        continue;
+                    case (int)CharacterCodes.slash:
+                        var nextChar = CharCodeAt(text, pos + 1);
+                        var hasTrailingNewLine = false;
+                        if (nextChar == (int)CharacterCodes.slash || nextChar == (int)CharacterCodes.asterisk)
+                        {
+                            var kind = nextChar == (int)CharacterCodes.slash ? SyntaxKind.SingleLineCommentTrivia : SyntaxKind.MultiLineCommentTrivia;
+                            var startPos = pos;
+                            pos += 2;
+                            if (nextChar == (int)CharacterCodes.slash)
+                            {
+                                while (pos < text.Length)
+                                {
+                                    if (IsLineBreak(text[pos]))
+                                    {
+                                        hasTrailingNewLine = true;
+                                        break;
+                                    }
+                                    pos++;
+                                }
+                            }
+                            else
+                            {
+                                while (pos < text.Length)
+                                {
+                                    if (text[pos] == (int)CharacterCodes.asterisk && CharCodeAt(text, pos + 1) == (int)CharacterCodes.slash)
+                                    {
+                                        pos += 2;
+                                        break;
+                                    }
+                                    pos++;
+                                }
+                            }
+
+                            if (collecting)
+                            {
+                                var hadPending = hasPendingCommentRange;
+                                range = pending;
+                                pending = new CommentRange { Pos = startPos, End = pos, Kind = kind, HasTrailingNewLine = hasTrailingNewLine };
+                                hasPendingCommentRange = true;
+                                if (hadPending)
+                                {
+                                    return true;
+                                }
+                            }
+
+                            continue;
+                        }
+                        done = true;
+                        continue;
+                    default:
+                        if (ch > (int)CharacterCodes.maxAsciiCharacter && IsWhiteSpaceLike(ch))
+                        {
+                            if (hasPendingCommentRange && IsLineBreak(ch))
+                            {
+                                pending.HasTrailingNewLine = true;
+                            }
+                            pos++;
+                            continue;
+                        }
+                        done = true;
+                        continue;
+                }
+            }
+            // scanEnd: the last pending range.
+            done = true;
+            range = pending;
+            if (hasPendingCommentRange)
+            {
+                hasPendingCommentRange = false;
+                return true;
+            }
+            return false;
+        }
     }
 
     internal static TResult? ForEachLeadingCommentRange<TState, TResult>(string text, int pos, CommentRangeCallback<TState, TResult> cb, TState state)
@@ -1040,12 +1116,14 @@ internal sealed partial class Scanner
         return null;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsIdentifierStart(int ch, ScriptTarget? languageVersion)
     {
         return IsASCIILetter(ch) || ch == (int)CharacterCodes.Dollar || ch == (int)CharacterCodes._ ||
             (ch > (int)CharacterCodes.maxAsciiCharacter && IsUnicodeIdentifierStart(ch, languageVersion));
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsIdentifierPart(int ch, ScriptTarget? languageVersion, LanguageVariant? identifierVariant = null)
     {
         return IsWordCharacter(ch) || ch == (int)CharacterCodes.Dollar ||
@@ -1054,6 +1132,7 @@ internal sealed partial class Scanner
             (ch > (int)CharacterCodes.maxAsciiCharacter && IsUnicodeIdentifierPart(ch, languageVersion));
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsIdentifierText(string name, ScriptTarget languageVersion, LanguageVariant identifierVariant = LanguageVariant.Standard)
     {
         var ch = CodePointAt(name, 0);
@@ -1097,6 +1176,7 @@ internal sealed partial class Scanner
         ClassSubtraction,
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static int CodePointAt(string s, int i)
     {
         // TODO(jakebailey): this is wrong and should have ?? 0; but all users are okay with it
@@ -1117,6 +1197,7 @@ internal sealed partial class Scanner
         return first;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static int CharSize(int ch)
     {
         if (ch >= 0x10000)
@@ -1149,11 +1230,24 @@ internal sealed partial class Scanner
     // scanner.ts: `String.fromCodePoint ? codePoint => String.fromCodePoint(codePoint) : utf16EncodeAsStringFallback`.
     // .NET has no String.fromCodePoint (char.ConvertFromUtf32 rejects surrogate code points, which
     // String.fromCodePoint accepts), so the worker is the fallback, which computes the same string.
-    private static readonly Func<int, string> Utf16EncodeAsStringWorker = Utf16EncodeAsStringFallback;
-
+    // (Track O: called directly instead of through a delegate.)
     internal static string Utf16EncodeAsString(int codePoint)
     {
-        return Utf16EncodeAsStringWorker(codePoint);
+        return Utf16EncodeAsStringFallback(codePoint);
+    }
+
+    /// <summary>Track O (O-NA): `result += utf16EncodeAsString(codePoint)` without the string (the fallback's code units).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private static void AppendCodePoint(ref TextBuilder result, int codePoint)
+    {
+        Debug.Assert(0x0 <= codePoint && codePoint <= 0x10FFFF);
+        if (codePoint <= 65535)
+        {
+            result.Append((char)codePoint);
+            return;
+        }
+        result.Append((char)(((codePoint - 65536) / 1024) + 0xD800));
+        result.Append((char)(((codePoint - 65536) % 1024) + 0xDC00));
     }
 
     // Table 66: Non-binary Unicode property aliases and their canonical property names
@@ -1188,6 +1282,7 @@ internal sealed partial class Scanner
         public OrderedStringSet Script_Extensions { get; set; } = null!;
 
         // `valuesOfNonBinaryUnicodeProperties[propertyName]` for a canonical property name.
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         public OrderedStringSet this[string propertyName] => propertyName switch
         {
             "General_Category" => General_Category,
@@ -1232,6 +1327,7 @@ internal sealed partial class Scanner
             }
         }
 
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         public bool Has(string value) => set.Contains(value);
 
         public void Add(string value)
@@ -1329,6 +1425,7 @@ internal sealed partial class Scanner
     }
 
     /// <summary>`text.charCodeAt(pos)`: NaN outside the string.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static int CharCodeAt(string text, int pos)
     {
         return (uint)pos < (uint)text.Length ? text[pos] : NaN;

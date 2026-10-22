@@ -461,7 +461,7 @@ internal sealed partial class Scanner
                     return FromCharCode(ch);
                 default:
                     pos--;
-                    return ScanEscapeSequence(
+                    return ScanEscapeSequenceString(
                         EscapeSequenceScanningFlags.RegularExpression
                             | (annexB ? EscapeSequenceScanningFlags.AnnexB : 0)
                             | (anyUnicodeMode ? EscapeSequenceScanningFlags.AnyUnicodeMode : 0)
@@ -1210,6 +1210,7 @@ internal sealed partial class Scanner
     }
 
     // `text.slice(pos, pos + 2) === "--"` (or "&&"): both characters exist and equal `ch`.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsDoublePunctuator(int at, char ch)
     {
         return at >= 0 && at + 1 < text.Length && text[at] == ch && text[at + 1] == ch;

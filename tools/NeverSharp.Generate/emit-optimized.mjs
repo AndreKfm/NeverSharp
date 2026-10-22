@@ -152,6 +152,9 @@ const SIDE_IN = {
     type: ["ConstructorDeclaration", "SetAccessorDeclaration"],
 };
 const isSide = (cls, field) => Object.hasOwn(SIDE_FIELDS, field) ? !SIDE_FIELDS[field].includes(cls) : !!SIDE_IN[field]?.includes(cls);
+// The NoAlloc contract of Track O's code (pre-registration §5.4, step O-NA). The analyzer does not verify generated code;
+// the members marked here only read and write arrays and call members of NodeStore.cs that it verifies.
+const NO_ALLOC = "    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]";
 // Offset tables: -1 absent, SIDE_OFFSET in the side table, otherwise the word offset, bit or object slot.
 const SIDE_OFFSET = 127;
 // Side table ids of the base fields NodeStore.cs keeps there (parent, original, modifierFlagsCache, emitNode).
@@ -259,10 +262,10 @@ export function emitOptimized(schema) {
         "    /// <summary>The offset table value of a field kept in the side table.</summary>",
         `    private const int SideOffset = ${SIDE_OFFSET};`, "",
         "    /// <summary>Record size in ints per kind: header, first object slot (kinds with object slots), int slots.</summary>",
-        "    private static ReadOnlySpan<byte> RecordSizes =>", "    [",
+        NO_ALLOC, "    private static ReadOnlySpan<byte> RecordSizes =>", "    [",
         ...tableOf(k => fields[kindClass[k]].words), "    ];", "",
         "    /// <summary>Object slots (strings, node lists, other objects) per kind.</summary>",
-        "    private static ReadOnlySpan<byte> RefCounts =>", "    [",
+        NO_ALLOC, "    private static ReadOnlySpan<byte> RefCounts =>", "    [",
         ...tableOf(k => fields[kindClass[k]].refs), "    ];", "",
         "    /// <summary>The node class of each kind (index into the classes of types.ts, Token for kinds without one).</summary>",
         "    private static ReadOnlySpan<byte> ClassIds =>", "    [",
@@ -312,9 +315,11 @@ export function emitOptimized(schema) {
             get = [...head, `        var o = ${table}[d[h] & KindMask];`, `        return o < 0 ? ${absent} : ${recordRead};`];
             set = [...head, `        var o = ${table}[d[h] & KindMask];`, ...throwIf("o < 0"), `        ${recordWrite}`];
         }
+        // NoAlloc (step O-NA): the accessors read and write the record arrays and the side table (whose growth, and the
+        // exception for a missing field, are the store's [NoAllocUnchecked] members).
         return [
-            "    [MethodImpl(MethodImplOptions.AggressiveInlining)]", `    public ${ret} ${name}(Node node)`, "    {", ...get, "    }", "",
-            "    [MethodImpl(MethodImplOptions.AggressiveInlining)]", `    public void Set${name}(Node node, ${ret} value)`, "    {", ...set, "    }", "",
+            NO_ALLOC, "    [MethodImpl(MethodImplOptions.AggressiveInlining)]", `    public ${ret} ${name}(Node node)`, "    {", ...get, "    }", "",
+            NO_ALLOC, "    [MethodImpl(MethodImplOptions.AggressiveInlining)]", `    public void Set${name}(Node node, ${ret} value)`, "    {", ...set, "    }", "",
             `    private static ReadOnlySpan<sbyte> ${table} =>`, "    [",
             ...tableOf(k => a.offsets.has(kindClass[k]) ? a.offsets.get(kindClass[k]) : -1), "    ];", ""];
     };
@@ -325,7 +330,7 @@ export function emitOptimized(schema) {
         lines.push(...getter(name, a));
     }
     lines.push("    // Node classes of types.ts: whether a node's kind is one of the class's kinds.");
-    for (const cls of classes) lines.push(`    public bool Is${cls}(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == ${classId.get(cls)};`, "");
+    for (const cls of classes) lines.push(NO_ALLOC, `    public bool Is${cls}(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == ${classId.get(cls)};`, "");
     lines.pop();
     lines.push("}", "");
     writeFileSync(join(outDir, "NodeStore.g.cs"), lines.join("\n"));
@@ -367,7 +372,44 @@ export function emitOptimized(schema) {
         v.push(`            case SyntaxKind.${kind}:`, `                return ${expr(entry.ir, schema.kindToClass[kind])};`);
         entries++;
     }
-    v.push("            default:", "                return null;", "        }", "    }", "",
+    v.push("            default:", "                return null;", "        }", "    }", "");
+    // Track O (O-NA): forEachChild with a struct visitor (both callbacks in one value, no delegates; a value-type
+    // result is not boxed). The same table as a chain of tests: each visit returns whether the search ends.
+    function sexpr(ir, cls) {
+        switch (ir.op) {
+            case "or": return ir.items.map(i => sexpr(i, cls)).join("\n                || ");
+            case "none": return "false";
+            case "node": { const f = field(cls, ir.prop); return f ? `Visit(ref visitor, store.${f.accessor}(node), ref result)` : "false"; }
+            case "nodes": { const f = field(cls, ir.prop); return f ? `VisitList(ref visitor, ${f.conv === "textOrList" ? `store.${f.accessor}(node).List` : `store.${f.accessor}(node)`}, ref result)` : "false"; }
+            case "each": { const f = field(cls, ir.prop); return f ? `VisitEach(ref visitor, store.${f.accessor}(node), ref result)` : "false"; }
+            case "cond": return `(${test(ir.test, cls)}\n                ? ${sexpr(ir.then, cls)}\n                : ${sexpr(ir.else, cls)})`;
+            default: throw new Error(`unknown IR op ${ir.op}`);
+        }
+    }
+    v.push("    /// <summary>",
+        "    /// parser.ts forEachChild with a struct visitor (Track O, O-NA): <c>cbNode</c> is <see cref=\"INodeVisitor{T}.VisitNode\"/>,",
+        "    /// <c>cbNodes</c> <see cref=\"INodeVisitor{T}.VisitNodes\"/>; returns the first truthy result (default if there is none).",
+        "    /// </summary>",
+        NO_ALLOC,
+        "    public static T? ForEachChild<TVisitor, T>(NodeStore store, Node node, TVisitor visitor) where TVisitor : struct, INodeVisitor<T>",
+        "    {",
+        "        if (node.IsNone || store.Kind(node) <= SyntaxKind.LastToken)", "        {", "            return default;", "        }",
+        "        T result = default!;",
+        "        switch (store.Kind(node))", "        {");
+    for (const [kind, entry] of Object.entries(schema.children)) {
+        v.push(`            case SyntaxKind.${kind}:`, `                return ${sexpr(entry.ir, schema.kindToClass[kind])}`, "                ? result", "                : default;");
+    }
+    v.push("            default:", "                return default;", "        }", "    }", "",
+        "    // parser.ts visitNode", NO_ALLOC,
+        "    private static bool Visit<TVisitor, T>(ref TVisitor visitor, Node node, ref T result) where TVisitor : struct, INodeVisitor<T>",
+        "    {", "        if (node.IsNone)", "        {", "            return false;", "        }", "        result = visitor.VisitNode(node);", "        return Core.IsTruthyValue(result);", "    }", "",
+        "    // parser.ts visitNodes", NO_ALLOC,
+        "    private static bool VisitList<TVisitor, T>(ref TVisitor visitor, NodeList nodes, ref T result) where TVisitor : struct, INodeVisitor<T>",
+        "    {", "        if (nodes.IsNone)", "        {", "            return false;", "        }", "        result = visitor.VisitNodes(nodes);", "        return Core.IsTruthyValue(result);", "    }", "",
+        "    // core.ts forEach(array, callback): every element through cbNode", NO_ALLOC,
+        "    private static bool VisitEach<TVisitor, T>(ref TVisitor visitor, IReadOnlyList<Node>? array, ref T result) where TVisitor : struct, INodeVisitor<T>",
+        "    {", "        if (array is not null)", "        {", "            for (var i = 0; i < array.Count; i++)", "            {", "                result = visitor.VisitNode(array[i]);",
+        "                if (Core.IsTruthyValue(result))", "                {", "                    return true;", "                }", "            }", "        }", "        return false;", "    }", "",
         "    // parser.ts visitNode", "    private static T? VisitNode<T>(Func<Node, T?> cbNode, Node node) where T : class => node.IsNone ? null : cbNode(node);", "",
         "    // parser.ts visitNodes (a list's elements stay where they are while lists are added)",
         "    private static T? VisitNodes<T>(NodeStore store, Func<Node, T?> cbNode, Func<NodeList, T?>? cbNodes, NodeList nodes) where T : class",
@@ -376,7 +418,9 @@ export function emitOptimized(schema) {
         "    // core.ts forEach(array, callback): every element through cbNode, also when cbNodes is given",
         "    private static T? ForEachElement<T>(IReadOnlyList<Node>? array, Func<Node, T?> cbNode) where T : class",
         "    {", "        if (array is not null)", "        {", "            for (var i = 0; i < array.Count; i++)", "            {", "                var result = cbNode(array[i]);", "                if (result is not null)", "                {", "                    return result;", "                }", "            }", "        }", "        return null;", "    }",
-        "}", "");
+        "}", "",
+        "/// <summary>The two callbacks of forEachChild (<c>cbNode</c>, <c>cbNodes</c>) as a struct (Track O, O-NA).</summary>",
+        "internal interface INodeVisitor<out T>", "{", NO_ALLOC, "    T VisitNode(Node node);", "", NO_ALLOC, "    T VisitNodes(NodeList nodes);", "}", "");
     writeFileSync(join(outDir, "NodeVisitor.g.cs"), v.join("\n"));
 
     const map = { classes: {}, omitted };

@@ -19,6 +19,7 @@ internal sealed partial class Parser
     /// TypeScript's return type is `JsxElement | JsxSelfClosingElement | JsxFragment`, but in the error case below it
     /// returns a BinaryExpression (`as Node as JsxElement`); the C# return type is Node.
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseJsxElementOrSelfClosingElementOrFragment(bool inExpressionContext, int? topInvalidNodePosition = null, Node openingTag = default, bool mustBeUnary = false)
     {
         var pos = GetNodePos();
@@ -68,12 +69,12 @@ internal sealed partial class Parser
                     if (!openingTag.IsNone && FactoryNodeTests.IsJsxOpeningElement(store, openingTag) && TagNamesAreEquivalent(store, store.TagName(closingElement), store.TagName(openingTag)))
                     {
                         // opening incorrectly matched with its parent's closing -- put error on opening
-                        ParseErrorAtRange(store.TagName(openingElement), Diagnostics.JSX_element_0_has_no_corresponding_closing_tag, Utilities.GetTextOfNodeFromSourceText(store, sourceText, store.TagName(openingElement)));
+                        ParseErrorWithTextOfNode(store.Pos(store.TagName(openingElement)), store.End(store.TagName(openingElement)), Diagnostics.JSX_element_0_has_no_corresponding_closing_tag, store.TagName(openingElement));
                     }
                     else
                     {
                         // other opening/closing mismatches -- put error on closing
-                        ParseErrorAtRange(store.TagName(closingElement), Diagnostics.Expected_corresponding_JSX_closing_tag_for_0, Utilities.GetTextOfNodeFromSourceText(store, sourceText, store.TagName(openingElement)));
+                        ParseErrorWithTextOfNode(store.Pos(store.TagName(closingElement)), store.End(store.TagName(closingElement)), Diagnostics.Expected_corresponding_JSX_closing_tag_for_0, store.TagName(openingElement));
                     }
                 }
             }
@@ -102,7 +103,7 @@ internal sealed partial class Parser
         if (!mustBeUnary && inExpressionContext && Token() == SyntaxKind.LessThanToken)
         {
             var topBadPos = topInvalidNodePosition == null ? store.Pos(result) : topInvalidNodePosition.Value;
-            var invalidElement = TryParse(p => ParseJsxElementOrSelfClosingElementOrFragment(/*inExpressionContext*/ true, topBadPos));
+            var invalidElement = TryParse(new F.ParseJsxElementOrSelfClosingElementOrFragment(/*inExpressionContext*/ true, topBadPos));
             if (!invalidElement.IsNone)
             {
                 var operatorToken = CreateMissingNode(SyntaxKind.CommaToken, /*reportAtCurrentPosition*/ false);
@@ -115,6 +116,7 @@ internal sealed partial class Parser
         return result;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseJsxText()
     {
         var pos = GetNodePos();
@@ -123,6 +125,7 @@ internal sealed partial class Parser
         return FinishNode(node, pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseJsxChild(Node openingTag, SyntaxKind token)
     {
         switch (token)
@@ -140,7 +143,7 @@ internal sealed partial class Parser
                     // or to cover only 'Foo' in < Foo >
                     var tag = store.TagName(openingTag);
                     var start = Math.Min(Scanner.SkipTrivia(sourceText, store.Pos(tag)), store.End(tag));
-                    ParseErrorAt(start, store.End(tag), Diagnostics.JSX_element_0_has_no_corresponding_closing_tag, Utilities.GetTextOfNodeFromSourceText(store, sourceText, store.TagName(openingTag)));
+                    ParseErrorWithTextOfNode(start, store.End(tag), Diagnostics.JSX_element_0_has_no_corresponding_closing_tag, store.TagName(openingTag));
                 }
                 return default;
             case SyntaxKind.LessThanSlashToken:
@@ -159,6 +162,7 @@ internal sealed partial class Parser
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private NodeList ParseJsxChildren(Node openingTag)
     {
         var list = store.BeginList();
@@ -189,12 +193,14 @@ internal sealed partial class Parser
         return CreateNodeArray(list, listPos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseJsxAttributes()
     {
         var pos = GetNodePos();
-        return FinishNode(factory.CreateJsxAttributes(ParseList(ParsingContext.JsxAttributes, static p => p.ParseJsxAttribute())), pos);
+        return FinishNode(factory.CreateJsxAttributes(ParseList(ParsingContext.JsxAttributes, new F.ParseJsxAttribute())), pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseJsxOpeningOrSelfClosingElementOrOpeningFragment(bool inExpressionContext)
     {
         var pos = GetNodePos();
@@ -242,6 +248,7 @@ internal sealed partial class Parser
         return FinishNode(node, pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseJsxElementName()
     {
         var pos = GetNodePos();
@@ -263,6 +270,7 @@ internal sealed partial class Parser
         return expression;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseJsxTagName()
     {
         var pos = GetNodePos();
@@ -278,6 +286,7 @@ internal sealed partial class Parser
         return isThis ? FinishNode(factory.CreateToken(SyntaxKind.ThisKeyword), pos) : tagName;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseJsxExpression(bool inExpressionContext)
     {
         var pos = GetNodePos();
@@ -314,6 +323,7 @@ internal sealed partial class Parser
         return FinishNode(factory.CreateJsxExpression(dotDotDotToken, expression), pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseJsxAttribute()
     {
         if (Token() == SyntaxKind.OpenBraceToken)
@@ -325,6 +335,7 @@ internal sealed partial class Parser
         return FinishNode(factory.CreateJsxAttribute(ParseJsxAttributeName(), ParseJsxAttributeValue()), pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseJsxAttributeValue()
     {
         if (Token() == SyntaxKind.EqualsToken)
@@ -346,6 +357,7 @@ internal sealed partial class Parser
         return default;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseJsxAttributeName()
     {
         var pos = GetNodePos();
@@ -360,6 +372,7 @@ internal sealed partial class Parser
         return attrName;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseJsxSpreadAttribute()
     {
         var pos = GetNodePos();
@@ -370,6 +383,7 @@ internal sealed partial class Parser
         return FinishNode(factory.CreateJsxSpreadAttribute(expression), pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseJsxClosingElement(Node open, bool inExpressionContext)
     {
         var pos = GetNodePos();
@@ -390,6 +404,7 @@ internal sealed partial class Parser
         return FinishNode(factory.CreateJsxClosingElement(tagName), pos);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseJsxClosingFragment(bool inExpressionContext)
     {
         var pos = GetNodePos();

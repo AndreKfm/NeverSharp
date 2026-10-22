@@ -20,6 +20,7 @@ internal sealed partial class NodeFactory
     //
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateSourceFile(
         NodeList statements,
         Node endOfFileToken,
@@ -79,6 +80,7 @@ internal sealed partial class NodeFactory
     /// Node fields are the constructor's); a field that is not an own property in TypeScript holds its default
     /// value on both objects, so copying it changes nothing.
     /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node CloneSourceFileWorker(Node source)
     {
         // TODO: This mechanism for cloning results in megamorphic property reads and writes. In future perf-related
@@ -133,6 +135,7 @@ internal sealed partial class NodeFactory
         return node;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node CloneSourceFile(Node source)
     {
         var node = CloneSourceFileWorker(source);
@@ -140,6 +143,7 @@ internal sealed partial class NodeFactory
         return node;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node CloneSourceFileWithChanges(
         Node source,
         NodeList statements,
@@ -162,6 +166,7 @@ internal sealed partial class NodeFactory
     }
 
     // @api
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node UpdateSourceFile(
         Node node,
         NodeList statements,
