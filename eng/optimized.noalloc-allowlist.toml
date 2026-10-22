@@ -1,7 +1,8 @@
 # Copyright 2026 Andre Kaufmann
 # SPDX-License-Identifier: Apache-2.0
 #
-# NoAlloc allowlist of Track O (pre-registration §5.4; step O-NA), an AdditionalFile of NeverSharp.Optimized.csproj.
+# NoAlloc allowlist of Track O (pre-registration §5.4 as amended by prereg/v6; written in step O-NA), part of the
+# Track O Gate 2 ruleset (eng/Gate2.Optimized.props) next to simd.noalloc-allowlist.toml.
 #
 # Part 1: runtime library members the ported code calls from [NoAlloc] members that the analyzer's built-in BCL
 # baseline (and eng/simd.noalloc-allowlist.toml) does not list. None of them allocates, locks or blocks.

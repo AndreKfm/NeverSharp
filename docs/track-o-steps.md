@@ -11,7 +11,7 @@ The list the Track O endpoint is reported with (pre-registration §8, A9). Each 
 | O5b | Identifier interning lookup: switch on length/first character, perfect hash (behind the O5a seam) | not started; depends on O5a | | |
 | O7a | Node lists as handles into a list store, ranges in one index arena (no variants; brief [modules/O7a.md](modules/O7a.md)) | done 2026-10-22; tuning corpus cs-o-aot-ws 845 ms vs main 1,100 ms (0.768 [0.760, 0.774]); M5 1.206 s, 417 MB | — (no variants) | phase1-progress.md, results/track-o/O7a/ |
 | O7b | Node list layouts: up to 2 more behind the O7a seam (pooled arrays, small-list inline) | not started; depends on O7a | | |
-| O-NA | Remaining allocations and NoAlloc coverage (phase1-plan §9 "NoAlloc compliance"; no variants; brief [modules/ONA.md](modules/ONA.md)) | running | — | |
+| O-NA | Remaining allocations and NoAlloc coverage (phase1-plan §9 "NoAlloc compliance"; no variants; brief [modules/ONA.md](modules/ONA.md)) | done 2026-10-22; tuning corpus cs-o-aot-ws 473 ms vs main 581 ms (0.815 [0.800, 0.833]); NoAlloc 2,119 of 2,437 methods, 55 exceptions | — (no variants) | phase1-progress.md, results/track-o/ONA/ |
 | O1 | File reading and decoding | not started | | |
 | O2 | Character classification | not started | | |
 | O3 | Trivia and comment skipping | not started | | |

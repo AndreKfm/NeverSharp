@@ -11,6 +11,8 @@
   <ItemGroup>
     <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.Optimized.txt" />
     <AdditionalFiles Include="$(MSBuildThisFileDirectory)simd.noalloc-allowlist.toml" />
+    <!-- prereg/v6: runtime members of the ported code that do not allocate, and the mirror of the [NoAllocUnchecked] exceptions. -->
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)optimized.noalloc-allowlist.toml" />
     <ProjectReference Include="$(RepoRoot)analyzers/NeverSharp.NoAlloc/NeverSharp.NoAlloc.Analyzers/NeverSharp.NoAlloc.Analyzers.csproj"
                       OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <Using Include="NeverSharp.NoAlloc" />

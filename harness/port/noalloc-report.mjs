@@ -49,8 +49,15 @@ for (const file of walk(src)) {
         pending = [];
     }
 }
+// Allowlists of the Track O ruleset (eng/*.noalloc-allowlist.toml): runtime members accepted as allocation-free and,
+// since prereg/v6, the mirror entries of the [NoAllocUnchecked] exceptions (no further exceptions).
+report.allowlists = {};
+for (const name of readdirSync(join(root, "eng")).filter(f => f.endsWith(".noalloc-allowlist.toml"))) {
+    report.allowlists[name] = (readFileSync(join(root, "eng", name), "utf8").match(/^\[\[member\]\]/gm) ?? []).length;
+}
 console.log(`Track O NoAlloc coverage: ${report.noAlloc} of ${report.methods} methods annotated (${(100 * report.noAlloc / Math.max(1, report.methods)).toFixed(1)} %), ${report.noAllocWithAllow} with lifted constraints, ${report.unchecked.length} [NoAllocUnchecked] exceptions`);
 for (const [dir, d] of Object.entries(report.byDirectory)) console.log(`  ${dir}: ${d.noAlloc} / ${d.methods}`);
+console.log(`  allowlist entries: ${Object.entries(report.allowlists).map(([f, n]) => `${f} ${n}`).join(", ")}`);
 for (const u of report.unchecked) console.log(`  unchecked ${u.file}:${u.line} ${u.reason}`);
 const out = process.argv.includes("--json") ? process.argv[process.argv.indexOf("--json") + 1] : undefined;
 if (out) writeFileSync(out, JSON.stringify(report, null, 1));
