@@ -22,7 +22,7 @@ namespace NeverSharp.Optimized;
 /// The text of a source file as Track O reads it: an array of UTF-16 code units of the exact length (no
 /// <see cref="string"/>), the text type of the scanner, the text table and the SourceFile node.
 /// <para>
-/// Reading (variant B): the file's bytes go into a per-thread buffer that is reused from file to file (pinned, grown to
+/// Reading (variant B): the file's bytes go into a per-thread buffer that is reused from file to file (grown to
 /// the largest file), so no byte array is allocated per file; they are decoded straight into the character array,
 /// which is the only allocation per file and belongs to the parse result (the node store keeps it; nothing pooled
 /// is referenced after the read, so results stay valid and independent of later reads, on any thread). The character
@@ -70,11 +70,12 @@ internal readonly struct SourceText
         return new SourceText(Decode(threadBuffer.AsSpan(0, read)));
     }
 
-    // The thread's read buffer (variant B's byte pool): one pinned buffer per thread, reused from file to file and
-    // grown (powers of two from 64 KiB) to the largest file the thread has read. A thread reads one file at a time and
+    // The thread's read buffer (variant B's byte pool): one buffer per thread, reused from file to file and grown
+    // (powers of two from 64 KiB) to the largest file the thread has read. A thread reads one file at a time and
     // decodes its bytes before the next read, so the buffer is never shared, and the decoded text does not refer to it.
     // (Not ArrayPool<byte>.Shared: it does not keep the arrays of the few files over 1 MiB, and its trimming after full
-    // collections drops buffers that are then allocated again.)
+    // collections drops buffers that are then allocated again. Not pinned: a pinned-heap allocation per new pool
+    // thread measured slower.)
     private const int MinThreadBuffer = 1 << 16;
 
     [ThreadStatic]
@@ -87,7 +88,7 @@ internal readonly struct SourceText
         if (buffer is null || buffer.Length < length)
         {
             var size = (int)Math.Min(BitOperations.RoundUpToPowerOf2((uint)Math.Max(length, MinThreadBuffer)), (uint)System.Array.MaxLength);
-            var grown = GC.AllocateUninitializedArray<byte>(size, pinned: true);
+            var grown = GC.AllocateUninitializedArray<byte>(size);
             buffer?.AsSpan(0, keep).CopyTo(grown);
             threadBuffer = buffer = grown;
         }
