@@ -24,6 +24,12 @@
     <Compile Include="$(RepoRoot)src/NeverSharp.$(NeverSharpTrack)/**/*.cs" Exclude="$(RepoRoot)src/NeverSharp.$(NeverSharpTrack)/bin/**;$(RepoRoot)src/NeverSharp.$(NeverSharpTrack)/obj/**" LinkBase="$(NeverSharpTrack)" />
     <Compile Include="$(RepoRoot)src/Generated/*.g.cs" LinkBase="Generated" />
   </ItemGroup>
+  <!-- Track O sources carry [NoAlloc] annotations, which its Gate 2 injects through the analyzer; here they come
+       from the annotations library (attributes only, no analysis). -->
+  <ItemGroup Condition="'$(NeverSharpTrack)' == 'Optimized'">
+    <ProjectReference Include="$(RepoRoot)analyzers/NeverSharp.NoAlloc/NeverSharp.NoAlloc.Annotations/NeverSharp.NoAlloc.Annotations.csproj" />
+    <Using Include="NeverSharp.NoAlloc" />
+  </ItemGroup>
   <!--
     BenchmarkDotNet depends on Microsoft.Diagnostics.Tracing.TraceEvent, which exports the top-level namespace
     Diagnostics (Diagnostics.Tracing.*). Compiled together with the ported sources, that namespace hides the
