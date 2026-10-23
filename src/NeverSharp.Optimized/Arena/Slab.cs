@@ -9,7 +9,7 @@ namespace NeverSharp.Optimized;
 
 /// <summary>
 /// A large block of memory that holds the node data of many parse results (step O9, variant C): records, list headers,
-/// list elements, or source texts and arena characters, one kind per slab. A thread fills its current slab of each kind
+/// list elements, source texts and arena characters, or side tables of rare fields (step O10), one kind per slab. A thread fills its current slab of each kind
 /// parse after parse, each parse writing one contiguous range after the ranges of the parses before it; a range, once
 /// its parse is committed, is never written by another parse (results stay independent).
 /// <para>
@@ -103,22 +103,32 @@ internal static class SlabKind
     internal const int ListHeaders = 1;
     internal const int ListElements = 2;
     internal const int Chars = 3;
-    internal const int Count = 4;
+    internal const int Side = 4;
+    internal const int Count = 5;
 
     /// <summary>The size of a thread's first slab of each kind (at least; a thread's slabs double up to the full size).</summary>
     internal const long FirstSize = 64 << 10;
+
+    /// <summary>The size of a thread's first side slab (small: on the tuning corpus a file's side table rarely outgrows its first 384-byte region).</summary>
+    internal const long FirstSideSize = 16 << 10;
 
     /// <summary>Slabs of this size and larger are native memory (the thread has parsed a few dozen files at least).</summary>
     internal const long NativeSize = 256 << 10;
 
     // Full slab sizes in bytes (from the tuning corpus: per character of source text about 2.5 bytes of records, 0.4 of
     // list headers, 0.15 of list elements, and 2 of source text plus 0.7 of arena characters in the character slabs, so
-    // one slab of each kind holds the data of roughly 1.5 million characters of source text).
+    // one slab of each kind holds the data of roughly 1.5 million characters of source text). Side tables of rare
+    // fields (step O10): on the tuning corpus 14 % of the files have entries, 22,000 entries in all, at 24 bytes per
+    // entry of table capacity (at least 384 bytes per file with entries); a thread opens its first side slab only when
+    // a file has entries, and its side slabs are native from the full size on.
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private static ReadOnlySpan<int> FullSizes => [4 << 20, 1 << 20, 512 << 10, 4 << 20];
+    private static ReadOnlySpan<int> FullSizes => [4 << 20, 1 << 20, 512 << 10, 4 << 20, 64 << 10];
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static long FullSize(int kind) => FullSizes[kind];
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal static long FirstSizeOf(int kind) => kind == Side ? FirstSideSize : FirstSize;
 }
 
 /// <summary>
@@ -246,7 +256,7 @@ internal sealed unsafe class ThreadSlabs
 
     internal readonly Slab?[] Current = new Slab?[SlabKind.Count];
 
-    // The size of the thread's next slab of each kind: from SlabKind.FirstSize on, doubling up to the full size.
+    // The size of the thread's next slab of each kind: from SlabKind.FirstSizeOf(kind) on, doubling up to the full size.
     private readonly long[] nextSize = new long[SlabKind.Count];
 
     internal object?[]? Refs;
@@ -282,13 +292,13 @@ internal sealed unsafe class ThreadSlabs
 
     /// <summary>
     /// A new current slab of the kind with at least <paramref name="minimum"/> bytes; the thread leaves the previous one
-    /// (its committed ranges stay held by their stores). Slabs grow from <see cref="SlabKind.FirstSize"/> to the full
+    /// (its committed ranges stay held by their stores). Slabs grow from <see cref="SlabKind.FirstSizeOf"/> to the full
     /// size of the kind as the thread fills them; full-size (and larger) slabs are native memory.
     /// </summary>
     internal Slab Replace(int kind, long minimum)
     {
         var full = SlabKind.FullSize(kind);
-        var size = Math.Max(nextSize[kind], SlabKind.FirstSize);
+        var size = Math.Max(nextSize[kind], SlabKind.FirstSizeOf(kind));
         nextSize[kind] = Math.Min(size * 2, full);
         size = SlabRange.Align(Math.Max(size, minimum));
         var slab = new Slab(size, native: size >= Math.Min(SlabKind.NativeSize, full));

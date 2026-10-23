@@ -23,7 +23,10 @@ namespace NeverSharp.Optimized;
 /// <para>
 /// Rare fields (parent, original, the modifier flags cache, the emit node, and the members the parser sets on few
 /// nodes of a class, such as JSDoc, optional tokens and rarely present lists; the generator lists them) live in a
-/// side table keyed by node and field, so they cost nothing on the nodes that lack them.
+/// side table keyed by node and field, so they cost nothing on the nodes that lack them. The side table (step O10)
+/// is an append-only log of entries (key, int value or object slot) with an open-addressing index over it, both in
+/// one region of the thread's side slab (Slab.cs), opened at a file's first entry and owned by the result like the
+/// records: no allocation per file, and a table that outgrows its region moves to a region twice the size.
 /// </para>
 /// <para>
 /// Memory (step O9, variant C: per-thread slabs, Slab.cs): the records, the list headers, the list elements and the
@@ -93,11 +96,19 @@ internal sealed unsafe partial class NodeStore
         }
     }
 
-    private struct SideValue
+    /// <summary>
+    /// A side table entry: the key (node << 8 | field id), the value (an int field's value, or for an object field the
+    /// index of the object slot that holds it), and whether the field is an object field.
+    /// </summary>
+    private struct SideEntry
     {
-        public int Int;
-        public object? Ref;
+        public long Key;
+        public int Value;
+        public int IsRef;
     }
+
+    // Side table entries in a new store's first region (a power of two).
+    private const int FirstSideCapacity = 16;
 
     // The records: dataCapacity ints from data on (the store's range of a record slab); used of them are in use.
     private int* data;
@@ -117,10 +128,17 @@ internal sealed unsafe partial class NodeStore
     // store whose slabs another store of the thread took over, see IsActive).
     private ThreadSlabs? owner;
 
-    // Rare fields, keyed by (node << 8) | field id; sideLog lists the keys in the order they were added (truncation).
-    private Dictionary<long, SideValue>? side;
-    private long[]? sideLog;
-    private int sideLogCount;
+    // Rare fields (step O10): sideCount entries of sideCapacity in the order they were added (truncation discards a
+    // suffix), and the index, 2 * sideCapacity ints, each 0 (free) or an entry's position + 1, linear probing from the
+    // key's hash (the top sideShift bits of a multiplicative hash). The current region is the last sideTop bytes in use
+    // of sideRange; regions left by growth stay in the range unused. No region until the first entry.
+    private SlabRange sideRange;
+    private int* sideIndex;
+    private SideEntry* sideEntries;
+    private int sideCapacity;
+    private int sideCount;
+    private int sideShift;
+    private long sideTop;
 
     /// <summary>A store for a source text, written into the slabs of the current thread until <see cref="Commit"/>.</summary>
     public NodeStore(NativeText sourceText)
@@ -201,6 +219,12 @@ internal sealed unsafe partial class NodeStore
         dataCapacity = 0;
         used = 0;
         dataRange.Release();
+        sideRange.Release();
+        sideIndex = null;
+        sideEntries = null;
+        sideCapacity = 0;
+        sideCount = 0;
+        sideTop = 0;
         ReleaseLists();
         refs.Slice(0, refCount).Clear();
         refArray = [];
@@ -258,13 +282,13 @@ internal sealed unsafe partial class NodeStore
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal Mark GetMark() => new(used, refCount, count, sideLogCount, listCount, listElementCount, frameCount, scratchTop, Texts.CharCount, Texts.InternedCount);
+    internal Mark GetMark() => new(used, refCount, count, sideCount, listCount, listElementCount, frameCount, scratchTop, Texts.CharCount, Texts.InternedCount);
 
     /// <summary>Discards every node created after <paramref name="mark"/> (speculative parsing that is rolled back).</summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal void Truncate(Mark mark)
     {
-        Debug.Assert(mark.Words <= used && mark.Refs <= refCount && mark.Nodes <= count && mark.SideLog <= sideLogCount && mark.Lists <= listCount, "Mark is beyond the store's fill level");
+        Debug.Assert(mark.Words <= used && mark.Refs <= refCount && mark.Nodes <= count && mark.SideLog <= sideCount && mark.Lists <= listCount, "Mark is beyond the store's fill level");
         used = mark.Words;
         refCount = mark.Refs;
         count = mark.Nodes;
@@ -276,7 +300,7 @@ internal sealed unsafe partial class NodeStore
         scratchTop = mark.ScratchTop;
         // Texts: characters and interned identifiers added since the mark belong to the discarded parse.
         Texts.Truncate(mark.Chars, mark.Interned);
-        if (sideLogCount > mark.SideLog)
+        if (sideCount > mark.SideLog)
         {
             TruncateSide(mark);
         }
@@ -284,26 +308,35 @@ internal sealed unsafe partial class NodeStore
 
     /// <summary>
     /// Removes the side table entries of discarded nodes. Entries added since the mark for nodes that survive (caches
-    /// written on older nodes) stay, and move down in the log so that an enclosing truncation still finds them.
+    /// written on older nodes) stay, and move down in the log so that an enclosing truncation still finds them; an
+    /// object slot of theirs from after the mark (truncated with the nodes' slots) moves down to a slot after
+    /// <see cref="refCount"/> (slots were handed out in log order, so a move never overwrites a slot still to move).
     /// </summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private void TruncateSide(Mark mark)
     {
-        var log = sideLog!;
+        var entries = sideEntries;
         var kept = mark.SideLog;
-        for (var i = mark.SideLog; i < sideLogCount; i++)
+        for (var i = mark.SideLog; i < sideCount; i++)
         {
-            var key = log[i];
-            if ((int)(key >> 8) >= mark.Words)
+            var entry = entries[i];
+            var slot = SideSlotOf(entry.Key, i + 1);
+            if ((int)(entry.Key >> 8) >= mark.Words)
             {
-                side!.Remove(key);
+                RemoveSideSlot(slot);
+                continue;
             }
-            else
+            if (entry.IsRef != 0 && entry.Value >= refCount)
             {
-                log[kept++] = key;
+                var r = refCount++;
+                var objects = refs;
+                objects[r] = objects[entry.Value];
+                entry.Value = r;
             }
+            entries[kept] = entry;
+            sideIndex[slot] = ++kept;
         }
-        sideLogCount = kept;
+        sideCount = kept;
     }
 
     /// <summary>
@@ -316,6 +349,11 @@ internal sealed unsafe partial class NodeStore
         var local = IsActive ? owner : null;
         dataRange.Commit((long)words * sizeof(int), local, SlabKind.Records);
         dataCapacity = words;
+        if (sideIndex is not null)
+        {
+            // The current region stays where it is, with its free entries: entries added later fill them first.
+            sideRange.Commit(sideTop, local, SlabKind.Side);
+        }
         if (local is not null && ReferenceEquals(local.Refs, refArray))
         {
             local.RefsUsed = refBase + slots;
@@ -407,70 +445,213 @@ internal sealed unsafe partial class NodeStore
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public void SetEmitNode(Node node, object? value) => SetSideRef(node.Index, EmitNodeSide, value);
 
-    //// Side table.
+    //// Side table (step O10).
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static long SideKey(int node, int field) => ((long)node << 8) | (uint)field;
 
+    /// <summary>The key's home slot in the index: the top bits of a multiplicative (Fibonacci) hash.</summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private int GetSideInt(int node, int field) => side is not null && side.TryGetValue(SideKey(node, field), out var value) ? value.Int : 0;
+    private int SideHome(long key) => (int)(((ulong)key * 0x9E3779B97F4A7C15UL) >> sideShift);
+
+    /// <summary>The entry of the key, or null if the table has none.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private SideEntry* FindSide(long key)
+    {
+        var index = sideIndex;
+        if (index is null)
+        {
+            return null;
+        }
+        var mask = (sideCapacity * 2) - 1;
+        var i = SideHome(key);
+        while (true)
+        {
+            var e = index[i];
+            if (e == 0)
+            {
+                return null;
+            }
+            var entry = sideEntries + (e - 1);
+            if (entry->Key == key)
+            {
+                return entry;
+            }
+            i = (i + 1) & mask;
+        }
+    }
+
+    /// <summary>The index slot that holds <paramref name="value"/> (an entry's position + 1, with the given key).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private int SideSlotOf(long key, int value)
+    {
+        var mask = (sideCapacity * 2) - 1;
+        var i = SideHome(key);
+        while (sideIndex[i] != value)
+        {
+            i = (i + 1) & mask;
+        }
+        return i;
+    }
+
+    /// <summary>
+    /// Frees an index slot. Later slots of the probe run move back where their home allows (backward-shift deletion),
+    /// so every key stays reachable from its home slot without tombstones.
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private void RemoveSideSlot(int slot)
+    {
+        var index = sideIndex;
+        var mask = (sideCapacity * 2) - 1;
+        var j = slot;
+        while (true)
+        {
+            j = (j + 1) & mask;
+            var e = index[j];
+            if (e == 0)
+            {
+                break;
+            }
+            var home = SideHome(sideEntries[e - 1].Key);
+            if (((j - home) & mask) >= ((j - slot) & mask))
+            {
+                index[slot] = e;
+                slot = j;
+            }
+        }
+        index[slot] = 0;
+    }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private object? GetSideRef(int node, int field) => side is not null && side.TryGetValue(SideKey(node, field), out var value) ? value.Ref : null;
+    private int GetSideInt(int node, int field)
+    {
+        var entry = FindSide(SideKey(node, field));
+        return entry is null ? 0 : entry->Value;
+    }
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private object? GetSideRef(int node, int field)
+    {
+        var entry = FindSide(SideKey(node, field));
+        return entry is null ? null : refs[entry->Value];
+    }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private void SetSideInt(int node, int field, int value)
     {
-        if (value == 0)
+        // A node without the side bit has no entries.
+        var entry = data[node] < 0 ? FindSide(SideKey(node, field)) : null;
+        if (entry is null)
         {
-            if (data[node] < 0)
+            if (value == 0)
             {
-                ref var existing = ref CollectionsMarshal.GetValueRefOrNullRef(side!, SideKey(node, field));
-                if (!Unsafe.IsNullRef(ref existing))
-                {
-                    existing.Int = 0;
-                }
+                return;
             }
-            return;
+            entry = AddSide(node, field);
         }
-        AddSide(node, field).Int = value;
+        entry->Value = value;
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private void SetSideRef(int node, int field, object? value)
     {
-        if (value is null)
+        var entry = data[node] < 0 ? FindSide(SideKey(node, field)) : null;
+        if (entry is not null)
         {
-            if (data[node] < 0)
-            {
-                ref var existing = ref CollectionsMarshal.GetValueRefOrNullRef(side!, SideKey(node, field));
-                if (!Unsafe.IsNullRef(ref existing))
-                {
-                    existing.Ref = null;
-                }
-            }
+            refs[entry->Value] = value;
             return;
         }
-        AddSide(node, field).Ref = value;
+        if (value is null)
+        {
+            return;
+        }
+        // The value's object slot (taken before the entry, which a growing table moves).
+        var slot = refCount;
+        if (slot == refCapacity)
+        {
+            GrowRefs(slot + 1);
+        }
+        refCount = slot + 1;
+        refs[slot] = value;
+        entry = AddSide(node, field);
+        entry->Value = slot;
+        entry->IsRef = 1;
     }
 
+    /// <summary>
+    /// A new entry (value 0, an int field's) for a key the table does not have; marks the node as having side entries.
+    /// A full table first moves to a region with twice the entries (the first region: <see cref="FirstSideCapacity"/>
+    /// entries): after the current region if the range has room, otherwise in the thread's next side slab (or, for a
+    /// committed store, a slab of its own); the entries are copied and the index is rebuilt.
+    /// </summary>
     [NoAllocUnchecked("arena growth: a new side table entry (rare fields)")]
-    private ref SideValue AddSide(int node, int field)
+    private SideEntry* AddSide(int node, int field)
     {
-        side ??= [];
-        var key = SideKey(node, field);
-        ref var value = ref CollectionsMarshal.GetValueRefOrAddDefault(side, key, out var exists);
-        if (!exists)
+        if (sideCount == sideCapacity)
         {
-            sideLog ??= new long[16];
-            if (sideLogCount == sideLog.Length)
-            {
-                Array.Resize(ref sideLog, sideLog.Length * 2);
-            }
-            sideLog[sideLogCount++] = key;
-            data[node] |= SideBit;
+            GrowSide();
         }
-        return ref value;
+        var key = SideKey(node, field);
+        var position = sideCount++;
+        var entry = sideEntries + position;
+        entry->Key = key;
+        entry->Value = 0;
+        entry->IsRef = 0;
+        var index = sideIndex;
+        var mask = (sideCapacity * 2) - 1;
+        var i = SideHome(key);
+        while (index[i] != 0)
+        {
+            i = (i + 1) & mask;
+        }
+        index[i] = position + 1;
+        data[node] |= SideBit;
+        return entry;
+    }
+
+    // (Called by AddSide only.)
+    private void GrowSide()
+    {
+        var capacity = sideCapacity == 0 ? FirstSideCapacity : sideCapacity * 2;
+        var indexBytes = (long)capacity * 2 * sizeof(int);
+        var bytes = indexBytes + ((long)capacity * sizeof(SideEntry));
+        var active = IsActive ? owner : null;
+        if (sideRange.Slab is null && active is not null)
+        {
+            // The parse's first entry: the range is the rest of the thread's current side slab.
+            sideRange.Open(active, SlabKind.Side, bytes);
+            sideTop = 0;
+        }
+        if (sideRange.Capacity - sideTop < bytes)
+        {
+            // The old region stays readable: the range keeps its slab held.
+            sideRange.Grow(0, bytes, active, SlabKind.Side);
+            sideTop = 0;
+        }
+        var region = sideRange.Start + sideTop;
+        sideTop = SlabRange.Align(sideTop + bytes);
+        var index = (int*)region;
+        var entries = (SideEntry*)(region + indexBytes);
+        new Span<int>(index, capacity * 2).Clear();
+        var n = sideCount;
+        if (n != 0)
+        {
+            Buffer.MemoryCopy(sideEntries, entries, (long)capacity * sizeof(SideEntry), (long)n * sizeof(SideEntry));
+        }
+        sideIndex = index;
+        sideEntries = entries;
+        sideCapacity = capacity;
+        sideShift = 64 - System.Numerics.BitOperations.Log2((uint)(capacity * 2));
+        var mask = (capacity * 2) - 1;
+        for (var p = 0; p < n; p++)
+        {
+            var i = SideHome(entries[p].Key);
+            while (index[i] != 0)
+            {
+                i = (i + 1) & mask;
+            }
+            index[i] = p + 1;
+        }
     }
 
     [NoAllocUnchecked("error path: reading or writing a field the node's kind does not have throws")]
