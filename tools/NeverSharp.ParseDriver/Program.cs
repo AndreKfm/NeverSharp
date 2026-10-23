@@ -47,7 +47,10 @@ using (var self = Process.GetCurrentProcess())
 var files = File.ReadAllLines(listPath).Where(l => l.Length > 0).ToArray();
 var texts = new string[files.Length];
 var sourceFiles = new SourceFile[files.Length];
-var options = new CreateSourceFileOptions { LanguageVersion = ScriptTarget.Latest, JsDocParsingMode = JSDocParsingMode.ParseForTypeErrors };
+// NEVERSHARP_JSDOC=all (development probe only, never set by bench.mjs): JSDocParsingMode.ParseAll, every JSDoc
+// comment parsed as typescript-go 7.0.2 does eagerly.
+var parseAllJsDoc = Environment.GetEnvironmentVariable("NEVERSHARP_JSDOC") == "all";
+var options = new CreateSourceFileOptions { LanguageVersion = ScriptTarget.Latest, JsDocParsingMode = parseAllJsDoc ? JSDocParsingMode.ParseAll : JSDocParsingMode.ParseForTypeErrors };
 
 void ParseOne(int i)
 {
@@ -97,8 +100,9 @@ const string track = "faithful";
 var runtime = $"{(System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported ? "jit" : "aot")}-{(System.Runtime.GCSettings.IsServerGC ? "srv" : "ws")}";
 var mode = single ? "single" : "parallel";
 var inv = CultureInfo.InvariantCulture;
+var jsDocField = parseAllJsDoc ? "\"jsdoc\":\"all\"," : "";
 Console.WriteLine(string.Create(inv,
-    $"{{\"driver\":\"cs-{track}-{runtime}-{mode}\",\"files\":{files.Length},\"chars\":{chars},\"nodes\":{nodes},\"priority\":\"{priority}\"," +
+    $"{{\"driver\":\"cs-{track}-{runtime}-{mode}\",\"files\":{files.Length},\"chars\":{chars},\"nodes\":{nodes},\"priority\":\"{priority}\",{jsDocField}" +
     $"\"allocatedBytes\":{GC.GetTotalAllocatedBytes(true)},\"gen0\":{GC.CollectionCount(0)},\"gen1\":{GC.CollectionCount(1)},\"gen2\":{GC.CollectionCount(2)}," +
     $"\"gcPauseMs\":{GC.GetTotalPauseDuration().TotalMilliseconds.ToString("0.###", inv)}}}"));
 GC.KeepAlive(texts);
