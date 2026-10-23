@@ -139,11 +139,8 @@ internal sealed partial class Scanner
         ["of"] = SyntaxKind.OfKeyword,
     };
 
-    // scanner.ts: `new Map(Object.entries(textToKeywordObj))`.
-    private static readonly Dictionary<string, SyntaxKind> TextToKeyword = new(TextToKeywordObj, StringComparer.Ordinal);
-
-    // textToKeyword looked up by a range of the text (see ScanIdentifier).
-    private static readonly Dictionary<string, SyntaxKind>.AlternateLookup<ReadOnlySpan<char>> TextToKeywordByRange = TextToKeyword.GetAlternateLookup<ReadOnlySpan<char>>();
+    // scanner.ts: `const textToKeyword = new Map(Object.entries(textToKeywordObj))`. Track O (O23-B): looked up only by a
+    // range of the text, through the perfect hash table of TryGetKeyword (Scanner.CharTables.cs), built from textToKeywordObj.
 
     // scanner.ts: `new Map(Object.entries({ ...textToKeywordObj, "{": ..., ... }))`.
     private static readonly OrderedDictionary<string, SyntaxKind> TextToToken = CreateTextToToken();
@@ -709,14 +706,8 @@ internal sealed partial class Scanner
                     if (CharCodeAt(text, pos + 1) == (int)CharacterCodes.slash)
                     {
                         pos += 2;
-                        while (pos < text.Length)
-                        {
-                            if (IsLineBreak(text[pos]))
-                            {
-                                break;
-                            }
-                            pos++;
-                        }
+                        // (Track O, O23-B: isLineBreak by the ASCII table.)
+                        pos = SkipToLineBreak(text, pos, text.Length);
                         canConsumeStar = false;
                         continue;
                     }
@@ -1003,15 +994,9 @@ internal sealed partial class Scanner
                             pos += 2;
                             if (nextChar == (int)CharacterCodes.slash)
                             {
-                                while (pos < text.Length)
-                                {
-                                    if (IsLineBreak(text[pos]))
-                                    {
-                                        hasTrailingNewLine = true;
-                                        break;
-                                    }
-                                    pos++;
-                                }
+                                // (Track O, O23-B: isLineBreak by the ASCII table; the loop stops before the end only at a line break.)
+                                pos = SkipToLineBreak(text, pos, text.Length);
+                                hasTrailingNewLine = pos < text.Length;
                             }
                             else
                             {
@@ -1119,17 +1104,25 @@ internal sealed partial class Scanner
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsIdentifierStart(int ch, ScriptTarget? languageVersion)
     {
-        return IsASCIILetter(ch) || ch == (int)CharacterCodes.Dollar || ch == (int)CharacterCodes._ ||
-            (ch > (int)CharacterCodes.maxAsciiCharacter && IsUnicodeIdentifierStart(ch, languageVersion));
+        // Track O (O23-B): ASCII letters, '$' and '_' by the ASCII table.
+        if ((uint)ch <= (int)CharacterCodes.maxAsciiCharacter)
+        {
+            return (AsciiCharFlags[ch] & (byte)CharFlags.IdentifierStart) != 0;
+        }
+        return ch > (int)CharacterCodes.maxAsciiCharacter && IsUnicodeIdentifierStart(ch, languageVersion);
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsIdentifierPart(int ch, ScriptTarget? languageVersion, LanguageVariant? identifierVariant = null)
     {
-        return IsWordCharacter(ch) || ch == (int)CharacterCodes.Dollar ||
-            // "-" and ":" are valid in JSX Identifiers
-            (identifierVariant == LanguageVariant.JSX ? (ch == (int)CharacterCodes.minus || ch == (int)CharacterCodes.colon) : false) ||
-            (ch > (int)CharacterCodes.maxAsciiCharacter && IsUnicodeIdentifierPart(ch, languageVersion));
+        // Track O (O23-B): word characters and '$' by the ASCII table.
+        if ((uint)ch <= (int)CharacterCodes.maxAsciiCharacter)
+        {
+            return (AsciiCharFlags[ch] & (byte)CharFlags.IdentifierPart) != 0 ||
+                // "-" and ":" are valid in JSX Identifiers
+                (identifierVariant == LanguageVariant.JSX ? (ch == (int)CharacterCodes.minus || ch == (int)CharacterCodes.colon) : false);
+        }
+        return ch > (int)CharacterCodes.maxAsciiCharacter && IsUnicodeIdentifierPart(ch, languageVersion);
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
