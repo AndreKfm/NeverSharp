@@ -22,4 +22,6 @@ The list the Track O endpoint is reported with (pre-registration §8, A9). Each 
 
 Endpoint (2026-10-22, after O1, Windows only): optimized track G = 0.60 [0.59, 0.61] vs tsgo7-parse (faster claim allowed); vs tsrs 1.52 [1.50, 1.54] (secondary). See results/track-o/endpoint/2026-10-22T18-55-52-105Z/VERDICT.md.
 
+Additional run (2026-10-23, after O1, O9, O10, O23; not the endpoint): G = 0.47 [0.46, 0.48] vs tsgo7-parse; vs tsrs 1.19 [1.18, 1.21] (contains 1.20, inconclusive; secondary). results/track-o/additional/2026-10-23T08-51-58-122Z/NOTE.md.
+
 NoAlloc coverage and exceptions: `node harness/port/noalloc-report.mjs`, reported with every Track O result.
