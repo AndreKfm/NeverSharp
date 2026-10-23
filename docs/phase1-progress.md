@@ -238,3 +238,7 @@ Briefs: [modules/O12.md](modules/O12.md), [modules/O24.md](modules/O24.md); chos
 - **Run 1 (all rig-compliant; tuning corpus, 20 runs):** main 399.3 ms, **O12 379.6 ms**, O24 389.9 ms; O12/main **0.951 [0.929, 0.981]** (single-threaded 0.956 [0.945, 0.966]) — **O12 merged**; O24/main 0.976 [0.940, 1.010] (single-threaded 1.004), not slower.
 - **O24 rebased onto O12:** run 2 not rig-compliant (idle before run 13.9 %; archived as `run2-not-compliant`, O24/O12 0.991, single-threaded 0.967); run 3 rig-compliant (idle 11.4 %): O12 376.8 ms, O24 377.5 ms, O24/O12 1.002 [0.980, 1.029], single-threaded 0.989 [0.977, 1.000]. Not slower, so **O24 merged** by the brief's rule; on top of O12 its gain is not measurable in the parse-only harness (the in-memory benchmark below shows it).
 - **After both merges:** `M5.ParseTuningCorpus` 485.4 ms, 38.9 MB (after O11: 598.9 ms). `results/track-o/O12-O24/` (`run1`, `run2-not-compliant`, `run3`, `merged-bdn`, `rank.mjs`).
+
+### Track O additional run after O12 and O24 (2026-10-23, Windows only)
+
+Protocol-compliant run at 4e32b26 (idle 10.9 %); variance gate PASS. cs-o-aot-ws vs tsgo7-parse **0.43 [0.42, 0.44]**; vs tsrs-parse **1.06 [1.05, 1.07]** (secondary, within 20 %; vscode 0.95 [0.92, 0.99] reported, partly tsrs run-to-run variation); single-threaded 0.618 vs typescript-go, 1.167 vs tsrs. The endpoint stays 0.60. `results/track-o/additional/2026-10-23T14-51-13-533Z/NOTE.md`.
