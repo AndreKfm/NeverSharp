@@ -1,0 +1,96 @@
+{
+  "results": [
+    {
+      "command": "C:/Users/akn/AppData/Local/Temp/claude/D--Private-Source-Andre-projects-NeverSharp/e10e288a-0925-4b3a-b4bd-9ebb823ad50b/scratchpad/avx-probe/v2/parse-cs-optimized-aot-ws.exe --single D:/Private/Source/Andre/projects/NeverSharp/artifacts/bench/filelists/tuning.txt",
+      "mean": 2.23045704,
+      "stddev": 0.027033984621221592,
+      "median": 2.2275277,
+      "user": 0.7015625,
+      "system": 1.540625,
+      "min": 2.1941031,
+      "max": 2.2741052,
+      "times": [
+        2.2522235,
+        2.2741052,
+        2.2387308,
+        2.215219,
+        2.2515875,
+        2.2163246,
+        2.2093346,
+        2.253417,
+        2.1995251,
+        2.1941031
+      ],
+      "memory_usage_byte": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "exit_codes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "command": "C:/Users/akn/AppData/Local/Temp/claude/D--Private-Source-Andre-projects-NeverSharp/e10e288a-0925-4b3a-b4bd-9ebb823ad50b/scratchpad/avx-probe/v3/parse-cs-optimized-aot-ws.exe --single D:/Private/Source/Andre/projects/NeverSharp/artifacts/bench/filelists/tuning.txt",
+      "mean": 2.2264726599999998,
+      "stddev": 0.016097512598687018,
+      "median": 2.23193785,
+      "user": 0.74375,
+      "system": 1.484375,
+      "min": 2.200704,
+      "max": 2.2470377,
+      "times": [
+        2.2470377,
+        2.2329733,
+        2.200704,
+        2.2324508,
+        2.2396695,
+        2.2314249,
+        2.21444,
+        2.2437489,
+        2.205893,
+        2.2163845
+      ],
+      "memory_usage_byte": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "exit_codes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  ]
+}
