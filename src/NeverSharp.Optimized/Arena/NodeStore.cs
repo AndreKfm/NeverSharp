@@ -454,28 +454,23 @@ internal sealed unsafe partial class NodeStore
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private int SideHome(long key) => (int)(((ulong)key * 0x9E3779B97F4A7C15UL) >> sideShift);
 
-    /// <summary>The entry of the key, or null if the table has none.</summary>
+    /// <summary>The position of the key's entry, or -1 if the table has none.</summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private SideEntry* FindSide(long key)
+    private int FindSide(long key)
     {
         var index = sideIndex;
         if (index is null)
         {
-            return null;
+            return -1;
         }
         var mask = (sideCapacity * 2) - 1;
         var i = SideHome(key);
         while (true)
         {
             var e = index[i];
-            if (e == 0)
+            if (e == 0 || sideEntries[e - 1].Key == key)
             {
-                return null;
-            }
-            var entry = sideEntries + (e - 1);
-            if (entry->Key == key)
-            {
-                return entry;
+                return e - 1;
             }
             i = (i + 1) & mask;
         }
@@ -525,47 +520,47 @@ internal sealed unsafe partial class NodeStore
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private int GetSideInt(int node, int field)
     {
-        var entry = FindSide(SideKey(node, field));
-        return entry is null ? 0 : entry->Value;
+        var p = FindSide(SideKey(node, field));
+        return p < 0 ? 0 : sideEntries[p].Value;
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private object? GetSideRef(int node, int field)
     {
-        var entry = FindSide(SideKey(node, field));
-        return entry is null ? null : refs[entry->Value];
+        var p = FindSide(SideKey(node, field));
+        return p < 0 ? null : refs[sideEntries[p].Value];
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private void SetSideInt(int node, int field, int value)
     {
         // A node without the side bit has no entries.
-        var entry = data[node] < 0 ? FindSide(SideKey(node, field)) : null;
-        if (entry is null)
+        var p = data[node] < 0 ? FindSide(SideKey(node, field)) : -1;
+        if (p < 0)
         {
             if (value == 0)
             {
                 return;
             }
-            entry = AddSide(node, field);
+            p = AddSide(node, field);
         }
-        entry->Value = value;
+        sideEntries[p].Value = value;
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private void SetSideRef(int node, int field, object? value)
     {
-        var entry = data[node] < 0 ? FindSide(SideKey(node, field)) : null;
-        if (entry is not null)
+        var p = data[node] < 0 ? FindSide(SideKey(node, field)) : -1;
+        if (p >= 0)
         {
-            refs[entry->Value] = value;
+            refs[sideEntries[p].Value] = value;
             return;
         }
         if (value is null)
         {
             return;
         }
-        // The value's object slot (taken before the entry, which a growing table moves).
+        // The value's object slot.
         var slot = refCount;
         if (slot == refCapacity)
         {
@@ -573,19 +568,22 @@ internal sealed unsafe partial class NodeStore
         }
         refCount = slot + 1;
         refs[slot] = value;
-        entry = AddSide(node, field);
-        entry->Value = slot;
-        entry->IsRef = 1;
+        // (The position first: adding may move the table.)
+        p = AddSide(node, field);
+        ref var entry = ref sideEntries[p];
+        entry.Value = slot;
+        entry.IsRef = 1;
     }
 
     /// <summary>
-    /// A new entry (value 0, an int field's) for a key the table does not have; marks the node as having side entries.
+    /// The position of a new entry (value 0, an int field's) for a key the table does not have; marks the node as
+    /// having side entries.
     /// A full table first moves to a region with twice the entries (the first region: <see cref="FirstSideCapacity"/>
     /// entries): after the current region if the range has room, otherwise in the thread's next side slab (or, for a
     /// committed store, a slab of its own); the entries are copied and the index is rebuilt.
     /// </summary>
     [NoAllocUnchecked("arena growth: a new side table entry (rare fields)")]
-    private SideEntry* AddSide(int node, int field)
+    private int AddSide(int node, int field)
     {
         if (sideCount == sideCapacity)
         {
@@ -593,10 +591,10 @@ internal sealed unsafe partial class NodeStore
         }
         var key = SideKey(node, field);
         var position = sideCount++;
-        var entry = sideEntries + position;
-        entry->Key = key;
-        entry->Value = 0;
-        entry->IsRef = 0;
+        ref var entry = ref sideEntries[position];
+        entry.Key = key;
+        entry.Value = 0;
+        entry.IsRef = 0;
         var index = sideIndex;
         var mask = (sideCapacity * 2) - 1;
         var i = SideHome(key);
@@ -606,7 +604,7 @@ internal sealed unsafe partial class NodeStore
         }
         index[i] = position + 1;
         data[node] |= SideBit;
-        return entry;
+        return position;
     }
 
     // (Called by AddSide only.)
