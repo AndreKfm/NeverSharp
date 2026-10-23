@@ -16,11 +16,12 @@ namespace NeverSharp.Optimized;
 internal sealed partial class Parser
 {
     // True if positioned at the start of a list element
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsListElement(ParsingContext parsingContext, bool inErrorRecovery)
     {
-        var node = CurrentNode(parsingContext);
-        if (!node.IsNone)
+        // Track O (step O28): currentNode returns undefined without a syntax cursor before it reads anything else.
+        if (syntaxCursor != null && !CurrentNode(parsingContext).IsNone)
         {
             return true;
         }
@@ -215,6 +216,7 @@ internal sealed partial class Parser
     }
 
     // True if positioned at a list terminator
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsListTerminator(ParsingContext kind)
     {
@@ -323,6 +325,7 @@ internal sealed partial class Parser
     }
 
     // Parses a list of elements
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private NodeList ParseList<TCallback>(ParsingContext kind, TCallback parseElement)
         where TCallback : struct, IParserCallback<Node>
@@ -352,14 +355,20 @@ internal sealed partial class Parser
         return CreateNodeArray(list, listPos);
     }
 
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseListElement<TCallback>(ParsingContext parsingContext, TCallback parseElement)
         where TCallback : struct, IParserCallback<Node>
     {
-        var node = CurrentNode(parsingContext);
-        if (!node.IsNone)
+        // Track O (step O28): currentNode returns undefined without a syntax cursor before it reads anything else, so
+        // it is called only with one.
+        if (syntaxCursor != null)
         {
-            return ConsumeNode(node);
+            var node = CurrentNode(parsingContext);
+            if (!node.IsNone)
+            {
+                return ConsumeNode(node);
+            }
         }
 
         return parseElement.Invoke(this);
@@ -786,6 +795,7 @@ internal sealed partial class Parser
     /// <summary>
     /// Parses a comma-delimited list of elements (TypeScript's overload whose elements are never undefined).
     /// </summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private NodeList ParseDelimitedList<TCallback>(ParsingContext kind, TCallback parseElement, bool? considerSemicolonAsDelimiter = null)
         where TCallback : struct, IParserCallback<Node>
@@ -797,6 +807,7 @@ internal sealed partial class Parser
     /// Parses a comma-delimited list of elements. TypeScript's overload whose element parser may return undefined
     /// (then the list is undefined); C# cannot overload on the nullability of the callback, so it has its own name.
     /// </summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private NodeList ParseDelimitedListOrUndefined<TCallback>(ParsingContext kind, TCallback parseElement, bool? considerSemicolonAsDelimiter = null)
         where TCallback : struct, IParserCallback<Node>

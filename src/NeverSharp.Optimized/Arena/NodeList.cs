@@ -236,6 +236,7 @@ internal sealed unsafe partial class NodeStore
     //// Lists under construction.
 
     /// <summary>Opens a list under construction (TypeScript: `const list = [];`).</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public ListBuilder BeginList()
     {
@@ -358,6 +359,81 @@ internal sealed unsafe partial class NodeStore
         return AddHeader(at, count, hasTrailingComma);
     }
 
+    /// <summary>
+    /// createNodeArray for a list under construction in one go (Track O, step O28): the elements are copied into the
+    /// arena while their transform flags are aggregated (nodeFactory.ts aggregateChildrenFlags, the union of
+    /// propagateChildFlags over the elements; <see cref="ChildFlags"/>), and the header is written once with its range
+    /// (<paramref name="pos"/>, <paramref name="end"/>), the transform flags and `hasTrailingComma`. The same values as
+    /// <see cref="FinishList"/> followed by NodeFactory.AggregateChildrenFlags and setTextRangePosEnd: reading the
+    /// elements' records does not depend on the list, and nothing else is written in between.
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    public NodeList FinishNodeArray(ListBuilder list, bool hasTrailingComma, int pos, int end)
+    {
+        var fr = frames!;
+        var i = 2 * list.Frame;
+        var start = fr[i];
+        var count = fr[i + 1];
+        Debug.Assert(count >= 0, "List finished twice");
+        var at = listElementCount;
+        if (count > elementCapacity - at)
+        {
+            GrowListElements(at + count);
+        }
+        var target = listElements + at;
+        // (One range check for the span; none per element.)
+        var source = new ReadOnlySpan<Node>(scratch, start, count);
+        var transformFlags = 0;
+        for (var k = 0; k < source.Length; k++)
+        {
+            var node = source[k];
+            target[k] = node;
+            transformFlags |= ChildFlags(node);
+        }
+        listElementCount = at + count;
+        PopFrame(list.Frame, start, count);
+        var index = listCount;
+        if (index == listCapacity)
+        {
+            GrowLists();
+        }
+        ref var h = ref lists[index];
+        h.Start = at;
+        h.Count = count;
+        h.Pos = pos;
+        h.End = end;
+        h.TransformFlags = transformFlags;
+        h.Bits = hasTrailingComma ? TrailingCommaBit : 0;
+        listCount = index + 1;
+        return new NodeList(index);
+    }
+
+    /// <summary>
+    /// nodeFactory.ts propagateChildFlags of an element (NodeFactory.PropagateChildFlags, step O12's form): the child's
+    /// transform flags without its kind's subtree exclusions, plus the property-name propagating flags of its name when
+    /// it has one that is a property name.
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private int ChildFlags(Node child)
+    {
+        if (child.IsNone)
+        {
+            return 0;
+        }
+        var flags = data[child.Index + TransformFlagsWord] & ~(int)TransformFlagsSubtreeExclusions(Kind(child));
+        var name = Name(child);
+        // (UtilitiesPublic.IsPropertyName: the kinds of a property name.)
+        SyntaxKind nameKind;
+        if (!name.IsNone &&
+            ((nameKind = Kind(name)) == SyntaxKind.Identifier || nameKind == SyntaxKind.PrivateIdentifier ||
+                nameKind == SyntaxKind.StringLiteral || nameKind == SyntaxKind.NumericLiteral || nameKind == SyntaxKind.ComputedPropertyName))
+        {
+            flags |= data[name.Index + TransformFlagsWord] & (int)Generated.TransformFlags.PropertyNamePropagatingFlags;
+        }
+        return flags;
+    }
+
     /// <summary>Closes a list under construction without creating a list (TypeScript: the plain array is dropped).</summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public void DiscardList(ListBuilder list)
@@ -366,6 +442,7 @@ internal sealed unsafe partial class NodeStore
         PopFrame(list.Frame, frames![i], frames[i + 1]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private void PopFrame(int frame, int start, int count)
     {

@@ -134,10 +134,9 @@ internal sealed partial class NodeFactory
         // Since the element list of a node array is typically created by starting with an empty array and
         // repeatedly calling push(), the list may not have the optimal memory layout. We invoke slice() for
         // small arrays (1 to 4 elements) to give the VM a chance to allocate an optimal representation.
-        // (C#: the list store copies the plain array into its arena, with pos and end -1.)
-        var array = store.FinishList(elements, hasTrailingComma == true);
-        AggregateChildrenFlags(store, array);
-        return array;
+        // (C#: the list store copies the plain array into its arena, with pos and end -1; Track O, step O28: with the
+        // transform flags aggregated during the copy, NodeStore.FinishNodeArray.)
+        return store.FinishNodeArray(elements, hasTrailingComma == true, -1, -1);
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]

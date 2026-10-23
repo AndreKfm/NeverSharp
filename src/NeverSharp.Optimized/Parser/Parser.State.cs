@@ -1503,12 +1503,13 @@ internal sealed partial class Parser : BaseNodeFactory
     /// TypeScript: `createNodeArray(elements: T[], pos, end?, hasTrailingComma?)`. The elements are a plain array: a
     /// list under construction (Track O, step O7a), which the list store copies into its arena.
     /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private NodeList CreateNodeArray(ListBuilder elements, int pos, int? end = null, bool? hasTrailingComma = null)
     {
-        var array = NodeFactory.CreateNodeArray(store, elements, hasTrailingComma);
-        Utilities.SetTextRangePosEnd(store, array, pos, end ?? scanner.GetTokenFullStart());
-        return array;
+        // Track O (step O28): factory.createNodeArray (copy, aggregated transform flags) and setTextRangePosEnd in one
+        // write of the list header (NodeStore.FinishNodeArray); the scanner is not touched in between.
+        return store.FinishNodeArray(elements, hasTrailingComma == true, pos, end ?? scanner.GetTokenFullStart());
     }
 
     /// <summary>`createNodeArray([...], pos, end?)` with an array literal.</summary>

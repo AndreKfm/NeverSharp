@@ -887,6 +887,7 @@ internal sealed partial class Parser
         return (uint)token < (uint)table.Length ? (OperatorPrecedence)table[(int)token] : Utilities.GetBinaryOperatorPrecedence(token);
     }
 
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsMemberExpressionContinuation(SyntaxKind token)
     {
@@ -960,7 +961,9 @@ internal sealed partial class Parser
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseUnaryOperandRest(int pos, Node primary)
     {
-        var expression = ParseMemberExpressionRest(pos, primary, /*allowOptionalChain*/ true);
+        // (Track O, step O28: parseMemberExpressionRest returns the expression unchanged on a token that does not
+        // continue a member expression.)
+        var expression = IsMemberExpressionContinuation(Token()) ? ParseMemberExpressionRest(pos, primary, /*allowOptionalChain*/ true) : primary;
         if (!ContinuesOperand(Token()))
         {
             // (The rest of parseLeftHandSideExpressionOrHigher, the postfix check and the exponentiation check would
@@ -1486,7 +1489,9 @@ internal sealed partial class Parser
         // of the recursion immediately.  So we parse out a primary expression to start with.
         var pos = GetNodePos();
         var expression = ParsePrimaryExpression();
-        return ParseMemberExpressionRest(pos, expression, /*allowOptionalChain*/ true);
+        // (Track O, step O28: parseMemberExpressionRest returns the expression unchanged on a token that does not
+        // continue a member expression.)
+        return IsMemberExpressionContinuation(Token()) ? ParseMemberExpressionRest(pos, expression, /*allowOptionalChain*/ true) : expression;
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
@@ -1592,7 +1597,7 @@ internal sealed partial class Parser
     private Node ParsePropertyAccessExpressionRest(int pos, Node expression, Node questionDotToken)
     {
         var name = ParseRightSideOfDot(/*allowIdentifierNames*/ true, /*allowPrivateIdentifiers*/ true, /*allowUnicodeEscapeSequenceInIdentifierName*/ true);
-        var isOptionalChain = !questionDotToken.IsNone || TryReparseOptionalChain(store, expression);
+        var isOptionalChain = !questionDotToken.IsNone || IsOrReparsesOptionalChain(store, expression);
         var propertyAccess = isOptionalChain ?
             factory.CreatePropertyAccessChain(expression, questionDotToken, name) :
             factory.CreatePropertyAccessExpression(expression, name);
@@ -1607,7 +1612,37 @@ internal sealed partial class Parser
             var end = Scanner.SkipTrivia(sourceText, store.End(typeArguments)) + 1;
             ParseErrorAt(errorPos, end, Diagnostics.An_instantiation_expression_cannot_be_followed_by_a_property_access);
         }
-        return FinishNode(propertyAccess, pos);
+        return FinishChainNode(propertyAccess, pos);
+    }
+
+    /// <summary>
+    /// `finishNode(node, pos)` (FinishNode with the end at the current token's full start), statement for statement, in
+    /// line in the call and member functions (Track O, step O28; NativeAOT does not inline FinishNode).
+    /// </summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private Node FinishChainNode(Node node, int pos)
+    {
+        var flags = contextFlags;
+        if (parseErrorBeforeNextFinishedNode)
+        {
+            parseErrorBeforeNextFinishedNode = false;
+            flags |= NodeFlags.ThisNodeHasError;
+        }
+        store.Finish(node, pos, scanner.GetTokenFullStart(), flags);
+        return node;
+    }
+
+    /// <summary>
+    /// `tryReparseOptionalChain(node)` (Track O, step O28): for a node without the OptionalChain flag that is not a
+    /// non-null expression it returns false before it changes anything, so it is called only for the others.
+    /// </summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private static bool IsOrReparsesOptionalChain(NodeStore store, Node node)
+    {
+        return (store.Flags(node) & NodeFlags.OptionalChain) != 0 ||
+            (FactoryNodeTests.IsNonNullExpression(store, node) && TryReparseOptionalChain(store, node));
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
@@ -1652,9 +1687,20 @@ internal sealed partial class Parser
     {
         while (true)
         {
+            var token = Token();
+            // Track O (step O28): on `.`, isStartOfOptionalPropertyOrElementAccessChain returns false without side
+            // effects (the token is not `?.`), and parseOptional(DotToken) consumes the dot: a property access without
+            // a question-dot token, as below.
+            if (token == SyntaxKind.DotToken)
+            {
+                NextTokenAfter(SyntaxKind.DotToken);
+                expression = ParsePropertyAccessExpressionRest(pos, expression, /*questionDotToken*/ default);
+                continue;
+            }
+
             // Track O (step O25): on a token none of the branches below acts on, each of them compares the token and
             // falls through to the return (IsMemberExpressionContinuation).
-            if (!IsMemberExpressionContinuation(Token()))
+            if (!IsMemberExpressionContinuation(token))
             {
                 return expression;
             }
@@ -1760,6 +1806,14 @@ internal sealed partial class Parser
     {
         while (true)
         {
+            // Track O (step O28): on a token other than `?.` and `(`, no question-dot token is parsed, there are no type
+            // arguments, and the loop breaks without acting.
+            var token = Token();
+            if (token != SyntaxKind.QuestionDotToken && token != SyntaxKind.OpenParenToken)
+            {
+                return expression;
+            }
+
             NodeList typeArguments = default;
             var questionDotToken = ParseOptionalToken(SyntaxKind.QuestionDotToken);
             if (!questionDotToken.IsNone)
@@ -1781,11 +1835,16 @@ internal sealed partial class Parser
                     expression = store.Expression(expression);
                 }
                 var argumentList = ParseArgumentList();
-                var callExpr = !questionDotToken.IsNone || TryReparseOptionalChain(store, expression) ?
+                var callExpr = !questionDotToken.IsNone || IsOrReparsesOptionalChain(store, expression) ?
                     factory.CreateCallChain(expression, questionDotToken, typeArguments, argumentList) :
                     factory.CreateCallExpression(expression, typeArguments, argumentList);
-                expression = FinishNode(callExpr, pos);
-                expression = ParseMemberExpressionRest(pos, expression, /*allowOptionalChain*/ true);
+                expression = FinishChainNode(callExpr, pos);
+                // (Track O, step O28: parseMemberExpressionRest returns the expression unchanged on a token that does not
+                // continue a member expression, see there.)
+                if (IsMemberExpressionContinuation(Token()))
+                {
+                    expression = ParseMemberExpressionRest(pos, expression, /*allowOptionalChain*/ true);
+                }
                 continue;
             }
             if (!questionDotToken.IsNone)
@@ -1799,13 +1858,104 @@ internal sealed partial class Parser
         return expression;
     }
 
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private NodeList ParseArgumentList()
     {
         ParseExpected(SyntaxKind.OpenParenToken);
-        var result = ParseDelimitedList(ParsingContext.ArgumentExpressions, new F.ParseArgumentExpression());
+        var result = ParseArgumentExpressions();
         ParseExpected(SyntaxKind.CloseParenToken);
         return result;
+    }
+
+    /// <summary>
+    /// `parseDelimitedList(ParsingContext.ArgumentExpressions, parseArgumentExpression)` with the context fixed (Track
+    /// O, step O28), statement for statement as ParseDelimitedListOrUndefined runs it for this context:
+    /// isListElement and parseListElement call currentNode, which returns undefined for a context that is not reusable
+    /// (isReusableParsingContext is false for ArgumentExpressions) before it reads anything, so isListElement is
+    /// `token === DotDotDotToken || isStartOfExpression()` (isStartOfLeftHandSideExpression returns true for an
+    /// identifier before anything else, so the identifier is tested first) and parseListElement is the callback;
+    /// isListTerminator is end of file, `)` or `;`; getExpectedCommaDiagnostic is undefined; considerSemicolonAsDelimiter
+    /// is not given.
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private NodeList ParseArgumentExpressions()
+    {
+        var saveParsingContext = parsingContext;
+        parsingContext |= 1 << (int)ParsingContext.ArgumentExpressions;
+        var list = store.BeginList();
+        var listPos = GetNodePos();
+
+        var commaStart = -1; // Meaning the previous token was not a comma
+        while (true)
+        {
+            var token = Token();
+            if (token == SyntaxKind.Identifier || token == SyntaxKind.DotDotDotToken || IsStartOfExpression())
+            {
+                var startPos = scanner.GetTokenFullStart();
+                // parseArgumentExpression: doOutsideOfContext(disallowInAndDecoratorContext,
+                // parseArgumentOrArrayLiteralElement), with doOutsideOfContext's statements in line.
+                Node result;
+                var contextFlagsToClear = DisallowInAndDecoratorContext & contextFlags;
+                if (contextFlagsToClear != 0)
+                {
+                    SetContextFlag(/*val*/ false, contextFlagsToClear);
+                    result = ParseArgumentOrArrayLiteralElement();
+                    SetContextFlag(/*val*/ true, contextFlagsToClear);
+                }
+                else
+                {
+                    result = ParseArgumentOrArrayLiteralElement();
+                }
+                if (result.IsNone)
+                {
+                    parsingContext = saveParsingContext;
+                    store.DiscardList(list);
+                    return default;
+                }
+                store.Push(list, result);
+                commaStart = scanner.GetTokenStart();
+
+                if (ParseOptional(SyntaxKind.CommaToken))
+                {
+                    // No need to check for a zero length node since we know we parsed a comma
+                    continue;
+                }
+
+                commaStart = -1; // Back to the state where the last token was not a comma
+                token = Token();
+                if (token == SyntaxKind.CloseParenToken || token == SyntaxKind.EndOfFileToken || token == SyntaxKind.SemicolonToken)
+                {
+                    break;
+                }
+
+                // We didn't get a comma, and the list wasn't terminated, explicitly parse
+                // out a comma so we give a good error message.
+                ParseExpected(SyntaxKind.CommaToken, /*diagnosticMessage*/ null);
+
+                if (startPos == scanner.GetTokenFullStart())
+                {
+                    // What we're parsing isn't actually remotely recognizable as a element and we've consumed no tokens whatsoever
+                    // Consume a token to advance the parser in some way and avoid an infinite loop
+                    NextToken();
+                }
+                continue;
+            }
+
+            token = Token();
+            if (token == SyntaxKind.CloseParenToken || token == SyntaxKind.EndOfFileToken || token == SyntaxKind.SemicolonToken)
+            {
+                break;
+            }
+
+            if (AbortParsingListOrMoveToNextToken(ParsingContext.ArgumentExpressions))
+            {
+                break;
+            }
+        }
+
+        parsingContext = saveParsingContext;
+        return CreateNodeArray(list, listPos, /*end*/ null, commaStart >= 0);
     }
 
     /// <summary>
