@@ -20,6 +20,8 @@ The list the Track O endpoint is reported with (pre-registration §8, A9). Each 
 | O9 | Per-file overhead after the endpoint: Seal copies, parser pool, hash tables (brief [modules/O9.md](modules/O9.md)); A main, B hand over the scratch, C per-thread slabs | done 2026-10-23; tuning corpus cs-o-aot-ws: A 444 ms, B 456 ms, C 408 ms; single A 2,840, B 2,809, C 2,651 ms | **C: per-thread slabs** (C/A 0.918 [0.893, 0.936]; 97 vs 290 MB) | phase1-progress.md, results/track-o/O9/ |
 | O10 | Side table of rare node fields without per-file allocation (no variants; brief [modules/O10.md](modules/O10.md)) | done 2026-10-23; 409 vs 415 ms (0.987 [0.964, 1.010]), not slower | — (no variants), merged | phase1-progress.md, results/track-o/O10-O23/ |
 | O11 | Speculative parsing: B token replay, C exact pre-decisions (brief [modules/O11.md](modules/O11.md)) | done 2026-10-23; main 401 ms, B 406 ms, C 387 ms; C on O5b 0.945 [0.924, 0.970] | **C: exact pre-decisions** (C/main 0.965 [0.935, 0.998]) | phase1-progress.md, results/track-o/O5b-O11/ |
+| O12 | Node creation path (one attempt; brief [modules/O12.md](modules/O12.md)) | running | | |
+| O24 | Scanner, second round: O23 C parts on top of B, token bookkeeping (one attempt; brief [modules/O24.md](modules/O24.md)) | running | | |
 
 Endpoint (2026-10-22, after O1, Windows only): optimized track G = 0.60 [0.59, 0.61] vs tsgo7-parse (faster claim allowed); vs tsrs 1.52 [1.50, 1.54] (secondary). See results/track-o/endpoint/2026-10-22T18-55-52-105Z/VERDICT.md.
 

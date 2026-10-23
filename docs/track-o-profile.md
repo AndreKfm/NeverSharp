@@ -66,3 +66,7 @@ Driver `parse-cs-optimized-jit-ws --single` on the vscode file list repeated fou
 | 9.6 % | speculation (`SpeculationHelper`, inclusive) |
 | 1.9 % | `TextTable.Intern` |
 | rest | spread over the grammar (`ParsePropertyAccessExpressionRest` 2.6 %, `ParseCallExpressionRest` 1.9 %, `NodeStore.Create` 1.6 %, …) |
+
+## Track O after O11 (2026-10-23)
+
+Same method as above (`artifacts/profile/o11-vscode4-cpu.speedscope.json`). Inclusive shares of the samples outside file reading (58 % of all samples; reading over-represented as noted): scanner 26 %, node factory (`NodeFactory.*`, `FactoryUtilities.*`) 20 %, node store 6 %, `TextTable` 4 %, the rest spread over the grammar. Largest attributed self times: `Scanner.Scan` 7.2 %, `ParsePropertyAccessExpressionRest` 3.3 %, `Scanner.ScanToken` 2.1 %, `TextTable.Intern` 2.0 %, `NodeFactory.CreateIdentifier` 1.5 %, `NodeStore.Create` 1.5 %.
