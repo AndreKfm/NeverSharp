@@ -4,8 +4,10 @@
 // (pos, length) into the source text, values that differ from the source text in a character arena, identifiers
 // interned in a table keyed by span), step O5a.
 
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
 
 namespace NeverSharp.Optimized;
 
@@ -205,11 +207,15 @@ internal readonly struct TextOrList : IEquatable<TextOrList>
 /// </summary>
 internal sealed unsafe class TextTable
 {
+    // Step O27: an entry of a text of up to ShortLength characters also holds its characters (Low: 0 to 7, High: 8 to
+    // 15, zero after the last), so a lookup compares them without reading the text the entry's handle points to.
     private struct Entry
     {
         public int Hash;
         public int Next; // the next (older) entry of the bucket, 0 for none
         public TextRef Text;
+        public Vector128<ushort> Low;
+        public Vector128<ushort> High;
     }
 
     // A hash table of the thread (the arrays a parse's table uses until Seal): buckets all zero while it is not lent.
@@ -240,6 +246,19 @@ internal sealed unsafe class TextTable
     // arrays belong to (until Seal).
     private int[]? buckets;
     private Entry[]? entries;
+
+    // Step O27: the buckets in use are the first 2^bucketBits of the array. A parse's table starts with InitialBuckets
+    // of the thread's array, however large an earlier parse made it, and doubles them as entries are added (in the
+    // same array while it is large enough): a small file's lookups stay within a few cache lines. The buckets beyond
+    // the ones in use are all zero. (A byte, next to `pooled`: the table's objects do not grow.)
+    private byte bucketBits;
+    private const int InitialBuckets = 256;
+
+    private int BucketMask
+    {
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+        get => (1 << bucketBits) - 1;
+    }
     private int entryCount;
     private InternTable? lent;
 
@@ -356,7 +375,7 @@ internal sealed unsafe class TextTable
             var interned = (TextRef*)(chars + at);
             var e = entries;
             var b = buckets!;
-            var mask = b.Length - 1;
+            var mask = BucketMask;
             for (var i = 1; i <= entryCount; i++)
             {
                 interned[i - 1] = e[i].Text;
@@ -521,27 +540,101 @@ internal sealed unsafe class TextTable
     /// parser.ts internIdentifier: the handle of the first text interned with the same characters, or
     /// <paramref name="text"/> itself, which becomes that handle.
     /// </summary>
+    /// <remarks>
+    /// Step O27: a text of up to <see cref="ShortLength"/> characters is keyed by its characters in two vectors (zero
+    /// after the last character, <see cref="ShortKey"/>), its hash computed from them without branching on the length
+    /// (<see cref="ShortHash"/>); a lookup compares the size and the two vectors of an entry, which hold the entry's
+    /// characters (equal sizes and equal vectors: the same characters). A span of the source text whose 16 characters
+    /// from its start lie within the text and its terminating NUL is loaded directly (the characters after the span are
+    /// masked off); other short texts (arena texts, texts at the end of the source) are copied into zeroed vectors.
+    /// Longer texts keep O5b's hash and comparison. Which hash is used does not change any result: the entries, their
+    /// order and the handles returned are those of the comparison of characters.
+    /// </remarks>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public TextRef Intern(TextRef text)
     {
+        var start = text.Start;
+        var length = text.Size - 1;
+        if ((uint)length <= ShortLength && start >= 0 && start <= source.Length - ShortLength + 1)
+        {
+            ref var c = ref Unsafe.As<char, ushort>(ref MemoryMarshal.GetReference(source.AsSpan(start)));
+            var n = Vector128.Create((short)length);
+            var low = Vector128.LoadUnsafe(ref c) & Vector128.GreaterThan(n, Vector128<short>.Indices).AsUInt16();
+            var high = Vector128.LoadUnsafe(ref c, 8) & Vector128.GreaterThan(n, Vector128<short>.Indices + Vector128.Create((short)8)).AsUInt16();
+            return InternShort(text, low, high);
+        }
+        return InternOther(text);
+    }
+
+    // Intern for a text of up to ShortLength characters, keyed by its characters (ShortKey).
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private TextRef InternShort(TextRef text, Vector128<ushort> low, Vector128<ushort> high)
+    {
+        var hash = ShortHash(low, high, text.Size);
+        if (buckets is null)
+        {
+            CreateHashTable();
+        }
+        ref var e = ref MemoryMarshal.GetReference(new Span<Entry>(entries));
+        var size = text.Size;
+        // (Entry numbers are below entries.Length, BucketMask below buckets.Length.)
+        for (var i = Unsafe.Add(ref MemoryMarshal.GetReference(new Span<int>(buckets)), hash & BucketMask); i != 0;)
+        {
+            ref var entry = ref Unsafe.Add(ref e, i);
+            if (entry.Hash == hash && entry.Text.Size == size && ((entry.Low ^ low) | (entry.High ^ high)) == Vector128<ushort>.Zero)
+            {
+                return entry.Text;
+            }
+            i = entry.Next;
+        }
+        AddEntry(hash, text, low, high);
+        return text;
+    }
+
+    // Intern for the texts the fast path of Intern does not load: short ones by ShortKey, longer ones by O5b's hash.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private TextRef InternOther(TextRef text)
+    {
         var span = Span(text);
-        var hash = Hash(span);
+        if (span.Length <= ShortLength)
+        {
+            ShortKey(span, out var low, out var high);
+            return InternShort(text, low, high);
+        }
+        var hash = LongHash(span);
         if (buckets is null)
         {
             CreateHashTable();
         }
         var e = entries!;
         var b = buckets!;
-        for (var i = b[hash & (b.Length - 1)]; i != 0; i = e[i].Next)
+        for (var i = b[hash & BucketMask]; i != 0; i = e[i].Next)
         {
             ref var entry = ref e[i];
-            if (entry.Hash == hash && entry.Text.Size == text.Size && SameChars(Span(entry.Text), span))
+            if (entry.Hash == hash && entry.Text.Size == text.Size && Span(entry.Text).SequenceEqual(span))
             {
                 return entry.Text;
             }
         }
-        AddEntry(hash, text);
+        AddEntry(hash, text, default, default);
         return text;
+    }
+
+    // The hash of a text for the table, as Intern computes it: ShortHash of its ShortKey up to ShortLength characters,
+    // LongHash beyond.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private int HashOf(TextRef text, out Vector128<ushort> low, out Vector128<ushort> high)
+    {
+        var span = Span(text);
+        if (span.Length <= ShortLength)
+        {
+            ShortKey(span, out low, out high);
+            return ShortHash(low, high, text.Size);
+        }
+        low = default;
+        high = default;
+        return LongHash(span);
     }
 
     /// <summary>The interned texts as TypeScript's `identifiers` map (materialized on demand; nothing in the parse reads it).</summary>
@@ -582,6 +675,7 @@ internal sealed unsafe class TextTable
             lent = table;
             buckets = table.Buckets;
             entries = table.Entries;
+            bucketBits = (byte)BitOperations.Log2((uint)Math.Min(InitialBuckets, buckets.Length));
             entryCount = 0;
             return;
         }
@@ -594,17 +688,19 @@ internal sealed unsafe class TextTable
         }
         buckets = new int[size];
         entries = new Entry[size];
+        bucketBits = (byte)BitOperations.Log2((uint)size);
         entryCount = 0;
         sealedInterned = null;
         for (var i = 0; i < previousCount; i++)
         {
             var text = previous[i];
-            AddEntry(Hash(Span(text)), text);
+            var hash = HashOf(text, out var low, out var high);
+            AddEntry(hash, text, low, high);
         }
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private void AddEntry(int hash, TextRef text)
+    private void AddEntry(int hash, TextRef text, Vector128<ushort> low, Vector128<ushort> high)
     {
         var index = entryCount + 1;
         if (index >= entries!.Length)
@@ -612,14 +708,17 @@ internal sealed unsafe class TextTable
             GrowEntries(index);
         }
         entryCount = index;
-        if (index > buckets!.Length - (buckets.Length >> 2))
+        var used = 1 << bucketBits;
+        if (index > used - (used >> 2))
         {
-            Rehash(buckets.Length * 2);
+            Rehash(used * 2);
         }
         ref var entry = ref entries[index];
         entry.Hash = hash;
         entry.Text = text;
-        ref var bucket = ref buckets[hash & (buckets.Length - 1)];
+        entry.Low = low;
+        entry.High = high;
+        ref var bucket = ref buckets![hash & BucketMask];
         entry.Next = bucket;
         bucket = index;
     }
@@ -634,19 +733,30 @@ internal sealed unsafe class TextTable
     }
 
     // Rebuilds the chains of the entries before the one being added, oldest first, so each chain still runs from
-    // the newest entry to the oldest.
+    // the newest entry to the oldest; with size buckets in use, in the same array if it has them (step O27: the
+    // buckets in use cleared first, the others are zero), else in a new one.
     [NoAllocUnchecked("arena growth: the interning table's bucket array doubles")]
     private void Rehash(int size)
     {
-        var grown = new int[size];
+        var grown = buckets!;
+        if (size <= grown.Length)
+        {
+            new Span<int>(grown, 0, 1 << bucketBits).Clear();
+        }
+        else
+        {
+            grown = new int[size];
+        }
+        var mask = size - 1;
         var e = entries!;
         for (var i = 1; i < entryCount; i++)
         {
-            ref var bucket = ref grown[e[i].Hash & (grown.Length - 1)];
+            ref var bucket = ref grown[e[i].Hash & mask];
             e[i].Next = bucket;
             bucket = i;
         }
         buckets = grown;
+        bucketBits = (byte)BitOperations.Log2((uint)size);
     }
 
     /// <summary>Discards the characters and interned texts added after a mark (<see cref="NodeStore.Truncate"/>).</summary>
@@ -665,95 +775,72 @@ internal sealed unsafe class TextTable
             for (var i = entryCount; i > markInterned; i--)
             {
                 // The newest entry of its bucket: the head of the chain.
-                b[e[i].Hash & (b.Length - 1)] = e[i].Next;
+                b[e[i].Hash & BucketMask] = e[i].Next;
             }
             entryCount = markInterned;
         }
     }
 
+    // Step O27: the texts keyed by their characters in two vectors (Entry.Low, Entry.High).
+    private const int ShortLength = 16;
+
     // Step O5b: a hash over the UTF-16 code units read four at a time (words of 8 bytes, every read within the text),
     // each word folded into the state by xor and a multiplication by an odd constant (a bijection of the state for each
     // word), then the state's halves folded and multiplied once more so that every character reaches the low bits the
-    // buckets use. The words: 1 to 3 characters form one word of the first, middle and last character (the length is in
-    // the seed); 4 to 8 characters the first and the last four (overlapping); 9 to 16 characters the words at 0, 4,
-    // length - 8 and length - 4; longer texts the words at 0, 4, 8, ... before length - 4 and the last four (the
-    // characters are counted, the reads are 8 bytes each). A dependency chain of one
-    // multiplication per word instead of one per character (FNV-1a before), and no loop up to 16 characters.
+    // buckets use. Step O27: only for texts longer than ShortLength: the words at 0, 4, 8, ... before length - 4 and
+    // the last four (the characters are counted, the reads are 8 bytes each).
     // Which hash is used does not change any result: entries, their order and the handles returned do not depend on it.
     private const ulong HashSeed = 0x9E3779B97F4A7C15ul;
     private const ulong HashMultiplier = 0xBF58476D1CE4E5B9ul;
     private const ulong HashFinal = 0x94D049BB133111EBul;
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private static int Hash(ReadOnlySpan<char> span)
+    private static int LongHash(ReadOnlySpan<char> span)
     {
-        ref var c = ref MemoryMarshal.GetReference(span);
-        ref var first = ref Unsafe.As<char, byte>(ref c);
+        Debug.Assert(span.Length > ShortLength, "LongHash of a short text");
+        ref var first = ref Unsafe.As<char, byte>(ref MemoryMarshal.GetReference(span));
         var length = span.Length;
         var h = HashSeed ^ (ulong)length;
-        if (length >= 4)
+        var last = (nint)(length - 4) * sizeof(char);
+        for (nint i = 0; i < last; i += sizeof(ulong))
         {
-            var last = (nint)(length - 4) * sizeof(char);
-            h = (h ^ Unsafe.ReadUnaligned<ulong>(ref first)) * HashMultiplier;
-            if (length > 8)
-            {
-                if (length <= 16)
-                {
-                    h = (h ^ Unsafe.ReadUnaligned<ulong>(ref Unsafe.Add(ref first, sizeof(ulong)))) * HashMultiplier;
-                    h = (h ^ Unsafe.ReadUnaligned<ulong>(ref Unsafe.Add(ref first, last - sizeof(ulong)))) * HashMultiplier;
-                }
-                else
-                {
-                    for (nint i = sizeof(ulong); i < last; i += sizeof(ulong))
-                    {
-                        h = (h ^ Unsafe.ReadUnaligned<ulong>(ref Unsafe.Add(ref first, i))) * HashMultiplier;
-                    }
-                }
-            }
-            h = (h ^ Unsafe.ReadUnaligned<ulong>(ref Unsafe.Add(ref first, last))) * HashMultiplier;
+            h = (h ^ Unsafe.ReadUnaligned<ulong>(ref Unsafe.Add(ref first, i))) * HashMultiplier;
         }
-        else if (length > 0)
-        {
-            var word = (ulong)c | ((ulong)Unsafe.Add(ref c, length >> 1) << 16) | ((ulong)Unsafe.Add(ref c, length - 1) << 32);
-            h = (h ^ word) * HashMultiplier;
-        }
+        h = (h ^ Unsafe.ReadUnaligned<ulong>(ref Unsafe.Add(ref first, last))) * HashMultiplier;
         h = (h ^ (h >> 32)) * HashFinal;
         return (int)(h >> 32);
     }
 
-    // Step O5b: `a.SequenceEqual(b)` for two texts of the same length, without a loop or a call up to 16 characters
-    // (the same words as Hash reads, which together cover every character), by SequenceEqual for longer ones.
+    // Step O27: the hash of a text of up to ShortLength characters from its key (the size, Low and High): the four
+    // 8-byte words of the vectors, each multiplied by its own odd constant (independent multiplications, no chain),
+    // folded by xor with the size, then the halves folded and multiplied once more, as LongHash ends.
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private static bool SameChars(ReadOnlySpan<char> a, ReadOnlySpan<char> b)
+    private static int ShortHash(Vector128<ushort> low, Vector128<ushort> high, int size)
     {
-        var length = b.Length;
-        ref var cx = ref MemoryMarshal.GetReference(a);
-        ref var cy = ref MemoryMarshal.GetReference(b);
-        if (length >= 4)
+        var l = low.AsUInt64();
+        var u = high.AsUInt64();
+        var h = (l.ToScalar() * HashMultiplier) ^ (l.GetElement(1) * HashSeed) ^ (u.ToScalar() * HashFinal) ^ (u.GetElement(1) * ShortHashMultiplier) ^ (ulong)size;
+        h = (h ^ (h >> 32)) * HashFinal;
+        return (int)(h >> 32);
+    }
+
+    private const ulong ShortHashMultiplier = 0xD6E8FEB86659FD93ul;
+
+    // Step O27: the key of a text of up to ShortLength characters (its characters in two vectors, zero after the last)
+    // when Intern cannot load it from the source text directly.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private static void ShortKey(ReadOnlySpan<char> span, out Vector128<ushort> low, out Vector128<ushort> high)
+    {
+        Debug.Assert(span.Length <= ShortLength, "ShortKey of a long text");
+        Span<ushort> buffer = stackalloc ushort[ShortLength];
+        buffer.Clear();
+        for (var i = 0; i < span.Length; i++)
         {
-            if (length > 16)
-            {
-                return a.SequenceEqual(b);
-            }
-            ref var x = ref Unsafe.As<char, byte>(ref cx);
-            ref var y = ref Unsafe.As<char, byte>(ref cy);
-            var last = (nint)(length - 4) * sizeof(char);
-            var difference = (Unsafe.ReadUnaligned<ulong>(ref x) ^ Unsafe.ReadUnaligned<ulong>(ref y)) |
-                (Unsafe.ReadUnaligned<ulong>(ref Unsafe.Add(ref x, last)) ^ Unsafe.ReadUnaligned<ulong>(ref Unsafe.Add(ref y, last)));
-            if (length > 8)
-            {
-                difference |= (Unsafe.ReadUnaligned<ulong>(ref Unsafe.Add(ref x, sizeof(ulong))) ^ Unsafe.ReadUnaligned<ulong>(ref Unsafe.Add(ref y, sizeof(ulong)))) |
-                    (Unsafe.ReadUnaligned<ulong>(ref Unsafe.Add(ref x, last - sizeof(ulong))) ^ Unsafe.ReadUnaligned<ulong>(ref Unsafe.Add(ref y, last - sizeof(ulong))));
-            }
-            return difference == 0;
+            buffer[i] = span[i];
         }
-        if (length == 0)
-        {
-            return true;
-        }
-        return ((cx ^ cy) | (Unsafe.Add(ref cx, length >> 1) ^ Unsafe.Add(ref cy, length >> 1)) | (Unsafe.Add(ref cx, length - 1) ^ Unsafe.Add(ref cy, length - 1))) == 0;
+        low = Vector128.Create<ushort>(buffer);
+        high = Vector128.Create<ushort>(buffer.Slice(8));
     }
 }
 
