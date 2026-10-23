@@ -1,0 +1,96 @@
+{
+  "results": [
+    {
+      "command": "D:/Private/Source/Andre/projects/NeverSharp/artifacts/bin/cs/optimized-aot-ws/parse-cs-optimized-aot-ws.exe --single D:/Private/Source/Andre/projects/NeverSharp/artifacts/bench/filelists/sentry.txt",
+      "mean": 0.5484229,
+      "stddev": 0.010049024991399784,
+      "median": 0.5456240000000001,
+      "user": 0.0734375,
+      "system": 0.4703125,
+      "min": 0.5391377,
+      "max": 0.5745376,
+      "times": [
+        0.5465486,
+        0.5439355,
+        0.5455283000000001,
+        0.5516688000000001,
+        0.5745376,
+        0.5411264,
+        0.5457197,
+        0.5437000000000001,
+        0.5391377,
+        0.5523264
+      ],
+      "memory_usage_byte": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "exit_codes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "command": "D:/Private/Source/Andre/projects/NeverSharp/artifacts/bin/cs/optimized-aot-ws/parse-cs-optimized-aot-ws.exe D:/Private/Source/Andre/projects/NeverSharp/artifacts/bench/filelists/sentry.txt",
+      "mean": 0.09825281,
+      "stddev": 0.00254171875594711,
+      "median": 0.09757570000000002,
+      "user": 0.4,
+      "system": 1.03125,
+      "min": 0.09518990000000001,
+      "max": 0.1038598,
+      "times": [
+        0.0977698,
+        0.09518990000000001,
+        0.0963711,
+        0.09755580000000001,
+        0.09637340000000001,
+        0.0975956,
+        0.1038598,
+        0.0973146,
+        0.10060190000000001,
+        0.0998962
+      ],
+      "memory_usage_byte": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "exit_codes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  ]
+}

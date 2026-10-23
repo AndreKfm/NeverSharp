@@ -1,0 +1,96 @@
+{
+  "results": [
+    {
+      "command": "D:/Private/Source/Andre/projects/NeverSharp/artifacts/bin/cs/optimized-aot-ws/parse-cs-optimized-aot-ws.exe --single D:/Private/Source/Andre/projects/NeverSharp/artifacts/bench/filelists/vscode.txt",
+      "mean": 0.7534853400000001,
+      "stddev": 0.015506290832232513,
+      "median": 0.7535061000000001,
+      "user": 0.0890625,
+      "system": 0.6546875,
+      "min": 0.7291143,
+      "max": 0.7822609,
+      "times": [
+        0.7291143,
+        0.7558967000000001,
+        0.7511155,
+        0.7660187,
+        0.7822609,
+        0.7594139000000001,
+        0.7468041000000001,
+        0.7355429,
+        0.7451150000000001,
+        0.7635714
+      ],
+      "memory_usage_byte": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "exit_codes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "command": "D:/Private/Source/Andre/projects/NeverSharp/artifacts/bin/cs/optimized-aot-ws/parse-cs-optimized-aot-ws.exe D:/Private/Source/Andre/projects/NeverSharp/artifacts/bench/filelists/vscode.txt",
+      "mean": 0.12501757,
+      "stddev": 0.004616898736898803,
+      "median": 0.12442365000000001,
+      "user": 0.49375,
+      "system": 1.3671875,
+      "min": 0.1192531,
+      "max": 0.1318967,
+      "times": [
+        0.11929840000000001,
+        0.1192531,
+        0.1318967,
+        0.12453370000000001,
+        0.12431360000000001,
+        0.1271109,
+        0.1242087,
+        0.1202624,
+        0.1315598,
+        0.1277384
+      ],
+      "memory_usage_byte": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "exit_codes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  ]
+}
