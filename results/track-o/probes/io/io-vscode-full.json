@@ -1,0 +1,188 @@
+{
+  "results": [
+    {
+      "command": "D:/Private/Source/Andre/projects/NeverSharp/artifacts/bin/cs/optimized-aot-ws/parse-cs-optimized-aot-ws.exe --single D:/Private/Source/Andre/projects/NeverSharp/artifacts/bench/filelists/vscode.txt",
+      "mean": 4.95256156,
+      "stddev": 0.027631955479649473,
+      "median": 4.949172300000001,
+      "user": 3.86875,
+      "system": 1.0765625,
+      "min": 4.9108763,
+      "max": 4.9969566,
+      "times": [
+        4.9108763,
+        4.994293,
+        4.9448476,
+        4.9639989,
+        4.9256842,
+        4.9602852,
+        4.9375877,
+        4.9375891,
+        4.9534970000000005,
+        4.9969566
+      ],
+      "memory_usage_byte": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "exit_codes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "command": "D:/Private/Source/Andre/projects/NeverSharp/artifacts/bin/cs/optimized-aot-ws/parse-cs-optimized-aot-ws.exe D:/Private/Source/Andre/projects/NeverSharp/artifacts/bench/filelists/vscode.txt",
+      "mean": 0.5565438500000001,
+      "stddev": 0.013489873757604666,
+      "median": 0.5571335500000001,
+      "user": 6.0125,
+      "system": 2.11875,
+      "min": 0.531151,
+      "max": 0.5810456,
+      "times": [
+        0.5523335,
+        0.5617738,
+        0.55093,
+        0.5445922000000001,
+        0.5689372,
+        0.5604081000000001,
+        0.531151,
+        0.5810456,
+        0.5557197,
+        0.5585474
+      ],
+      "memory_usage_byte": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "exit_codes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "command": "D:/Private/Source/Andre/projects/NeverSharp/artifacts/bin/parse-rs.exe --single D:/Private/Source/Andre/projects/NeverSharp/artifacts/bench/filelists/vscode.txt",
+      "mean": 2.48852974,
+      "stddev": 0.013827841742111864,
+      "median": 2.490078,
+      "user": 1.3609375,
+      "system": 1.11875,
+      "min": 2.4647305,
+      "max": 2.5052535000000002,
+      "times": [
+        2.4965640000000002,
+        2.4762068,
+        2.4647305,
+        2.5052535000000002,
+        2.483592,
+        2.475675,
+        2.4972615,
+        2.4823543,
+        2.5023762,
+        2.5012836
+      ],
+      "memory_usage_byte": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "exit_codes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "command": "D:/Private/Source/Andre/projects/NeverSharp/artifacts/bin/parse-rs.exe D:/Private/Source/Andre/projects/NeverSharp/artifacts/bench/filelists/vscode.txt",
+      "mean": 0.35024969000000006,
+      "stddev": 0.030503332755525806,
+      "median": 0.3522328,
+      "user": 1.9859375,
+      "system": 2.384375,
+      "min": 0.3153645,
+      "max": 0.40562960000000003,
+      "times": [
+        0.35688800000000004,
+        0.3603405,
+        0.3847726,
+        0.40562960000000003,
+        0.34757760000000004,
+        0.32502790000000004,
+        0.3214076,
+        0.31861300000000004,
+        0.3668756,
+        0.3153645
+      ],
+      "memory_usage_byte": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "exit_codes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  ]
+}

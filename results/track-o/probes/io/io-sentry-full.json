@@ -1,0 +1,188 @@
+{
+  "results": [
+    {
+      "command": "D:/Private/Source/Andre/projects/NeverSharp/artifacts/bin/cs/optimized-aot-ws/parse-cs-optimized-aot-ws.exe --single D:/Private/Source/Andre/projects/NeverSharp/artifacts/bench/filelists/sentry.txt",
+      "mean": 2.07131507,
+      "stddev": 0.010313885252744329,
+      "median": 2.06939275,
+      "user": 1.34375,
+      "system": 0.71875,
+      "min": 2.058495,
+      "max": 2.0959486,
+      "times": [
+        2.0693554,
+        2.0702526,
+        2.0694301,
+        2.0676419,
+        2.08069,
+        2.0959486,
+        2.058495,
+        2.0683658,
+        2.0697239,
+        2.0632474
+      ],
+      "memory_usage_byte": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "exit_codes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "command": "D:/Private/Source/Andre/projects/NeverSharp/artifacts/bin/cs/optimized-aot-ws/parse-cs-optimized-aot-ws.exe D:/Private/Source/Andre/projects/NeverSharp/artifacts/bench/filelists/sentry.txt",
+      "mean": 0.25465438,
+      "stddev": 0.0035207585927530486,
+      "median": 0.2557683,
+      "user": 2.1875,
+      "system": 1.4640625,
+      "min": 0.24840350000000003,
+      "max": 0.25864580000000004,
+      "times": [
+        0.24840350000000003,
+        0.25864580000000004,
+        0.25462660000000004,
+        0.2570153,
+        0.25168660000000004,
+        0.2560155,
+        0.25810510000000003,
+        0.2567108,
+        0.2555211,
+        0.24981350000000002
+      ],
+      "memory_usage_byte": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "exit_codes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "command": "D:/Private/Source/Andre/projects/NeverSharp/artifacts/bin/parse-rs.exe --single D:/Private/Source/Andre/projects/NeverSharp/artifacts/bench/filelists/sentry.txt",
+      "mean": 1.27487753,
+      "stddev": 0.015724058995130158,
+      "median": 1.2709845,
+      "user": 0.5375,
+      "system": 0.7265625,
+      "min": 1.2604717,
+      "max": 1.312982,
+      "times": [
+        1.2680198,
+        1.2641417000000001,
+        1.2775021,
+        1.2874521,
+        1.2605827,
+        1.2697227,
+        1.2604717,
+        1.2722463,
+        1.2756542,
+        1.312982
+      ],
+      "memory_usage_byte": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "exit_codes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "command": "D:/Private/Source/Andre/projects/NeverSharp/artifacts/bin/parse-rs.exe D:/Private/Source/Andre/projects/NeverSharp/artifacts/bench/filelists/sentry.txt",
+      "mean": 0.16055168000000003,
+      "stddev": 0.003408823325104688,
+      "median": 0.16081255,
+      "user": 0.8203125,
+      "system": 1.3390625,
+      "min": 0.152099,
+      "max": 0.1646131,
+      "times": [
+        0.16056120000000002,
+        0.1584772,
+        0.1622461,
+        0.1619605,
+        0.16079090000000001,
+        0.1646131,
+        0.16067630000000002,
+        0.16325830000000002,
+        0.1608342,
+        0.152099
+      ],
+      "memory_usage_byte": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "exit_codes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  ]
+}

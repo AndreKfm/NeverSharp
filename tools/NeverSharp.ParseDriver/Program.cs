@@ -52,9 +52,23 @@ var sourceFiles = new SourceFile[files.Length];
 var parseAllJsDoc = Environment.GetEnvironmentVariable("NEVERSHARP_JSDOC") == "all";
 var options = new CreateSourceFileOptions { LanguageVersion = ScriptTarget.Latest, JsDocParsingMode = parseAllJsDoc ? JSDocParsingMode.ParseAll : JSDocParsingMode.ParseForTypeErrors };
 
+#if TRACK_OPTIMIZED
+// NEVERSHARP_PROBE=read (development probe only, never set by bench.mjs): read and decode every file as ParseFile
+// does, without parsing; the I/O and decoding floor of the measured work.
+var readOnly = Environment.GetEnvironmentVariable("NEVERSHARP_PROBE") == "read";
+long readChars = 0;
+#endif
+
 void ParseOne(int i)
 {
 #if TRACK_OPTIMIZED
+    if (readOnly)
+    {
+        var text = SourceText.ReadNative(files[i]);
+        Interlocked.Add(ref readChars, text.Length);
+        text.Release();
+        return;
+    }
     // Track O reads files itself (step O1: SourceText.Read, sys.ts semantics, checked by tools/NeverSharp.ReaderCheck).
     sourceFiles[i] = Parser.ParseFile(files[i], files[i].Replace('\\', '/'), options, setParentNodes: false, KindOf(files[i]));
 #else
@@ -80,6 +94,15 @@ else
     }
     Task.WaitAll(tasks);
 }
+
+#if TRACK_OPTIMIZED
+if (readOnly)
+{
+    Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+        $"{{\"driver\":\"cs-optimized-read-probe-{(single ? "single" : "parallel")}\",\"files\":{files.Length},\"chars\":{readChars},\"nodes\":0,\"priority\":\"{priority}\"}}"));
+    return 0;
+}
+#endif
 
 long chars = 0, nodes = 0;
 for (var i = 0; i < files.Length; i++)
