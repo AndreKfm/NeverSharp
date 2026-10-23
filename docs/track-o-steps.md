@@ -33,4 +33,6 @@ Additional run (2026-10-23, after O5b, O11; not the endpoint): G = 0.46 [0.45, 0
 
 Additional run (2026-10-23, after O12, O24; not the endpoint): G = 0.43 [0.42, 0.44] vs tsgo7-parse; vs tsrs 1.06 [1.05, 1.07] (within 20 %, secondary; vscode 0.95 [0.92, 0.99], reported, not claimed). results/track-o/additional/2026-10-23T14-51-13-533Z/NOTE.md.
 
+Additional run (2026-10-23, after O25, O26; not the endpoint): G = 0.41 [0.41, 0.42] vs tsgo7-parse; vs tsrs 1.04 [1.03, 1.06] (within 20 %, secondary; vscode 0.95 [0.90, 0.98], reported, not claimed). results/track-o/additional/2026-10-23T17-40-49-265Z/NOTE.md.
+
 NoAlloc coverage and exceptions: `node harness/port/noalloc-report.mjs`, reported with every Track O result.

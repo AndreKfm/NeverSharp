@@ -253,3 +253,7 @@ Briefs: [modules/O25.md](modules/O25.md), [modules/O26.md](modules/O26.md); chos
 - **Run 2 invalid (orchestrator's error):** the fast-forward merge of O25 had failed, so the "O26 on O25" build was O26 on main without O25 (O26/O25 1.000, single-threaded 1.019); archived as `run2-invalid-base`, not used.
 - **Run 3 (O26 correctly rebased onto O25):** O25 363.1 ms, O26 360.9 ms, O26/O25 0.994 [0.978, 1.016], single-threaded 1.000 [0.990, 1.004]; not slower, so **O26 merged** by the brief's rule. On the tuning corpus file reading dominates, so both gains show mainly in the in-memory benchmark below.
 - **After both merges:** `M5.ParseTuningCorpus` 430.1 ms, 38.9 MB (after O24: 485.4 ms). `results/track-o/O25-O26/`.
+
+### Track O additional run after O25 and O26 (2026-10-23, Windows only)
+
+Protocol-compliant run at dadb71f (idle 6.9 %); variance gate PASS. cs-o-aot-ws vs tsgo7-parse **0.41 [0.41, 0.42]**; vs tsrs-parse **1.04 [1.03, 1.06]** (secondary, within 20 %; vscode 0.95 [0.90, 0.98] in the second run in a row, reported); single-threaded 0.571 vs typescript-go, 1.077 vs tsrs. The endpoint stays 0.60. `results/track-o/additional/2026-10-23T17-40-49-265Z/NOTE.md`.
