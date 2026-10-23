@@ -163,6 +163,7 @@ internal sealed partial class Scanner
     {
         Debug.Assert(table.Source.SameAs(text) || (table.Source.Length == 0 && text.Length == 0), "The texts of another source text");
         texts = table;
+        replaySerial++; // Track O (O11-B)
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
@@ -252,6 +253,7 @@ internal sealed partial class Scanner
     [NoAllocUnchecked("error path: reports through the error callback (the parser creates a diagnostic)")]
     private void Error(DiagnosticMessage message, int errPos, int length, object? arg0 = null)
     {
+        replaySerial++; // Track O (O11-B): a token with an error is not replayed (Scanner.Replay.cs)
         if (onError != null)
         {
             var oldPos = pos;
@@ -1391,6 +1393,11 @@ internal sealed partial class Scanner
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SyntaxKind Scan()
     {
+        // Track O (O11-B): the token a rolled-back speculation scanned from here (Scanner.Replay.cs).
+        if (replayGate != 0)
+        {
+            return ScanWithReplay();
+        }
         fullStartPos = pos;
         tokenFlags = TokenFlags.None;
         // Track O (O23-B): the common tokens by the ASCII table, in a small method: the run of ASCII white space and line
@@ -2107,6 +2114,7 @@ internal sealed partial class Scanner
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SyntaxKind ReScanInvalidIdentifier()
     {
+        replaySerial++; // Track O (O11-B): no token replay across a re-scan (Scanner.Replay.cs)
         Debug.Assert(token == SyntaxKind.Unknown, "'reScanInvalidIdentifier' should only be called when the current token is 'SyntaxKind.Unknown'.");
         pos = tokenStart = fullStartPos;
         tokenFlags = 0;
@@ -2264,6 +2272,7 @@ internal sealed partial class Scanner
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SyntaxKind ReScanGreaterToken()
     {
+        replaySerial++; // Track O (O11-B): no token replay across a re-scan (Scanner.Replay.cs)
         if (token == SyntaxKind.GreaterThanToken)
         {
             if (CharCodeUnchecked(pos) == (int)CharacterCodes.greaterThan)
@@ -2298,6 +2307,7 @@ internal sealed partial class Scanner
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SyntaxKind ReScanAsteriskEqualsToken()
     {
+        replaySerial++; // Track O (O11-B): no token replay across a re-scan (Scanner.Replay.cs)
         Debug.Assert(token == SyntaxKind.AsteriskEqualsToken, "'reScanAsteriskEqualsToken' should only be called on a '*='");
         pos = tokenStart + 1;
         return token = SyntaxKind.EqualsToken;
@@ -2306,6 +2316,7 @@ internal sealed partial class Scanner
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SyntaxKind ReScanSlashToken(bool reportErrors = false)
     {
+        replaySerial++; // Track O (O11-B): no token replay across a re-scan (Scanner.Replay.cs)
         if (token == SyntaxKind.SlashToken || token == SyntaxKind.SlashEqualsToken)
         {
             // Quickly get to the end of regex such that we know the flags
@@ -2532,6 +2543,7 @@ internal sealed partial class Scanner
             return commentDirectives;
         }
 
+        replaySerial++; // Track O (O11-B): scanning the comment again appends the directive again (Scanner.Replay.cs)
         return AppendCommentDirective(commentDirectives, lineStart, type);
     }
 
@@ -2576,6 +2588,7 @@ internal sealed partial class Scanner
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SyntaxKind ReScanTemplateToken(bool isTaggedTemplate)
     {
+        replaySerial++; // Track O (O11-B): no token replay across a re-scan (Scanner.Replay.cs)
         pos = tokenStart;
         return token = ScanTemplateAndSetTokenValue(!isTaggedTemplate);
     }
@@ -2583,6 +2596,7 @@ internal sealed partial class Scanner
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SyntaxKind ReScanTemplateHeadOrNoSubstitutionTemplate()
     {
+        replaySerial++; // Track O (O11-B): no token replay across a re-scan (Scanner.Replay.cs)
         pos = tokenStart;
         return token = ScanTemplateAndSetTokenValue(/*shouldEmitInvalidEscapeError*/ true);
     }
@@ -2590,6 +2604,7 @@ internal sealed partial class Scanner
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SyntaxKind ReScanJsxToken(bool allowMultilineJsxText = true)
     {
+        replaySerial++; // Track O (O11-B): no token replay across a re-scan (Scanner.Replay.cs)
         pos = tokenStart = fullStartPos;
         return token = ScanJsxToken(allowMultilineJsxText);
     }
@@ -2597,6 +2612,7 @@ internal sealed partial class Scanner
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SyntaxKind ReScanLessThanToken()
     {
+        replaySerial++; // Track O (O11-B): no token replay across a re-scan (Scanner.Replay.cs)
         if (token == SyntaxKind.LessThanLessThanToken)
         {
             pos = tokenStart + 1;
@@ -2608,6 +2624,7 @@ internal sealed partial class Scanner
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SyntaxKind ReScanHashToken()
     {
+        replaySerial++; // Track O (O11-B): no token replay across a re-scan (Scanner.Replay.cs)
         if (token == SyntaxKind.PrivateIdentifier)
         {
             pos = tokenStart + 1;
@@ -2619,6 +2636,7 @@ internal sealed partial class Scanner
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SyntaxKind ReScanQuestionToken()
     {
+        replaySerial++; // Track O (O11-B): no token replay across a re-scan (Scanner.Replay.cs)
         Debug.Assert(token == SyntaxKind.QuestionQuestionToken, "'reScanQuestionToken' should only be called on a '??'");
         pos = tokenStart + 1;
         return token = SyntaxKind.QuestionToken;
@@ -2627,6 +2645,7 @@ internal sealed partial class Scanner
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SyntaxKind ScanJsxToken(bool allowMultilineJsxText = true)
     {
+        replaySerial++; // Track O (O11-B): no token replay across another kind of scan (Scanner.Replay.cs)
         fullStartPos = tokenStart = pos;
 
         if (pos >= end)
@@ -2718,6 +2737,7 @@ internal sealed partial class Scanner
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SyntaxKind ScanJsxIdentifier()
     {
+        replaySerial++; // Track O (O11-B): no token replay across another kind of scan (Scanner.Replay.cs)
         if (TokenIsIdentifierOrKeyword(token))
         {
             // An identifier or keyword has already been parsed - check for a `-` or a single instance of `:` and then append it and
@@ -2752,6 +2772,7 @@ internal sealed partial class Scanner
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SyntaxKind ScanJsxAttributeValue()
     {
+        replaySerial++; // Track O (O11-B): no token replay across another kind of scan (Scanner.Replay.cs)
         fullStartPos = pos;
 
         switch (CharCodeUnchecked(pos))
@@ -2769,6 +2790,7 @@ internal sealed partial class Scanner
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SyntaxKind ReScanJsxAttributeValue()
     {
+        replaySerial++; // Track O (O11-B): no token replay across a re-scan (Scanner.Replay.cs)
         pos = tokenStart = fullStartPos;
         return ScanJsxAttributeValue();
     }
@@ -2776,6 +2798,7 @@ internal sealed partial class Scanner
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SyntaxKind ScanJSDocCommentTextToken(bool inBackticks)
     {
+        replaySerial++; // Track O (O11-B): no token replay across another kind of scan (Scanner.Replay.cs)
         fullStartPos = tokenStart = pos;
         tokenFlags = TokenFlags.None;
         if (pos >= end)
@@ -2812,6 +2835,7 @@ internal sealed partial class Scanner
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SyntaxKind ScanJsDocToken()
     {
+        replaySerial++; // Track O (O11-B): no token replay across another kind of scan (Scanner.Replay.cs)
         fullStartPos = tokenStart = pos;
         tokenFlags = TokenFlags.None;
         if (pos >= end)
@@ -2932,12 +2956,15 @@ internal sealed partial class Scanner
         var saveToken = token;
         var saveTokenValue = tokenValue;
         var saveTokenFlags = tokenFlags;
+        var saveReplaySerial = replaySerial; // Track O (O11-B)
         var result = callback.Invoke();
 
         // If our callback returned something 'falsy' or we're just looking ahead,
         // then unconditionally restore us to where we were.
         if (!Core.IsTruthyValue(result) || isLookahead)
         {
+            // Track O (O11-B): the last token the speculation scanned, for replay (Scanner.Replay.cs).
+            KeepReplayToken(savePos, saveReplaySerial, saveTokenValue);
             pos = savePos;
             fullStartPos = saveStartPos;
             tokenStart = saveTokenPos;
@@ -2975,6 +3002,7 @@ internal sealed partial class Scanner
         tokenValue = saveTokenValue;
         tokenFlags = saveTokenFlags;
         commentDirectives = saveErrorExpectations;
+        replaySerial++; // Track O (O11-B): no token replay across the end of the range (Scanner.Replay.cs)
 
         return result;
     }
@@ -3003,6 +3031,7 @@ internal sealed partial class Scanner
         tokenValue = saveTokenValue;
         tokenFlags = saveTokenFlags;
         commentDirectives = saveErrorExpectations;
+        replaySerial++; // Track O (O11-B): no token replay across the end of the range (Scanner.Replay.cs)
 
         return result;
     }
@@ -3062,30 +3091,35 @@ internal sealed partial class Scanner
     internal void SetScriptTarget(ScriptTarget scriptTarget)
     {
         languageVersion = scriptTarget;
+        replaySerial++; // Track O (O11-B)
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal void SetLanguageVariant(LanguageVariant variant)
     {
         languageVariant = variant;
+        replaySerial++; // Track O (O11-B)
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal void SetScriptKind(ScriptKind kind)
     {
         scriptKind = kind;
+        replaySerial++; // Track O (O11-B)
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal void SetJSDocParsingMode(JSDocParsingMode kind)
     {
         jsDocParsingMode = kind;
+        replaySerial++; // Track O (O11-B)
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal void ResetTokenState(int position)
     {
         Debug.Assert(position >= 0);
+        replaySerial++; // Track O (O11-B): no token replay across a reset (Scanner.Replay.cs)
         pos = position;
         fullStartPos = position;
         tokenStart = position;
@@ -3105,5 +3139,6 @@ internal sealed partial class Scanner
     internal void SetSkipJsDocLeadingAsterisks(bool skip)
     {
         skipJsDocLeadingAsterisks += skip ? 1 : -1;
+        replaySerial++; // Track O (O11-B)
     }
 }
