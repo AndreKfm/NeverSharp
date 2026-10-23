@@ -17,7 +17,7 @@ The list the Track O endpoint is reported with (pre-registration §8, A9). Each 
 | O3 | Trivia and comment skipping | not started | | |
 | O4 | String, template and numeric literals | not started | | |
 | O8 | Parallel scheduling | not started (probe 2026-10-23: Track O scales slightly better than tsrs; low priority) | | |
-| O9 | Per-file overhead after the endpoint: Seal copies, parser pool, hash tables (brief [modules/O9.md](modules/O9.md)); A main, B hand over the scratch, C per-thread slabs | B and C running | | |
+| O9 | Per-file overhead after the endpoint: Seal copies, parser pool, hash tables (brief [modules/O9.md](modules/O9.md)); A main, B hand over the scratch, C per-thread slabs | done 2026-10-23; tuning corpus cs-o-aot-ws: A 444 ms, B 456 ms, C 408 ms; single A 2,840, B 2,809, C 2,651 ms | **C: per-thread slabs** (C/A 0.918 [0.893, 0.936]; 97 vs 290 MB) | phase1-progress.md, results/track-o/O9/ |
 
 Endpoint (2026-10-22, after O1, Windows only): optimized track G = 0.60 [0.59, 0.61] vs tsgo7-parse (faster claim allowed); vs tsrs 1.52 [1.50, 1.54] (secondary). See results/track-o/endpoint/2026-10-22T18-55-52-105Z/VERDICT.md.
 
