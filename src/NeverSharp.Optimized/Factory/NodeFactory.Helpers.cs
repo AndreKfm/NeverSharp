@@ -18,12 +18,14 @@ internal sealed partial class NodeFactory
 {
     // Lazily load the parenthesizer, node converters, and some factory methods until they are used.
     // (TypeScript: `memoize(() => flags & NodeFactoryFlags.NoParenthesizerRules ? nullParenthesizerRules : createParenthesizerRules(factory))`.)
-    private ParenthesizerRules? parenthesizerRulesValue;
+    // (Track O, step O12: the rules can only be nullParenthesizerRules, since createParenthesizerRules is not ported; the
+    // getter returns that sealed class, so the factory's calls to it are direct and its identity members inline.)
+    private FactoryParenthesizerRules.NullParenthesizerRulesObject? parenthesizerRulesValue;
     private NodeConverters? convertersValue;
 
     /// <summary>The factory's `parenthesizer` getter (TypeScript's memoized `parenthesizerRules()`).</summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal ParenthesizerRules Parenthesizer
+    internal FactoryParenthesizerRules.NullParenthesizerRulesObject Parenthesizer
     {
         get
         {

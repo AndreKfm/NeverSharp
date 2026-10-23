@@ -73,7 +73,9 @@ internal static partial class FactoryUtilities
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static Node SkipOuterExpressions(NodeStore store, Node node, OuterExpressionKinds kinds = OuterExpressionKinds.All)
     {
-        while (IsOuterExpression(store, node, kinds))
+        // Track O (step O12): the kinds of OuterExpression (TypeAssertionExpression 217 to SatisfiesExpression 239, and
+        // PartiallyEmittedExpression) tested first; most nodes are none, and isOuterExpression is false for them.
+        while (IsOuterExpressionKindRange(store.Kind(node)) && IsOuterExpression(store, node, kinds))
         {
             // `node = node.expression` (every OuterExpression kind declares `expression`)
             node = store.Kind(node) switch
@@ -88,6 +90,14 @@ internal static partial class FactoryUtilities
             };
         }
         return node;
+    }
+
+    /// <summary>Whether a kind can be one of isOuterExpression's (a superset: the range holds other kinds too).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private static bool IsOuterExpressionKindRange(SyntaxKind kind)
+    {
+        return (uint)(kind - SyntaxKind.TypeAssertionExpression) <= (uint)(SyntaxKind.SatisfiesExpression - SyntaxKind.TypeAssertionExpression)
+            || kind == SyntaxKind.PartiallyEmittedExpression;
     }
 
     /// <summary>

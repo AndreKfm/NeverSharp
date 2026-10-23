@@ -339,7 +339,20 @@ internal sealed unsafe partial class NodeStore
         {
             GrowListElements(at + count);
         }
-        new ReadOnlySpan<Node>(scratch, start, count).CopyTo(new Span<Node>(listElements + at, count));
+        var target = listElements + at;
+        if (count <= 8)
+        {
+            // Most lists are short (step O12): a plain loop instead of the call to the block copy.
+            var source = scratch!;
+            for (var k = 0; k < count; k++)
+            {
+                target[k] = source[start + k];
+            }
+        }
+        else
+        {
+            new ReadOnlySpan<Node>(scratch, start, count).CopyTo(new Span<Node>(target, count));
+        }
         listElementCount = at + count;
         PopFrame(list.Frame, start, count);
         return AddHeader(at, count, hasTrailingComma);

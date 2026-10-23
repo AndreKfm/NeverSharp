@@ -23,13 +23,17 @@ internal sealed partial class NodeFactory
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateQualifiedName(Node left, Node right)
     {
-        var node = CreateBaseNode(SyntaxKind.QualifiedName);
-        store.SetLeft(node, left);
-        store.SetRight(node, AsName(right));
-        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildFlags(store, store.Left(node)) |
-            PropagateIdentifierNameFlags(store, store.Right(node))));
+        // (Track O, step O12, here and in the functions below: the fields and the transform flags are computed from the
+        // arguments first, then the record is written in one go by the generated NodeStore.New{Class}; the flags of
+        // the new node, which TypeScript's code ORs in or tests, are none at that point. No other node is created in
+        // between.)
+        var rightNode = AsName(right);
         // node.flowNode = undefined; // initialized by binder (FlowContainer)
-        return node;
+        return store.NewQualifiedName(
+            PropagateChildFlags(store, left) |
+                PropagateIdentifierNameFlags(store, rightNode),
+            left: left,
+            right: rightNode);
     }
 
     // @api
@@ -52,15 +56,14 @@ internal sealed partial class NodeFactory
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateTypeParameterDeclaration(NodeList modifiers, Node name, Node constraint = default, Node defaultType = default)
     {
-        var node = CreateBaseDeclaration(SyntaxKind.TypeParameter);
-        store.SetModifiers(node, AsNodeArray(store, modifiers));
-        store.SetName(node, AsName(name));
-        store.SetConstraint(node, constraint);
-        store.SetDefault(node, defaultType);
-        store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
-        store.SetExpression(node, default); // initialized by parser to report grammar errors
+        // (expression: undefined, initialized by parser to report grammar errors)
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
-        return node;
+        return store.NewTypeParameterDeclaration(
+            TransformFlags.ContainsTypeScript,
+            modifiers: AsNodeArray(store, modifiers),
+            name: AsName(name),
+            constraint: constraint,
+            @default: defaultType);
     }
 
     // @api
@@ -73,30 +76,34 @@ internal sealed partial class NodeFactory
         Node type = default,
         Node initializer = default)
     {
-        var node = CreateBaseDeclaration(SyntaxKind.Parameter);
-        store.SetModifiers(node, AsNodeArray(store, modifiers));
-        store.SetDotDotDotToken(node, dotDotDotToken);
-        store.SetName(node, AsName(name));
-        store.SetQuestionToken(node, questionToken);
-        store.SetType(node, type);
-        store.SetInitializer(node, AsInitializer(initializer));
-        if (Utilities.IsThisIdentifier(store, store.Name(node)))
+        var modifiersArray = AsNodeArray(store, modifiers);
+        var nameNode = AsName(name);
+        var initializerNode = AsInitializer(initializer);
+        TransformFlags transformFlags;
+        if (Utilities.IsThisIdentifier(store, nameNode))
         {
-            store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
+            transformFlags = TransformFlags.ContainsTypeScript;
         }
         else
         {
-            store.SetTransformFlags(node, PropagateChildrenFlags(store.Modifiers(node)) |
-                PropagateChildFlags(store, store.DotDotDotToken(node)) |
-                PropagateNameFlags(store, store.Name(node)) |
-                PropagateChildFlags(store, store.QuestionToken(node)) |
-                PropagateChildFlags(store, store.Initializer(node)) |
-                (!((store.QuestionToken(node) is { IsNone: false } __t1 ? __t1 : store.Type(node))).IsNone ? TransformFlags.ContainsTypeScript : TransformFlags.None) |
-                (!((store.DotDotDotToken(node) is { IsNone: false } __t2 ? __t2 : store.Initializer(node))).IsNone ? TransformFlags.ContainsES2015 : TransformFlags.None) |
-                ((Utilities.ModifiersToFlags(store, store.Modifiers(node)) & ModifierFlags.ParameterPropertyModifier) != 0 ? TransformFlags.ContainsTypeScriptClassSyntax : TransformFlags.None));
+            transformFlags = PropagateChildrenFlags(modifiersArray) |
+                PropagateChildFlags(store, dotDotDotToken) |
+                PropagateNameFlags(store, nameNode) |
+                PropagateChildFlags(store, questionToken) |
+                PropagateChildFlags(store, initializerNode) |
+                (!questionToken.IsNone || !type.IsNone ? TransformFlags.ContainsTypeScript : TransformFlags.None) |
+                (!dotDotDotToken.IsNone || !initializerNode.IsNone ? TransformFlags.ContainsES2015 : TransformFlags.None) |
+                ((Utilities.ModifiersToFlags(store, modifiersArray) & ModifierFlags.ParameterPropertyModifier) != 0 ? TransformFlags.ContainsTypeScriptClassSyntax : TransformFlags.None);
         }
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
-        return node;
+        return store.NewParameterDeclaration(
+            transformFlags,
+            modifiers: modifiersArray,
+            dotDotDotToken: dotDotDotToken,
+            name: nameNode,
+            questionToken: questionToken,
+            type: type,
+            initializer: initializerNode);
     }
 
     // @api
@@ -124,15 +131,14 @@ internal sealed partial class NodeFactory
         Node questionToken,
         Node type)
     {
-        var node = CreateBaseDeclaration(SyntaxKind.PropertySignature);
-        store.SetModifiers(node, AsNodeArray(store, modifiers));
-        store.SetName(node, AsName(name));
-        store.SetType(node, type);
-        store.SetQuestionToken(node, questionToken);
-        store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
-        store.SetInitializer(node, default); // initialized by parser to report grammar errors
+        // (initializer: undefined, initialized by parser to report grammar errors)
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
-        return node;
+        return store.NewPropertySignature(
+            TransformFlags.ContainsTypeScript,
+            modifiers: AsNodeArray(store, modifiers),
+            name: AsName(name),
+            type: type,
+            questionToken: questionToken);
     }
 
     // @api
@@ -144,22 +150,28 @@ internal sealed partial class NodeFactory
         Node type,
         Node initializer)
     {
-        var node = CreateBaseDeclaration(SyntaxKind.PropertyDeclaration);
-        store.SetModifiers(node, AsNodeArray(store, modifiers));
-        store.SetName(node, AsName(name));
-        store.SetQuestionToken(node, !questionOrExclamationToken.IsNone && FactoryNodeTests.IsQuestionToken(store, questionOrExclamationToken) ? questionOrExclamationToken : default);
-        store.SetExclamationToken(node, !questionOrExclamationToken.IsNone && FactoryNodeTests.IsExclamationToken(store, questionOrExclamationToken) ? questionOrExclamationToken : default);
-        store.SetType(node, type);
-        store.SetInitializer(node, AsInitializer(initializer));
-        var isAmbient = (store.Flags(node) & NodeFlags.Ambient) != 0 || (Utilities.ModifiersToFlags(store, store.Modifiers(node)) & ModifierFlags.Ambient) != 0;
-        store.SetTransformFlags(node, PropagateChildrenFlags(store.Modifiers(node)) |
-            PropagateNameFlags(store, store.Name(node)) |
-            PropagateChildFlags(store, store.Initializer(node)) |
-            (isAmbient || !store.QuestionToken(node).IsNone || !store.ExclamationToken(node).IsNone || !store.Type(node).IsNone ? TransformFlags.ContainsTypeScript : TransformFlags.None) |
-            (FactoryNodeTests.IsComputedPropertyName(store, store.Name(node)) || (Utilities.ModifiersToFlags(store, store.Modifiers(node)) & ModifierFlags.Static) != 0 && !store.Initializer(node).IsNone ? TransformFlags.ContainsTypeScriptClassSyntax : TransformFlags.None) |
-            TransformFlags.ContainsClassFields);
+        var modifiersArray = AsNodeArray(store, modifiers);
+        var nameNode = AsName(name);
+        var questionToken = !questionOrExclamationToken.IsNone && FactoryNodeTests.IsQuestionToken(store, questionOrExclamationToken) ? questionOrExclamationToken : default;
+        var exclamationToken = !questionOrExclamationToken.IsNone && FactoryNodeTests.IsExclamationToken(store, questionOrExclamationToken) ? questionOrExclamationToken : default;
+        var initializerNode = AsInitializer(initializer);
+        // (node.flags & NodeFlags.Ambient: a new node has no flags.)
+        var isAmbient = (Utilities.ModifiersToFlags(store, modifiersArray) & ModifierFlags.Ambient) != 0;
+        var transformFlags = PropagateChildrenFlags(modifiersArray) |
+            PropagateNameFlags(store, nameNode) |
+            PropagateChildFlags(store, initializerNode) |
+            (isAmbient || !questionToken.IsNone || !exclamationToken.IsNone || !type.IsNone ? TransformFlags.ContainsTypeScript : TransformFlags.None) |
+            (FactoryNodeTests.IsComputedPropertyName(store, nameNode) || (Utilities.ModifiersToFlags(store, modifiersArray) & ModifierFlags.Static) != 0 && !initializerNode.IsNone ? TransformFlags.ContainsTypeScriptClassSyntax : TransformFlags.None) |
+            TransformFlags.ContainsClassFields;
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
-        return node;
+        return store.NewPropertyDeclaration(
+            transformFlags,
+            modifiers: modifiersArray,
+            name: nameNode,
+            questionToken: questionToken,
+            exclamationToken: exclamationToken,
+            type: type,
+            initializer: initializerNode);
     }
 
     // @api
@@ -172,19 +184,18 @@ internal sealed partial class NodeFactory
         NodeList parameters,
         Node type)
     {
-        var node = CreateBaseDeclaration(SyntaxKind.MethodSignature);
-        store.SetModifiers(node, AsNodeArray(store, modifiers));
-        store.SetName(node, AsName(name));
-        store.SetQuestionToken(node, questionToken);
-        store.SetTypeParameters(node, AsNodeArray(store, typeParameters));
-        store.SetParameters(node, AsNodeArray(store, parameters));
-        store.SetType(node, type);
-        store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         // node.locals = undefined; // initialized by binder (LocalsContainer)
         // node.nextContainer = undefined; // initialized by binder (LocalsContainer)
         // node.typeArguments = undefined; // used in quick info
-        return node;
+        return store.NewMethodSignature(
+            TransformFlags.ContainsTypeScript,
+            modifiers: AsNodeArray(store, modifiers),
+            name: AsName(name),
+            questionToken: questionToken,
+            typeParameters: AsNodeArray(store, typeParameters),
+            parameters: AsNodeArray(store, parameters),
+            type: type);
     }
 
     // @api
@@ -199,40 +210,46 @@ internal sealed partial class NodeFactory
         Node type,
         Node body)
     {
-        var node = CreateBaseDeclaration(SyntaxKind.MethodDeclaration);
-        store.SetModifiers(node, AsNodeArray(store, modifiers));
-        store.SetAsteriskToken(node, asteriskToken);
-        store.SetName(node, AsName(name));
-        store.SetQuestionToken(node, questionToken);
-        store.SetExclamationToken(node, default); // initialized by parser for grammar errors
-        store.SetTypeParameters(node, AsNodeArray(store, typeParameters));
-        store.SetParameters(node, CreateNodeArray(store, parameters));
-        store.SetType(node, type);
-        store.SetBody(node, body);
-        if (store.Body(node).IsNone)
+        var modifiersArray = AsNodeArray(store, modifiers);
+        var nameNode = AsName(name);
+        var typeParametersArray = AsNodeArray(store, typeParameters);
+        var parametersArray = CreateNodeArray(store, parameters);
+        TransformFlags transformFlags;
+        if (body.IsNone)
         {
-            store.SetTransformFlags(node, TransformFlags.ContainsTypeScript);
+            transformFlags = TransformFlags.ContainsTypeScript;
         }
         else
         {
-            var isAsync = (Utilities.ModifiersToFlags(store, store.Modifiers(node)) & ModifierFlags.Async) != 0;
-            var isGenerator = !store.AsteriskToken(node).IsNone;
+            var isAsync = (Utilities.ModifiersToFlags(store, modifiersArray) & ModifierFlags.Async) != 0;
+            var isGenerator = !asteriskToken.IsNone;
             var isAsyncGenerator = isAsync && isGenerator;
-            store.SetTransformFlags(node, PropagateChildrenFlags(store.Modifiers(node)) |
-                PropagateChildFlags(store, store.AsteriskToken(node)) |
-                PropagateNameFlags(store, store.Name(node)) |
-                PropagateChildFlags(store, store.QuestionToken(node)) |
-                PropagateChildrenFlags(store.TypeParameters(node)) |
-                PropagateChildrenFlags(store.Parameters(node)) |
-                PropagateChildFlags(store, store.Type(node)) |
-                (PropagateChildFlags(store, store.Body(node)) & ~TransformFlags.ContainsPossibleTopLevelAwait) |
+            transformFlags = PropagateChildrenFlags(modifiersArray) |
+                PropagateChildFlags(store, asteriskToken) |
+                PropagateNameFlags(store, nameNode) |
+                PropagateChildFlags(store, questionToken) |
+                PropagateChildrenFlags(typeParametersArray) |
+                PropagateChildrenFlags(parametersArray) |
+                PropagateChildFlags(store, type) |
+                (PropagateChildFlags(store, body) & ~TransformFlags.ContainsPossibleTopLevelAwait) |
                 (isAsyncGenerator ? TransformFlags.ContainsES2018 :
                     isAsync ? TransformFlags.ContainsES2017 :
                     isGenerator ? TransformFlags.ContainsGenerator :
                     TransformFlags.None) |
-                (!store.QuestionToken(node).IsNone || !store.TypeParameters(node).IsNone || !store.Type(node).IsNone ? TransformFlags.ContainsTypeScript : TransformFlags.None) |
-                TransformFlags.ContainsES2015);
+                (!questionToken.IsNone || !typeParametersArray.IsNone || !type.IsNone ? TransformFlags.ContainsTypeScript : TransformFlags.None) |
+                TransformFlags.ContainsES2015;
         }
+        // (exclamationToken: undefined, initialized by parser for grammar errors)
+        var node = store.NewMethodDeclaration(
+            transformFlags,
+            modifiers: modifiersArray,
+            asteriskToken: asteriskToken,
+            name: nameNode,
+            questionToken: questionToken,
+            typeParameters: typeParametersArray,
+            parameters: parametersArray,
+            type: type,
+            body: body);
         // node.typeArguments = undefined; // used in quick info
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
         // node.locals = undefined; // initialized by binder (LocalsContainer)

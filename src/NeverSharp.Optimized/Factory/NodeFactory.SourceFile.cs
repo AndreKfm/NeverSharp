@@ -36,36 +36,15 @@ internal sealed partial class NodeFactory
         store.SetResolvedPath(node, "");
         store.SetOriginalFileName(node, "");
         store.SetLanguageVersion(node, ScriptTarget.LatestStandard);
-        store.SetLanguageVariant(node, 0);
-        store.SetScriptKind(node, 0);
-        store.SetIsDeclarationFile(node, false);
-        store.SetHasNoDefaultLib(node, false);
         store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateChildrenFlags(store.Statements(node)) |
             PropagateChildFlags(store, store.EndOfFileToken(node))));
-        store.SetNextContainer(node, default); // initialized by binder (LocalsContainer)
-        store.SetNodeCount(node, 0);
-        store.SetIdentifierCount(node, 0);
-        store.SetSymbolCount(node, 0);
-        store.SetParseDiagnostics(node, null!);
-        store.SetBindDiagnostics(node, null!);
-        store.SetBindSuggestionDiagnostics(node, null);
-        store.SetLineMap(node, null!);
-        store.SetExternalModuleIndicator(node, null);
-        store.SetSetExternalModuleIndicator(node, null);
-        store.SetPragmas(node, null!);
-        store.SetCheckJsDirective(node, null);
-        store.SetReferencedFiles(node, null!);
-        store.SetTypeReferenceDirectives(node, null!);
-        store.SetLibReferenceDirectives(node, null!);
-        store.SetAmdDependencies(node, null!);
-        store.SetCommentDirectives(node, null);
-        store.SetIdentifiers(node, null!);
-        store.SetPackageJsonLocations(node, null);
-        store.SetImports(node, null!);
-        store.SetModuleAugmentations(node, null!);
-        store.SetAmbientModuleNames(node, null!);
-        // TypeScript: `node.impliedNodeFormat = undefined` (the generated field is a ModuleKind; undefined is its default).
-        store.SetImpliedNodeFormat(node, default);
+        // Track O (step O12): TypeScript then assigns undefined, 0 or false to the other fields (languageVariant,
+        // scriptKind, isDeclarationFile, hasNoDefaultLib, nextContainer, nodeCount, identifierCount, symbolCount,
+        // parseDiagnostics, bindDiagnostics, bindSuggestionDiagnostics, lineMap, externalModuleIndicator,
+        // setExternalModuleIndicator, pragmas, checkJsDirective, referencedFiles, typeReferenceDirectives,
+        // libReferenceDirectives, amdDependencies, commentDirectives, identifiers, packageJsonLocations, imports,
+        // moduleAugmentations, ambientModuleNames, impliedNodeFormat); every field of a new node already holds that
+        // value (NodeStore.CreateNode), so those writes are left out.
         return node;
     }
 

@@ -20,6 +20,9 @@
 //   without the field reads as undefined (default), as the property does in TypeScript; a setter throws.
 //   Where one name has different types on different classes, the minority classes get `{Class}{Field}`.
 // - `Is{Class}(n)`: whether a node's kind belongs to a node class (Track F's `node is Class`).
+// - Step O12: `New{Class}(...)` for the classes of NEW_CLASSES, which write a new node's whole record at the class's
+//   constant offsets (the factory computes the transform flags beforehand), and the table of nodeFactory.ts
+//   getTransformFlagsSubtreeExclusions per kind, evaluated from TypeScript's source.
 // - NodeVisitor.ForEachChild over handles, translating forEachChildTable entry by entry; list elements are read
 //   through the store's list store.
 //
@@ -163,6 +166,26 @@ const NO_ALLOC = "    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]";
 const SIDE_OFFSET = 127;
 // Side table ids of the base fields NodeStore.cs keeps there (parent, original, modifierFlagsCache, emitNode).
 const FIRST_SIDE_ID = 4;
+// Step O12: the classes whose records the factory writes in one go (`New{Class}`: the whole record at constant offsets,
+// the transform flags included, without the per-field offset tables). The classes of the nodes the parser creates
+// most; the others are created through NodeStore.CreateNode and their setters.
+const NEW_CLASSES = ["ArrayLiteralExpression", "ArrowFunction", "AsExpression", "AwaitExpression", "BinaryExpression", "Block",
+    "CallExpression", "ConditionalExpression", "ElementAccessExpression", "ExpressionStatement", "ExpressionWithTypeArguments",
+    "FunctionDeclaration", "FunctionExpression", "Identifier", "IfStatement", "LiteralTypeNode", "MethodDeclaration",
+    "MethodSignature", "NewExpression", "NonNullExpression", "NumericLiteral", "ObjectLiteralExpression", "ParameterDeclaration",
+    "ParenthesizedExpression", "PostfixUnaryExpression", "PrefixUnaryExpression", "PropertyAccessExpression", "PropertyAssignment",
+    "PropertyDeclaration", "PropertySignature", "QualifiedName", "ReturnStatement", "ShorthandPropertyAssignment", "SpreadElement",
+    "StringLiteral", "TemplateExpression", "TemplateSpan", "ThrowStatement", "TypeOfExpression", "TypeReferenceNode",
+    "VariableDeclaration", "VariableDeclarationList", "VariableStatement",
+    // Type nodes.
+    "ArrayTypeNode", "FunctionTypeNode", "IndexedAccessTypeNode", "IntersectionTypeNode", "ParenthesizedTypeNode", "TypeLiteralNode",
+    "TypeOperatorNode", "TypeParameterDeclaration", "TypeQueryNode", "UnionTypeNode"];
+const CS_KEYWORDS = new Set(["abstract", "as", "base", "bool", "break", "byte", "case", "catch", "char", "checked", "class", "const", "continue",
+    "decimal", "default", "delegate", "do", "double", "else", "enum", "event", "explicit", "extern", "false", "finally", "fixed", "float", "for",
+    "foreach", "goto", "if", "implicit", "in", "int", "interface", "internal", "is", "lock", "long", "namespace", "new", "null", "object", "operator",
+    "out", "override", "params", "private", "protected", "public", "readonly", "ref", "return", "sbyte", "sealed", "short", "sizeof", "stackalloc",
+    "static", "string", "struct", "switch", "this", "throw", "true", "try", "typeof", "uint", "ulong", "unchecked", "unsafe", "ushort", "using",
+    "virtual", "void", "volatile", "while"]);
 
 export function emitOptimized(schema) {
     const assigned = assignedPropertyNames();
@@ -263,6 +286,8 @@ export function emitOptimized(schema) {
         `    private const int KindCount = ${kindCount};`, "",
         `    private const int HeaderWords = ${HEADER_WORDS};`, "",
         `    private const int RefBaseWord = ${REF_BASE_WORD};`, "",
+        "    /// <summary>The size of the largest record in ints.</summary>",
+        `    private const int MaxRecordWords = ${Math.max(...classes.map(c => fields[c].words))};`, "",
         "    /// <summary>The offset table value of a field kept in the side table.</summary>",
         `    private const int SideOffset = ${SIDE_OFFSET};`, "",
         "    /// <summary>Record size in ints per kind: header, first object slot (kinds with object slots), int slots.</summary>",
@@ -327,12 +352,65 @@ export function emitOptimized(schema) {
             `    private static ReadOnlySpan<sbyte> ${table} =>`, "    [",
             ...tableOf(k => a.offsets.has(kindClass[k]) ? a.offsets.get(kindClass[k]) : -1), "    ];", ""];
     };
+    // Step O12: `New{Class}(kind (classes with several kinds), transformFlags, fields)`: a new record (pos and end 0, flags
+    // none, as NodeStore.CreateNode) written in one go at the class's constant offsets. Every int of the record is
+    // written once (header, int slots, the boolean fields as bits of the kind word); fields the caller leaves out are
+    // undefined. Side table fields follow the record (a new entry marks the kind word); the side table's object fields
+    // (JSDoc, set by the parser later) are undefined on a new node and not parameters.
+    const newRecords = () => {
+        const out = ["    //// Creation of whole records (step O12): one method per class of NEW_CLASSES (emit-optimized.mjs).", ""];
+        for (const cls of NEW_CLASSES) {
+            const info = fields[cls];
+            if (!info) throw new Error(`NEW_CLASSES: unknown class ${cls}`);
+            if (info.refs > 0) throw new Error(`NEW_CLASSES: ${cls} has object slots`);
+            const kinds = kindNames.filter(n => schema.kindToClass[n] === cls);
+            if (kinds.length === 0) throw new Error(`NEW_CLASSES: ${cls} has no kind`);
+            const multi = kinds.length > 1;
+            const list = info.list.filter(f => !(f.layout === "side" && f.store === "ref"));
+            const param = f => CS_KEYWORDS.has(f.ts) ? `@${f.ts}` : f.ts;
+            for (const f of list) if (["kind", "transformFlags", "handle", "record"].includes(f.ts)) throw new Error(`${cls}.${f.ts}: parameter name collides`);
+            const toInt = (f, v) => f.conv === "node" || f.conv === "list" ? `${v}.Index` : f.conv === "bool" ? `(${v} ? 1 : 0)` : f.conv === "enum" ? `(int)${v}` : v;
+            const isSet = (f, v) => f.conv === "node" || f.conv === "list" ? `!${v}.IsNone` : f.conv === "bool" ? v : `${v} != 0`;
+            const params = [...(multi ? ["SyntaxKind kind"] : []), "TransformFlags transformFlags", ...list.map(f => `${f.type} ${param(f)} = default`)];
+            const kindWord = [multi ? "(int)kind" : `(int)SyntaxKind.${kinds[0]}`, ...list.filter(f => f.layout === "bit").map(f => `(${param(f)} ? ${1 << f.offset} : 0)`)];
+            const body = [`        var handle = NewRecord(${info.words});`, "        var record = data + handle;",
+                `        record[0] = ${kindWord.join(" | ")};`, "        record[FlagsWord] = 0;", "        record[PosWord] = 0;", "        record[EndWord] = 0;",
+                "        record[TransformFlagsWord] = (int)transformFlags;"];
+            for (const f of list.filter(f => f.layout === "word")) {
+                const v = param(f);
+                if (f.conv === "text") body.push(`        record[${f.offset}] = ${v}.Start;`, `        record[${f.offset + 1}] = ${v}.Size;`);
+                else if (f.conv === "textOrList") body.push(`        record[${f.offset}] = ${v}.A;`, `        record[${f.offset + 1}] = ${v}.B;`);
+                else body.push(`        record[${f.offset}] = ${toInt(f, v)};`);
+            }
+            for (const f of list.filter(f => f.layout === "side")) {
+                const v = param(f);
+                body.push(`        if (${isSet(f, v)})`, "        {", `            SetSideInt(handle, ${accessors.get(f.accessor).sideId}, ${toInt(f, v)});`, "        }");
+            }
+            body.push("        return new Node(handle);");
+            out.push(`    /// <summary>A new ${cls} (${multi ? `one of ${kinds.length} kinds` : kinds[0]}) with its fields (step O12).</summary>`,
+                NO_ALLOC, "    [MethodImpl(MethodImplOptions.AggressiveInlining)]", `    internal Node New${cls}(${params.join(", ")})`, "    {", ...body, "    }", "");
+        }
+        return out;
+    };
     for (const [name, a] of [...accessors].sort((x, y) => x[0] < y[0] ? -1 : 1)) {
         const owners = [...a.offsets.keys()];
         const where = a.layouts.size === 1 && a.layouts.has("side") ? " (side table)" : a.layouts.has("side") ? " (some in the side table)" : "";
         lines.push(`    // ${owners.length > 6 ? `${owners.slice(0, 6).join(", ")}, … (${owners.length} classes)` : owners.join(", ")}${where}`);
         lines.push(...getter(name, a));
     }
+    lines.push(...newRecords());
+    // Step O12: nodeFactory.ts getTransformFlagsSubtreeExclusions per kind, evaluated from TypeScript's own source (the
+    // function transpiled and run on every kind), so that propagating a child's flags is a table lookup.
+    const exclusionsSource = readFileSync(join(tsRoot, "src", "compiler", "factory", "nodeFactory.ts"), "utf8").replace(/\r\n/g, "\n");
+    const exclusionsStart = exclusionsSource.indexOf("function getTransformFlagsSubtreeExclusions(");
+    const exclusionsEnd = exclusionsSource.indexOf("\n}\n", exclusionsStart);
+    if (exclusionsStart < 0 || exclusionsEnd < 0) throw new Error("getTransformFlagsSubtreeExclusions not found in nodeFactory.ts");
+    const exclusionsJs = ts.transpile(exclusionsSource.slice(exclusionsStart, exclusionsEnd + 2), { target: ts.ScriptTarget.ES2020 });
+    const exclusionsOf = new Function("SyntaxKind", "TransformFlags", `${exclusionsJs}\nreturn getTransformFlagsSubtreeExclusions;`)(ts.SyntaxKind, ts.TransformFlags);
+    lines.push("    /// <summary>nodeFactory.ts getTransformFlagsSubtreeExclusions for each kind (step O12: evaluated by the generator from TypeScript's function).</summary>",
+        NO_ALLOC, "    internal static TransformFlags TransformFlagsSubtreeExclusions(SyntaxKind kind) => (TransformFlags)SubtreeExclusionsTable[(int)kind];", "",
+        "    private static ReadOnlySpan<int> SubtreeExclusionsTable =>", "    [",
+        ...tableOf(k => { const v = exclusionsOf(k); if (!Number.isInteger(v)) throw new Error(`exclusions of kind ${k}: ${v}`); return v | 0; }), "    ];", "");
     lines.push("    // Node classes of types.ts: whether a node's kind is one of the class's kinds.");
     for (const cls of classes) lines.push(NO_ALLOC, `    public bool Is${cls}(Node node) => !node.IsNone && ClassIds[data[node.Index] & KindMask] == ${classId.get(cls)};`, "");
     lines.pop();

@@ -124,6 +124,9 @@ internal sealed unsafe partial class NodeStore
 
     private int count;
 
+    // Nodes created (step O12), not reduced by truncation.
+    private int created;
+
     // The thread whose slabs this store's parse writes to, until the parse is committed (null afterwards, and for a
     // store whose slabs another store of the thread took over, see IsActive).
     private ThreadSlabs? owner;
@@ -240,45 +243,95 @@ internal sealed unsafe partial class NodeStore
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal int Count => count;
 
-    /// <summary>A new node of the given kind: pos and end -1, flags none, every field undefined (utilities.ts: function Node).</summary>
+    /// <summary>
+    /// The number of nodes created so far, including those a truncation discarded since (the parser's nodeCount, which
+    /// speculation does not restore; step O12: the factory creates nodes here directly).
+    /// </summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal Node Create(SyntaxKind kind)
+    internal int CreatedCount => created;
+
+    /// <summary>
+    /// A new node as the parser's base factory creates it (`new Node(kind, /*pos*/ 0, /*end*/ 0)`, utilities.ts: function
+    /// Node): pos and end 0, flags none, every field undefined, the given transform flags (step O12: one write of the
+    /// record, formerly a record with pos and end -1 and two setters; counted in <see cref="CreatedCount"/>).
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node CreateNode(SyntaxKind kind, TransformFlags transformFlags = 0)
     {
         var k = (int)kind;
         int size = RecordSizes[k];
+        var h = used;
+        // Room for the largest record: the zeroing below is one constant-size block (the words after this record's
+        // end are free, they belong to no record).
+        if (MaxRecordWords > dataCapacity - h)
+        {
+            GrowData(h + MaxRecordWords);
+        }
+        var record = data + h;
+        Unsafe.InitBlockUnaligned(record, 0, MaxRecordWords * sizeof(int));
+        record[0] = k;
+        record[TransformFlagsWord] = (int)transformFlags;
         int refSize = RefCounts[k];
+        if (refSize != 0)
+        {
+            InitRefs(record, refSize);
+        }
+        used = h + size;
+        count++;
+        created++;
+        return new Node(h);
+    }
+
+    // The object slots of a new record (CreateNode; kinds with object slots are rare).
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private void InitRefs(int* record, int refSize)
+    {
+        var r = refCount;
+        if (refSize > refCapacity - r)
+        {
+            GrowRefs(r + refSize);
+        }
+        record[RefBaseWord] = r;
+        // Slots of discarded nodes (reused after a truncation) may hold old references.
+        refs.Slice(r, refSize).Clear();
+        refCount = r + refSize;
+    }
+
+    /// <summary>
+    /// The record of a new node of <paramref name="size"/> ints, for the generated `New{Class}` methods, which write
+    /// every int of it (step O12); counted like <see cref="CreateNode"/>.
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private int NewRecord(int size)
+    {
         var h = used;
         if (size > dataCapacity - h)
         {
             GrowData(h + size);
         }
-        var record = data + h;
-        record[0] = k;
-        record[FlagsWord] = 0;
-        record[PosWord] = -1;
-        record[EndWord] = -1;
-        record[TransformFlagsWord] = 0;
-        var first = HeaderWords;
-        if (refSize != 0)
-        {
-            var r = refCount;
-            if (refSize > refCapacity - r)
-            {
-                GrowRefs(r + refSize);
-            }
-            record[RefBaseWord] = r;
-            first++;
-            // Slots of discarded nodes (reused after a truncation) may hold old references.
-            refs.Slice(r, refSize).Clear();
-            refCount = r + refSize;
-        }
-        for (var i = first; i < size; i++)
-        {
-            record[i] = 0;
-        }
         used = h + size;
         count++;
-        return new Node(h);
+        created++;
+        return h;
+    }
+
+    /// <summary>
+    /// The parser's finishNode in one go (step O12): sets pos and end and adds <paramref name="flags"/> to the node's
+    /// flags.
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal void Finish(Node node, int pos, int end, NodeFlags flags)
+    {
+        var record = data + node.Index;
+        record[PosWord] = pos;
+        record[EndWord] = end;
+        if (flags != 0)
+        {
+            record[FlagsWord] |= (int)flags;
+        }
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]

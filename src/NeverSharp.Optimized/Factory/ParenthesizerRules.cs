@@ -129,10 +129,11 @@ internal interface NodeConverters
 /// <summary>factory/parenthesizerRules.ts (nullParenthesizerRules; createParenthesizerRules is not reached by the parser's factory).</summary>
 internal static class FactoryParenthesizerRules
 {
-    internal static readonly ParenthesizerRules NullParenthesizerRules = new NullParenthesizerRulesObject();
+    // (Track O, step O12: typed as the sealed class, so that calls through NodeFactory.Parenthesizer are direct.)
+    internal static readonly NullParenthesizerRulesObject NullParenthesizerRules = new NullParenthesizerRulesObject();
 
     /// <summary>The object literal `nullParenthesizerRules`.</summary>
-    private sealed class NullParenthesizerRulesObject : ParenthesizerRules
+    internal sealed class NullParenthesizerRulesObject : ParenthesizerRules
     {
         public Func<Node, Node> GetParenthesizeLeftSideOfBinaryForOperator(SyntaxKind binaryOperator) => Core.Identity;
 

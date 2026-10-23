@@ -263,34 +263,35 @@ internal sealed partial class NodeFactory
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreatePropertyAssignment(Node name, Node initializer)
     {
-        var node = CreateBaseDeclaration(SyntaxKind.PropertyAssignment);
-        store.SetName(node, AsName(name));
-        store.SetInitializer(node, Parenthesizer.ParenthesizeExpressionForDisallowedComma(initializer));
-        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateNameFlags(store, store.Name(node)) |
-            PropagateChildFlags(store, store.Initializer(node))));
-        store.SetModifiers(node, default); // initialized by parser to report grammar errors
-        store.SetQuestionToken(node, default); // initialized by parser to report grammar errors
-        store.SetExclamationToken(node, default); // initialized by parser to report grammar errors
+        // (Track O, step O12: the fields and the transform flags first, then the record in one go,
+        // NodeStore.NewPropertyAssignment; modifiers, questionToken and exclamationToken stay undefined, initialized by
+        // parser to report grammar errors.)
+        var nameNode = AsName(name);
+        var initializerNode = Parenthesizer.ParenthesizeExpressionForDisallowedComma(initializer);
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
-        return node;
+        return store.NewPropertyAssignment(
+            PropagateNameFlags(store, nameNode) |
+                PropagateChildFlags(store, initializerNode),
+            name: nameNode,
+            initializer: initializerNode);
     }
 
     // @api
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateShorthandPropertyAssignment(Node name, Node objectAssignmentInitializer = default)
     {
-        var node = CreateBaseDeclaration(SyntaxKind.ShorthandPropertyAssignment);
-        store.SetName(node, AsName(name));
-        store.SetObjectAssignmentInitializer(node, !objectAssignmentInitializer.IsNone ? Parenthesizer.ParenthesizeExpressionForDisallowedComma(objectAssignmentInitializer) : default);
-        store.SetTransformFlags(node, store.TransformFlags(node) | (PropagateIdentifierNameFlags(store, store.Name(node)) |
-            PropagateChildFlags(store, store.ObjectAssignmentInitializer(node)) |
-            TransformFlags.ContainsES2015));
-        store.SetEqualsToken(node, default); // initialized by parser to report grammar errors
-        store.SetModifiers(node, default); // initialized by parser to report grammar errors
-        store.SetQuestionToken(node, default); // initialized by parser to report grammar errors
-        store.SetExclamationToken(node, default); // initialized by parser to report grammar errors
+        // (Track O, step O12: the fields and the transform flags first, then the record in one go,
+        // NodeStore.NewShorthandPropertyAssignment; equalsToken, modifiers, questionToken and exclamationToken stay
+        // undefined, initialized by parser to report grammar errors.)
+        var nameNode = AsName(name);
+        var initializerNode = !objectAssignmentInitializer.IsNone ? Parenthesizer.ParenthesizeExpressionForDisallowedComma(objectAssignmentInitializer) : default;
         // node.jsDoc = undefined; // initialized by parser (JsDocContainer)
-        return node;
+        return store.NewShorthandPropertyAssignment(
+            PropagateIdentifierNameFlags(store, nameNode) |
+                PropagateChildFlags(store, initializerNode) |
+                TransformFlags.ContainsES2015,
+            name: nameNode,
+            objectAssignmentInitializer: initializerNode);
     }
 
     // @api

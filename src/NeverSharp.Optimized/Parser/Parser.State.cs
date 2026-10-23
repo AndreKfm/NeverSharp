@@ -103,7 +103,11 @@ internal sealed partial class Parser : BaseNodeFactory
     private SyntaxCursor? syntaxCursor;
 
     private SyntaxKind currentToken;
+    // Track O (step O12): the factory creates nodes in the store directly and the store counts them; TypeScript's
+    // nodeCount is the store's count since initializeState (nodeCountStart) plus nodeCount, the nodes counted without
+    // being created (see NodeCount).
     private int nodeCount;
+    private int nodeCountStart;
     // Track O (O5a): the texts of the parse (the store's): character arena and interned identifiers (TypeScript's
     // `identifiers` map).
     private TextTable texts = null!;
@@ -207,35 +211,23 @@ internal sealed partial class Parser : BaseNodeFactory
         reportPragmaDiagnosticCallback = ReportPragmaDiagnostic;
     }
 
+    /// <summary>TypeScript's nodeCount: the nodes created since initializeState, as the base factory below counts them.</summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private Node CountNode(Node node)
-    {
-        nodeCount++;
-        return node;
-    }
+    private int NodeCount() => nodeCount + store.CreatedCount - nodeCountStart;
 
     // Rather than using `createBaseNodeFactory` here, we establish a `BaseNodeFactory` that closes over the
     // constructors above, which are reset each time `initializeState` is called.
-    // (The constructors of objectAllocator create the node with the given kind, pos 0 and end 0.)
-    Node BaseNodeFactory.CreateBaseSourceFileNode(SyntaxKind kind) => CountNode(NewNode(store, kind));
+    // (The constructors of objectAllocator create the node with the given kind, pos 0 and end 0. Track O, step O12: the
+    // store counts the node; the parser's factory calls NodeStore.CreateNode itself, as these members do.)
+    Node BaseNodeFactory.CreateBaseSourceFileNode(SyntaxKind kind) => store.CreateNode(kind);
 
-    Node BaseNodeFactory.CreateBaseIdentifierNode(SyntaxKind kind) => CountNode(NewNode(store, kind));
+    Node BaseNodeFactory.CreateBaseIdentifierNode(SyntaxKind kind) => store.CreateNode(kind);
 
-    Node BaseNodeFactory.CreateBasePrivateIdentifierNode(SyntaxKind kind) => CountNode(NewNode(store, kind));
+    Node BaseNodeFactory.CreateBasePrivateIdentifierNode(SyntaxKind kind) => store.CreateNode(kind);
 
-    Node BaseNodeFactory.CreateBaseTokenNode(SyntaxKind kind) => CountNode(NewNode(store, kind));
+    Node BaseNodeFactory.CreateBaseTokenNode(SyntaxKind kind) => store.CreateNode(kind);
 
-    Node BaseNodeFactory.CreateBaseNode(SyntaxKind kind) => CountNode(NewNode(store, kind));
-
-    /// <summary>`new XConstructor(kind, /*pos*/ 0, /*end*/ 0)` (utilities.ts: Node, Token, Identifier constructors).</summary>
-    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private static Node NewNode(NodeStore store, SyntaxKind kind)
-    {
-        var node = store.Create(kind);
-        store.SetPos(node, 0);
-        store.SetEnd(node, 0);
-        return node;
-    }
+    Node BaseNodeFactory.CreateBaseNode(SyntaxKind kind) => store.CreateNode(kind);
 
     /// <summary>Makes <paramref name="nodeStore"/> the store the parser and its factory create nodes in.</summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
@@ -296,6 +288,7 @@ internal sealed partial class Parser : BaseNodeFactory
         parsingContext = 0;
         identifierCount = 0;
         nodeCount = 0;
+        nodeCountStart = store.CreatedCount;
         sourceFlags = 0;
         topLevel = true;
 
@@ -374,7 +367,7 @@ internal sealed partial class Parser : BaseNodeFactory
         ProcessPragmasIntoFields(store, sourceFile, reportPragmaDiagnosticCallback);
 
         store.SetCommentDirectives(sourceFile, scanner.GetCommentDirectives());
-        store.SetNodeCount(sourceFile, nodeCount);
+        store.SetNodeCount(sourceFile, NodeCount());
         store.SetIdentifierCount(sourceFile, identifierCount);
         store.SetIdentifiers(sourceFile, texts);
         store.SetParseDiagnostics(sourceFile, Utilities.AttachFileToDiagnostics(store, parseDiagnostics, sourceFile));
@@ -1474,11 +1467,8 @@ internal sealed partial class Parser : BaseNodeFactory
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node FinishNode(Node node, int pos, int? end = null)
     {
-        Utilities.SetTextRangePosEnd(store, node, pos, end ?? scanner.GetTokenFullStart());
-        if (contextFlags != 0)
-        {
-            store.SetFlags(node, store.Flags(node) | contextFlags);
-        }
+        // (Track O, step O12: pos, end and the added flags in one write of the record, NodeStore.Finish.)
+        var flags = contextFlags;
 
         // Keep track on the node if we encountered an error while parsing it.  If we did, then
         // we cannot reuse the node incrementally.  Once we've marked this node, clear out the
@@ -1486,9 +1476,10 @@ internal sealed partial class Parser : BaseNodeFactory
         if (parseErrorBeforeNextFinishedNode)
         {
             parseErrorBeforeNextFinishedNode = false;
-            store.SetFlags(node, store.Flags(node) | NodeFlags.ThisNodeHasError);
+            flags |= NodeFlags.ThisNodeHasError;
         }
 
+        store.Finish(node, pos, end ?? scanner.GetTokenFullStart(), flags);
         return node;
     }
 

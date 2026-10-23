@@ -116,7 +116,7 @@ internal sealed partial class Parser
             FixupParentReferences(store, sourceFile);
         }
 
-        store.SetNodeCount(sourceFile, nodeCount);
+        store.SetNodeCount(sourceFile, NodeCount());
         store.SetIdentifierCount(sourceFile, identifierCount);
         store.SetIdentifiers(sourceFile, texts);
         store.SetParseDiagnostics(sourceFile, Utilities.AttachFileToDiagnostics(store, parseDiagnostics, sourceFile));

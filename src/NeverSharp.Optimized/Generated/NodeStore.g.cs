@@ -25,6 +25,9 @@ internal sealed unsafe partial class NodeStore
 
     private const int RefBaseWord = 5;
 
+    /// <summary>The size of the largest record in ints.</summary>
+    private const int MaxRecordWords = 16;
+
     /// <summary>The offset table value of a field kept in the side table.</summary>
     private const int SideOffset = 127;
 
@@ -6297,6 +6300,1153 @@ internal sealed unsafe partial class NodeStore
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,127,-1,-1,-1,-1,-1,
+    ];
+
+    //// Creation of whole records (step O12): one method per class of NEW_CLASSES (emit-optimized.mjs).
+
+    /// <summary>A new ArrayLiteralExpression (ArrayLiteralExpression) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewArrayLiteralExpression(TransformFlags transformFlags, NodeList elements = default, bool multiLine = default)
+    {
+        var handle = NewRecord(6);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.ArrayLiteralExpression | (multiLine ? 65536 : 0);
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = elements.Index;
+        return new Node(handle);
+    }
+
+    /// <summary>A new ArrowFunction (ArrowFunction) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewArrowFunction(TransformFlags transformFlags, Node asteriskToken = default, Node body = default, Node equalsGreaterThanToken = default, Node exclamationToken = default, NodeList modifiers = default, Node nextContainer = default, NodeList parameters = default, Node questionToken = default, Node type = default, NodeList typeArguments = default, NodeList typeParameters = default)
+    {
+        var handle = NewRecord(9);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.ArrowFunction;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = body.Index;
+        record[6] = equalsGreaterThanToken.Index;
+        record[7] = parameters.Index;
+        record[8] = type.Index;
+        if (!asteriskToken.IsNone)
+        {
+            SetSideInt(handle, 5, asteriskToken.Index);
+        }
+        if (!exclamationToken.IsNone)
+        {
+            SetSideInt(handle, 9, exclamationToken.Index);
+        }
+        if (!modifiers.IsNone)
+        {
+            SetSideInt(handle, 14, modifiers.Index);
+        }
+        if (!nextContainer.IsNone)
+        {
+            SetSideInt(handle, 16, nextContainer.Index);
+        }
+        if (!questionToken.IsNone)
+        {
+            SetSideInt(handle, 21, questionToken.Index);
+        }
+        if (!typeArguments.IsNone)
+        {
+            SetSideInt(handle, 28, typeArguments.Index);
+        }
+        if (!typeParameters.IsNone)
+        {
+            SetSideInt(handle, 29, typeParameters.Index);
+        }
+        return new Node(handle);
+    }
+
+    /// <summary>A new AsExpression (AsExpression) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewAsExpression(TransformFlags transformFlags, Node expression = default, Node type = default)
+    {
+        var handle = NewRecord(7);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.AsExpression;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = expression.Index;
+        record[6] = type.Index;
+        return new Node(handle);
+    }
+
+    /// <summary>A new AwaitExpression (AwaitExpression) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewAwaitExpression(TransformFlags transformFlags, Node expression = default)
+    {
+        var handle = NewRecord(6);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.AwaitExpression;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = expression.Index;
+        return new Node(handle);
+    }
+
+    /// <summary>A new BinaryExpression (BinaryExpression) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewBinaryExpression(TransformFlags transformFlags, Node left = default, Node operatorToken = default, Node right = default)
+    {
+        var handle = NewRecord(8);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.BinaryExpression;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = left.Index;
+        record[6] = operatorToken.Index;
+        record[7] = right.Index;
+        return new Node(handle);
+    }
+
+    /// <summary>A new Block (Block) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewBlock(TransformFlags transformFlags, bool multiLine = default, Node nextContainer = default, NodeList statements = default)
+    {
+        var handle = NewRecord(6);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.Block | (multiLine ? 65536 : 0);
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = statements.Index;
+        if (!nextContainer.IsNone)
+        {
+            SetSideInt(handle, 16, nextContainer.Index);
+        }
+        return new Node(handle);
+    }
+
+    /// <summary>A new CallExpression (CallExpression) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewCallExpression(TransformFlags transformFlags, NodeList arguments = default, Node expression = default, Node questionDotToken = default, NodeList typeArguments = default)
+    {
+        var handle = NewRecord(7);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.CallExpression;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = arguments.Index;
+        record[6] = expression.Index;
+        if (!questionDotToken.IsNone)
+        {
+            SetSideInt(handle, 20, questionDotToken.Index);
+        }
+        if (!typeArguments.IsNone)
+        {
+            SetSideInt(handle, 28, typeArguments.Index);
+        }
+        return new Node(handle);
+    }
+
+    /// <summary>A new ConditionalExpression (ConditionalExpression) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewConditionalExpression(TransformFlags transformFlags, Node colonToken = default, Node condition = default, Node questionToken = default, Node whenFalse = default, Node whenTrue = default)
+    {
+        var handle = NewRecord(10);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.ConditionalExpression;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = colonToken.Index;
+        record[6] = condition.Index;
+        record[7] = questionToken.Index;
+        record[8] = whenFalse.Index;
+        record[9] = whenTrue.Index;
+        return new Node(handle);
+    }
+
+    /// <summary>A new ElementAccessExpression (ElementAccessExpression) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewElementAccessExpression(TransformFlags transformFlags, Node argumentExpression = default, Node expression = default, Node questionDotToken = default)
+    {
+        var handle = NewRecord(7);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.ElementAccessExpression;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = argumentExpression.Index;
+        record[6] = expression.Index;
+        if (!questionDotToken.IsNone)
+        {
+            SetSideInt(handle, 20, questionDotToken.Index);
+        }
+        return new Node(handle);
+    }
+
+    /// <summary>A new ExpressionStatement (ExpressionStatement) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewExpressionStatement(TransformFlags transformFlags, Node expression = default)
+    {
+        var handle = NewRecord(6);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.ExpressionStatement;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = expression.Index;
+        return new Node(handle);
+    }
+
+    /// <summary>A new ExpressionWithTypeArguments (ExpressionWithTypeArguments) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewExpressionWithTypeArguments(TransformFlags transformFlags, Node expression = default, NodeList typeArguments = default)
+    {
+        var handle = NewRecord(7);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.ExpressionWithTypeArguments;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = expression.Index;
+        record[6] = typeArguments.Index;
+        return new Node(handle);
+    }
+
+    /// <summary>A new FunctionDeclaration (FunctionDeclaration) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewFunctionDeclaration(TransformFlags transformFlags, Node asteriskToken = default, Node body = default, Node exclamationToken = default, NodeList modifiers = default, Node name = default, Node nextContainer = default, NodeList parameters = default, Node questionToken = default, Node type = default, NodeList typeArguments = default, NodeList typeParameters = default)
+    {
+        var handle = NewRecord(11);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.FunctionDeclaration;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = body.Index;
+        record[6] = modifiers.Index;
+        record[7] = name.Index;
+        record[8] = parameters.Index;
+        record[9] = type.Index;
+        record[10] = typeParameters.Index;
+        if (!asteriskToken.IsNone)
+        {
+            SetSideInt(handle, 5, asteriskToken.Index);
+        }
+        if (!exclamationToken.IsNone)
+        {
+            SetSideInt(handle, 9, exclamationToken.Index);
+        }
+        if (!nextContainer.IsNone)
+        {
+            SetSideInt(handle, 16, nextContainer.Index);
+        }
+        if (!questionToken.IsNone)
+        {
+            SetSideInt(handle, 21, questionToken.Index);
+        }
+        if (!typeArguments.IsNone)
+        {
+            SetSideInt(handle, 28, typeArguments.Index);
+        }
+        return new Node(handle);
+    }
+
+    /// <summary>A new FunctionExpression (FunctionExpression) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewFunctionExpression(TransformFlags transformFlags, Node asteriskToken = default, Node body = default, Node exclamationToken = default, NodeList modifiers = default, Node name = default, Node nextContainer = default, NodeList parameters = default, Node questionToken = default, Node type = default, NodeList typeArguments = default, NodeList typeParameters = default)
+    {
+        var handle = NewRecord(11);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.FunctionExpression;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = body.Index;
+        record[6] = modifiers.Index;
+        record[7] = name.Index;
+        record[8] = parameters.Index;
+        record[9] = type.Index;
+        record[10] = typeParameters.Index;
+        if (!asteriskToken.IsNone)
+        {
+            SetSideInt(handle, 5, asteriskToken.Index);
+        }
+        if (!exclamationToken.IsNone)
+        {
+            SetSideInt(handle, 9, exclamationToken.Index);
+        }
+        if (!nextContainer.IsNone)
+        {
+            SetSideInt(handle, 16, nextContainer.Index);
+        }
+        if (!questionToken.IsNone)
+        {
+            SetSideInt(handle, 21, questionToken.Index);
+        }
+        if (!typeArguments.IsNone)
+        {
+            SetSideInt(handle, 28, typeArguments.Index);
+        }
+        return new Node(handle);
+    }
+
+    /// <summary>A new Identifier (Identifier) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewIdentifier(TransformFlags transformFlags, TextRef escapedText = default)
+    {
+        var handle = NewRecord(7);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.Identifier;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = escapedText.Start;
+        record[6] = escapedText.Size;
+        return new Node(handle);
+    }
+
+    /// <summary>A new IfStatement (IfStatement) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewIfStatement(TransformFlags transformFlags, Node elseStatement = default, Node expression = default, Node thenStatement = default)
+    {
+        var handle = NewRecord(8);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.IfStatement;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = elseStatement.Index;
+        record[6] = expression.Index;
+        record[7] = thenStatement.Index;
+        return new Node(handle);
+    }
+
+    /// <summary>A new LiteralTypeNode (LiteralType) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewLiteralTypeNode(TransformFlags transformFlags, Node literal = default)
+    {
+        var handle = NewRecord(6);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.LiteralType;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = literal.Index;
+        return new Node(handle);
+    }
+
+    /// <summary>A new MethodDeclaration (MethodDeclaration) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewMethodDeclaration(TransformFlags transformFlags, Node asteriskToken = default, Node body = default, Node exclamationToken = default, NodeList modifiers = default, Node name = default, Node nextContainer = default, NodeList parameters = default, Node questionToken = default, Node type = default, NodeList typeArguments = default, NodeList typeParameters = default)
+    {
+        var handle = NewRecord(11);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.MethodDeclaration;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = body.Index;
+        record[6] = modifiers.Index;
+        record[7] = name.Index;
+        record[8] = parameters.Index;
+        record[9] = type.Index;
+        record[10] = typeParameters.Index;
+        if (!asteriskToken.IsNone)
+        {
+            SetSideInt(handle, 5, asteriskToken.Index);
+        }
+        if (!exclamationToken.IsNone)
+        {
+            SetSideInt(handle, 9, exclamationToken.Index);
+        }
+        if (!nextContainer.IsNone)
+        {
+            SetSideInt(handle, 16, nextContainer.Index);
+        }
+        if (!questionToken.IsNone)
+        {
+            SetSideInt(handle, 21, questionToken.Index);
+        }
+        if (!typeArguments.IsNone)
+        {
+            SetSideInt(handle, 28, typeArguments.Index);
+        }
+        return new Node(handle);
+    }
+
+    /// <summary>A new MethodSignature (MethodSignature) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewMethodSignature(TransformFlags transformFlags, NodeList modifiers = default, Node name = default, Node nextContainer = default, NodeList parameters = default, Node questionToken = default, Node type = default, NodeList typeArguments = default, NodeList typeParameters = default)
+    {
+        var handle = NewRecord(10);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.MethodSignature;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = name.Index;
+        record[6] = parameters.Index;
+        record[7] = questionToken.Index;
+        record[8] = type.Index;
+        record[9] = typeParameters.Index;
+        if (!modifiers.IsNone)
+        {
+            SetSideInt(handle, 14, modifiers.Index);
+        }
+        if (!nextContainer.IsNone)
+        {
+            SetSideInt(handle, 16, nextContainer.Index);
+        }
+        if (!typeArguments.IsNone)
+        {
+            SetSideInt(handle, 28, typeArguments.Index);
+        }
+        return new Node(handle);
+    }
+
+    /// <summary>A new NewExpression (NewExpression) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewNewExpression(TransformFlags transformFlags, NodeList arguments = default, Node expression = default, NodeList typeArguments = default)
+    {
+        var handle = NewRecord(8);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.NewExpression;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = arguments.Index;
+        record[6] = expression.Index;
+        record[7] = typeArguments.Index;
+        return new Node(handle);
+    }
+
+    /// <summary>A new NonNullExpression (NonNullExpression) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewNonNullExpression(TransformFlags transformFlags, Node expression = default)
+    {
+        var handle = NewRecord(6);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.NonNullExpression;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = expression.Index;
+        return new Node(handle);
+    }
+
+    /// <summary>A new NumericLiteral (NumericLiteral) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewNumericLiteral(TransformFlags transformFlags, bool hasExtendedUnicodeEscape = default, bool isUnterminated = default, TokenFlags numericLiteralFlags = default, TextRef text = default)
+    {
+        var handle = NewRecord(7);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.NumericLiteral | (hasExtendedUnicodeEscape ? 65536 : 0) | (isUnterminated ? 131072 : 0);
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = text.Start;
+        record[6] = text.Size;
+        if (numericLiteralFlags != 0)
+        {
+            SetSideInt(handle, 17, (int)numericLiteralFlags);
+        }
+        return new Node(handle);
+    }
+
+    /// <summary>A new ObjectLiteralExpression (ObjectLiteralExpression) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewObjectLiteralExpression(TransformFlags transformFlags, bool multiLine = default, NodeList properties = default)
+    {
+        var handle = NewRecord(6);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.ObjectLiteralExpression | (multiLine ? 65536 : 0);
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = properties.Index;
+        return new Node(handle);
+    }
+
+    /// <summary>A new ParameterDeclaration (Parameter) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewParameterDeclaration(TransformFlags transformFlags, Node dotDotDotToken = default, Node initializer = default, NodeList modifiers = default, Node name = default, Node questionToken = default, Node type = default)
+    {
+        var handle = NewRecord(8);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.Parameter;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = name.Index;
+        record[6] = questionToken.Index;
+        record[7] = type.Index;
+        if (!dotDotDotToken.IsNone)
+        {
+            SetSideInt(handle, 7, dotDotDotToken.Index);
+        }
+        if (!initializer.IsNone)
+        {
+            SetSideInt(handle, 11, initializer.Index);
+        }
+        if (!modifiers.IsNone)
+        {
+            SetSideInt(handle, 14, modifiers.Index);
+        }
+        return new Node(handle);
+    }
+
+    /// <summary>A new ParenthesizedExpression (ParenthesizedExpression) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewParenthesizedExpression(TransformFlags transformFlags, Node expression = default)
+    {
+        var handle = NewRecord(6);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.ParenthesizedExpression;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = expression.Index;
+        return new Node(handle);
+    }
+
+    /// <summary>A new PostfixUnaryExpression (PostfixUnaryExpression) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewPostfixUnaryExpression(TransformFlags transformFlags, Node operand = default, SyntaxKind @operator = default)
+    {
+        var handle = NewRecord(7);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.PostfixUnaryExpression;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = operand.Index;
+        record[6] = (int)@operator;
+        return new Node(handle);
+    }
+
+    /// <summary>A new PrefixUnaryExpression (PrefixUnaryExpression) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewPrefixUnaryExpression(TransformFlags transformFlags, Node operand = default, SyntaxKind @operator = default)
+    {
+        var handle = NewRecord(7);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.PrefixUnaryExpression;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = operand.Index;
+        record[6] = (int)@operator;
+        return new Node(handle);
+    }
+
+    /// <summary>A new PropertyAccessExpression (PropertyAccessExpression) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewPropertyAccessExpression(TransformFlags transformFlags, Node expression = default, Node name = default, Node questionDotToken = default)
+    {
+        var handle = NewRecord(7);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.PropertyAccessExpression;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = expression.Index;
+        record[6] = name.Index;
+        if (!questionDotToken.IsNone)
+        {
+            SetSideInt(handle, 20, questionDotToken.Index);
+        }
+        return new Node(handle);
+    }
+
+    /// <summary>A new PropertyAssignment (PropertyAssignment) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewPropertyAssignment(TransformFlags transformFlags, Node exclamationToken = default, Node initializer = default, NodeList modifiers = default, Node name = default, Node questionToken = default)
+    {
+        var handle = NewRecord(7);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.PropertyAssignment;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = initializer.Index;
+        record[6] = name.Index;
+        if (!exclamationToken.IsNone)
+        {
+            SetSideInt(handle, 9, exclamationToken.Index);
+        }
+        if (!modifiers.IsNone)
+        {
+            SetSideInt(handle, 14, modifiers.Index);
+        }
+        if (!questionToken.IsNone)
+        {
+            SetSideInt(handle, 21, questionToken.Index);
+        }
+        return new Node(handle);
+    }
+
+    /// <summary>A new PropertyDeclaration (PropertyDeclaration) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewPropertyDeclaration(TransformFlags transformFlags, Node exclamationToken = default, Node initializer = default, NodeList modifiers = default, Node name = default, Node questionToken = default, Node type = default)
+    {
+        var handle = NewRecord(9);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.PropertyDeclaration;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = initializer.Index;
+        record[6] = modifiers.Index;
+        record[7] = name.Index;
+        record[8] = type.Index;
+        if (!exclamationToken.IsNone)
+        {
+            SetSideInt(handle, 9, exclamationToken.Index);
+        }
+        if (!questionToken.IsNone)
+        {
+            SetSideInt(handle, 21, questionToken.Index);
+        }
+        return new Node(handle);
+    }
+
+    /// <summary>A new PropertySignature (PropertySignature) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewPropertySignature(TransformFlags transformFlags, Node initializer = default, NodeList modifiers = default, Node name = default, Node questionToken = default, Node type = default)
+    {
+        var handle = NewRecord(9);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.PropertySignature;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = modifiers.Index;
+        record[6] = name.Index;
+        record[7] = questionToken.Index;
+        record[8] = type.Index;
+        if (!initializer.IsNone)
+        {
+            SetSideInt(handle, 11, initializer.Index);
+        }
+        return new Node(handle);
+    }
+
+    /// <summary>A new QualifiedName (QualifiedName) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewQualifiedName(TransformFlags transformFlags, Node left = default, Node right = default)
+    {
+        var handle = NewRecord(7);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.QualifiedName;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = left.Index;
+        record[6] = right.Index;
+        return new Node(handle);
+    }
+
+    /// <summary>A new ReturnStatement (ReturnStatement) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewReturnStatement(TransformFlags transformFlags, Node expression = default)
+    {
+        var handle = NewRecord(6);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.ReturnStatement;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = expression.Index;
+        return new Node(handle);
+    }
+
+    /// <summary>A new ShorthandPropertyAssignment (ShorthandPropertyAssignment) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewShorthandPropertyAssignment(TransformFlags transformFlags, Node equalsToken = default, Node exclamationToken = default, NodeList modifiers = default, Node name = default, Node objectAssignmentInitializer = default, Node questionToken = default)
+    {
+        var handle = NewRecord(6);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.ShorthandPropertyAssignment;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = name.Index;
+        if (!equalsToken.IsNone)
+        {
+            SetSideInt(handle, 8, equalsToken.Index);
+        }
+        if (!exclamationToken.IsNone)
+        {
+            SetSideInt(handle, 9, exclamationToken.Index);
+        }
+        if (!modifiers.IsNone)
+        {
+            SetSideInt(handle, 14, modifiers.Index);
+        }
+        if (!objectAssignmentInitializer.IsNone)
+        {
+            SetSideInt(handle, 18, objectAssignmentInitializer.Index);
+        }
+        if (!questionToken.IsNone)
+        {
+            SetSideInt(handle, 21, questionToken.Index);
+        }
+        return new Node(handle);
+    }
+
+    /// <summary>A new SpreadElement (SpreadElement) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewSpreadElement(TransformFlags transformFlags, Node expression = default)
+    {
+        var handle = NewRecord(6);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.SpreadElement;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = expression.Index;
+        return new Node(handle);
+    }
+
+    /// <summary>A new StringLiteral (StringLiteral) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewStringLiteral(TransformFlags transformFlags, bool hasExtendedUnicodeEscape = default, bool isUnterminated = default, bool singleQuote = default, TextRef text = default, Node textSourceNode = default)
+    {
+        var handle = NewRecord(7);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.StringLiteral | (hasExtendedUnicodeEscape ? 65536 : 0) | (isUnterminated ? 131072 : 0) | (singleQuote ? 262144 : 0);
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = text.Start;
+        record[6] = text.Size;
+        if (!textSourceNode.IsNone)
+        {
+            SetSideInt(handle, 24, textSourceNode.Index);
+        }
+        return new Node(handle);
+    }
+
+    /// <summary>A new TemplateExpression (TemplateExpression) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewTemplateExpression(TransformFlags transformFlags, Node head = default, NodeList templateSpans = default)
+    {
+        var handle = NewRecord(7);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.TemplateExpression;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = head.Index;
+        record[6] = templateSpans.Index;
+        return new Node(handle);
+    }
+
+    /// <summary>A new TemplateSpan (TemplateSpan) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewTemplateSpan(TransformFlags transformFlags, Node expression = default, Node literal = default)
+    {
+        var handle = NewRecord(7);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.TemplateSpan;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = expression.Index;
+        record[6] = literal.Index;
+        return new Node(handle);
+    }
+
+    /// <summary>A new ThrowStatement (ThrowStatement) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewThrowStatement(TransformFlags transformFlags, Node expression = default)
+    {
+        var handle = NewRecord(6);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.ThrowStatement;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = expression.Index;
+        return new Node(handle);
+    }
+
+    /// <summary>A new TypeOfExpression (TypeOfExpression) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewTypeOfExpression(TransformFlags transformFlags, Node expression = default)
+    {
+        var handle = NewRecord(6);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.TypeOfExpression;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = expression.Index;
+        return new Node(handle);
+    }
+
+    /// <summary>A new TypeReferenceNode (TypeReference) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewTypeReferenceNode(TransformFlags transformFlags, NodeList typeArguments = default, Node typeName = default)
+    {
+        var handle = NewRecord(7);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.TypeReference;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = typeArguments.Index;
+        record[6] = typeName.Index;
+        return new Node(handle);
+    }
+
+    /// <summary>A new VariableDeclaration (VariableDeclaration) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewVariableDeclaration(TransformFlags transformFlags, Node exclamationToken = default, Node initializer = default, Node name = default, Node type = default)
+    {
+        var handle = NewRecord(8);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.VariableDeclaration;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = initializer.Index;
+        record[6] = name.Index;
+        record[7] = type.Index;
+        if (!exclamationToken.IsNone)
+        {
+            SetSideInt(handle, 9, exclamationToken.Index);
+        }
+        return new Node(handle);
+    }
+
+    /// <summary>A new VariableDeclarationList (VariableDeclarationList) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewVariableDeclarationList(TransformFlags transformFlags, NodeList declarations = default)
+    {
+        var handle = NewRecord(6);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.VariableDeclarationList;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = declarations.Index;
+        return new Node(handle);
+    }
+
+    /// <summary>A new VariableStatement (VariableStatement) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewVariableStatement(TransformFlags transformFlags, Node declarationList = default, NodeList modifiers = default)
+    {
+        var handle = NewRecord(7);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.VariableStatement;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = declarationList.Index;
+        record[6] = modifiers.Index;
+        return new Node(handle);
+    }
+
+    /// <summary>A new ArrayTypeNode (ArrayType) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewArrayTypeNode(TransformFlags transformFlags, Node elementType = default)
+    {
+        var handle = NewRecord(6);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.ArrayType;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = elementType.Index;
+        return new Node(handle);
+    }
+
+    /// <summary>A new FunctionTypeNode (FunctionType) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewFunctionTypeNode(TransformFlags transformFlags, NodeList modifiers = default, Node name = default, Node nextContainer = default, NodeList parameters = default, Node type = default, NodeList typeArguments = default, NodeList typeParameters = default)
+    {
+        var handle = NewRecord(8);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.FunctionType;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = parameters.Index;
+        record[6] = type.Index;
+        record[7] = typeParameters.Index;
+        if (!modifiers.IsNone)
+        {
+            SetSideInt(handle, 14, modifiers.Index);
+        }
+        if (!name.IsNone)
+        {
+            SetSideInt(handle, 15, name.Index);
+        }
+        if (!nextContainer.IsNone)
+        {
+            SetSideInt(handle, 16, nextContainer.Index);
+        }
+        if (!typeArguments.IsNone)
+        {
+            SetSideInt(handle, 28, typeArguments.Index);
+        }
+        return new Node(handle);
+    }
+
+    /// <summary>A new IndexedAccessTypeNode (IndexedAccessType) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewIndexedAccessTypeNode(TransformFlags transformFlags, Node indexType = default, Node objectType = default)
+    {
+        var handle = NewRecord(7);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.IndexedAccessType;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = indexType.Index;
+        record[6] = objectType.Index;
+        return new Node(handle);
+    }
+
+    /// <summary>A new IntersectionTypeNode (IntersectionType) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewIntersectionTypeNode(TransformFlags transformFlags, NodeList types = default)
+    {
+        var handle = NewRecord(6);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.IntersectionType;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = types.Index;
+        return new Node(handle);
+    }
+
+    /// <summary>A new ParenthesizedTypeNode (ParenthesizedType) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewParenthesizedTypeNode(TransformFlags transformFlags, Node type = default)
+    {
+        var handle = NewRecord(6);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.ParenthesizedType;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = type.Index;
+        return new Node(handle);
+    }
+
+    /// <summary>A new TypeLiteralNode (TypeLiteral) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewTypeLiteralNode(TransformFlags transformFlags, NodeList members = default)
+    {
+        var handle = NewRecord(6);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.TypeLiteral;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = members.Index;
+        return new Node(handle);
+    }
+
+    /// <summary>A new TypeOperatorNode (TypeOperator) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewTypeOperatorNode(TransformFlags transformFlags, SyntaxKind @operator = default, Node type = default)
+    {
+        var handle = NewRecord(7);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.TypeOperator;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = (int)@operator;
+        record[6] = type.Index;
+        return new Node(handle);
+    }
+
+    /// <summary>A new TypeParameterDeclaration (TypeParameter) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewTypeParameterDeclaration(TransformFlags transformFlags, Node constraint = default, Node @default = default, Node expression = default, NodeList modifiers = default, Node name = default)
+    {
+        var handle = NewRecord(8);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.TypeParameter;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = constraint.Index;
+        record[6] = @default.Index;
+        record[7] = name.Index;
+        if (!expression.IsNone)
+        {
+            SetSideInt(handle, 10, expression.Index);
+        }
+        if (!modifiers.IsNone)
+        {
+            SetSideInt(handle, 14, modifiers.Index);
+        }
+        return new Node(handle);
+    }
+
+    /// <summary>A new TypeQueryNode (TypeQuery) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewTypeQueryNode(TransformFlags transformFlags, Node exprName = default, NodeList typeArguments = default)
+    {
+        var handle = NewRecord(6);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.TypeQuery;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = exprName.Index;
+        if (!typeArguments.IsNone)
+        {
+            SetSideInt(handle, 28, typeArguments.Index);
+        }
+        return new Node(handle);
+    }
+
+    /// <summary>A new UnionTypeNode (UnionType) with its fields (step O12).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Node NewUnionTypeNode(TransformFlags transformFlags, NodeList types = default)
+    {
+        var handle = NewRecord(6);
+        var record = data + handle;
+        record[0] = (int)SyntaxKind.UnionType;
+        record[FlagsWord] = 0;
+        record[PosWord] = 0;
+        record[EndWord] = 0;
+        record[TransformFlagsWord] = (int)transformFlags;
+        record[5] = types.Index;
+        return new Node(handle);
+    }
+
+    /// <summary>nodeFactory.ts getTransformFlagsSubtreeExclusions for each kind (step O12: evaluated by the generator from TypeScript's function).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal static TransformFlags TransformFlagsSubtreeExclusions(SyntaxKind kind) => (TransformFlags)SubtreeExclusionsTable[(int)kind];
+
+    private static ReadOnlySpan<int> SubtreeExclusionsTable =>
+    [
+        -2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,
+        -2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,
+        -2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2,-2147483648,-2147483648,-2147483648,
+        -2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2,-2147483648,-2147483648,-2,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2,-2147483648,-2147483648,-2147483648,-2,-2,-2147483648,-2147483648,-2,-2,-2147483648,-2147483648,-2147483648,-2147483648,
+        -2147483648,-2147483648,-2147483648,-2,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2,-2147483648,-2147483648,-2,-2013249536,-2,-2005057536,-2147483648,-1937948672,-2005057536,-2005057536,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,
+        -2,-2,-2,-2,-2,-2,-2,-2147450880,-2147450880,-2147483648,-2147450880,-2147278848,-2147483648,-2147483648,-2147450880,-2147450880,-2147483648,-2147483648,-2147483648,-1937940480,-2072174592,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147344384,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,
+        -2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2146893824,-1937940480,-2147344384,-2,-2,-2147483648,-1941676032,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,
+        -2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147418112,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,
+        -2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,-2147483648,
     ];
 
     // Node classes of types.ts: whether a node's kind is one of the class's kinds.

@@ -148,10 +148,14 @@ internal sealed partial class NodeFactory
         return array;
     }
 
+    // Track O (step O12): the base nodes are created in the store directly (NodeStore.CreateNode, as the parser's base
+    // factory creates them; the store counts them for the parser's nodeCount), without the interface call. The hot
+    // factory functions write their whole record with the generated `NodeStore.New{Class}` instead, the transform flags
+    // computed beforehand from the children they are given.
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node CreateBaseNode(SyntaxKind kind)
     {
-        return baseFactory.CreateBaseNode(kind);
+        return store.CreateNode(kind);
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
@@ -175,14 +179,11 @@ internal sealed partial class NodeFactory
         var flagsValue = numericLiteralFlags ?? TokenFlags.None;
         var text = value;
         Debug.Assert(text.Length <= 0 || store.Texts.Span(text)[0] != (char)CharacterCodes.minus, "Negative numbers should be created in combination with createPrefixUnaryExpression");
-        var node = CreateBaseDeclaration(SyntaxKind.NumericLiteral);
-        store.SetText(node, text);
-        store.SetNumericLiteralFlags(node, flagsValue);
-        if ((flagsValue & TokenFlags.BinaryOrOctalSpecifier) != 0)
-        {
-            store.SetTransformFlags(node, store.TransformFlags(node) | TransformFlags.ContainsES2015);
-        }
-        return node;
+        // (Track O, step O12: the record in one go, NodeStore.NewNumericLiteral.)
+        return store.NewNumericLiteral(
+            (flagsValue & TokenFlags.BinaryOrOctalSpecifier) != 0 ? TransformFlags.ContainsES2015 : TransformFlags.None,
+            text: text,
+            numericLiteralFlags: flagsValue);
     }
 
     // @api
@@ -197,18 +198,8 @@ internal sealed partial class NodeFactory
     internal Node CreateBigIntLiteral(TextRef value)
     {
         // TypeScript: `value: string | PseudoBigInt`; the parser passes the literal's text.
-        var node = CreateBaseToken(SyntaxKind.BigIntLiteral);
+        var node = store.CreateNode(SyntaxKind.BigIntLiteral, TransformFlags.ContainsES2020);
         store.SetText(node, value);
-        store.SetTransformFlags(node, store.TransformFlags(node) | TransformFlags.ContainsES2020);
-        return node;
-    }
-
-    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private Node CreateBaseStringLiteral(TextRef text, bool? isSingleQuote)
-    {
-        var node = CreateBaseDeclaration(SyntaxKind.StringLiteral);
-        store.SetText(node, text);
-        store.SetSingleQuote(node, isSingleQuote == true);
         return node;
     }
 
@@ -216,13 +207,12 @@ internal sealed partial class NodeFactory
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateStringLiteral(TextRef text, bool? isSingleQuote = null, bool? hasExtendedUnicodeEscape = null)
     {
-        var node = CreateBaseStringLiteral(text, isSingleQuote);
-        store.SetHasExtendedUnicodeEscape(node, hasExtendedUnicodeEscape == true);
-        if (hasExtendedUnicodeEscape == true)
-        {
-            store.SetTransformFlags(node, store.TransformFlags(node) | TransformFlags.ContainsES2015);
-        }
-        return node;
+        // (Track O, step O12: createBaseStringLiteral and the rest in one record write, NodeStore.NewStringLiteral.)
+        return store.NewStringLiteral(
+            hasExtendedUnicodeEscape == true ? TransformFlags.ContainsES2015 : TransformFlags.None,
+            text: text,
+            singleQuote: isSingleQuote == true,
+            hasExtendedUnicodeEscape: hasExtendedUnicodeEscape == true);
     }
 
     // @api
@@ -238,15 +228,6 @@ internal sealed partial class NodeFactory
     // Identifiers
     //
 
-    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private Node CreateBaseIdentifier(TextRef escapedText)
-    {
-        var node = baseFactory.CreateBaseIdentifierNode(SyntaxKind.Identifier);
-        store.SetEscapedText(node, escapedText);
-        store.SetJsDoc(node, null); // initialized by parser (JsDocContainer)
-        return node;
-    }
-
     // @api
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node CreateIdentifier(TextRef text, SyntaxKind? originalKeywordKind = null, bool? hasExtendedUnicodeEscape = null)
@@ -255,22 +236,28 @@ internal sealed partial class NodeFactory
         // (originalKeywordKind is not stored on the node; TypeScript computes it from the text and does not use it further.)
         _ = originalKeywordKind;
 
-        var node = CreateBaseIdentifier(UtilitiesPublic.EscapeLeadingUnderscores(store.Texts, text));
+        // Track O (step O12): createBaseIdentifier (escapedText; jsDoc undefined, as on every new node) and the transform
+        // flags in one record write (NodeStore.NewIdentifier); the flags of a new node are none, so the identifier has
+        // IdentifierHasExtendedUnicodeEscape exactly when hasExtendedUnicodeEscape is true.
+        var escapedText = UtilitiesPublic.EscapeLeadingUnderscores(store.Texts, text);
+        var transformFlags = TransformFlags.None;
+
+        // NOTE: we do not include transform flags of typeArguments in an identifier as they do not contribute to transformations
+        // ("await" has 5 characters: TextRef.Size 6.)
+        if (escapedText.Size == 6 && store.Texts.Equals(escapedText, "await"))
+        {
+            transformFlags |= TransformFlags.ContainsPossibleTopLevelAwait;
+        }
+        if (hasExtendedUnicodeEscape == true)
+        {
+            transformFlags |= TransformFlags.ContainsES2015;
+        }
+
+        var node = store.NewIdentifier(transformFlags, escapedText: escapedText);
         if (hasExtendedUnicodeEscape == true)
         {
             store.SetFlags(node, store.Flags(node) | NodeFlags.IdentifierHasExtendedUnicodeEscape);
         }
-
-        // NOTE: we do not include transform flags of typeArguments in an identifier as they do not contribute to transformations
-        if (store.Texts.Equals(store.EscapedText(node), "await"))
-        {
-            store.SetTransformFlags(node, store.TransformFlags(node) | TransformFlags.ContainsPossibleTopLevelAwait);
-        }
-        if ((store.Flags(node) & NodeFlags.IdentifierHasExtendedUnicodeEscape) != 0)
-        {
-            store.SetTransformFlags(node, store.TransformFlags(node) | TransformFlags.ContainsES2015);
-        }
-
         return node;
     }
 
@@ -284,9 +271,8 @@ internal sealed partial class NodeFactory
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node CreateBasePrivateIdentifier(TextRef escapedText)
     {
-        var node = baseFactory.CreateBasePrivateIdentifierNode(SyntaxKind.PrivateIdentifier);
+        var node = store.CreateNode(SyntaxKind.PrivateIdentifier, TransformFlags.ContainsClassFields);
         store.SetEscapedText(node, escapedText);
-        store.SetTransformFlags(node, store.TransformFlags(node) | TransformFlags.ContainsClassFields);
         return node;
     }
 
@@ -315,7 +301,7 @@ internal sealed partial class NodeFactory
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node CreateBaseToken(SyntaxKind kind)
     {
-        return baseFactory.CreateBaseTokenNode(kind);
+        return store.CreateNode(kind);
     }
 
     // @api
@@ -326,7 +312,7 @@ internal sealed partial class NodeFactory
         Debug.Assert(token <= SyntaxKind.FirstTemplateToken || token >= SyntaxKind.LastTemplateToken, "Invalid token. Use 'createTemplateLiteralLikeNode' to create template literals.");
         Debug.Assert(token <= SyntaxKind.FirstLiteralToken || token >= SyntaxKind.LastLiteralToken, "Invalid token. Use 'createLiteralLikeNode' to create literals.");
         Debug.Assert(token != SyntaxKind.Identifier, "Invalid token. Use 'createIdentifier' to create identifiers");
-        var node = CreateBaseToken(token);
+        // (Track O, step O12: the transform flags first, then the node with them in one record write.)
         var transformFlags = TransformFlags.None;
         switch (token)
         {
@@ -377,11 +363,7 @@ internal sealed partial class NodeFactory
                 transformFlags = TransformFlags.ContainsLexicalThis;
                 break;
         }
-        if (transformFlags != TransformFlags.None)
-        {
-            store.SetTransformFlags(node, store.TransformFlags(node) | transformFlags);
-        }
-        return node;
+        return store.CreateNode(token, transformFlags);
     }
 
     //// File-level functions of nodeFactory.ts: propagation of transform flags.
@@ -413,13 +395,11 @@ internal sealed partial class NodeFactory
             return TransformFlags.None;
         }
         var childFlags = store.TransformFlags(child) & ~GetTransformFlagsSubtreeExclusions(store.Kind(child));
-        if (UtilitiesPublic.IsNamedDeclaration(store, child))
+        // isNamedDeclaration(child) && isPropertyName(child.name) (Track O, step O12: the name read once).
+        var name = store.Name(child);
+        if (!name.IsNone && UtilitiesPublic.IsPropertyName(store, name))
         {
-            var name = store.Name(child);
-            if (UtilitiesPublic.IsPropertyName(store, name))
-            {
-                return PropagatePropertyNameFlagsOfChild(store, name, childFlags);
-            }
+            return PropagatePropertyNameFlagsOfChild(store, name, childFlags);
         }
         return childFlags;
     }
@@ -448,76 +428,9 @@ internal sealed partial class NodeFactory
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static TransformFlags GetTransformFlagsSubtreeExclusions(SyntaxKind kind)
     {
-        if (kind >= SyntaxKind.FirstTypeNode && kind <= SyntaxKind.LastTypeNode)
-        {
-            return TransformFlags.TypeExcludes;
-        }
-
-        switch (kind)
-        {
-            case SyntaxKind.CallExpression:
-            case SyntaxKind.NewExpression:
-            case SyntaxKind.ArrayLiteralExpression:
-                return TransformFlags.ArrayLiteralOrCallOrNewExcludes;
-            case SyntaxKind.ModuleDeclaration:
-                return TransformFlags.ModuleExcludes;
-            case SyntaxKind.Parameter:
-                return TransformFlags.ParameterExcludes;
-            case SyntaxKind.ArrowFunction:
-                return TransformFlags.ArrowFunctionExcludes;
-            case SyntaxKind.FunctionExpression:
-            case SyntaxKind.FunctionDeclaration:
-                return TransformFlags.FunctionExcludes;
-            case SyntaxKind.VariableDeclarationList:
-                return TransformFlags.VariableDeclarationListExcludes;
-            case SyntaxKind.ClassDeclaration:
-            case SyntaxKind.ClassExpression:
-                return TransformFlags.ClassExcludes;
-            case SyntaxKind.Constructor:
-                return TransformFlags.ConstructorExcludes;
-            case SyntaxKind.PropertyDeclaration:
-                return TransformFlags.PropertyExcludes;
-            case SyntaxKind.MethodDeclaration:
-            case SyntaxKind.GetAccessor:
-            case SyntaxKind.SetAccessor:
-                return TransformFlags.MethodOrAccessorExcludes;
-            case SyntaxKind.AnyKeyword:
-            case SyntaxKind.NumberKeyword:
-            case SyntaxKind.BigIntKeyword:
-            case SyntaxKind.NeverKeyword:
-            case SyntaxKind.StringKeyword:
-            case SyntaxKind.ObjectKeyword:
-            case SyntaxKind.BooleanKeyword:
-            case SyntaxKind.SymbolKeyword:
-            case SyntaxKind.VoidKeyword:
-            case SyntaxKind.TypeParameter:
-            case SyntaxKind.PropertySignature:
-            case SyntaxKind.MethodSignature:
-            case SyntaxKind.CallSignature:
-            case SyntaxKind.ConstructSignature:
-            case SyntaxKind.IndexSignature:
-            case SyntaxKind.InterfaceDeclaration:
-            case SyntaxKind.TypeAliasDeclaration:
-                return TransformFlags.TypeExcludes;
-            case SyntaxKind.ObjectLiteralExpression:
-                return TransformFlags.ObjectLiteralExcludes;
-            case SyntaxKind.CatchClause:
-                return TransformFlags.CatchClauseExcludes;
-            case SyntaxKind.ObjectBindingPattern:
-            case SyntaxKind.ArrayBindingPattern:
-                return TransformFlags.BindingPatternExcludes;
-            case SyntaxKind.TypeAssertionExpression:
-            case SyntaxKind.SatisfiesExpression:
-            case SyntaxKind.AsExpression:
-            case SyntaxKind.PartiallyEmittedExpression:
-            case SyntaxKind.ParenthesizedExpression:
-            case SyntaxKind.SuperKeyword:
-                return TransformFlags.OuterExpressionExcludes;
-            case SyntaxKind.PropertyAccessExpression:
-            case SyntaxKind.ElementAccessExpression:
-                return TransformFlags.PropertyAccessExcludes;
-            default:
-                return TransformFlags.NodeExcludes;
-        }
+        // Track O (step O12): a table lookup instead of TypeScript's range test and switch (`kind >= FirstTypeNode &&
+        // kind <= LastTypeNode` gives TypeExcludes, then one case list per exclusion, NodeExcludes by default); the
+        // generator evaluates TypeScript's function on every kind (NodeStore.g.cs, emit-optimized.mjs).
+        return NodeStore.TransformFlagsSubtreeExclusions(kind);
     }
 }
