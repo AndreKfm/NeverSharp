@@ -675,10 +675,8 @@ internal sealed partial class Scanner
         {
             // typescript-go's scanString (internal/scanner/scanner.go) takes a fast path over the characters none of
             // the tests below handle; for each of them the loop below would only do `pos++`.
-            while (pos < end && !IsStringSpecialCharacter(text[pos], quote))
-            {
-                pos++;
-            }
+            // Track O (O23): with SIMD (Scanner.Simd.cs).
+            pos = SkipStringCharacters(pos, quote);
 
             if (pos >= end)
             {
@@ -733,10 +731,8 @@ internal sealed partial class Scanner
             // typescript-go's scanTemplateAndSetTokenValue (internal/scanner/scanner.go) first skips the characters
             // that none of the tests below handle (`scanASCIIWhile(b != '`' && b != '$' && b != '\\' && b != '\r')`);
             // for each of them the loop below would only do `pos++`.
-            while (pos < end && !IsTemplateSpecialCharacter(text[pos]))
-            {
-                pos++;
-            }
+            // Track O (O23): with SIMD (Scanner.Simd.cs).
+            pos = SkipTemplateCharacters(pos);
 
             if (pos >= end)
             {
@@ -1419,10 +1415,8 @@ internal sealed partial class Scanner
                         // typescript-go's Scan (internal/scanner/scanner.go) consumes the run of ASCII white space and
                         // line breaks after a line break in one loop. Each of these characters would come back here or
                         // to the white space case below and do the same (pos++ and continue; the line break flag is set).
-                        while (pos < end && IsAsciiWhiteSpaceOrLineBreak(CharCodeUnchecked(pos)))
-                        {
-                            pos++;
-                        }
+                        // Track O (O23): the run found with SIMD (Scanner.Simd.cs).
+                        pos = SkipAsciiWhiteSpaceOrLineBreak(pos);
                         continue;
                     }
                     else
@@ -1598,16 +1592,8 @@ internal sealed partial class Scanner
                     // Single-line comment
                     if (CharCodeUnchecked(pos + 1) == (int)CharacterCodes.slash)
                     {
-                        pos += 2;
-
-                        while (pos < end)
-                        {
-                            if (IsLineBreak(CharCodeUnchecked(pos)))
-                            {
-                                break;
-                            }
-                            pos++;
-                        }
+                        // Track O (O23): `while (pos < end && !isLineBreak(text.charCodeAt(pos))) pos++;` with SIMD.
+                        pos = FindLineBreak(pos + 2);
 
                         commentDirectives = AppendIfCommentDirective(
                             commentDirectives,
@@ -1631,27 +1617,9 @@ internal sealed partial class Scanner
                         pos += 2;
                         var isJSDoc = CharCodeUnchecked(pos) == (int)CharacterCodes.asterisk && CharCodeUnchecked(pos + 1) != (int)CharacterCodes.slash;
 
-                        var commentClosed = false;
                         var lastLineStart = tokenStart;
-                        while (pos < end)
-                        {
-                            var ch2 = CharCodeUnchecked(pos);
-
-                            if (ch2 == (int)CharacterCodes.asterisk && CharCodeUnchecked(pos + 1) == (int)CharacterCodes.slash)
-                            {
-                                pos += 2;
-                                commentClosed = true;
-                                break;
-                            }
-
-                            pos++;
-
-                            if (IsLineBreak(ch2))
-                            {
-                                lastLineStart = pos;
-                                tokenFlags |= TokenFlags.PrecedingLineBreak;
-                            }
-                        }
+                        // Track O (O23): the loop over the body (until "*/" or the end, recording line breaks) with SIMD.
+                        var commentClosed = ScanMultiLineCommentBody(ref lastLineStart);
 
                         if (isJSDoc && ShouldParseJSDoc())
                         {
@@ -2062,11 +2030,8 @@ internal sealed partial class Scanner
             // character other than '\', the loop below would stop at the same position and take the same branch.
             if (ch <= (int)CharacterCodes.maxAsciiCharacter)
             {
-                var asciiEnd = pos;
-                while (asciiEnd < end && IsAsciiIdentifierPart(text[asciiEnd]))
-                {
-                    asciiEnd++;
-                }
+                // Track O (O23): the run of ASCII identifier characters found with SIMD.
+                var asciiEnd = SkipAsciiIdentifierParts(pos);
                 if (asciiEnd >= end || (text[asciiEnd] <= (int)CharacterCodes.maxAsciiCharacter && text[asciiEnd] != (int)CharacterCodes.backslash))
                 {
                     pos = asciiEnd;
@@ -2134,7 +2099,9 @@ internal sealed partial class Scanner
             int ch = text[start];
             if (ch >= (int)CharacterCodes.a && ch <= (int)CharacterCodes.z)
             {
-                if (TextToKeywordByRange.TryGetValue(text.AsSpan(start, len), out var keyword))
+                // Track O (O23): textToKeyword through a perfect hash and one vector compare (Scanner.Simd.cs).
+                var keyword = MatchKeyword(start, len);
+                if (keyword != SyntaxKind.Unknown)
                 {
                     tokenValue = TextRef.Source(start, len);
                     return token = keyword;
