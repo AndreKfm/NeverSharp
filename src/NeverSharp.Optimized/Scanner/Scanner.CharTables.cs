@@ -131,6 +131,34 @@ internal sealed partial class Scanner
     }
 
     /// <summary>
+    /// Track O (O24): false when the single-line comment text[<paramref name="start"/>..<paramref name="commentEnd"/>)
+    /// (from its "//"; commentEnd &lt;= the text's length) cannot match commentDirectiveRegExSingleLine
+    /// (`^\/\/\/?\s*@(ts-expect-error|ts-ignore)`), so that appendIfCommentDirective would return the directives
+    /// unchanged: after "//", an optional '/' and spaces or tabs, the comment ends, or the next character is an ASCII
+    /// character that is neither '@' nor other white space ('\t' to '\r'). True otherwise (the full test decides).
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private bool MayBeCommentDirective(int start, int commentEnd)
+    {
+        var p = start + 2;
+        if (p < commentEnd && text[p] == '/')
+        {
+            p++;
+        }
+        while (p < commentEnd && (text[p] == ' ' || text[p] == '\t'))
+        {
+            p++;
+        }
+        if (p >= commentEnd)
+        {
+            return false;
+        }
+        int ch = text[p];
+        return ch >= 128 || ch == '@' || (uint)(ch - '\t') <= '\r' - '\t';
+    }
+
+    /// <summary>
     /// textToKeyword looked up by a range of the text (Track O, O23-B: instead of the dictionary's hash and buckets, a
     /// table indexed by a hash of the first two characters, the last one and the length, which is collision-free for the
     /// keywords; a hit is confirmed by comparing the characters). <paramref name="value"/> has 2 to 12 characters.
@@ -149,10 +177,16 @@ internal sealed partial class Scanner
         return false;
     }
 
-    /// <summary>The perfect hash table of the keywords (<see cref="TryGetKeyword"/>), built from textToKeywordObj.</summary>
+    /// <summary>
+    /// The perfect hash table of the keywords (<see cref="TryGetKeyword"/>, <see cref="MatchKeyword"/>), built from
+    /// textToKeywordObj.
+    /// </summary>
     private static class KeywordTable
     {
         private const int Size = 512;
+
+        /// <summary>The characters of a keyword in <see cref="Chars"/>, zero-padded (Track O, O24).</summary>
+        internal const int Width = 16;
 
         /// <summary>The keywords in the order of textToKeywordObj.</summary>
         internal static readonly string[] Words = [.. TextToKeywordObj.Keys];
@@ -162,6 +196,41 @@ internal sealed partial class Scanner
 
         /// <summary>Per hash value: 1 + the keyword's index in <see cref="Words"/>, or 0.</summary>
         internal static readonly byte[] Slots = CreateSlots();
+
+        /// <summary>
+        /// Per slot value (1 + index): the keyword's characters at slot * <see cref="Width"/>, zero-padded; slot 0 is
+        /// empty (Track O, O24).
+        /// </summary>
+        internal static readonly ushort[] Chars = CreateChars();
+
+        /// <summary>Per slot value: the keyword's length, 0 for slot 0 (Track O, O24).</summary>
+        internal static readonly byte[] Lengths = CreateLengths();
+
+        /// <summary>Per slot value: the keyword's kind, Unknown for slot 0 (Track O, O24).</summary>
+        internal static readonly SyntaxKind[] SlotKinds = [SyntaxKind.Unknown, .. Kinds];
+
+        private static ushort[] CreateChars()
+        {
+            var chars = new ushort[(Words.Length + 1) * Width];
+            for (var i = 0; i < Words.Length; i++)
+            {
+                for (var j = 0; j < Words[i].Length; j++)
+                {
+                    chars[((i + 1) * Width) + j] = Words[i][j];
+                }
+            }
+            return chars;
+        }
+
+        private static byte[] CreateLengths()
+        {
+            var lengths = new byte[Words.Length + 1];
+            for (var i = 0; i < Words.Length; i++)
+            {
+                lengths[i + 1] = (byte)Words[i].Length;
+            }
+            return lengths;
+        }
 
         private static byte[] CreateSlots()
         {
@@ -185,26 +254,5 @@ internal sealed partial class Scanner
         {
             return ((first * 2) + (second * 2) + (last * 47) + length) & (Size - 1);
         }
-    }
-
-    /// <summary>
-    /// The end of the run of ASCII identifier parts ([A-Za-z0-9$_]) from <paramref name="pos"/>, before
-    /// <paramref name="end"/>.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private int SkipAsciiIdentifierParts(int pos)
-    {
-        var flags = AsciiCharFlags;
-        while (pos < end)
-        {
-            int ch = text[pos];
-            if (ch >= 128 || (flags[ch] & (byte)CharFlags.IdentifierPart) == 0)
-            {
-                break;
-            }
-            pos++;
-        }
-        return pos;
     }
 }

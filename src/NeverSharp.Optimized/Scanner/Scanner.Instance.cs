@@ -334,6 +334,39 @@ internal sealed partial class Scanner
     //     | NonOctalDecimalIntegerLiteral
     // LegacyOctalIntegerLiteral ::= '0' [0-7]+
     // NonOctalDecimalIntegerLiteral ::= '0' [0-7]* [89] [0-9]*
+    /// <summary>
+    /// Track O (O24): scanNumber for the common case, a decimal integer of at most 15 digits without leading zeros (or
+    /// a single `0`) after which no '.', no identifier part (digit, letter, '$', '_': no separator, exponent, bigint
+    /// suffix or identifier) and no character above ASCII follow, read as scanNumber reads (CharCodeUnchecked, so past
+    /// end within the text; the text has a NUL after its last character). scanNumber would take its fragments as one
+    /// span, find the value canonical (JsNumber.IsCanonicalNumericString) and keep it: tokenValue the span of the text,
+    /// pos after the digits, no token flags. Returns false, changing nothing, in every other case.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private bool TryScanSimpleInteger()
+    {
+        var start = pos;
+        var p = start + 1;
+        while ((uint)(text[p] - '0') <= 9u)
+        {
+            p++;
+        }
+        var length = p - start;
+        if (length > 15 || (length > 1 && text[start] == '0'))
+        {
+            return false;
+        }
+        int next = text[p];
+        if (next >= 128 || next == (int)CharacterCodes.dot || (AsciiCharFlags[next] & (byte)CharFlags.IdentifierPart) != 0)
+        {
+            return false;
+        }
+        pos = p;
+        tokenValue = TextRef.Source(start, length);
+        return true;
+    }
+
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private SyntaxKind ScanNumber()
     {
@@ -674,22 +707,12 @@ internal sealed partial class Scanner
         var start = pos;
         // Track O (O23-B): the quote is '"' or '\'' (both callers); the other one does not end the string.
         Debug.Assert(quote == (int)CharacterCodes.doubleQuote || quote == (int)CharacterCodes.singleQuote);
-        var otherQuote = quote ^ ((int)CharacterCodes.doubleQuote ^ (int)CharacterCodes.singleQuote);
-        var flags = AsciiCharFlags;
         while (true)
         {
             // typescript-go's scanString (internal/scanner/scanner.go) takes a fast path over the characters none of
-            // the tests below handle; for each of them the loop below would only do `pos++`. (Track O, O23-B: the
-            // characters it stops at, the quote, '\', LF and CR, are the table's string specials except the other quote.)
-            while (pos < end)
-            {
-                int c = text[pos];
-                if ((uint)c < 128u && (flags[c] & (byte)CharFlags.StringSpecial) != 0 && c != otherQuote)
-                {
-                    break;
-                }
-                pos++;
-            }
+            // the tests below handle; for each of them the loop below would only do `pos++`. (Track O, O24: the
+            // characters it stops at, the quote, '\', LF and CR, found by SIMD, Scanner.Simd.cs.)
+            pos = SkipStringCharacters(pos, quote);
 
             if (pos >= end)
             {
@@ -743,11 +766,8 @@ internal sealed partial class Scanner
         {
             // typescript-go's scanTemplateAndSetTokenValue (internal/scanner/scanner.go) first skips the characters
             // that none of the tests below handle (`scanASCIIWhile(b != '`' && b != '$' && b != '\\' && b != '\r')`);
-            // for each of them the loop below would only do `pos++`.
-            while (pos < end && !IsTemplateSpecialCharacter(text[pos]))
-            {
-                pos++;
-            }
+            // for each of them the loop below would only do `pos++`. (Track O, O24: by SIMD, Scanner.Simd.cs.)
+            pos = SkipTemplateCharacters(pos);
 
             if (pos >= end)
             {
@@ -1391,49 +1411,118 @@ internal sealed partial class Scanner
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SyntaxKind Scan()
     {
-        fullStartPos = pos;
-        tokenFlags = TokenFlags.None;
-        // Track O (O23-B): the common tokens by the ASCII table, in a small method: the run of ASCII white space and line
-        // breaks before the token (skipTrivia; each of them would come back to the loop of ScanToken and do `pos++`,
-        // a line break also setting PrecedingLineBreak), then an identifier or keyword that starts with an ASCII
-        // character, or a punctuator that is always one character. Everything else, from the first character none of
-        // these handles, goes to ScanToken (the loop of scanner.ts's scan), which starts at that character as the loop
-        // would after `continue`.
-        var flags = AsciiCharFlags;
+        // Track O (O23-B, O24): the common tokens by the ASCII table, in a small method, with the token state in locals
+        // until the token is known. First the trivia before the token (skipTrivia): ASCII white space and line breaks
+        // (each of them would come back to the loop of ScanToken and do `pos++`, a line break also setting
+        // PrecedingLineBreak; after a line break the run of ASCII trivia by SIMD), and single-line comments (ScanToken's
+        // case: the body to the first line break, the comment directive, `continue`). Then an identifier or keyword that
+        // starts with an ASCII character, a punctuator that is always one character, '.', '=' or a string literal, as
+        // ScanToken's cases return them. Everything else, from the first character none of these handles, goes to
+        // ScanToken (the loop of scanner.ts's scan), which starts at that character as the loop would after `continue`.
+        // (The text has a NUL after its last character, so text[p + 1] for p &lt; end reads what CharCodeUnchecked
+        // tests: the character, or the NUL where CharCodeUnchecked returns NaN; neither matches any character tested.)
         var p = pos;
-        while (p < end)
+        fullStartPos = p;
+        var limit = end;
+        var flags = TokenFlags.None;
+        var table = AsciiCharFlags;
+        if (skipTrivia)
         {
-            int ch = text[p];
-            if (ch >= 128)
+            while (p < limit)
             {
-                break;
-            }
-            var f = flags[ch];
-            if ((f & (byte)(CharFlags.WhiteSpace | CharFlags.LineBreak)) != 0)
-            {
-                if (!skipTrivia)
+                int c = text[p];
+                if (c >= 128)
                 {
                     break;
                 }
+                var f = table[c];
+                if ((f & (byte)CharFlags.WhiteSpace) != 0)
+                {
+                    p++;
+                    continue;
+                }
                 if ((f & (byte)CharFlags.LineBreak) != 0)
                 {
-                    tokenFlags |= TokenFlags.PrecedingLineBreak;
+                    flags |= TokenFlags.PrecedingLineBreak;
+                    p = SkipAsciiWhiteSpaceOrLineBreak(p + 1);
+                    continue;
                 }
-                p++;
-                continue;
+                if (c == (int)CharacterCodes.slash && text[p + 1] == (int)CharacterCodes.slash)
+                {
+                    var commentEnd = FindLineBreak(p + 2);
+                    if (MayBeCommentDirective(p, commentEnd))
+                    {
+                        // (The directive's range ends at pos.)
+                        pos = commentEnd;
+                        commentDirectives = AppendIfCommentDirective(commentDirectives, p, commentEnd, /*multiLine*/ false, p);
+                    }
+                    p = commentEnd;
+                    continue;
+                }
+                break;
             }
-            if ((f & (byte)CharFlags.IdentifierStart) != 0)
+        }
+        tokenFlags = flags;
+        if (p < limit)
+        {
+            int ch = text[p];
+            if (ch < 128)
             {
-                pos = tokenStart = p;
-                return ScanAsciiIdentifier();
+                var f = table[ch];
+                if ((f & (byte)CharFlags.IdentifierStart) != 0)
+                {
+                    tokenStart = p;
+                    var asciiEnd = SkipAsciiIdentifierParts(p + 1);
+                    pos = asciiEnd;
+                    if (asciiEnd < limit)
+                    {
+                        int next = text[asciiEnd];
+                        if (next > (int)CharacterCodes.maxAsciiCharacter || next == (int)CharacterCodes.backslash)
+                        {
+                            return ScanIdentifierRest(languageVersion);
+                        }
+                    }
+                    return GetIdentifierTokenOfRange(p, asciiEnd);
+                }
+                if ((f & (byte)CharFlags.SingleCharToken) != 0)
+                {
+                    tokenStart = p;
+                    pos = p + 1;
+                    return token = (SyntaxKind)AsciiSingleCharTokens[ch];
+                }
+                switch (ch)
+                {
+                    case (int)CharacterCodes.dot:
+                        {
+                            int next = text[p + 1];
+                            if (next != (int)CharacterCodes.dot && !IsDigit(next))
+                            {
+                                tokenStart = p;
+                                pos = p + 1;
+                                return token = SyntaxKind.DotToken;
+                            }
+                            break;
+                        }
+                    case (int)CharacterCodes.equals:
+                        {
+                            // (A conflict marker starts with seven '='.)
+                            int next = text[p + 1];
+                            if (next != (int)CharacterCodes.equals && next != (int)CharacterCodes.greaterThan)
+                            {
+                                tokenStart = p;
+                                pos = p + 1;
+                                return token = SyntaxKind.EqualsToken;
+                            }
+                            break;
+                        }
+                    case (int)CharacterCodes.doubleQuote:
+                    case (int)CharacterCodes.singleQuote:
+                        tokenStart = p;
+                        pos = p;
+                        tokenValue = ScanString();
+                        return token = SyntaxKind.StringLiteral;
+                }
             }
-            if ((f & (byte)CharFlags.SingleCharToken) != 0)
-            {
-                tokenStart = p;
-                pos = p + 1;
-                return token = (SyntaxKind)AsciiSingleCharTokens[ch];
-            }
-            break;
         }
         pos = p;
         return ScanToken();
@@ -1489,9 +1578,13 @@ internal sealed partial class Scanner
                     }
                 }
                 var len = asciiEnd - p;
-                if (len >= 2 && len <= 12 && ch >= (int)CharacterCodes.a && ch <= (int)CharacterCodes.z && TryGetKeyword(text.AsSpan(p, len), out var keyword))
+                if (len >= 2 && len <= 12 && ch >= (int)CharacterCodes.a && ch <= (int)CharacterCodes.z)
                 {
-                    return keyword;
+                    var keyword = MatchKeyword(p, len);
+                    if (keyword != SyntaxKind.Unknown)
+                    {
+                        return keyword;
+                    }
                 }
                 return SyntaxKind.Identifier;
             }
@@ -1565,10 +1658,8 @@ internal sealed partial class Scanner
                         // typescript-go's Scan (internal/scanner/scanner.go) consumes the run of ASCII white space and
                         // line breaks after a line break in one loop. Each of these characters would come back here or
                         // to the white space case below and do the same (pos++ and continue; the line break flag is set).
-                        while (pos < end && IsAsciiWhiteSpaceOrLineBreak(CharCodeUnchecked(pos)))
-                        {
-                            pos++;
-                        }
+                        // (Track O, O24: the run by SIMD.)
+                        pos = SkipAsciiWhiteSpaceOrLineBreak(pos);
                         continue;
                     }
                     else
@@ -1746,18 +1837,19 @@ internal sealed partial class Scanner
                     {
                         pos += 2;
 
-                        // (Track O, O23-B: isLineBreak by the ASCII table.)
-                        while (pos < end && !IsLineBreakFast(text[pos]))
-                        {
-                            pos++;
-                        }
+                        // (Track O, O24: the first line break by SIMD, Scanner.Simd.cs.)
+                        pos = FindLineBreak(pos);
 
-                        commentDirectives = AppendIfCommentDirective(
-                            commentDirectives,
-                            tokenStart,
-                            pos,
-                            /*multiLine*/ false,
-                            tokenStart);
+                        // (Track O, O24: most comments are rejected by the first characters, MayBeCommentDirective.)
+                        if (MayBeCommentDirective(tokenStart, pos))
+                        {
+                            commentDirectives = AppendIfCommentDirective(
+                                commentDirectives,
+                                tokenStart,
+                                pos,
+                                /*multiLine*/ false,
+                                tokenStart);
+                        }
 
                         if (skipTrivia)
                         {
@@ -1774,36 +1866,10 @@ internal sealed partial class Scanner
                         pos += 2;
                         var isJSDoc = CharCodeUnchecked(pos) == (int)CharacterCodes.asterisk && CharCodeUnchecked(pos + 1) != (int)CharacterCodes.slash;
 
-                        var commentClosed = false;
                         var lastLineStart = tokenStart;
-                        var flags = AsciiCharFlags;
-                        while (pos < end)
-                        {
-                            int ch2 = text[pos];
-
-                            // Track O (O23-B): the characters that are neither '*' nor a line break only advance (the tests
-                            // below would only do `pos++`).
-                            if ((uint)ch2 < 128u ? (flags[ch2] & (byte)CharFlags.BlockCommentSpecial) == 0 : (ch2 | 1) != (int)CharacterCodes.paragraphSeparator)
-                            {
-                                pos++;
-                                continue;
-                            }
-
-                            if (ch2 == (int)CharacterCodes.asterisk && CharCodeUnchecked(pos + 1) == (int)CharacterCodes.slash)
-                            {
-                                pos += 2;
-                                commentClosed = true;
-                                break;
-                            }
-
-                            pos++;
-
-                            if (IsLineBreak(ch2))
-                            {
-                                lastLineStart = pos;
-                                tokenFlags |= TokenFlags.PrecedingLineBreak;
-                            }
-                        }
+                        // Track O (O24): the loop over the comment's body (stop after "*/"; each line break sets
+                        // PrecedingLineBreak and lastLineStart) by SIMD in two passes, Scanner.Simd.cs.
+                        var commentClosed = ScanMultiLineCommentBody(ref lastLineStart);
 
                         if (isJSDoc && ShouldParseJSDoc())
                         {
@@ -1890,6 +1956,10 @@ internal sealed partial class Scanner
                 case (int)CharacterCodes._7:
                 case (int)CharacterCodes._8:
                 case (int)CharacterCodes._9:
+                    if (TryScanSimpleInteger())
+                    {
+                        return token = SyntaxKind.NumericLiteral;
+                    }
                     return token = ScanNumber();
                 case (int)CharacterCodes.colon:
                     pos++;
@@ -2221,17 +2291,6 @@ internal sealed partial class Scanner
     }
 
     /// <summary>
-    /// Track O (O23-B): <see cref="ScanIdentifier"/> from <see cref="Scan"/> for an identifier whose first character, at
-    /// pos, is an ASCII identifier start.
-    /// </summary>
-    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private SyntaxKind ScanAsciiIdentifier()
-    {
-        pos++;
-        return ScanIdentifierAfterAsciiStart(languageVersion);
-    }
-
-    /// <summary>
     /// The rest of <see cref="ScanIdentifier"/> after an ASCII first character (pos after it). Fast path for simple ASCII
     /// identifiers, as typescript-go's scanIdentifier (internal/scanner/scanner.go): when the identifier consists of ASCII
     /// identifier characters and ends at the end or at an ASCII character other than '\', the loop of scanIdentifier
@@ -2302,19 +2361,20 @@ internal sealed partial class Scanner
     {
         // Reserved words are between 2 and 12 characters long and start with a lowercase letter
         var len = end - start;
+        tokenValue = TextRef.Source(start, len);
         if (len >= 2 && len <= 12)
         {
             int ch = text[start];
             if (ch >= (int)CharacterCodes.a && ch <= (int)CharacterCodes.z)
             {
-                if (TryGetKeyword(text.AsSpan(start, len), out var keyword))
+                // (Track O, O24: the keyword's characters compared by SIMD, Scanner.Simd.cs.)
+                var keyword = MatchKeyword(start, len);
+                if (keyword != SyntaxKind.Unknown)
                 {
-                    tokenValue = TextRef.Source(start, len);
                     return token = keyword;
                 }
             }
         }
-        tokenValue = TextRef.Source(start, len);
         return token = SyntaxKind.Identifier;
     }
 
