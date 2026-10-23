@@ -53,3 +53,16 @@ Node objects together are roughly half of the bytes.
 3. **O7 node lists** as ranges in an index arena (lists and their growth).
 4. **O1 file reading and decoding** (the byte arrays and the I/O share).
 5. Then the scanner steps O2–O4 and O8 (parallel scheduling), as far as the budget allows.
+
+## Track O after O9 (2026-10-23)
+
+Driver `parse-cs-optimized-jit-ws --single` on the vscode file list repeated four times (46,896 files, 13,448 samples), profile `dotnet-common,dotnet-sampled-thread-time`; summary `node harness/profile/hot-paths.mjs artifacts/profile/o9-vscode4-cpu.speedscope.json`. Caveat: EventPipe's sampler stops managed threads at safe points, while threads in native calls are sampled where they are, so native I/O and GC polls (`PollGC`) are over-represented; the AOT probes in `results/track-o/probes/io/NOTE.md` put reading at about 15 % of single-threaded wall-clock, not the 39 % this profile shows.
+
+| Share of samples | Where |
+|---:|---|
+| 39 % | reading (`SourceText.ReadNative`; file open 11 %, path normalization `PathHelper.Normalize` 6 %) — over-represented, see above |
+| 12 % | scanner self time (`Scan` 5.9 %, `ScanIdentifier` 5.9 %), 14.5 % inclusive; about a quarter of the parse samples |
+| 6 % | side table of rare fields (`NodeStore.AddSide`): `Dictionary` growth and the GC polls under it, reached from common node kinds (`CreateParameterDeclaration`, `CreateBasePropertyAccessExpression`, `CreateArrowFunction`, `CreateCallExpression`); the per-kind placement puts fields there that are not rare for those kinds |
+| 9.6 % | speculation (`SpeculationHelper`, inclusive) |
+| 1.9 % | `TextTable.Intern` |
+| rest | spread over the grammar (`ParsePropertyAccessExpressionRest` 2.6 %, `ParseCallExpressionRest` 1.9 %, `NodeStore.Create` 1.6 %, …) |
