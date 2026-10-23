@@ -9,7 +9,8 @@
 // for the UTF-16 byte order marks Encoding.Unicode / Encoding.BigEndianUnicode into the destination span (the same
 // replacement of lone surrogates as the reference decode). No byte[] and no string per file.
 //
-// Where the text lives: a parse's text is NativeText, UTF-16 in memory from NativeMemory.Alloc, owned by the parse
+// Where the text lives: a parse's text is NativeText, UTF-16 in a range of the reading thread's character slab (step
+// O9, variant C: Arena/Slab.cs; memory from NativeMemory.Alloc while a parse of the thread is open), owned by the parse
 // result (the store's TextTable and the SourceFile node) and released by it (SourceFile.Release), with a finalizer as
 // the backstop. The scanner and the text table read it through SourceChars (pointer and length). SourceText.Read, the
 // tool contract (the reader check), decodes with the same code into a managed array, so that a span of it keeps it alive.
@@ -63,7 +64,13 @@ internal readonly struct SourceText
         {
             var source = new ReadOnlySpan<byte>(bytes, count);
             var capacity = MaxChars(source);
-            // One more character: a terminating NUL after the text.
+            var local = ThreadSlabs.Local;
+            if (local.Active is null)
+            {
+                // Track O (O9, variant C): the text goes into the thread's character slab, before the ranges of the parse.
+                return local.DecodeText(source, capacity);
+            }
+            // (A parse of the thread is open: memory of the text's own.) One more character: a terminating NUL after the text.
             var chars = (char*)NativeMemory.Alloc((nuint)capacity + 1, sizeof(char));
             int length;
             try
@@ -103,7 +110,7 @@ internal readonly struct SourceText
     private static bool IsUtf16(ReadOnlySpan<byte> bytes) => bytes.Length >= 2 && ((bytes[0] == 0xFE && bytes[1] == 0xFF) || (bytes[0] == 0xFF && bytes[1] == 0xFE));
 
     // sys.ts readFile's decoding into the destination (at least MaxChars long); returns the number of code units.
-    private static int Decode(ReadOnlySpan<byte> bytes, Span<char> destination)
+    internal static int Decode(ReadOnlySpan<byte> bytes, Span<char> destination)
     {
         if (bytes.Length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF)
         {
@@ -213,6 +220,8 @@ internal sealed unsafe class NativeText
     private int length;
     private GCHandle pin;
     private readonly string? text;
+    // Track O (O9, variant C): the slab the characters are in (held once by this text), or null.
+    private readonly Slab? slab;
 
     /// <summary>The empty text (never released).</summary>
     internal static readonly NativeText Empty = new(string.Empty);
@@ -221,6 +230,14 @@ internal sealed unsafe class NativeText
     {
         address = (nint)chars;
         this.length = length;
+    }
+
+    /// <summary>Characters in a range of <paramref name="slab"/>, which the text holds once (dropped by <see cref="Release"/>).</summary>
+    internal NativeText(char* chars, int length, Slab slab)
+    {
+        address = (nint)chars;
+        this.length = length;
+        this.slab = slab;
     }
 
     private NativeText(string text)
@@ -277,6 +294,10 @@ internal sealed unsafe class NativeText
         if (pin.IsAllocated)
         {
             pin.Free();
+        }
+        else if (slab is not null)
+        {
+            slab.RemoveHolder();
         }
         else
         {

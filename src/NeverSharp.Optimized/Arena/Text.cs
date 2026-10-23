@@ -194,13 +194,15 @@ internal readonly struct TextOrList : IEquatable<TextOrList>
 /// the heads of their chains.
 /// </para>
 /// <para>
-/// Sizing and lifetime: the table of a parse (<see cref="UsePool"/>) takes its arena and hash table arrays from the pool
-/// the node store uses (NodeStore.Scratch, shared by all threads) while the parse runs. <see cref="Seal"/>, at the end
-/// of the parse, moves the arena's characters and the interned handles (TypeScript's `identifiers`) into arrays of the
-/// exact size and gives the pooled arrays back; the hash table is rebuilt only if something interns afterwards.
+/// Memory and lifetime (step O9, variant C): the arena of a parse's table (<see cref="UseSlabs"/>) is a range of the
+/// thread's character slab, as the node records are ranges of its record slab (NodeStore.cs); the hash table is the
+/// thread's, lent to the table while the parse runs. <see cref="Seal"/>, at the end of the parse, writes the interned
+/// handles (TypeScript's `identifiers`) after the arena's characters, commits the range, clears the hash table's used
+/// buckets (not the whole table) and gives it back to the thread; a hash table is rebuilt only if something interns
+/// afterwards. Other tables (a scanner's own) keep their arena and hash table in memory of their own.
 /// </para>
 /// </summary>
-internal sealed class TextTable
+internal sealed unsafe class TextTable
 {
     private struct Entry
     {
@@ -209,21 +211,42 @@ internal sealed class TextTable
         public TextRef Text;
     }
 
+    // A hash table of the thread (the arrays a parse's table uses until Seal): buckets all zero while it is not lent.
+    private sealed class InternTable
+    {
+        public int[] Buckets = new int[1024];
+        public Entry[] Entries = new Entry[1024];
+    }
+
+    [ThreadStatic]
+    private static InternTable? threadTable;
+
     // The source text (step O1, variant C: native memory the parse result owns) and its characters.
     private NativeText owner;
     private SourceChars source;
-    private char[] chars = [];
-    private int charCount;
 
-    // Interning: buckets hold entry numbers (1-based, 0 = empty); entries[0] is unused.
+    // The arena: charCapacity characters from chars on (a range of a character slab, or memory of the table's own).
+    private char* chars;
+    private int charCapacity;
+    private int charCount;
+    private SlabRange charRange;
+
+    // A parse's table: the thread whose slabs it writes to, and the store whose parse owns them (ThreadSlabs.Active).
+    private ThreadSlabs? slabs;
+    private object? slabsOwner;
+
+    // Interning: buckets hold entry numbers (1-based, 0 = empty); entries[0] is unused. lent: the thread's table the
+    // arrays belong to (until Seal).
     private int[]? buckets;
     private Entry[]? entries;
     private int entryCount;
+    private InternTable? lent;
 
-    // The interned handles in the order they were added, after Seal (the hash table is gone then).
-    private TextRef[]? sealedInterned;
+    // The interned handles in the order they were added, after Seal (the hash table is gone then): entryCount of them,
+    // after the arena's characters.
+    private TextRef* sealedInterned;
 
-    // Whether the arrays come from the pool (a parse's table until Seal).
+    // Whether this is a parse's table that is not sealed yet.
     private bool pooled;
 
     public TextTable(NativeText source)
@@ -260,9 +283,39 @@ internal sealed class TextTable
         get => entryCount;
     }
 
-    /// <summary>Takes the arrays from the pool until <see cref="Seal"/> (the table of a parse).</summary>
-    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal void UsePool() => pooled = true;
+    /// <summary>
+    /// The table of a parse: the arena is a range of the thread's character slab and the hash table the thread's, until
+    /// <see cref="Seal"/>; <paramref name="store"/> is the store whose parse owns the thread's slabs.
+    /// </summary>
+    internal void UseSlabs(ThreadSlabs local, object store, int textLength)
+    {
+        pooled = true;
+        slabs = local;
+        slabsOwner = store;
+        chars = (char*)charRange.Open(local, SlabKind.Chars, (((long)textLength / 8) + 256) * sizeof(char));
+        charCapacity = (int)(charRange.Capacity / sizeof(char));
+    }
+
+    // The thread whose slabs the arena grows into: the table's parse still owns them.
+    private ThreadSlabs? ActiveSlabs
+    {
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+        get => pooled && slabs is not null && ReferenceEquals(slabs.Active, slabsOwner) ? slabs : null;
+    }
+
+    /// <summary>Drops the hold on the character slab and frees the source text (the result is released).</summary>
+    internal void Release()
+    {
+        owner.Release();
+        chars = null;
+        charCapacity = 0;
+        charCount = 0;
+        sealedInterned = null;
+        entryCount = 0;
+        buckets = null;
+        entries = null;
+        charRange.Release();
+    }
 
     /// <summary>Starts over with another source text (a scanner's own table, reused from text to text).</summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
@@ -279,37 +332,51 @@ internal sealed class TextTable
     }
 
     /// <summary>
-    /// The end of the parse: the arena's characters and the interned handles move into arrays of the exact size, and the
-    /// pooled arrays go back to the pool.
+    /// The end of the parse: the interned handles are written after the arena's characters, the arena's range is
+    /// committed, and the hash table goes back to the thread with its used buckets cleared.
     /// </summary>
-    [NoAllocUnchecked("per-file result: the exact arrays of characters and interned texts the finished tree keeps")]
+    [NoAllocUnchecked("per-file result: the slab range of characters and interned texts the finished tree keeps")]
     internal void Seal()
     {
         if (!pooled)
         {
             return;
         }
-        pooled = false;
-        var oldChars = chars;
-        chars = charCount == 0 ? [] : oldChars.AsSpan(0, charCount).ToArray();
-        if (oldChars.Length != 0)
-        {
-            NodeStore.Scratch<char>.Return(oldChars);
-        }
+        var committed = charCount;
         if (entries is not null)
         {
-            var interned = new TextRef[entryCount];
-            for (var i = 0; i < interned.Length; i++)
+            // The interned handles, at a multiple of 4 characters (8 bytes) after the characters.
+            var at = (charCount + 3) & ~3;
+            committed = at + (entryCount * 4);
+            if (committed > charCapacity)
             {
-                interned[i] = entries[i + 1].Text;
+                GrowChars(committed);
+            }
+            var interned = (TextRef*)(chars + at);
+            var e = entries;
+            var b = buckets!;
+            var mask = b.Length - 1;
+            for (var i = 1; i <= entryCount; i++)
+            {
+                interned[i - 1] = e[i].Text;
+                b[e[i].Hash & mask] = 0;
             }
             sealedInterned = interned;
-            NodeStore.Scratch<int>.Return(buckets!);
-            NodeStore.Scratch<Entry>.Return(entries);
+            if (lent is not null)
+            {
+                lent.Buckets = b;
+                lent.Entries = e;
+                threadTable ??= lent;
+                lent = null;
+            }
             buckets = null;
             entries = null;
-            // (entryCount stays: the number of interned texts, now in sealedInterned.)
+            // (entryCount stays: the number of interned texts, now at sealedInterned.)
         }
+        charRange.Commit((long)committed * sizeof(char), ActiveSlabs, SlabKind.Chars);
+        // Characters added later move the arena to memory of the table's own (the interned handles stay where they are).
+        charCapacity = charCount;
+        pooled = false;
     }
 
     /// <summary>The characters of a text (empty for <see cref="TextRef.None"/>).</summary>
@@ -321,7 +388,7 @@ internal sealed class TextTable
         {
             return default;
         }
-        return text.Start >= 0 ? source.AsSpan(text.Start, text.Size - 1) : new ReadOnlySpan<char>(chars, ~text.Start, text.Size - 1);
+        return text.Start >= 0 ? source.AsSpan(text.Start, text.Size - 1) : new ReadOnlySpan<char>(chars + ~text.Start, text.Size - 1);
     }
 
     /// <summary>The text as a string (null for <see cref="TextRef.None"/>): where TypeScript's code needs a string object.</summary>
@@ -380,7 +447,7 @@ internal sealed class TextTable
             return TextRef.Empty;
         }
         var at = Reserve(value.Length);
-        value.CopyTo(chars.AsSpan(at));
+        value.CopyTo(new Span<char>(chars + at, value.Length));
         charCount = at + value.Length;
         return TextRef.Arena(at, value.Length);
     }
@@ -420,35 +487,30 @@ internal sealed class TextTable
     internal int Reserve(int count)
     {
         var at = charCount;
-        if (count > chars.Length - at)
+        if (count > charCapacity - at)
         {
             GrowChars(at + count);
         }
         return at;
     }
 
-    [NoAllocUnchecked("arena growth: the character arena doubles")]
+    [NoAllocUnchecked("arena growth: the character range moves to a larger slab")]
     private void GrowChars(int needed)
     {
-        var length = Math.Max(Math.Max(chars.Length * 2, 256), needed);
-        var grown = pooled ? NodeStore.Scratch<char>.Rent(length) : new char[length];
-        chars.AsSpan(0, charCount).CopyTo(grown);
-        // (Nothing holds a span of the arena while room is made: Add's value is never one, and the builder copies arena
-        // characters by index. So a pooled array can go back to the pool at once.)
-        if (pooled && chars.Length != 0)
-        {
-            NodeStore.Scratch<char>.Return(chars);
-        }
-        chars = grown;
+        // A parse's table grows into the thread's next character slab while its parse owns the thread's slabs, other
+        // tables (and a parse's table after Seal) into memory of their own. The range it leaves stays held.
+        var needs = Math.Max(Math.Max((long)charCapacity * 2, 256), needed);
+        chars = (char*)charRange.Grow((long)charCount * sizeof(char), needs * sizeof(char), ActiveSlabs, SlabKind.Chars);
+        charCapacity = (int)Math.Min(charRange.Capacity / sizeof(char), int.MaxValue);
     }
 
     /// <summary>The arena's characters from <paramref name="at"/> (after <see cref="Reserve"/>), for writing.</summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal Span<char> ArenaSpan(int at, int count) => chars.AsSpan(at, count);
+    internal Span<char> ArenaSpan(int at, int count) => new(chars + at, count);
 
     /// <summary>Copies characters of the arena to a place after them (after <see cref="Reserve"/>).</summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal void CopyWithin(int from, int to, int count) => Array.Copy(chars, from, chars, to, count);
+    internal void CopyWithin(int from, int to, int count) => new ReadOnlySpan<char>(chars + from, count).CopyTo(new Span<char>(chars + to, count));
 
     /// <summary>Sets the arena's fill level (after writing reserved characters).</summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
@@ -497,7 +559,7 @@ internal sealed class TextTable
     {
         if (entries is null)
         {
-            return sealedInterned ?? [];
+            return sealedInterned == null ? [] : new ReadOnlySpan<TextRef>(sealedInterned, entryCount).ToArray();
         }
         var interned = new TextRef[entryCount];
         for (var i = 0; i < interned.Length; i++)
@@ -507,28 +569,36 @@ internal sealed class TextTable
         return interned;
     }
 
-    // The hash table: pooled for a parse (power-of-two lengths from 4096 on), rebuilt from the sealed handles if
-    // something interns after Seal.
-    [NoAllocUnchecked("arena growth: the interning table's first arrays, from the pool")]
+    // The hash table: the thread's for a parse (lent until Seal, its buckets all zero), rebuilt in arrays of the
+    // table's own from the sealed handles if something interns after Seal.
+    [NoAllocUnchecked("arena growth: the interning table's first arrays, lent by the thread or new")]
     private void CreateHashTable()
     {
+        if (pooled)
+        {
+            var table = threadTable ?? new InternTable();
+            threadTable = null;
+            lent = table;
+            buckets = table.Buckets;
+            entries = table.Entries;
+            entryCount = 0;
+            return;
+        }
         var previous = sealedInterned;
+        var previousCount = previous == null ? 0 : entryCount;
         var size = 256;
-        while (previous is not null && previous.Length > size - (size >> 2))
+        while (previousCount > size - (size >> 2))
         {
             size *= 2;
         }
-        buckets = pooled ? NodeStore.Scratch<int>.Rent(size) : new int[size];
-        Array.Clear(buckets);
-        entries = pooled ? NodeStore.Scratch<Entry>.Rent(buckets.Length) : new Entry[buckets.Length];
+        buckets = new int[size];
+        entries = new Entry[size];
         entryCount = 0;
         sealedInterned = null;
-        if (previous is not null)
+        for (var i = 0; i < previousCount; i++)
         {
-            foreach (var text in previous)
-            {
-                AddEntry(Hash(Span(text)), text);
-            }
+            var text = previous[i];
+            AddEntry(Hash(Span(text)), text);
         }
     }
 
@@ -553,15 +623,12 @@ internal sealed class TextTable
         bucket = index;
     }
 
+    // (A lent table keeps the grown arrays: they go back to the thread with Seal.)
     [NoAllocUnchecked("arena growth: the interning table's entry array doubles")]
     private void GrowEntries(int index)
     {
-        var grown = pooled ? NodeStore.Scratch<Entry>.Rent(entries!.Length * 2) : new Entry[entries!.Length * 2];
+        var grown = new Entry[entries!.Length * 2];
         entries.AsSpan(0, index).CopyTo(grown);
-        if (pooled)
-        {
-            NodeStore.Scratch<Entry>.Return(entries);
-        }
         entries = grown;
     }
 
@@ -570,18 +637,13 @@ internal sealed class TextTable
     [NoAllocUnchecked("arena growth: the interning table's bucket array doubles")]
     private void Rehash(int size)
     {
-        var grown = pooled ? NodeStore.Scratch<int>.Rent(size) : new int[size];
-        Array.Clear(grown);
+        var grown = new int[size];
         var e = entries!;
         for (var i = 1; i < entryCount; i++)
         {
             ref var bucket = ref grown[e[i].Hash & (grown.Length - 1)];
             e[i].Next = bucket;
             bucket = i;
-        }
-        if (pooled)
-        {
-            NodeStore.Scratch<int>.Return(buckets!);
         }
         buckets = grown;
     }

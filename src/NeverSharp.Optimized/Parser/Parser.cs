@@ -50,17 +50,33 @@ internal sealed class CreateSourceFileOptions
 internal sealed partial class Parser
 {
     // Instances are reused across parses, as TypeScript reuses its singleton namespace; to parse on many threads
-    // at once each parse takes its own instance from this pool.
-    // typescript-go counterpart: parserPool, getParser, putParser (internal/parser/parser.go).
+    // at once each parse takes its own instance: the one the thread keeps, or (a thread that parses while it already
+    // has one in use) one from this pool.
+    // typescript-go counterpart: parserPool, getParser, putParser (internal/parser/parser.go; sync.Pool caches per
+    // processor). Track O (O9): the per-thread instance first, so a parse takes no lock.
     private static readonly ConcurrentBag<Parser> ParserPool = [];
+
+    [ThreadStatic]
+    private static Parser? threadParser;
 
     private static Parser GetParser()
     {
-        return ParserPool.TryTake(out var parser) ? parser : new Parser();
+        var parser = threadParser;
+        if (parser is not null)
+        {
+            threadParser = null;
+            return parser;
+        }
+        return ParserPool.TryTake(out parser) ? parser : new Parser();
     }
 
     private static void PutParser(Parser parser)
     {
+        if (threadParser is null)
+        {
+            threadParser = parser;
+            return;
+        }
         ParserPool.Add(parser);
     }
 
@@ -312,7 +328,7 @@ internal sealed partial class Parser
         }
         finally
         {
-            store.Texts.Seal(); // Track O (O5a): the texts move into exact arrays, the pooled arrays go back
+            store.Commit(); // Track O (O9): the store's slab ranges are committed, the thread's next parse starts after them
             parser.UseStore(null!); // the result keeps the store, the pooled parser does not
             PutParser(parser);
         }
@@ -356,7 +372,7 @@ internal sealed partial class Parser
         }
         finally
         {
-            store.Texts.Seal();
+            store.Commit();
             parser.UseStore(null!);
             PutParser(parser);
         }

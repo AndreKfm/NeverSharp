@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Original code (not ported): Track O's node arena (pre-registration §5.4), step O6b variant A's layout (compact records).
 
-using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using NeverSharp.Generated;
@@ -27,13 +26,16 @@ namespace NeverSharp.Optimized;
 /// side table keyed by node and field, so they cost nothing on the nodes that lack them.
 /// </para>
 /// <para>
-/// Sizing: while the parse runs, the store fills two scratch arrays rented from a pool shared by all threads (the
-/// counterpart of typescript-go's pooled node arenas, internal/ast/ast.go), sized from the text length and grown by
-/// doubling when a file needs more. When the parser creates the SourceFile node, the last node of a parse, the store
-/// copies its records into arrays of the exact size and returns the scratch arrays to the pool; nodes created after
-/// that grow the exact arrays as needed. So a parse allocates its final arrays once, without spare capacity or
-/// growth garbage. The final int array lives on the pinned object heap: it outlives the parse like the tree it
-/// holds, and the collector neither copies it from generation to generation nor scans it (it holds no references).
+/// Memory (step O9, variant C: per-thread slabs, Slab.cs): the records, the list headers, the list elements and the
+/// arena characters of a parse are written straight into large slabs of native memory that the parsing thread fills
+/// parse after parse (the counterpart of typescript-go's pooled node arenas, internal/ast/ast.go, which hand out
+/// nodes from large blocks). A store's records are one range of the thread's current record slab, and a node handle
+/// is an offset from the range's start, so a range that outgrows its slab moves to a new slab without changing any
+/// handle. When the parse is committed (<see cref="Commit"/>), the ranges shrink to what is in use and the thread's
+/// next parse starts after them: no copy and no array per file. The result keeps its slabs alive (a hold on each,
+/// dropped by <see cref="Release"/>; the slab's finalizer is the backstop). Nodes created after the commit move the
+/// grown arena to memory of the store's own. Object slots (references) live in a managed slot array the thread fills
+/// the same way.
 /// </para>
 /// <para>
 /// Speculative parsing discards the nodes (and lists and texts) it created by truncating the arrays to a <see cref="Mark"/> taken
@@ -43,7 +45,7 @@ namespace NeverSharp.Optimized;
 /// Node lists are handles into the list store of the same parse (NodeList.cs, step O7a); list fields are int slots.
 /// </para>
 /// </summary>
-internal sealed partial class NodeStore
+internal sealed unsafe partial class NodeStore
 {
     // Kind word: kind in bits 0..15, boolean fields in bits 16..30 (generated), side table entries in bit 31.
     private const int KindMask = 0xFFFF;
@@ -97,33 +99,43 @@ internal sealed partial class NodeStore
         public object? Ref;
     }
 
-    private int[] data;
+    // The records: dataCapacity ints from data on (the store's range of a record slab); used of them are in use.
+    private int* data;
+    private int dataCapacity;
     private int used;
-    private object?[] refs;
+    private SlabRange dataRange;
+
+    // The object slots: refCapacity slots of refArray from refBase on; refCount of them are in use.
+    private object?[] refArray = [];
+    private int refBase;
+    private int refCapacity;
     private int refCount;
-    // The highest refCount since the object array was taken from the pool: the slots to clear before giving it back.
-    private int refMax;
+
     private int count;
-    // Whether data and refs are scratch arrays of the pool (until the SourceFile node is created).
-    private bool pooled;
+
+    // The thread whose slabs this store's parse writes to, until the parse is committed (null afterwards, and for a
+    // store whose slabs another store of the thread took over, see IsActive).
+    private ThreadSlabs? owner;
 
     // Rare fields, keyed by (node << 8) | field id; sideLog lists the keys in the order they were added (truncation).
     private Dictionary<long, SideValue>? side;
     private long[]? sideLog;
     private int sideLogCount;
 
-    /// <summary>A store for a source text (scratch arrays from the pool; exact arrays when the parse ends).</summary>
+    /// <summary>A store for a source text, written into the slabs of the current thread until <see cref="Commit"/>.</summary>
     public NodeStore(NativeText sourceText)
     {
         var textLength = sourceText.Length;
+        var local = ThreadSlabs.Local;
+        local.TakeOver(this);
+        owner = local;
         Texts = new TextTable(sourceText);
-        Texts.UsePool();
-        // From the tuning corpus: 0.56 ints and 0.036 object slots per character on average since node lists are
-        // handles in int slots (O7a) (the pool rounds up to a power of two; a file that needs more grows its scratch
-        // arrays).
-        data = Scratch<int>.Rent((textLength / 3 * 2) + 64);
-        refs = Scratch<object?>.Rent((textLength / 20) + 16);
-        pooled = true;
+        Texts.UseSlabs(local, this, textLength);
+        // From the tuning corpus: 0.56 ints per character on average since node lists are handles in int slots (O7a);
+        // the range reaches to the end of the slab anyway, the estimate only decides whether a new slab is started.
+        data = (int*)dataRange.Open(local, SlabKind.Records, (((long)textLength / 3 * 2) + 64) * sizeof(int));
+        dataCapacity = (int)(dataRange.Capacity / sizeof(int));
+        OpenRefs(local);
         // Record 0 is Node.None.
         data[0] = (int)SyntaxKind.Unknown;
         data[FlagsWord] = 0;
@@ -132,7 +144,69 @@ internal sealed partial class NodeStore
         data[TransformFlagsWord] = 0;
         used = HeaderWords;
         count = 1;
-        InitLists(textLength);
+        InitLists(local, textLength);
+    }
+
+    /// <summary>Whether this store's parse still writes to the thread's slabs (it owns them and is not committed).</summary>
+    private bool IsActive
+    {
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+        get => owner is not null && ReferenceEquals(owner.Active, this);
+    }
+
+    // The object slots of the store: the rest of the thread's slot array.
+    private void OpenRefs(ThreadSlabs local)
+    {
+        local.EnsureRefs();
+        refArray = local.Refs!;
+        refBase = local.RefsUsed;
+        refCapacity = refArray.Length - refBase;
+    }
+
+    /// <summary>The object slots of the store (indices relative to its range).</summary>
+    private Span<object?> refs
+    {
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+        get => new(refArray, refBase, refCapacity);
+    }
+
+    /// <summary>
+    /// The end of the parse (Parser.CreateSourceFile): the ranges shrink to what is in use and the thread's next parse
+    /// starts after them; nodes created afterwards move the arena they grow to memory of the store's own.
+    /// </summary>
+    internal void Commit()
+    {
+        Seal(used, refCount);
+        SealLists();
+        Texts.Seal();
+        if (IsActive)
+        {
+            owner!.Active = null;
+        }
+        owner = null;
+    }
+
+    /// <summary>
+    /// Drops the store's holds on its slabs and frees its source text (SourceFile.Release): the caller is done with the
+    /// tree, which must not be read afterwards.
+    /// </summary>
+    internal void Release()
+    {
+        if (owner is not null)
+        {
+            Commit();
+        }
+        Texts.Release();
+        data = null;
+        dataCapacity = 0;
+        used = 0;
+        dataRange.Release();
+        ReleaseLists();
+        refs.Slice(0, refCount).Clear();
+        refArray = [];
+        refBase = 0;
+        refCapacity = 0;
+        refCount = 0;
     }
 
     /// <summary>The texts of the parse: source text, character arena and interned identifiers (Text.cs, step O5a).</summary>
@@ -149,16 +223,12 @@ internal sealed partial class NodeStore
         var k = (int)kind;
         int size = RecordSizes[k];
         int refSize = RefCounts[k];
-        if (kind == SyntaxKind.SourceFile && pooled)
-        {
-            Seal(size, refSize);
-        }
         var h = used;
-        if (size > data.Length - h)
+        if (size > dataCapacity - h)
         {
             GrowData(h + size);
         }
-        var record = data.AsSpan(h, size);
+        var record = data + h;
         record[0] = k;
         record[FlagsWord] = 0;
         record[PosWord] = -1;
@@ -168,21 +238,17 @@ internal sealed partial class NodeStore
         if (refSize != 0)
         {
             var r = refCount;
-            if (refSize > refs.Length - r)
+            if (refSize > refCapacity - r)
             {
                 GrowRefs(r + refSize);
             }
             record[RefBaseWord] = r;
             first++;
-            // Pooled arrays and slots of discarded nodes (reused after a truncation) may hold old references.
-            refs.AsSpan(r, refSize).Clear();
+            // Slots of discarded nodes (reused after a truncation) may hold old references.
+            refs.Slice(r, refSize).Clear();
             refCount = r + refSize;
-            if (refCount > refMax)
-            {
-                refMax = refCount;
-            }
         }
-        for (var i = first; i < record.Length; i++)
+        for (var i = first; i < size; i++)
         {
             record[i] = 0;
         }
@@ -240,57 +306,52 @@ internal sealed partial class NodeStore
         sideLogCount = kept;
     }
 
-    /// <summary>Moves the records into arrays of the exact size (plus the SourceFile record) and returns the scratch arrays.</summary>
-    [NoAllocUnchecked("per-file result: the exact arrays the finished tree keeps")]
-    private void Seal(int size, int refSize)
+    /// <summary>
+    /// Commits the record range (<paramref name="words"/> ints) and the object slot range (<paramref name="slots"/>) of
+    /// the finished parse: the thread's next parse starts after them, and later nodes grow memory of the store's own.
+    /// </summary>
+    [NoAllocUnchecked("per-file result: the slab ranges the finished tree keeps")]
+    private void Seal(int words, int slots)
     {
-        var exact = GC.AllocateUninitializedArray<int>(used + size, pinned: true);
-        Array.Copy(data, exact, used);
-        var exactRefs = new object?[refCount + refSize];
-        Array.Copy(refs, exactRefs, refCount);
-        ReturnScratch();
-        data = exact;
-        refs = exactRefs;
-        pooled = false;
-        SealLists();
+        var local = IsActive ? owner : null;
+        dataRange.Commit((long)words * sizeof(int), local, SlabKind.Records);
+        dataCapacity = words;
+        if (local is not null && ReferenceEquals(local.Refs, refArray))
+        {
+            local.RefsUsed = refBase + slots;
+        }
+        refCapacity = slots;
     }
 
-    /// <summary>Gives the scratch arrays back to the pool, without the references this store wrote.</summary>
-    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private void ReturnScratch()
-    {
-        refs.AsSpan(0, refMax).Clear();
-        Scratch<object?>.Return(refs);
-        Scratch<int>.Return(data);
-    }
-
-    [NoAllocUnchecked("arena growth: the record array doubles")]
+    [NoAllocUnchecked("arena growth: the record range moves to a larger slab")]
     private void GrowData(int needed)
     {
-        var length = Math.Max(data.Length * 2, needed);
-        var grown = pooled ? Scratch<int>.Rent(length) : GC.AllocateUninitializedArray<int>(length);
-        Array.Copy(data, grown, used);
-        if (pooled)
-        {
-            Scratch<int>.Return(data);
-        }
-        data = grown;
+        data = (int*)dataRange.Grow((long)used * sizeof(int), (long)needed * sizeof(int), IsActive ? owner : null, SlabKind.Records);
+        dataCapacity = (int)(dataRange.Capacity / sizeof(int));
     }
 
-    [NoAllocUnchecked("arena growth: the object slot array doubles")]
+    [NoAllocUnchecked("arena growth: the object slots move to a new slot array")]
     private void GrowRefs(int needed)
     {
-        var length = Math.Max(refs.Length * 2, needed);
-        var grown = pooled ? Scratch<object?>.Rent(length) : new object?[length];
-        Array.Copy(refs, grown, refCount);
-        if (pooled)
+        var length = Math.Max(Math.Max(refCapacity * 2, needed), 16);
+        object?[] grown;
+        if (IsActive)
         {
-            refs.AsSpan(0, refMax).Clear();
-            Scratch<object?>.Return(refs);
-            // The new array may hold old references beyond refCount; Create clears the slots it hands out.
-            refMax = refCount;
+            grown = new object?[Math.Max(length, ThreadSlabs.RefSlabLength)];
+            owner!.Refs = grown;
+            owner.RefsUsed = 0;
         }
-        refs = grown;
+        else
+        {
+            grown = new object?[length];
+        }
+        var old = refs.Slice(0, refCount);
+        old.CopyTo(grown);
+        // The old slots no longer keep the objects alive.
+        old.Clear();
+        refArray = grown;
+        refBase = 0;
+        refCapacity = grown.Length;
     }
 
     //// Base fields (utilities.ts: function Node).
@@ -416,58 +477,5 @@ internal sealed partial class NodeStore
     private static void ThrowNoField(int kindWord, string field)
     {
         throw new InvalidOperationException($"{(SyntaxKind)(kindWord & KindMask)} has no field {field}");
-    }
-
-    /// <summary>
-    /// The pool of scratch arrays, shared by all threads: power-of-two lengths from 2^12 on, a few lock-free slots
-    /// per length. Unlike a per-thread cache it keeps no more arrays than parses ran at the same time, and a thread
-    /// that once parsed a large file does not hold a large array for itself.
-    /// </summary>
-    internal static class Scratch<T>
-    {
-        private const int MinShift = 12;
-        private const int Classes = 31 - MinShift;
-        private const int SlotsPerClass = 64;
-
-        private static readonly T[]?[] Slots = new T[]?[Classes * SlotsPerClass];
-
-        /// <summary>An array of at least <paramref name="minimumLength"/> elements (contents undefined).</summary>
-        public static T[] Rent(int minimumLength)
-        {
-            var c = ClassOf(minimumLength);
-            if (c >= Classes)
-            {
-                return new T[minimumLength];
-            }
-            for (var i = c * SlotsPerClass; i < (c + 1) * SlotsPerClass; i++)
-            {
-                if (Volatile.Read(ref Slots[i]) is not null && Interlocked.Exchange(ref Slots[i], null) is { } array)
-                {
-                    return array;
-                }
-            }
-            return GC.AllocateUninitializedArray<T>(1 << (c + MinShift));
-        }
-
-        /// <summary>Keeps an array of <see cref="Rent"/> for later (the caller cleared the references it wrote).</summary>
-        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-        public static void Return(T[] array)
-        {
-            var c = ClassOf(array.Length);
-            if (c >= Classes || array.Length != 1 << (c + MinShift))
-            {
-                return;
-            }
-            for (var i = c * SlotsPerClass; i < (c + 1) * SlotsPerClass; i++)
-            {
-                if (Volatile.Read(ref Slots[i]) is null && Interlocked.CompareExchange(ref Slots[i], array, null) is null)
-                {
-                    return;
-                }
-            }
-        }
-
-        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-        private static int ClassOf(int length) => length <= 1 << MinShift ? 0 : 32 - BitOperations.LeadingZeroCount((uint)length - 1) - MinShift;
     }
 }

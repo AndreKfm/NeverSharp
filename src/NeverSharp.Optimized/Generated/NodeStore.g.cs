@@ -17,7 +17,7 @@ using NeverSharp.Generated;
 namespace NeverSharp.Optimized;
 
 /// <summary>The generated part of the node store: layout tables, field accessors and node class tests (O6b variant A layout).</summary>
-internal sealed partial class NodeStore
+internal sealed unsafe partial class NodeStore
 {
     private const int KindCount = 359;
 

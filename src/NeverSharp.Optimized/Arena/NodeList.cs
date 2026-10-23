@@ -83,13 +83,13 @@ internal readonly struct ListBuilder
 /// below it are finished.
 /// </para>
 /// <para>
-/// Sizing and lifetime as for the node records (NodeStore.cs): the header, element, scratch and frame arrays are
-/// rented from the shared pool while the parse runs; when the SourceFile node is created, the headers and elements
-/// move into arrays of the exact size (pinned; they hold no references) and the scratch arrays go back to the pool.
-/// Speculative parsing truncates the list store with the node store (<see cref="Mark"/>).
+/// Memory and lifetime as for the node records (NodeStore.cs, step O9 variant C): the headers and the elements are
+/// ranges of the thread's slabs of list headers and list elements, committed with the records; the scratch stack and
+/// its frames are the thread's, lent to the store while it parses. Speculative parsing truncates the list store with
+/// the node store (<see cref="Mark"/>).
 /// </para>
 /// </summary>
-internal sealed partial class NodeStore
+internal sealed unsafe partial class NodeStore
 {
     private const int TrailingCommaBit = 1;
     private const int MissingListBit = 2;
@@ -104,10 +104,16 @@ internal sealed partial class NodeStore
         public int Bits;
     }
 
-    private ListHeader[] lists = null!;
+    // The list headers (listCapacity of them from lists on) and the list elements (elementCapacity from listElements
+    // on): ranges of the thread's slabs.
+    private ListHeader* lists;
+    private int listCapacity;
     private int listCount;
-    private Node[] listElements = null!;
+    private SlabRange listRange;
+    private Node* listElements;
+    private int elementCapacity;
     private int listElementCount;
+    private SlabRange elementRange;
 
     // Lists under construction: scratch[0..scratchTop) holds the elements of the open frames; frames holds (start,
     // count) per frame, count -1 for a frame finished out of order (popped when the frames above it are).
@@ -116,16 +122,14 @@ internal sealed partial class NodeStore
     private int[]? frames;
     private int frameCount;
 
-    // Whether the list arrays are scratch arrays of the pool (until the SourceFile node is created).
-    private bool listsPooled;
-
-    private void InitLists(int textLength)
+    private void InitLists(ThreadSlabs local, int textLength)
     {
-        // From the tuning corpus: 0.016 lists and 0.027 list elements per character on average (rounded up by the pool;
-        // fewer than 10 of 24,511 files grow these arrays).
-        lists = Scratch<ListHeader>.Rent((textLength / 64) + 16);
-        listElements = Scratch<Node>.Rent((textLength / 32) + 16);
-        listsPooled = true;
+        // From the tuning corpus: 0.016 lists and 0.027 list elements per character on average (estimates only: the
+        // ranges reach to the end of the slabs).
+        lists = (ListHeader*)listRange.Open(local, SlabKind.ListHeaders, (((long)textLength / 64) + 16) * sizeof(ListHeader));
+        listCapacity = (int)(listRange.Capacity / sizeof(ListHeader));
+        listElements = (Node*)elementRange.Open(local, SlabKind.ListElements, (((long)textLength / 32) + 16) * sizeof(Node));
+        elementCapacity = (int)(elementRange.Capacity / sizeof(Node));
         // Header 0 is NodeList.None: no elements, range -1.
         lists[0] = new ListHeader { Pos = -1, End = -1 };
         listCount = 1;
@@ -140,7 +144,7 @@ internal sealed partial class NodeStore
     public ReadOnlySpan<Node> Nodes(NodeList list)
     {
         ref var h = ref lists[list.Index];
-        return new ReadOnlySpan<Node>(listElements, h.Start, h.Count);
+        return new ReadOnlySpan<Node>(listElements + h.Start, h.Count);
     }
 
     /// <summary>The number of elements of a list (TypeScript: `list.length`).</summary>
@@ -185,12 +189,12 @@ internal sealed partial class NodeStore
     public NodeList NewList(ReadOnlySpan<Node> elements, bool hasTrailingComma = false)
     {
         var start = listElementCount;
-        if (elements.Length > listElements.Length - start)
+        if (elements.Length > elementCapacity - start)
         {
             GrowListElements(start + elements.Length);
         }
-        // The source may be the elements of an existing list (the old array stays intact when the arena grows).
-        elements.CopyTo(listElements.AsSpan(start));
+        // The source may be the elements of an existing list (the old range stays intact when the arena moves).
+        elements.CopyTo(new Span<Node>(listElements + start, elements.Length));
         listElementCount = start + elements.Length;
         return AddHeader(start, elements.Length, hasTrailingComma);
     }
@@ -199,7 +203,7 @@ internal sealed partial class NodeStore
     private NodeList AddHeader(int start, int count, bool hasTrailingComma)
     {
         var index = listCount;
-        if (index == lists.Length)
+        if (index == listCapacity)
         {
             GrowLists();
         }
@@ -214,28 +218,19 @@ internal sealed partial class NodeStore
         return new NodeList(index);
     }
 
-    [NoAllocUnchecked("arena growth: the list header array doubles")]
+    [NoAllocUnchecked("arena growth: the list header range moves to a larger slab")]
     private void GrowLists()
     {
-        var length = lists.Length * 2;
-        var grown = listsPooled ? Scratch<ListHeader>.Rent(length) : GC.AllocateUninitializedArray<ListHeader>(length);
-        Array.Copy(lists, grown, listCount);
-        if (listsPooled)
-        {
-            Scratch<ListHeader>.Return(lists);
-        }
-        lists = grown;
+        lists = (ListHeader*)listRange.Grow((long)listCount * sizeof(ListHeader), ((long)listCount + 1) * sizeof(ListHeader), IsActive ? owner : null, SlabKind.ListHeaders);
+        listCapacity = (int)(listRange.Capacity / sizeof(ListHeader));
     }
 
-    [NoAllocUnchecked("arena growth: the list element array doubles")]
+    [NoAllocUnchecked("arena growth: the list element range moves to a larger slab")]
     private void GrowListElements(int needed)
     {
-        var length = Math.Max(listElements.Length * 2, needed);
-        var grown = listsPooled ? Scratch<Node>.Rent(length) : GC.AllocateUninitializedArray<Node>(length);
-        Array.Copy(listElements, grown, listElementCount);
-        // Spans handed out by Elements may still read the old array, so it is not given back to the pool (another
-        // parse could overwrite it); the collector takes it.
-        listElements = grown;
+        // Spans handed out by Nodes may still read the old range: the store keeps holding the slab it leaves.
+        listElements = (Node*)elementRange.Grow((long)listElementCount * sizeof(Node), (long)needed * sizeof(Node), IsActive ? owner : null, SlabKind.ListElements);
+        elementCapacity = (int)(elementRange.Capacity / sizeof(Node));
     }
 
     //// Lists under construction.
@@ -340,11 +335,11 @@ internal sealed partial class NodeStore
         var count = fr[i + 1];
         Debug.Assert(count >= 0, "List finished twice");
         var at = listElementCount;
-        if (count > listElements.Length - at)
+        if (count > elementCapacity - at)
         {
             GrowListElements(at + count);
         }
-        Array.Copy(scratch!, start, listElements, at, count);
+        new ReadOnlySpan<Node>(scratch, start, count).CopyTo(new Span<Node>(listElements + at, count));
         listElementCount = at + count;
         PopFrame(list.Frame, start, count);
         return AddHeader(at, count, hasTrailingComma);
@@ -380,43 +375,58 @@ internal sealed partial class NodeStore
         }
     }
 
-    [NoAllocUnchecked("arena growth: the scratch arrays of lists under construction, from the pool")]
+    [NoAllocUnchecked("arena growth: the scratch arrays of lists under construction, lent by the thread")]
     private void RentScratch()
     {
-        if (listsPooled)
+        var local = IsActive ? owner! : null;
+        if (local is not null && local.ListScratch is not null)
         {
-            scratch = Scratch<Node>.Rent(1024);
-            frames = Scratch<int>.Rent(256);
+            scratch = local.ListScratch;
+            frames = local.ListFrames;
+            local.ListScratch = null;
+            local.ListFrames = null;
         }
         else
         {
-            scratch = new Node[64];
-            frames = new int[32];
+            scratch = new Node[local is not null ? 1024 : 64];
+            frames = new int[local is not null ? 256 : 32];
         }
         scratchTop = 0;
         frameCount = 0;
     }
 
-    /// <summary>Moves the lists into arrays of the exact size and returns the scratch arrays (with <see cref="Seal"/>).</summary>
-    [NoAllocUnchecked("per-file result: the exact list arrays the finished tree keeps")]
+    /// <summary>Commits the list header and element ranges and gives the scratch arrays back to the thread (with <see cref="Seal"/>).</summary>
+    [NoAllocUnchecked("per-file result: the slab ranges of the lists the finished tree keeps")]
     private void SealLists()
     {
-        var exact = GC.AllocateUninitializedArray<ListHeader>(listCount, pinned: true);
-        Array.Copy(lists, exact, listCount);
-        Scratch<ListHeader>.Return(lists);
-        lists = exact;
-        var exactElements = GC.AllocateUninitializedArray<Node>(listElementCount, pinned: true);
-        Array.Copy(listElements, exactElements, listElementCount);
-        Scratch<Node>.Return(listElements);
-        listElements = exactElements;
+        var local = IsActive ? owner : null;
+        listRange.Commit((long)listCount * sizeof(ListHeader), local, SlabKind.ListHeaders);
+        listCapacity = listCount;
+        elementRange.Commit((long)listElementCount * sizeof(Node), local, SlabKind.ListElements);
+        elementCapacity = listElementCount;
         if (frames is not null && frameCount == 0)
         {
-            Scratch<Node>.Return(scratch!);
-            Scratch<int>.Return(frames);
+            if (local is not null && local.ListScratch is null)
+            {
+                local.ListScratch = scratch;
+                local.ListFrames = frames;
+            }
             scratch = null;
             frames = null;
         }
-        // (Open frames at the seal keep their scratch arrays; they are not returned to the pool.)
-        listsPooled = false;
+        // (Open frames at the seal keep their scratch arrays.)
+    }
+
+    /// <summary>Drops the holds on the list slabs (<see cref="Release"/>).</summary>
+    private void ReleaseLists()
+    {
+        lists = null;
+        listCapacity = 0;
+        listCount = 0;
+        listRange.Release();
+        listElements = null;
+        elementCapacity = 0;
+        listElementCount = 0;
+        elementRange.Release();
     }
 }

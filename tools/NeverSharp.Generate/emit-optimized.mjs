@@ -259,7 +259,7 @@ export function emitOptimized(schema) {
     const lines = [header("src/compiler/types.ts (node interfaces) and src/compiler/parser.ts (forEachChildTable)"),
         "#nullable enable", "", "using System.Runtime.CompilerServices;", "using NeverSharp.Generated;", "", "namespace NeverSharp.Optimized;", "",
         "/// <summary>The generated part of the node store: layout tables, field accessors and node class tests (O6b variant A layout).</summary>",
-        "internal sealed partial class NodeStore", "{",
+        "internal sealed unsafe partial class NodeStore", "{",
         `    private const int KindCount = ${kindCount};`, "",
         `    private const int HeaderWords = ${HEADER_WORDS};`, "",
         `    private const int RefBaseWord = ${REF_BASE_WORD};`, "",
