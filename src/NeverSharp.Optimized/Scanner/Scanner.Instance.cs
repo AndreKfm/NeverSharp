@@ -9,6 +9,7 @@
 // Modified: translated from TypeScript to C#.
 
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Text;
 using NeverSharp.Generated;
 
@@ -671,12 +672,22 @@ internal sealed partial class Scanner
         pos++;
         var result = new TextBuilder(texts); // TypeScript: `let result = ""` (Track O: a span of the text unless escapes change it)
         var start = pos;
+        // Track O (O23-B): the quote is '"' or '\'' (both callers); the other one does not end the string.
+        Debug.Assert(quote == (int)CharacterCodes.doubleQuote || quote == (int)CharacterCodes.singleQuote);
+        var otherQuote = quote ^ ((int)CharacterCodes.doubleQuote ^ (int)CharacterCodes.singleQuote);
+        var flags = AsciiCharFlags;
         while (true)
         {
             // typescript-go's scanString (internal/scanner/scanner.go) takes a fast path over the characters none of
-            // the tests below handle; for each of them the loop below would only do `pos++`.
-            while (pos < end && !IsStringSpecialCharacter(text[pos], quote))
+            // the tests below handle; for each of them the loop below would only do `pos++`. (Track O, O23-B: the
+            // characters it stops at, the quote, '\', LF and CR, are the table's string specials except the other quote.)
+            while (pos < end)
             {
+                int c = text[pos];
+                if ((uint)c < 128u && (flags[c] & (byte)CharFlags.StringSpecial) != 0 && c != otherQuote)
+                {
+                    break;
+                }
                 pos++;
             }
 
@@ -1215,7 +1226,7 @@ internal sealed partial class Scanner
             int ch = value[0];
             if (ch >= (int)CharacterCodes.a && ch <= (int)CharacterCodes.z)
             {
-                if (TextToKeywordByRange.TryGetValue(value, out var keyword))
+                if (TryGetKeyword(value, out var keyword))
                 {
                     return token = keyword;
                 }
@@ -1382,6 +1393,59 @@ internal sealed partial class Scanner
     {
         fullStartPos = pos;
         tokenFlags = TokenFlags.None;
+        // Track O (O23-B): the common tokens by the ASCII table, in a small method: the run of ASCII white space and line
+        // breaks before the token (skipTrivia; each of them would come back to the loop of ScanToken and do `pos++`,
+        // a line break also setting PrecedingLineBreak), then an identifier or keyword that starts with an ASCII
+        // character, or a punctuator that is always one character. Everything else, from the first character none of
+        // these handles, goes to ScanToken (the loop of scanner.ts's scan), which starts at that character as the loop
+        // would after `continue`.
+        var flags = AsciiCharFlags;
+        var p = pos;
+        while (p < end)
+        {
+            int ch = text[p];
+            if (ch >= 128)
+            {
+                break;
+            }
+            var f = flags[ch];
+            if ((f & (byte)(CharFlags.WhiteSpace | CharFlags.LineBreak)) != 0)
+            {
+                if (!skipTrivia)
+                {
+                    break;
+                }
+                if ((f & (byte)CharFlags.LineBreak) != 0)
+                {
+                    tokenFlags |= TokenFlags.PrecedingLineBreak;
+                }
+                p++;
+                continue;
+            }
+            if ((f & (byte)CharFlags.IdentifierStart) != 0)
+            {
+                pos = tokenStart = p;
+                return ScanAsciiIdentifier();
+            }
+            if ((f & (byte)CharFlags.SingleCharToken) != 0)
+            {
+                tokenStart = p;
+                pos = p + 1;
+                return token = (SyntaxKind)AsciiSingleCharTokens[ch];
+            }
+            break;
+        }
+        pos = p;
+        return ScanToken();
+    }
+
+    /// <summary>
+    /// The loop of scanner.ts's scan (Track O, O23-B: entered from <see cref="Scan"/>, which has reset the token's flags
+    /// and handled the common tokens).
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private SyntaxKind ScanToken()
+    {
         while (true)
         {
             tokenStart = pos;
@@ -1600,12 +1664,9 @@ internal sealed partial class Scanner
                     {
                         pos += 2;
 
-                        while (pos < end)
+                        // (Track O, O23-B: isLineBreak by the ASCII table.)
+                        while (pos < end && !IsLineBreakFast(text[pos]))
                         {
-                            if (IsLineBreak(CharCodeUnchecked(pos)))
-                            {
-                                break;
-                            }
                             pos++;
                         }
 
@@ -1633,9 +1694,18 @@ internal sealed partial class Scanner
 
                         var commentClosed = false;
                         var lastLineStart = tokenStart;
+                        var flags = AsciiCharFlags;
                         while (pos < end)
                         {
-                            var ch2 = CharCodeUnchecked(pos);
+                            int ch2 = text[pos];
+
+                            // Track O (O23-B): the characters that are neither '*' nor a line break only advance (the tests
+                            // below would only do `pos++`).
+                            if ((uint)ch2 < 128u ? (flags[ch2] & (byte)CharFlags.BlockCommentSpecial) == 0 : (ch2 | 1) != (int)CharacterCodes.paragraphSeparator)
+                            {
+                                pos++;
+                                continue;
+                            }
 
                             if (ch2 == (int)CharacterCodes.asterisk && CharCodeUnchecked(pos + 1) == (int)CharacterCodes.slash)
                             {
@@ -2054,52 +2124,79 @@ internal sealed partial class Scanner
     private SyntaxKind? ScanIdentifier(int startCharacter, ScriptTarget languageVersion)
     {
         var ch = startCharacter;
-        if (IsIdentifierStart(ch, languageVersion))
+        if (HasAsciiFlag(ch, CharFlags.IdentifierStart))
+        {
+            // Track O (O23-B): isIdentifierStart of an ASCII character by the table.
+            pos++;
+            return ScanIdentifierAfterAsciiStart(languageVersion);
+        }
+        if (ch > (int)CharacterCodes.maxAsciiCharacter && IsUnicodeIdentifierStart(ch, languageVersion))
         {
             pos += CharSize(ch);
-            // Fast path for simple ASCII identifiers, as typescript-go's scanIdentifier (internal/scanner/scanner.go):
-            // when the identifier consists of ASCII identifier characters and ends at the end or at an ASCII
-            // character other than '\', the loop below would stop at the same position and take the same branch.
-            if (ch <= (int)CharacterCodes.maxAsciiCharacter)
-            {
-                var asciiEnd = pos;
-                while (asciiEnd < end && IsAsciiIdentifierPart(text[asciiEnd]))
-                {
-                    asciiEnd++;
-                }
-                if (asciiEnd >= end || (text[asciiEnd] <= (int)CharacterCodes.maxAsciiCharacter && text[asciiEnd] != (int)CharacterCodes.backslash))
-                {
-                    pos = asciiEnd;
-                    return GetIdentifierTokenOfRange(tokenStart, pos);
-                }
-            }
-            while (pos < end && IsIdentifierPart(ch = CodePointUnchecked(pos), languageVersion))
-            {
-                pos += CharSize(ch);
-            }
-            if (ch == (int)CharacterCodes.backslash)
-            {
-                // TypeScript: `tokenValue = text.substring(tokenStart, pos); tokenValue += scanIdentifierParts();`.
-                var value = new TextBuilder(texts);
-                value.AppendSource(tokenStart, pos);
-                ScanIdentifierParts(ref value);
-                tokenValue = value.Result();
-                return GetIdentifierToken();
-            }
-            // TypeScript: `tokenValue = text.substring(tokenStart, pos); return getIdentifierToken();`.
-            // typescript-go takes the value as a slice of the text, which copies nothing
-            // (`s.tokenValue = s.text[start:s.pos]`, scanIdentifier in internal/scanner/scanner.go); here the
-            // value is the span of the text (Track O, O5a) and the keyword lookup of getIdentifierToken runs on it.
-            return GetIdentifierTokenOfRange(tokenStart, pos);
+            return ScanIdentifierRest(languageVersion);
         }
         return null;
     }
 
-    // The characters scanString tests for: the quote, '\', LF, CR.
+    /// <summary>
+    /// Track O (O23-B): <see cref="ScanIdentifier"/> from <see cref="Scan"/> for an identifier whose first character, at
+    /// pos, is an ASCII identifier start.
+    /// </summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private static bool IsStringSpecialCharacter(int ch, int quote)
+    private SyntaxKind ScanAsciiIdentifier()
     {
-        return ch == quote || ch == (int)CharacterCodes.backslash || ch == (int)CharacterCodes.lineFeed || ch == (int)CharacterCodes.carriageReturn;
+        pos++;
+        return ScanIdentifierAfterAsciiStart(languageVersion);
+    }
+
+    /// <summary>
+    /// The rest of <see cref="ScanIdentifier"/> after an ASCII first character (pos after it). Fast path for simple ASCII
+    /// identifiers, as typescript-go's scanIdentifier (internal/scanner/scanner.go): when the identifier consists of ASCII
+    /// identifier characters and ends at the end or at an ASCII character other than '\', the loop of scanIdentifier
+    /// would stop at the same position and take the same branch (Track O, O23-B: the run of ASCII identifier parts by the
+    /// table). Otherwise scanIdentifier's loop continues where the run ends, as it would after the same characters.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private SyntaxKind ScanIdentifierAfterAsciiStart(ScriptTarget languageVersion)
+    {
+        var asciiEnd = SkipAsciiIdentifierParts(pos);
+        pos = asciiEnd;
+        if (asciiEnd < end)
+        {
+            int next = text[asciiEnd];
+            if (next > (int)CharacterCodes.maxAsciiCharacter || next == (int)CharacterCodes.backslash)
+            {
+                return ScanIdentifierRest(languageVersion);
+            }
+        }
+        return GetIdentifierTokenOfRange(tokenStart, asciiEnd);
+    }
+
+    /// <summary>The loop of scanIdentifier after the first character, and what follows it (pos after the first character).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private SyntaxKind ScanIdentifierRest(ScriptTarget languageVersion)
+    {
+        // (The loop leaves the first character in `ch` when it does not run; that character is never '\'.)
+        var ch = 0;
+        while (pos < end && IsIdentifierPart(ch = CodePointUnchecked(pos), languageVersion))
+        {
+            pos += CharSize(ch);
+        }
+        if (ch == (int)CharacterCodes.backslash)
+        {
+            // TypeScript: `tokenValue = text.substring(tokenStart, pos); tokenValue += scanIdentifierParts();`.
+            var value = new TextBuilder(texts);
+            value.AppendSource(tokenStart, pos);
+            ScanIdentifierParts(ref value);
+            tokenValue = value.Result();
+            return GetIdentifierToken();
+        }
+        // TypeScript: `tokenValue = text.substring(tokenStart, pos); return getIdentifierToken();`.
+        // typescript-go takes the value as a slice of the text, which copies nothing
+        // (`s.tokenValue = s.text[start:s.pos]`, scanIdentifier in internal/scanner/scanner.go); here the
+        // value is the span of the text (Track O, O5a) and the keyword lookup of getIdentifierToken runs on it.
+        return GetIdentifierTokenOfRange(tokenStart, pos);
     }
 
     // The characters scanTemplateAndSetTokenValue tests for: '`', '$', '\', CR.
@@ -2116,12 +2213,6 @@ internal sealed partial class Scanner
         return ch == (int)CharacterCodes.space || (ch >= (int)CharacterCodes.tab && ch <= (int)CharacterCodes.carriageReturn);
     }
 
-    // isIdentifierPart for an ASCII character (any language version and variant other than JSX): [A-Za-z0-9_$].
-    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private static bool IsAsciiIdentifierPart(int ch)
-    {
-        return IsWordCharacter(ch) || ch == (int)CharacterCodes.Dollar;
-    }
 
     // getIdentifierToken for tokenValue = text[start..end), see ScanIdentifier.
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
@@ -2134,7 +2225,7 @@ internal sealed partial class Scanner
             int ch = text[start];
             if (ch >= (int)CharacterCodes.a && ch <= (int)CharacterCodes.z)
             {
-                if (TextToKeywordByRange.TryGetValue(text.AsSpan(start, len), out var keyword))
+                if (TryGetKeyword(text.AsSpan(start, len), out var keyword))
                 {
                     tokenValue = TextRef.Source(start, len);
                     return token = keyword;
