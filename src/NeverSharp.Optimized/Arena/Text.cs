@@ -5,6 +5,7 @@
 // interned in a table keyed by span), step O5a.
 
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace NeverSharp.Optimized;
 
@@ -534,7 +535,7 @@ internal sealed unsafe class TextTable
         for (var i = b[hash & (b.Length - 1)]; i != 0; i = e[i].Next)
         {
             ref var entry = ref e[i];
-            if (entry.Hash == hash && entry.Text.Size == text.Size && Span(entry.Text).SequenceEqual(span))
+            if (entry.Hash == hash && entry.Text.Size == text.Size && SameChars(Span(entry.Text), span))
             {
                 return entry.Text;
             }
@@ -670,16 +671,89 @@ internal sealed unsafe class TextTable
         }
     }
 
-    // FNV-1a over the UTF-16 code units.
+    // Step O5b: a hash over the UTF-16 code units read four at a time (words of 8 bytes, every read within the text),
+    // each word folded into the state by xor and a multiplication by an odd constant (a bijection of the state for each
+    // word), then the state's halves folded and multiplied once more so that every character reaches the low bits the
+    // buckets use. The words: 1 to 3 characters form one word of the first, middle and last character (the length is in
+    // the seed); 4 to 8 characters the first and the last four (overlapping); 9 to 16 characters the words at 0, 4,
+    // length - 8 and length - 4; longer texts the words at 0, 4, 8, ... before length - 4 and the last four (the
+    // characters are counted, the reads are 8 bytes each). A dependency chain of one
+    // multiplication per word instead of one per character (FNV-1a before), and no loop up to 16 characters.
+    // Which hash is used does not change any result: entries, their order and the handles returned do not depend on it.
+    private const ulong HashSeed = 0x9E3779B97F4A7C15ul;
+    private const ulong HashMultiplier = 0xBF58476D1CE4E5B9ul;
+    private const ulong HashFinal = 0x94D049BB133111EBul;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static int Hash(ReadOnlySpan<char> span)
     {
-        var h = 2166136261u;
-        foreach (var c in span)
+        ref var c = ref MemoryMarshal.GetReference(span);
+        ref var first = ref Unsafe.As<char, byte>(ref c);
+        var length = span.Length;
+        var h = HashSeed ^ (ulong)length;
+        if (length >= 4)
         {
-            h = (h ^ c) * 16777619u;
+            var last = (nint)(length - 4) * sizeof(char);
+            h = (h ^ Unsafe.ReadUnaligned<ulong>(ref first)) * HashMultiplier;
+            if (length > 8)
+            {
+                if (length <= 16)
+                {
+                    h = (h ^ Unsafe.ReadUnaligned<ulong>(ref Unsafe.Add(ref first, sizeof(ulong)))) * HashMultiplier;
+                    h = (h ^ Unsafe.ReadUnaligned<ulong>(ref Unsafe.Add(ref first, last - sizeof(ulong)))) * HashMultiplier;
+                }
+                else
+                {
+                    for (nint i = sizeof(ulong); i < last; i += sizeof(ulong))
+                    {
+                        h = (h ^ Unsafe.ReadUnaligned<ulong>(ref Unsafe.Add(ref first, i))) * HashMultiplier;
+                    }
+                }
+            }
+            h = (h ^ Unsafe.ReadUnaligned<ulong>(ref Unsafe.Add(ref first, last))) * HashMultiplier;
         }
-        return (int)(h ^ (h >> 15));
+        else if (length > 0)
+        {
+            var word = (ulong)c | ((ulong)Unsafe.Add(ref c, length >> 1) << 16) | ((ulong)Unsafe.Add(ref c, length - 1) << 32);
+            h = (h ^ word) * HashMultiplier;
+        }
+        h = (h ^ (h >> 32)) * HashFinal;
+        return (int)(h >> 32);
+    }
+
+    // Step O5b: `a.SequenceEqual(b)` for two texts of the same length, without a loop or a call up to 16 characters
+    // (the same words as Hash reads, which together cover every character), by SequenceEqual for longer ones.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private static bool SameChars(ReadOnlySpan<char> a, ReadOnlySpan<char> b)
+    {
+        var length = b.Length;
+        ref var cx = ref MemoryMarshal.GetReference(a);
+        ref var cy = ref MemoryMarshal.GetReference(b);
+        if (length >= 4)
+        {
+            if (length > 16)
+            {
+                return a.SequenceEqual(b);
+            }
+            ref var x = ref Unsafe.As<char, byte>(ref cx);
+            ref var y = ref Unsafe.As<char, byte>(ref cy);
+            var last = (nint)(length - 4) * sizeof(char);
+            var difference = (Unsafe.ReadUnaligned<ulong>(ref x) ^ Unsafe.ReadUnaligned<ulong>(ref y)) |
+                (Unsafe.ReadUnaligned<ulong>(ref Unsafe.Add(ref x, last)) ^ Unsafe.ReadUnaligned<ulong>(ref Unsafe.Add(ref y, last)));
+            if (length > 8)
+            {
+                difference |= (Unsafe.ReadUnaligned<ulong>(ref Unsafe.Add(ref x, sizeof(ulong))) ^ Unsafe.ReadUnaligned<ulong>(ref Unsafe.Add(ref y, sizeof(ulong)))) |
+                    (Unsafe.ReadUnaligned<ulong>(ref Unsafe.Add(ref x, last - sizeof(ulong))) ^ Unsafe.ReadUnaligned<ulong>(ref Unsafe.Add(ref y, last - sizeof(ulong))));
+            }
+            return difference == 0;
+        }
+        if (length == 0)
+        {
+            return true;
+        }
+        return ((cx ^ cy) | (Unsafe.Add(ref cx, length >> 1) ^ Unsafe.Add(ref cy, length >> 1)) | (Unsafe.Add(ref cx, length - 1) ^ Unsafe.Add(ref cy, length - 1))) == 0;
     }
 }
 
