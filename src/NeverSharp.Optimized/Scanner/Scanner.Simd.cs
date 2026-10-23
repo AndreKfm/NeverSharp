@@ -146,59 +146,86 @@ internal sealed partial class Scanner
     /// The body of a multi-line comment from pos (after "/*"), as scan's loop does it: stops after the first "*/" whose
     /// '*' is before end (pos after the '/'; returns true), or at end (returns false); for each line break before that
     /// it sets <see cref="TokenFlags.PrecedingLineBreak"/> and <paramref name="lastLineStart"/> to the position after it.
-    /// The vectors find the candidates of a block ('*' and line breaks); each is then handled as the scalar loop would.
+    /// In two passes: the vectors find the "*/" (a '*' lane whose next character is '/'), then the last line break
+    /// before it, searching backwards; the scalar loop steps over the same characters and records each line break, so
+    /// only the last one and whether there is one matter.
     /// </summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool ScanMultiLineCommentBody(ref int lastLineStart)
     {
-        var p = pos;
+        var start = pos;
+        var p = start;
         var limit = end;
+        var closed = false;
         if (Vector128.IsHardwareAccelerated)
         {
             ref var b = ref TextBase();
-            while (p <= limit - Vector128<ushort>.Count)
+            // The pairs (p + i, p + i + 1), i < 8, of a block: all characters before end.
+            while (p < limit - Vector128<ushort>.Count)
             {
-                var v = Vector128.LoadUnsafe(ref b, (nuint)p);
-                var bits = LaneBits(Vector128.Equals(v, Vector128.Create((ushort)'*')) | LineBreaks(v));
-                while (bits != 0)
+                var star = Vector128.Equals(Vector128.LoadUnsafe(ref b, (nuint)p), Vector128.Create((ushort)'*'));
+                var slash = Vector128.Equals(Vector128.LoadUnsafe(ref b, (nuint)(p + 1)), Vector128.Create((ushort)'/'));
+                var bits = LaneBits(star & slash);
+                if (bits != 0)
                 {
-                    var q = p + FirstLane(bits);
-                    if (text[q] == '*')
-                    {
-                        if (CharCodeUnchecked(q + 1) == (int)CharacterCodes.slash)
-                        {
-                            pos = q + 2;
-                            return true;
-                        }
-                    }
-                    else
-                    {
-                        lastLineStart = q + 1;
-                        tokenFlags |= TokenFlags.PrecedingLineBreak;
-                    }
-                    bits &= bits - 1;
-                    bits &= bits - 1; // both bits of the lane
+                    p += FirstLane(bits);
+                    closed = true;
+                    break;
                 }
                 p += Vector128<ushort>.Count;
             }
         }
-        while (p < limit)
+        if (!closed)
         {
-            var ch = text[p];
-            if (ch == '*' && CharCodeUnchecked(p + 1) == (int)CharacterCodes.slash)
+            // The rest as the scalar loop tests it (the '/' may be at end when end is before the end of the text).
+            while (p < limit)
             {
-                pos = p + 2;
-                return true;
-            }
-            p++;
-            if (IsLineBreak(ch))
-            {
-                lastLineStart = p;
-                tokenFlags |= TokenFlags.PrecedingLineBreak;
+                if (text[p] == '*' && CharCodeUnchecked(p + 1) == (int)CharacterCodes.slash)
+                {
+                    closed = true;
+                    break;
+                }
+                p++;
             }
         }
-        pos = p;
-        return false;
+        // The characters the scalar loop steps over are [start, p): its last line break decides.
+        var lineBreak = LastLineBreak(start, p);
+        if (lineBreak >= 0)
+        {
+            lastLineStart = lineBreak + 1;
+            tokenFlags |= TokenFlags.PrecedingLineBreak;
+        }
+        pos = closed ? p + 2 : p;
+        return closed;
+    }
+
+    /// <summary>The position of the last line break (<see cref="IsLineBreak"/>) in [<paramref name="low"/>, <paramref name="high"/>), or -1.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private int LastLineBreak(int low, int high)
+    {
+        var p = high;
+        if (Vector128.IsHardwareAccelerated)
+        {
+            ref var b = ref TextBase();
+            while (p - Vector128<ushort>.Count >= low)
+            {
+                p -= Vector128<ushort>.Count;
+                var lineBreak = LaneBits(LineBreaks(Vector128.LoadUnsafe(ref b, (nuint)p)));
+                if (lineBreak != 0)
+                {
+                    return p + (BitOperations.Log2(lineBreak) >> 1);
+                }
+            }
+        }
+        while (p > low)
+        {
+            p--;
+            if (IsLineBreak(text[p]))
+            {
+                return p;
+            }
+        }
+        return -1;
     }
 
     /// <summary>
