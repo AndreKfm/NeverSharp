@@ -22,6 +22,8 @@ The list the Track O endpoint is reported with (pre-registration §8, A9). Each 
 | O11 | Speculative parsing: B token replay, C exact pre-decisions (brief [modules/O11.md](modules/O11.md)) | done 2026-10-23; main 401 ms, B 406 ms, C 387 ms; C on O5b 0.945 [0.924, 0.970] | **C: exact pre-decisions** (C/main 0.965 [0.935, 0.998]) | phase1-progress.md, results/track-o/O5b-O11/ |
 | O12 | Node creation path (one attempt; brief [modules/O12.md](modules/O12.md)) | done 2026-10-23; 380 vs 399 ms (0.951 [0.929, 0.981]) | — (one attempt), merged | phase1-progress.md, results/track-o/O12-O24/ |
 | O24 | Scanner, second round: O23 C parts on top of B, token bookkeeping (one attempt; brief [modules/O24.md](modules/O24.md)) | done 2026-10-23; vs main 0.976 [0.940, 1.010]; on O12 1.002 [0.980, 1.029], not slower | — (one attempt), merged | phase1-progress.md, results/track-o/O12-O24/ |
+| O25 | Expression descent: exact shortcuts (one attempt; brief [modules/O25.md](modules/O25.md)) | running | | |
+| O26 | Token consumption: parser reads of scanner state, NextToken, ParseTokenNode (one attempt; brief [modules/O26.md](modules/O26.md)) | running | | |
 
 Endpoint (2026-10-22, after O1, Windows only): optimized track G = 0.60 [0.59, 0.61] vs tsgo7-parse (faster claim allowed); vs tsrs 1.52 [1.50, 1.54] (secondary). See results/track-o/endpoint/2026-10-22T18-55-52-105Z/VERDICT.md.
 
