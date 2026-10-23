@@ -150,6 +150,31 @@ internal sealed partial class Parser
         // Note: for ease of implementation we treat productions '2' and '3' as the same thing.
         // (i.e. they're both BinaryExpressions with an assignment operator in it).
 
+        // Track O (step O25): a token that only ParsePrimaryExpression acts on (IsPlainPrimaryStart) takes the descent
+        // below without any level acting before the primary expression: no yield expression, arrow function or async
+        // arrow function check fires, and every level down to ParsePrimaryExpression takes its fall-through path with
+        // the same node position (no token is consumed in between). So the primary expression is parsed directly; if
+        // the token after it continues no level (ContinuesOperand), every level above returns it unchanged, without
+        // side effects, and so does this function. Otherwise the levels above the primary expression run as before
+        // (ParseUnaryOperandRest, ParseBinaryExpressionRest, ParseAssignmentExpressionRest).
+        if (IsPlainPrimaryStart(Token()))
+        {
+            var primaryPos = GetNodePos();
+            var primaryHasJSDoc = HasPrecedingJSDocComment();
+            var primary = ParsePlainPrimaryExpression();
+            if (!ContinuesOperand(Token()))
+            {
+                return primary;
+            }
+            var operand = ParseUnaryOperandRest(primaryPos, primary);
+            if (!ContinuesOperand(Token()))
+            {
+                return operand;
+            }
+            operand = ParseBinaryExpressionRest(OperatorPrecedence.Lowest, operand, primaryPos);
+            return ParseAssignmentExpressionRest(operand, primaryPos, primaryHasJSDoc, allowReturnTypeInArrowFunction);
+        }
+
         // First, do the simple check if we have a YieldExpression (production '6').
         if (IsYieldExpression())
         {
@@ -185,7 +210,14 @@ internal sealed partial class Parser
         var pos = GetNodePos();
         var hasJSDoc = HasPrecedingJSDocComment();
         var expr = ParseBinaryExpressionOrHigher(OperatorPrecedence.Lowest);
+        return ParseAssignmentExpressionRest(expr, pos, hasJSDoc, allowReturnTypeInArrowFunction);
+    }
 
+    // The part of parseAssignmentExpressionOrHigher after its parseBinaryExpressionOrHigher (Track O, step O25: shared
+    // with the path for a plain primary expression above).
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private Node ParseAssignmentExpressionRest(Node expr, int pos, bool hasJSDoc, bool allowReturnTypeInArrowFunction)
+    {
         // To avoid a look-ahead, we did not handle the case of an arrow function with a single un-parenthesized
         // parameter ('x => ...') above. We handle it here by checking if the parsed expression was a single
         // identifier and the current token is an arrow.
@@ -757,8 +789,189 @@ internal sealed partial class Parser
     private Node ParseBinaryExpressionOrHigher(OperatorPrecedence precedence)
     {
         var pos = GetNodePos();
+
+        // Track O (step O25): for a token that only ParsePrimaryExpression acts on, parseUnaryExpressionOrHigher takes
+        // its update-expression branch, parseUpdateExpression and parseLeftHandSideExpressionOrHigher their fall-through
+        // paths down to parseMemberExpressionOrHigher's parsePrimaryExpression, all at this position (see
+        // ParseAssignmentExpressionOrHigher). If the token after the primary expression continues no level, the levels
+        // above it and parseBinaryExpressionRest return it unchanged (its precedence is -1, below every precedence).
+        if (IsPlainPrimaryStart(Token()))
+        {
+            var primary = ParsePlainPrimaryExpression();
+            if (!ContinuesOperand(Token()))
+            {
+                return primary;
+            }
+            var operand = ParseUnaryOperandRest(pos, primary);
+            return ContinuesOperand(Token()) ? ParseBinaryExpressionRest(precedence, operand, pos) : operand;
+        }
+
         var leftOperand = ParseUnaryExpressionOrHigher();
         return ParseBinaryExpressionRest(precedence, leftOperand, pos);
+    }
+
+    /// <summary>
+    /// Track O (step O25): the tokens with which parseAssignmentExpressionOrHigher and parseBinaryExpressionOrHigher
+    /// reach parsePrimaryExpression with no level acting before it. None of them is `yield`, `(`, `&lt;`, `async`,
+    /// `=&gt;` (the yield and arrow function checks of parseAssignmentExpressionOrHigher), a prefix operator or `await`
+    /// (isUpdateExpression is true for all of them), `++`, `--` (parseUpdateExpression), `import` or `super`
+    /// (parseLeftHandSideExpressionOrHigher); parsePrimaryExpression handles each of them itself.
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private static bool IsPlainPrimaryStart(SyntaxKind token)
+    {
+        switch (token)
+        {
+            case SyntaxKind.Identifier:
+            case SyntaxKind.ThisKeyword:
+            case SyntaxKind.NullKeyword:
+            case SyntaxKind.TrueKeyword:
+            case SyntaxKind.FalseKeyword:
+            case SyntaxKind.NumericLiteral:
+            case SyntaxKind.BigIntLiteral:
+            case SyntaxKind.StringLiteral:
+            case SyntaxKind.NoSubstitutionTemplateLiteral:
+            case SyntaxKind.TemplateHead:
+            case SyntaxKind.OpenBracketToken:
+            case SyntaxKind.OpenBraceToken:
+            case SyntaxKind.NewKeyword:
+            case SyntaxKind.FunctionKeyword:
+            case SyntaxKind.ClassKeyword:
+            case SyntaxKind.PrivateIdentifier:
+                return true;
+            case SyntaxKind.YieldKeyword:
+            case SyntaxKind.AsyncKeyword:
+            case SyntaxKind.AwaitKeyword:
+                return false;
+            default:
+                // The other future reserved words and contextual keywords: parsePrimaryExpression parses them as
+                // identifiers (its default case), and no level above acts on them.
+                return token > SyntaxKind.LastReservedWord && token <= SyntaxKind.LastKeyword;
+        }
+    }
+
+    /// <summary>
+    /// parsePrimaryExpression for a token of <see cref="IsPlainPrimaryStart"/> (Track O, step O25): an identifier token
+    /// takes its default case, `parseIdentifier(Diagnostics.Expression_expected)`, which creates the identifier
+    /// (isIdentifier is true for it, so the message is not used).
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private Node ParsePlainPrimaryExpression()
+    {
+        return Token() == SyntaxKind.Identifier ? CreateIdentifier(/*isIdentifier*/ true) : ParsePrimaryExpression();
+    }
+
+    /// <summary>
+    /// Track O (step O25): whether the current token, after an operand, can make any level between
+    /// parseMemberExpressionOrHigher and parseAssignmentExpressionOrHigher act (<see cref="ExpressionTokens"/>). For
+    /// any other token each of those levels only compares the token and returns the operand unchanged.
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private static bool ContinuesOperand(SyntaxKind token)
+    {
+        var table = ExpressionTokens.ContinuesOperand;
+        return (uint)token >= (uint)table.Length || table[(int)token];
+    }
+
+    /// <summary>
+    /// Track O (step O25): the tokens on which a branch of parseMemberExpressionRest acts; each branch first requires
+    /// one of them (`?.` for an optional chain, `.`, `[`, a template for a tagged template, `!` for a non-null
+    /// expression, `&lt;` or `&lt;&lt;` for type arguments: tryParse(parseTypeArgumentsInExpression) decides on any
+    /// other token without changing anything, see TryParseTypeArgumentsInExpression).
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private static OperatorPrecedence BinaryOperatorPrecedence(SyntaxKind token)
+    {
+        // Track O (step O25): getBinaryOperatorPrecedence from a table computed with it.
+        var table = ExpressionTokens.BinaryOperatorPrecedence;
+        return (uint)token < (uint)table.Length ? (OperatorPrecedence)table[(int)token] : Utilities.GetBinaryOperatorPrecedence(token);
+    }
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private static bool IsMemberExpressionContinuation(SyntaxKind token)
+    {
+        switch (token)
+        {
+            case SyntaxKind.QuestionDotToken:
+            case SyntaxKind.DotToken:
+            case SyntaxKind.OpenBracketToken:
+            case SyntaxKind.NoSubstitutionTemplateLiteral:
+            case SyntaxKind.TemplateHead:
+            case SyntaxKind.ExclamationToken:
+            case SyntaxKind.LessThanToken:
+            case SyntaxKind.LessThanLessThanToken:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>Track O (step O25): token tables of the expression descent, computed once from the parser's predicates.</summary>
+    private static class ExpressionTokens
+    {
+        /// <summary>
+        /// Per token kind: true if the token, after an operand, continues it at some level: a member expression
+        /// (<see cref="IsMemberExpressionContinuation"/>), a call (`(`; `?.` is included above), a postfix `++`/`--`,
+        /// an exponentiation (`**`), any binary operator (including `as`, `satisfies`, `in`) or a `&gt;` that
+        /// reScanGreaterToken may merge, an arrow (`=&gt;`), an assignment operator, or a conditional (`?`).
+        /// </summary>
+        internal static readonly bool[] ContinuesOperand = CreateContinuesOperand();
+
+        /// <summary>Per token kind: getBinaryOperatorPrecedence of the kind.</summary>
+        internal static readonly sbyte[] BinaryOperatorPrecedence = CreateBinaryOperatorPrecedence();
+
+        private static sbyte[] CreateBinaryOperatorPrecedence()
+        {
+            var table = new sbyte[(int)SyntaxKind.Count];
+            for (var k = 0; k < table.Length; k++)
+            {
+                table[k] = (sbyte)Utilities.GetBinaryOperatorPrecedence((SyntaxKind)k);
+            }
+            return table;
+        }
+
+        private static bool[] CreateContinuesOperand()
+        {
+            var table = new bool[(int)SyntaxKind.Count];
+            for (var k = 0; k < table.Length; k++)
+            {
+                var kind = (SyntaxKind)k;
+                table[k] = IsMemberExpressionContinuation(kind) ||
+                    kind == SyntaxKind.OpenParenToken ||
+                    kind == SyntaxKind.PlusPlusToken ||
+                    kind == SyntaxKind.MinusMinusToken ||
+                    kind == SyntaxKind.AsteriskAsteriskToken ||
+                    kind == SyntaxKind.GreaterThanToken ||
+                    Utilities.GetBinaryOperatorPrecedence(kind) > OperatorPrecedence.Invalid ||
+                    kind == SyntaxKind.EqualsGreaterThanToken ||
+                    Utilities.IsAssignmentOperator(kind) ||
+                    kind == SyntaxKind.QuestionToken;
+            }
+            return table;
+        }
+    }
+
+    /// <summary>
+    /// Track O (step O25): the levels above a primary expression parsed by parseMemberExpressionOrHigher, as
+    /// parseUnaryExpressionOrHigher's update-expression branch completes it: the rest of parseMemberExpressionOrHigher
+    /// and of parseLeftHandSideExpressionOrHigher, the postfix operator of parseUpdateExpression, and an
+    /// exponentiation. All at the primary expression's position, which is the position of every one of those levels.
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private Node ParseUnaryOperandRest(int pos, Node primary)
+    {
+        var expression = ParseMemberExpressionRest(pos, primary, /*allowOptionalChain*/ true);
+        if (!ContinuesOperand(Token()))
+        {
+            // (The rest of parseLeftHandSideExpressionOrHigher, the postfix check and the exponentiation check would
+            // each compare the token and return the expression unchanged.)
+            return expression;
+        }
+        expression = ParseLeftHandSideExpressionRest(pos, expression);
+        expression = ParseUpdateExpressionRest(expression);
+        return Token() == SyntaxKind.AsteriskAsteriskToken ?
+            ParseBinaryExpressionRest(Utilities.GetBinaryOperatorPrecedence(Token()), expression, pos) :
+            expression;
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
@@ -776,7 +989,7 @@ internal sealed partial class Parser
             // reScanGreaterToken so that we merge token sequences like > and = into >=
 
             ReScanGreaterToken();
-            var newPrecedence = Utilities.GetBinaryOperatorPrecedence(Token());
+            var newPrecedence = BinaryOperatorPrecedence(Token());
 
             // Check the precedence to see if we should "take" this operator
             // - For left associative operator (all operator but **), consume the operator,
@@ -1097,8 +1310,13 @@ internal sealed partial class Parser
             return ParseJsxElementOrSelfClosingElementOrFragment(/*inExpressionContext*/ true);
         }
 
-        var expression = ParseLeftHandSideExpressionOrHigher();
+        return ParseUpdateExpressionRest(ParseLeftHandSideExpressionOrHigher());
+    }
 
+    // The postfix part of parseUpdateExpression (Track O, step O25: shared with ParseUnaryOperandRest).
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private Node ParseUpdateExpressionRest(Node expression)
+    {
         Debug.Assert(UtilitiesPublic.IsLeftHandSideExpression(store, expression));
         if ((Token() == SyntaxKind.PlusPlusToken || Token() == SyntaxKind.MinusMinusToken) && !scanner.HasPrecedingLineBreak())
         {
@@ -1179,18 +1397,41 @@ internal sealed partial class Parser
             }
             else
             {
-                expression = ParseMemberExpressionOrHigher();
+                return ParseLeftHandSideExpressionRest(pos, ParseMemberExpressionOrHigher());
             }
+        }
+        else if (Token() == SyntaxKind.SuperKeyword)
+        {
+            expression = ParseSuperExpression();
         }
         else
         {
-            expression = Token() == SyntaxKind.SuperKeyword ? ParseSuperExpression() : ParseMemberExpressionOrHigher();
+            return ParseLeftHandSideExpressionRest(pos, ParseMemberExpressionOrHigher());
         }
 
         // Now, we *may* be complete.  However, we might have consumed the start of a
         // CallExpression or OptionalExpression.  As such, we need to consume the rest
         // of it here to be complete.
         return ParseCallExpressionRest(pos, expression);
+    }
+
+    /// <summary>
+    /// `parseCallExpressionRest(pos, expression)` for an expression that parseMemberExpressionOrHigher (or
+    /// parseMemberExpressionRest) has just returned. Track O (step O25): parseCallExpressionRest starts with
+    /// parseMemberExpressionRest on that expression in the same state, which ended exactly because none of its branches
+    /// acted; on a token other than `?.`, `&lt;` and `&lt;&lt;` its checks are plain comparisons of that state, so the
+    /// second call returns the expression unchanged without side effects and is left out. (On `?.` the check may look
+    /// ahead, on `&lt;`/`&lt;&lt;` it may speculate: both scan, so they are repeated as before.)
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private Node ParseLeftHandSideExpressionRest(int pos, Node expression)
+    {
+        var token = Token();
+        if (token == SyntaxKind.QuestionDotToken || token == SyntaxKind.LessThanToken || token == SyntaxKind.LessThanLessThanToken)
+        {
+            return ParseCallExpressionRest(pos, expression);
+        }
+        return ParseCallExpressionRestAfterMemberRest(pos, expression);
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
@@ -1411,6 +1652,13 @@ internal sealed partial class Parser
     {
         while (true)
         {
+            // Track O (step O25): on a token none of the branches below acts on, each of them compares the token and
+            // falls through to the return (IsMemberExpressionContinuation).
+            if (!IsMemberExpressionContinuation(Token()))
+            {
+                return expression;
+            }
+
             Node questionDotToken = default;
             var isPropertyAccess = false;
             if (allowOptionalChain && IsStartOfOptionalPropertyOrElementAccessChain())
@@ -1499,9 +1747,19 @@ internal sealed partial class Parser
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseCallExpressionRest(int pos, Node expression)
     {
+        return ParseCallExpressionRestAfterMemberRest(pos, ParseMemberExpressionRest(pos, expression, /*allowOptionalChain*/ true));
+    }
+
+    /// <summary>
+    /// parseCallExpressionRest after the parseMemberExpressionRest that starts each iteration of its loop (Track O, step
+    /// O25: the loop is rotated, so each `continue` calls parseMemberExpressionRest before the next iteration, as the
+    /// loop's first statement did; see ParseLeftHandSideExpressionRest for the caller that leaves out the first one).
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private Node ParseCallExpressionRestAfterMemberRest(int pos, Node expression)
+    {
         while (true)
         {
-            expression = ParseMemberExpressionRest(pos, expression, /*allowOptionalChain*/ true);
             NodeList typeArguments = default;
             var questionDotToken = ParseOptionalToken(SyntaxKind.QuestionDotToken);
             if (!questionDotToken.IsNone)
@@ -1510,6 +1768,7 @@ internal sealed partial class Parser
                 if (IsTemplateStartOfTaggedTemplate())
                 {
                     expression = ParseTaggedTemplateRest(pos, expression, questionDotToken, typeArguments);
+                    expression = ParseMemberExpressionRest(pos, expression, /*allowOptionalChain*/ true);
                     continue;
                 }
             }
@@ -1526,6 +1785,7 @@ internal sealed partial class Parser
                     factory.CreateCallChain(expression, questionDotToken, typeArguments, argumentList) :
                     factory.CreateCallExpression(expression, typeArguments, argumentList);
                 expression = FinishNode(callExpr, pos);
+                expression = ParseMemberExpressionRest(pos, expression, /*allowOptionalChain*/ true);
                 continue;
             }
             if (!questionDotToken.IsNone)
