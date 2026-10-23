@@ -25,4 +25,6 @@ Endpoint (2026-10-22, after O1, Windows only): optimized track G = 0.60 [0.59, 0
 
 Additional run (2026-10-23, after O1, O9, O10, O23; not the endpoint): G = 0.47 [0.46, 0.48] vs tsgo7-parse; vs tsrs 1.19 [1.18, 1.21] (contains 1.20, inconclusive; secondary). results/track-o/additional/2026-10-23T08-51-58-122Z/NOTE.md.
 
+Additional run (2026-10-23, after O5b, O11; not the endpoint): G = 0.46 [0.45, 0.46] vs tsgo7-parse; vs tsrs 1.16 [1.14, 1.17]: within 20 % of tsrs (secondary). results/track-o/additional/2026-10-23T11-50-41-097Z/NOTE.md.
+
 NoAlloc coverage and exceptions: `node harness/port/noalloc-report.mjs`, reported with every Track O result.

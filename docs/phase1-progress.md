@@ -224,3 +224,7 @@ Briefs: [modules/O5b.md](modules/O5b.md), [modules/O11.md](modules/O11.md); chos
 - **Run 1 (all rig-compliant; tuning corpus, 20 runs):** main 401.1 ms, O5b 398.2 ms, B 405.5 ms, **C 386.9 ms**; O5b/main 0.993 [0.950, 1.019] (not slower: **O5b merged**); B/main 1.011 [0.978, 1.044] (not better: not merged); **C/main 0.965 [0.935, 0.998]**, C/B 0.954 [0.931, 0.984]. Single-threaded: C/main 0.978 [0.972, 0.983].
 - **Run 2 (C rebased onto O5b):** O5b 415.6 ms, C 392.8 ms, C/O5b **0.945 [0.924, 0.970]**; single-threaded 0.976 [0.971, 0.981]. **C merged.** Raw: `results/track-o/O5b-O11/run1`, `run2` (`rank.mjs`).
 - **After both merges:** `M5.ParseTuningCorpus` 598.9 ms, 38.9 MB (after O23: 639.1 ms). `results/track-o/O5b-O11/merged-bdn/`.
+
+### Track O additional run after O5b and O11 (2026-10-23, Windows only)
+
+Protocol-compliant run at cfbabcf; rig ok, variance gate PASS. cs-o-aot-ws vs tsgo7-parse **0.46 [0.45, 0.46]**; vs tsrs-parse **1.16 [1.14, 1.17]**: upper bound ≤ 1.20, so "within 20 % of tsrs" (secondary, from an additional run; tsrs vscode MAD/median 5.40 %); single-threaded 0.720 vs typescript-go, 1.357 vs tsrs. The endpoint stays 0.60. `results/track-o/additional/2026-10-23T11-50-41-097Z/NOTE.md`.
