@@ -83,9 +83,10 @@ internal readonly struct ListBuilder
 /// below it are finished.
 /// </para>
 /// <para>
-/// Sizing and lifetime as for the node records (NodeStore.cs): the header, element, scratch and frame arrays are
-/// rented from the shared pool while the parse runs; when the SourceFile node is created, the headers and elements
-/// move into arrays of the exact size (pinned; they hold no references) and the scratch arrays go back to the pool.
+/// Sizing and lifetime as for the node records (NodeStore.cs, step O9 variant B): the header and element arrays
+/// (pinned; they hold no references) are sized from the text length, and when the SourceFile node is created the
+/// result keeps them as they are unless they have much more room than needed; the scratch and frame arrays of lists
+/// under construction stay with the thread.
 /// Speculative parsing truncates the list store with the node store (<see cref="Mark"/>).
 /// </para>
 /// </summary>
@@ -116,15 +117,16 @@ internal sealed partial class NodeStore
     private int[]? frames;
     private int frameCount;
 
-    // Whether the list arrays are scratch arrays of the pool (until the SourceFile node is created).
+    // Whether the parse is still building the list arrays (until the SourceFile node is created).
     private bool listsPooled;
+    // The element array the parse outgrew first (it goes back to the thread at the end of the parse, see GrowListElements).
+    private Node[]? outgrownElements;
 
-    private void InitLists(int textLength)
+    private void InitLists()
     {
-        // From the tuning corpus: 0.016 lists and 0.027 list elements per character on average (rounded up by the pool;
-        // fewer than 10 of 24,511 files grow these arrays).
-        lists = Scratch<ListHeader>.Rent((textLength / 64) + 16);
-        listElements = Scratch<Node>.Rent((textLength / 32) + 16);
+        var arrays = ThreadArrays.Current;
+        lists = ThreadArrays.Take(ref arrays.Lists, ScratchLists, pinned: true);
+        listElements = ThreadArrays.Take(ref arrays.ListElements, ScratchElements, pinned: true);
         listsPooled = true;
         // Header 0 is NodeList.None: no elements, range -1.
         lists[0] = new ListHeader { Pos = -1, End = -1 };
@@ -217,12 +219,12 @@ internal sealed partial class NodeStore
     [NoAllocUnchecked("arena growth: the list header array doubles")]
     private void GrowLists()
     {
-        var length = lists.Length * 2;
-        var grown = listsPooled ? Scratch<ListHeader>.Rent(length) : GC.AllocateUninitializedArray<ListHeader>(length);
+        var grown = GC.AllocateUninitializedArray<ListHeader>(GrowthLength(lists.Length, listCount, listCount + 1), pinned: true);
         Array.Copy(lists, grown, listCount);
         if (listsPooled)
         {
-            Scratch<ListHeader>.Return(lists);
+            // (Headers are read and written by index; the thread's next parse may reuse the array.)
+            ThreadArrays.Offer(ref ThreadArrays.Current.Lists, lists, ScratchLists);
         }
         lists = grown;
     }
@@ -230,11 +232,14 @@ internal sealed partial class NodeStore
     [NoAllocUnchecked("arena growth: the list element array doubles")]
     private void GrowListElements(int needed)
     {
-        var length = Math.Max(listElements.Length * 2, needed);
-        var grown = listsPooled ? Scratch<Node>.Rent(length) : GC.AllocateUninitializedArray<Node>(length);
+        var grown = GC.AllocateUninitializedArray<Node>(GrowthLength(listElements.Length, listElementCount, needed), pinned: true);
         Array.Copy(listElements, grown, listElementCount);
-        // Spans handed out by Elements may still read the old array, so it is not given back to the pool (another
-        // parse could overwrite it); the collector takes it.
+        // Spans handed out by Nodes may still read the old array while this parse runs, so the first array the parse
+        // outgrew goes back to the thread only at its end (SealLists); later ones are the collector's.
+        if (listsPooled && outgrownElements is null)
+        {
+            outgrownElements = listElements;
+        }
         listElements = grown;
     }
 
@@ -380,13 +385,17 @@ internal sealed partial class NodeStore
         }
     }
 
-    [NoAllocUnchecked("arena growth: the scratch arrays of lists under construction, from the pool")]
+    [NoAllocUnchecked("arena growth: the scratch arrays of lists under construction, from the thread")]
     private void RentScratch()
     {
         if (listsPooled)
         {
-            scratch = Scratch<Node>.Rent(1024);
-            frames = Scratch<int>.Rent(256);
+            // The thread's scratch arrays (no result keeps them), or new ones.
+            var arrays = ThreadArrays.Current;
+            scratch = arrays.ListScratch ?? new Node[1024];
+            frames = arrays.Frames ?? new int[256];
+            arrays.ListScratch = null;
+            arrays.Frames = null;
         }
         else
         {
@@ -397,26 +406,29 @@ internal sealed partial class NodeStore
         frameCount = 0;
     }
 
-    /// <summary>Moves the lists into arrays of the exact size and returns the scratch arrays (with <see cref="Seal"/>).</summary>
+    /// <summary>
+    /// The lists' part of <see cref="Seal"/>: the result keeps the header and element arrays unless they are trimmed
+    /// (<see cref="ThreadArrays.Fit{T}"/>); the scratch arrays of lists under construction go back to the thread.
+    /// </summary>
     [NoAllocUnchecked("per-file result: the exact list arrays the finished tree keeps")]
     private void SealLists()
     {
-        var exact = GC.AllocateUninitializedArray<ListHeader>(listCount, pinned: true);
-        Array.Copy(lists, exact, listCount);
-        Scratch<ListHeader>.Return(lists);
-        lists = exact;
-        var exactElements = GC.AllocateUninitializedArray<Node>(listElementCount, pinned: true);
-        Array.Copy(listElements, exactElements, listElementCount);
-        Scratch<Node>.Return(listElements);
-        listElements = exactElements;
+        var arrays = ThreadArrays.Current;
+        lists = ThreadArrays.Fit(lists, listCount, listCount, ref arrays.Lists, ScratchLists, pinned: true);
+        listElements = ThreadArrays.Fit(listElements, listElementCount, listElementCount, ref arrays.ListElements, ScratchElements, pinned: true);
+        if (outgrownElements is not null)
+        {
+            ThreadArrays.Offer(ref arrays.ListElements, outgrownElements, ScratchElements);
+            outgrownElements = null;
+        }
         if (frames is not null && frameCount == 0)
         {
-            Scratch<Node>.Return(scratch!);
-            Scratch<int>.Return(frames);
+            arrays.ListScratch = scratch;
+            arrays.Frames = frames;
             scratch = null;
             frames = null;
         }
-        // (Open frames at the seal keep their scratch arrays; they are not returned to the pool.)
+        // (Open frames at the seal keep their scratch arrays; they do not go back to the thread.)
         listsPooled = false;
     }
 }

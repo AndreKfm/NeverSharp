@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Original code (not ported): Track O's node arena (pre-registration §5.4), step O6b variant A's layout (compact records).
 
-using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using NeverSharp.Generated;
@@ -27,13 +26,17 @@ namespace NeverSharp.Optimized;
 /// side table keyed by node and field, so they cost nothing on the nodes that lack them.
 /// </para>
 /// <para>
-/// Sizing: while the parse runs, the store fills two scratch arrays rented from a pool shared by all threads (the
-/// counterpart of typescript-go's pooled node arenas, internal/ast/ast.go), sized from the text length and grown by
-/// doubling when a file needs more. When the parser creates the SourceFile node, the last node of a parse, the store
-/// copies its records into arrays of the exact size and returns the scratch arrays to the pool; nodes created after
-/// that grow the exact arrays as needed. So a parse allocates its final arrays once, without spare capacity or
-/// growth garbage. The final int array lives on the pinned object heap: it outlives the parse like the tree it
-/// holds, and the collector neither copies it from generation to generation nor scans it (it holds no references).
+/// Sizing (step O9, variant B: the result keeps the arrays it was built in): a parse starts in its thread's working
+/// arrays (<see cref="ThreadArrays"/>, the counterpart of typescript-go's pooled node arenas, internal/ast/ast.go;
+/// <see cref="ScratchWords"/> ints at first). A file that needs more grows them to the size its progress through the
+/// text projects (<see cref="GrowthLength"/>), and the outgrown array goes back to the thread. When the parser creates
+/// the SourceFile node, the last node of a parse, the result keeps the arrays as they are, without a copy; only an
+/// array with much more room than the parse used (more than twice the room needed, and the spare room above
+/// <see cref="TrimBytes"/>) is trimmed: its records are copied into an array of the exact size, and the working array
+/// stays with the thread. So a thread's working arrays are replaced lazily: a parse that keeps them leaves the thread
+/// without, and the next parse on the thread allocates new ones. The int array lives on the pinned object heap: it
+/// outlives the parse like the tree it holds, and the collector neither copies it from generation to generation nor
+/// scans it (it holds no references). Nodes created after the SourceFile node use the room left, or grow the arrays.
 /// </para>
 /// <para>
 /// Speculative parsing discards the nodes (and lists and texts) it created by truncating the arrays to a <see cref="Mark"/> taken
@@ -101,28 +104,27 @@ internal sealed partial class NodeStore
     private int used;
     private object?[] refs;
     private int refCount;
-    // The highest refCount since the object array was taken from the pool: the slots to clear before giving it back.
+    // The highest refCount since the object array was taken from the thread: the slots to clear before giving it back.
     private int refMax;
     private int count;
-    // Whether data and refs are scratch arrays of the pool (until the SourceFile node is created).
+    // Whether the parse is still building the arrays (until the SourceFile node is created, see Seal).
     private bool pooled;
+    // The largest node end set so far: the parse's progress through the text (GrowthLength).
+    private int maxEnd;
 
     // Rare fields, keyed by (node << 8) | field id; sideLog lists the keys in the order they were added (truncation).
     private Dictionary<long, SideValue>? side;
     private long[]? sideLog;
     private int sideLogCount;
 
-    /// <summary>A store for a source text (scratch arrays from the pool; exact arrays when the parse ends).</summary>
+    /// <summary>A store for a source text (the thread's working arrays or new ones; the result keeps them at the end).</summary>
     public NodeStore(NativeText sourceText)
     {
-        var textLength = sourceText.Length;
         Texts = new TextTable(sourceText);
         Texts.UsePool();
-        // From the tuning corpus: 0.56 ints and 0.036 object slots per character on average since node lists are
-        // handles in int slots (O7a) (the pool rounds up to a power of two; a file that needs more grows its scratch
-        // arrays).
-        data = Scratch<int>.Rent((textLength / 3 * 2) + 64);
-        refs = Scratch<object?>.Rent((textLength / 20) + 16);
+        var arrays = ThreadArrays.Current;
+        data = ThreadArrays.Take(ref arrays.Data, ScratchWords, pinned: true);
+        refs = ThreadArrays.Take(ref arrays.Refs, ScratchRefs, pinned: false);
         pooled = true;
         // Record 0 is Node.None.
         data[0] = (int)SyntaxKind.Unknown;
@@ -132,7 +134,7 @@ internal sealed partial class NodeStore
         data[TransformFlagsWord] = 0;
         used = HeaderWords;
         count = 1;
-        InitLists(textLength);
+        InitLists();
     }
 
     /// <summary>The texts of the parse: source text, character arena and interned identifiers (Text.cs, step O5a).</summary>
@@ -240,39 +242,39 @@ internal sealed partial class NodeStore
         sideLogCount = kept;
     }
 
-    /// <summary>Moves the records into arrays of the exact size (plus the SourceFile record) and returns the scratch arrays.</summary>
+    /// <summary>
+    /// The end of the parse (before the SourceFile record): the result keeps the arrays the parse built, except an array
+    /// with much more room than needed, whose contents move into an exact array while the working array stays with the
+    /// thread (<see cref="ThreadArrays.Fit{T}"/>).
+    /// </summary>
     [NoAllocUnchecked("per-file result: the exact arrays the finished tree keeps")]
     private void Seal(int size, int refSize)
     {
-        var exact = GC.AllocateUninitializedArray<int>(used + size, pinned: true);
-        Array.Copy(data, exact, used);
-        var exactRefs = new object?[refCount + refSize];
-        Array.Copy(refs, exactRefs, refCount);
-        ReturnScratch();
-        data = exact;
-        refs = exactRefs;
+        var arrays = ThreadArrays.Current;
+        data = ThreadArrays.Fit(data, used, used + size, ref arrays.Data, ScratchWords, pinned: true);
+        var needed = refCount + refSize;
+        if (TrimAtSeal(refs.Length, needed, IntPtr.Size))
+        {
+            var exactRefs = new object?[needed];
+            Array.Copy(refs, exactRefs, refCount);
+            // The working array goes to the thread without the references this store wrote.
+            refs.AsSpan(0, refMax).Clear();
+            ThreadArrays.Offer(ref arrays.Refs, refs, ScratchRefs);
+            refs = exactRefs;
+        }
         pooled = false;
         SealLists();
-    }
-
-    /// <summary>Gives the scratch arrays back to the pool, without the references this store wrote.</summary>
-    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private void ReturnScratch()
-    {
-        refs.AsSpan(0, refMax).Clear();
-        Scratch<object?>.Return(refs);
-        Scratch<int>.Return(data);
     }
 
     [NoAllocUnchecked("arena growth: the record array doubles")]
     private void GrowData(int needed)
     {
-        var length = Math.Max(data.Length * 2, needed);
-        var grown = pooled ? Scratch<int>.Rent(length) : GC.AllocateUninitializedArray<int>(length);
+        var grown = GC.AllocateUninitializedArray<int>(GrowthLength(data.Length, used, needed), pinned: true);
         Array.Copy(data, grown, used);
         if (pooled)
         {
-            Scratch<int>.Return(data);
+            // (Nothing holds a span of the records while room is made; the thread's next parse may reuse the array.)
+            ThreadArrays.Offer(ref ThreadArrays.Current.Data, data, ScratchWords);
         }
         data = grown;
     }
@@ -280,17 +282,11 @@ internal sealed partial class NodeStore
     [NoAllocUnchecked("arena growth: the object slot array doubles")]
     private void GrowRefs(int needed)
     {
-        var length = Math.Max(refs.Length * 2, needed);
-        var grown = pooled ? Scratch<object?>.Rent(length) : new object?[length];
+        var grown = new object?[Math.Max(refs.Length * 2, needed)];
         Array.Copy(refs, grown, refCount);
-        if (pooled)
-        {
-            refs.AsSpan(0, refMax).Clear();
-            Scratch<object?>.Return(refs);
-            // The new array may hold old references beyond refCount; Create clears the slots it hands out.
-            refMax = refCount;
-        }
+        // (The old array is the collector's, with the references it holds.)
         refs = grown;
+        refMax = refCount;
     }
 
     //// Base fields (utilities.ts: function Node).
@@ -308,7 +304,33 @@ internal sealed partial class NodeStore
     public int End(Node node) => data[node.Index + EndWord];
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    public void SetEnd(Node node, int value) => data[node.Index + EndWord] = value;
+    public void SetEnd(Node node, int value)
+    {
+        data[node.Index + EndWord] = value;
+        if (value > maxEnd)
+        {
+            maxEnd = value;
+        }
+    }
+
+    /// <summary>
+    /// The new length of an array that holds <paramref name="count"/> elements and needs <paramref name="needed"/>: while
+    /// the parse builds the arrays (the result keeps them), the count projected to the end of the text from the parse's
+    /// progress (the largest node end so far) plus a quarter, at least one and a half times the current length; after
+    /// the parse, or before a sixteenth of the text, twice the current length.
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private int GrowthLength(int current, int count, int needed)
+    {
+        var textLength = Texts.Source.Length;
+        long length = 2L * current;
+        if (pooled && maxEnd > 0 && maxEnd > textLength / 16)
+        {
+            var projected = (long)count * textLength / maxEnd;
+            length = Math.Max(projected + (projected >> 2) + 64, current + (current >> 1));
+        }
+        return (int)Math.Min(0x7FFFFFC7L, Math.Max(length, needed)); // (at most Array.MaxLength)
+    }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public NodeFlags Flags(Node node) => (NodeFlags)data[node.Index + FlagsWord];
@@ -418,56 +440,87 @@ internal sealed partial class NodeStore
         throw new InvalidOperationException($"{(SyntaxKind)(kindWord & KindMask)} has no field {field}");
     }
 
+    /// <summary>The spare room (bytes) up to which an array goes to the result as it is, however much larger than needed.</summary>
+    internal const int TrimBytes = 4096;
+
+    // The first lengths of a thread's working arrays (O9 variant B, measured on the tuning corpus and vscode): records
+    // of about 10,000 characters of code (0.56 to 0.8 ints per character), a tenth and a fifth as many list headers and
+    // list elements, and a few object slots (only the SourceFile node has object fields in the tuning corpus).
+    private const int ScratchWords = 8192;
+    private const int ScratchLists = (ScratchWords / 10) + 16;
+    private const int ScratchElements = (ScratchWords / 5) + 16;
+    private const int ScratchRefs = 64;
+
     /// <summary>
-    /// The pool of scratch arrays, shared by all threads: power-of-two lengths from 2^12 on, a few lock-free slots
-    /// per length. Unlike a per-thread cache it keeps no more arrays than parses ran at the same time, and a thread
-    /// that once parsed a large file does not hold a large array for itself.
+    /// Whether an array of <paramref name="length"/> elements is trimmed at the end of a parse that needs
+    /// <paramref name="needed"/> of them: it lacks the room, or it has more than twice the room needed and the spare
+    /// room exceeds <see cref="TrimBytes"/>.
     /// </summary>
-    internal static class Scratch<T>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal static bool TrimAtSeal(int length, int needed, int elementSize) =>
+        length < needed || (length > 2 * needed && (long)(length - needed) * elementSize > TrimBytes);
+
+    /// <summary>
+    /// The working arrays a thread keeps between parses (step O9, variant B): at most one per kind, taken by the next
+    /// parse on the thread (<see cref="Take{T}"/>), and offered back by a parse that outgrew it or trimmed it
+    /// (<see cref="Offer{T}"/>); the scratch arrays of lists under construction, which no result keeps, always go
+    /// back. A parse takes an array out of its slot, so a parse that starts on the same thread meanwhile does not share
+    /// it.
+    /// </summary>
+    private sealed class ThreadArrays
     {
-        private const int MinShift = 12;
-        private const int Classes = 31 - MinShift;
-        private const int SlotsPerClass = 64;
+        [ThreadStatic]
+        private static ThreadArrays? current;
 
-        private static readonly T[]?[] Slots = new T[]?[Classes * SlotsPerClass];
+        public int[]? Data;
+        public object?[]? Refs;
+        public ListHeader[]? Lists;
+        public Node[]? ListElements;
+        public Node[]? ListScratch;
+        public int[]? Frames;
 
-        /// <summary>An array of at least <paramref name="minimumLength"/> elements (contents undefined).</summary>
-        public static T[] Rent(int minimumLength)
+        /// <summary>The arrays of the current thread.</summary>
+        public static ThreadArrays Current => current ??= new ThreadArrays();
+
+        /// <summary>
+        /// The thread's array of the slot, or a new one of <paramref name="length"/> elements (the first length of a
+        /// working array; contents undefined for arrays without references).
+        /// </summary>
+        public static T[] Take<T>(ref T[]? slot, int length, bool pinned)
         {
-            var c = ClassOf(minimumLength);
-            if (c >= Classes)
-            {
-                return new T[minimumLength];
-            }
-            for (var i = c * SlotsPerClass; i < (c + 1) * SlotsPerClass; i++)
-            {
-                if (Volatile.Read(ref Slots[i]) is not null && Interlocked.Exchange(ref Slots[i], null) is { } array)
-                {
-                    return array;
-                }
-            }
-            return GC.AllocateUninitializedArray<T>(1 << (c + MinShift));
+            var array = slot;
+            slot = null;
+            return array ?? GC.AllocateUninitializedArray<T>(length, pinned);
         }
 
-        /// <summary>Keeps an array of <see cref="Rent"/> for later (the caller cleared the references it wrote).</summary>
-        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-        public static void Return(T[] array)
+        /// <summary>
+        /// The array the result keeps: <paramref name="array"/> itself, or, if it is trimmed (<see cref="TrimAtSeal"/>),
+        /// a copy of its first <paramref name="count"/> elements in an array of <paramref name="needed"/> elements, and
+        /// the working array is offered to the thread.
+        /// </summary>
+        public static T[] Fit<T>(T[] array, int count, int needed, ref T[]? slot, int firstLength, bool pinned)
         {
-            var c = ClassOf(array.Length);
-            if (c >= Classes || array.Length != 1 << (c + MinShift))
+            if (!TrimAtSeal(array.Length, needed, Unsafe.SizeOf<T>()))
             {
-                return;
+                return array;
             }
-            for (var i = c * SlotsPerClass; i < (c + 1) * SlotsPerClass; i++)
-            {
-                if (Volatile.Read(ref Slots[i]) is null && Interlocked.CompareExchange(ref Slots[i], array, null) is null)
-                {
-                    return;
-                }
-            }
+            var exact = GC.AllocateUninitializedArray<T>(needed, pinned);
+            Array.Copy(array, exact, count);
+            Offer(ref slot, array, firstLength);
+            return exact;
         }
 
+        /// <summary>
+        /// Keeps a working array no result holds for the thread's next parse: the smaller of it and the slot's, and
+        /// into an empty slot only up to four times the first length (a thread does not hold a large file's array).
+        /// </summary>
         [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-        private static int ClassOf(int length) => length <= 1 << MinShift ? 0 : 32 - BitOperations.LeadingZeroCount((uint)length - 1) - MinShift;
+        public static void Offer<T>(ref T[]? slot, T[] array, int firstLength)
+        {
+            if (slot is null ? array.Length <= 4 * firstLength : array.Length < slot.Length)
+            {
+                slot = array;
+            }
+        }
     }
 }

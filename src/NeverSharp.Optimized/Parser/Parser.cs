@@ -52,15 +52,31 @@ internal sealed partial class Parser
     // Instances are reused across parses, as TypeScript reuses its singleton namespace; to parse on many threads
     // at once each parse takes its own instance from this pool.
     // typescript-go counterpart: parserPool, getParser, putParser (internal/parser/parser.go).
+    // Track O (step O9): each thread keeps one instance of its own (typescript-go's sync.Pool caches per processor);
+    // the shared pool serves only a parse that starts while its thread's instance is in use.
     private static readonly ConcurrentBag<Parser> ParserPool = [];
+
+    [ThreadStatic]
+    private static Parser? threadParser;
 
     private static Parser GetParser()
     {
-        return ParserPool.TryTake(out var parser) ? parser : new Parser();
+        var parser = threadParser;
+        if (parser is not null)
+        {
+            threadParser = null;
+            return parser;
+        }
+        return ParserPool.TryTake(out parser) ? parser : new Parser();
     }
 
     private static void PutParser(Parser parser)
     {
+        if (threadParser is null)
+        {
+            threadParser = parser;
+            return;
+        }
         ParserPool.Add(parser);
     }
 
@@ -312,7 +328,7 @@ internal sealed partial class Parser
         }
         finally
         {
-            store.Texts.Seal(); // Track O (O5a): the texts move into exact arrays, the pooled arrays go back
+            store.Texts.Seal(); // Track O (O5a, O9): the result keeps the texts, the hash table goes back to the thread
             parser.UseStore(null!); // the result keeps the store, the pooled parser does not
             PutParser(parser);
         }
