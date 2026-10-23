@@ -1421,21 +1421,30 @@ internal sealed partial class Scanner
         // ScanToken (the loop of scanner.ts's scan), which starts at that character as the loop would after `continue`.
         // (The text has a NUL after its last character, so text[p + 1] for p &lt; end reads what CharCodeUnchecked
         // tests: the character, or the NUL where CharCodeUnchecked returns NaN; neither matches any character tested.)
+        // Track O (O26): the trivia loop leaves the first character of the token and its class (ch, f) to the token's
+        // dispatch instead of reading them again; the text in a local. For an identifier, getIdentifierToken
+        // (GetIdentifierTokenOfRange) is done here, with the first character in ch. The test that the identifier is not
+        // continued by a non-ASCII character or '\' reads text[asciiEnd] also when asciiEnd is end (the character there
+        // is in the text or its NUL, see above): if it matches, ScanIdentifierRest's loop does not run at end, and it
+        // returns GetIdentifierTokenOfRange(tokenStart, pos) as well.
         var p = pos;
         fullStartPos = p;
         var limit = end;
+        var chars = text;
         var flags = TokenFlags.None;
         var table = AsciiCharFlags;
+        int ch;
+        int f;
         if (skipTrivia)
         {
             while (p < limit)
             {
-                int c = text[p];
-                if (c >= 128)
+                ch = chars[p];
+                if (ch >= 128)
                 {
                     break;
                 }
-                var f = table[c];
+                f = table[ch];
                 if ((f & (byte)CharFlags.WhiteSpace) != 0)
                 {
                     p++;
@@ -1447,7 +1456,7 @@ internal sealed partial class Scanner
                     p = SkipAsciiWhiteSpaceOrLineBreak(p + 1);
                     continue;
                 }
-                if (c == (int)CharacterCodes.slash && text[p + 1] == (int)CharacterCodes.slash)
+                if (ch == (int)CharacterCodes.slash && chars[p + 1] == (int)CharacterCodes.slash)
                 {
                     var commentEnd = FindLineBreak(p + 2);
                     if (MayBeCommentDirective(p, commentEnd))
@@ -1459,70 +1468,85 @@ internal sealed partial class Scanner
                     p = commentEnd;
                     continue;
                 }
-                break;
+                tokenFlags = flags;
+                goto AsciiCharacter;
             }
         }
         tokenFlags = flags;
         if (p < limit)
         {
-            int ch = text[p];
+            ch = chars[p];
             if (ch < 128)
             {
-                var f = table[ch];
-                if ((f & (byte)CharFlags.IdentifierStart) != 0)
+                f = table[ch];
+                goto AsciiCharacter;
+            }
+        }
+        pos = p;
+        return ScanToken();
+
+    AsciiCharacter:
+        if ((f & (byte)CharFlags.IdentifierStart) != 0)
+        {
+            tokenStart = p;
+            var asciiEnd = SkipAsciiIdentifierParts(p + 1);
+            pos = asciiEnd;
+            int next = chars[asciiEnd];
+            if (next > (int)CharacterCodes.maxAsciiCharacter || next == (int)CharacterCodes.backslash)
+            {
+                return ScanIdentifierRest(languageVersion);
+            }
+            // GetIdentifierTokenOfRange(p, asciiEnd): reserved words are between 2 and 12 characters long and start
+            // with a lowercase letter.
+            var len = asciiEnd - p;
+            tokenValue = TextRef.Source(p, len);
+            if (len >= 2 && len <= 12 && ch >= (int)CharacterCodes.a && ch <= (int)CharacterCodes.z)
+            {
+                var keyword = MatchKeyword(p, len);
+                if (keyword != SyntaxKind.Unknown)
                 {
-                    tokenStart = p;
-                    var asciiEnd = SkipAsciiIdentifierParts(p + 1);
-                    pos = asciiEnd;
-                    if (asciiEnd < limit)
-                    {
-                        int next = text[asciiEnd];
-                        if (next > (int)CharacterCodes.maxAsciiCharacter || next == (int)CharacterCodes.backslash)
-                        {
-                            return ScanIdentifierRest(languageVersion);
-                        }
-                    }
-                    return GetIdentifierTokenOfRange(p, asciiEnd);
-                }
-                if ((f & (byte)CharFlags.SingleCharToken) != 0)
-                {
-                    tokenStart = p;
-                    pos = p + 1;
-                    return token = (SyntaxKind)AsciiSingleCharTokens[ch];
-                }
-                switch (ch)
-                {
-                    case (int)CharacterCodes.dot:
-                        {
-                            int next = text[p + 1];
-                            if (next != (int)CharacterCodes.dot && !IsDigit(next))
-                            {
-                                tokenStart = p;
-                                pos = p + 1;
-                                return token = SyntaxKind.DotToken;
-                            }
-                            break;
-                        }
-                    case (int)CharacterCodes.equals:
-                        {
-                            // (A conflict marker starts with seven '='.)
-                            int next = text[p + 1];
-                            if (next != (int)CharacterCodes.equals && next != (int)CharacterCodes.greaterThan)
-                            {
-                                tokenStart = p;
-                                pos = p + 1;
-                                return token = SyntaxKind.EqualsToken;
-                            }
-                            break;
-                        }
-                    case (int)CharacterCodes.doubleQuote:
-                    case (int)CharacterCodes.singleQuote:
-                        tokenStart = p;
-                        pos = p;
-                        tokenValue = ScanString();
-                        return token = SyntaxKind.StringLiteral;
+                    return token = keyword;
                 }
             }
+            return token = SyntaxKind.Identifier;
+        }
+        if ((f & (byte)CharFlags.SingleCharToken) != 0)
+        {
+            tokenStart = p;
+            pos = p + 1;
+            return token = (SyntaxKind)AsciiSingleCharTokens[ch];
+        }
+        switch (ch)
+        {
+            case (int)CharacterCodes.dot:
+                {
+                    int next = chars[p + 1];
+                    if (next != (int)CharacterCodes.dot && !IsDigit(next))
+                    {
+                        tokenStart = p;
+                        pos = p + 1;
+                        return token = SyntaxKind.DotToken;
+                    }
+                    break;
+                }
+            case (int)CharacterCodes.equals:
+                {
+                    // (A conflict marker starts with seven '='.)
+                    int next = chars[p + 1];
+                    if (next != (int)CharacterCodes.equals && next != (int)CharacterCodes.greaterThan)
+                    {
+                        tokenStart = p;
+                        pos = p + 1;
+                        return token = SyntaxKind.EqualsToken;
+                    }
+                    break;
+                }
+            case (int)CharacterCodes.doubleQuote:
+            case (int)CharacterCodes.singleQuote:
+                tokenStart = p;
+                pos = p;
+                tokenValue = ScanString();
+                return token = SyntaxKind.StringLiteral;
         }
         pos = p;
         return ScanToken();

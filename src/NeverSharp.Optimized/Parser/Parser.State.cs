@@ -8,6 +8,7 @@
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
 // Modified: translated from TypeScript to C#.
 
+using System.Runtime.CompilerServices;
 using NeverSharp.Generated;
 
 namespace NeverSharp.Optimized;
@@ -834,6 +835,7 @@ internal sealed partial class Parser : BaseNodeFactory
         return currentToken;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private SyntaxKind NextTokenWithoutCheck()
     {
@@ -848,16 +850,46 @@ internal sealed partial class Parser : BaseNodeFactory
         return func.Invoke(this);
     }
 
+    // Track O (O26): nextToken in the caller (the escape check is one compare for a token that is no keyword), the error
+    // out of line. `HasUnicodeEscape() || HasExtendedUnicodeEscape()` as one test of both flags, and isKeyword
+    // (Utilities.IsKeyword: FirstKeyword <= token <= LastKeyword) as one unsigned compare in place, since the NativeAOT
+    // compiler does not inline that method (a call for every token).
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private SyntaxKind NextToken()
     {
         // if the keyword had an escape
-        if (Utilities.IsKeyword(currentToken) && (scanner.HasUnicodeEscape() || scanner.HasExtendedUnicodeEscape()))
+        if ((uint)(currentToken - SyntaxKind.FirstKeyword) <= (uint)(SyntaxKind.LastKeyword - SyntaxKind.FirstKeyword) &&
+            (scanner.GetTokenFlags() & (TokenFlags.UnicodeEscape | TokenFlags.ExtendedUnicodeEscape)) != 0)
         {
             // issue a parse error for the escape
-            ParseErrorAt(scanner.GetTokenStart(), scanner.GetTokenEnd(), Diagnostics.Keywords_cannot_contain_escape_characters);
+            ReportKeywordWithEscape();
         }
         return NextTokenWithoutCheck();
+    }
+
+    /// <summary>
+    /// Track O (O26): <see cref="NextToken"/> when the current token is known to be <paramref name="kind"/> (the caller
+    /// has compared it): the keyword test is on <paramref name="kind"/>, which callers pass as a constant, so that it
+    /// folds away for punctuation.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private void NextTokenAfter(SyntaxKind kind)
+    {
+        if ((uint)(kind - SyntaxKind.FirstKeyword) <= (uint)(SyntaxKind.LastKeyword - SyntaxKind.FirstKeyword) && (scanner.GetTokenFlags() & (TokenFlags.UnicodeEscape | TokenFlags.ExtendedUnicodeEscape)) != 0)
+        {
+            ReportKeywordWithEscape();
+        }
+        currentToken = scanner.Scan();
+    }
+
+    // nextToken's error: issue a parse error for the escape.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private void ReportKeywordWithEscape()
+    {
+        ParseErrorAt(scanner.GetTokenStart(), scanner.GetTokenEnd(), Diagnostics.Keywords_cannot_contain_escape_characters);
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
@@ -1108,6 +1140,8 @@ internal sealed partial class Parser : BaseNodeFactory
         return token > SyntaxKind.LastReservedWord;
     }
 
+    // Track O (O26): the match in the caller, the error out of line (ParseExpectedError).
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool ParseExpected(SyntaxKind kind, DiagnosticMessage? diagnosticMessage = null, bool shouldAdvance = true)
     {
@@ -1115,11 +1149,19 @@ internal sealed partial class Parser : BaseNodeFactory
         {
             if (shouldAdvance)
             {
-                NextToken();
+                NextTokenAfter(kind);
             }
             return true;
         }
 
+        return ParseExpectedError(kind, diagnosticMessage);
+    }
+
+    // The rest of parseExpected: the current token is not `kind`.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private bool ParseExpectedError(SyntaxKind kind, DiagnosticMessage? diagnosticMessage)
+    {
         // Report specific message if provided with one.  Otherwise, report generic fallback message.
         if (diagnosticMessage != null)
         {
@@ -1313,14 +1355,24 @@ internal sealed partial class Parser : BaseNodeFactory
         return false;
     }
 
+    // Track O (O26): the match in the caller, the error out of line (ParseExpectedMatchingBracketsError).
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private void ParseExpectedMatchingBrackets(SyntaxKind openKind, SyntaxKind closeKind, bool openParsed, int openPosition)
     {
         if (Token() == closeKind)
         {
-            NextToken();
+            NextTokenAfter(closeKind);
             return;
         }
+        ParseExpectedMatchingBracketsError(openKind, closeKind, openParsed, openPosition);
+    }
+
+    // The rest of parseExpectedMatchingBrackets: the current token is not `closeKind`.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private void ParseExpectedMatchingBracketsError(SyntaxKind openKind, SyntaxKind closeKind, bool openParsed, int openPosition)
+    {
         var lastError = ParseErrorAtCurrentToken(Diagnostics._0_expected, Scanner.TokenToString(closeKind));
         if (!openParsed)
         {
@@ -1340,17 +1392,19 @@ internal sealed partial class Parser : BaseNodeFactory
             Utilities.CreateDetachedDiagnostic(fileName, sourceText, openPosition, 1, Diagnostics.The_parser_expected_to_find_a_1_to_match_the_0_token_here, Scanner.TokenToString(openKind), Scanner.TokenToString(closeKind)));
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool ParseOptional(SyntaxKind t)
     {
         if (Token() == t)
         {
-            NextToken();
+            NextTokenAfter(t);
             return true;
         }
         return false;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseOptionalToken(SyntaxKind t)
     {
@@ -1407,6 +1461,7 @@ internal sealed partial class Parser : BaseNodeFactory
         return FinishNode(factory.CreateToken(kind), pos);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool CanParseSemicolon()
     {
@@ -1420,6 +1475,7 @@ internal sealed partial class Parser : BaseNodeFactory
         return Token() == SyntaxKind.CloseBraceToken || Token() == SyntaxKind.EndOfFileToken || scanner.HasPrecedingLineBreak();
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool TryParseSemicolon()
     {
@@ -1431,7 +1487,7 @@ internal sealed partial class Parser : BaseNodeFactory
         if (Token() == SyntaxKind.SemicolonToken)
         {
             // consume the semicolon if it was explicitly provided.
-            NextToken();
+            NextTokenAfter(SyntaxKind.SemicolonToken);
         }
 
         return true;
