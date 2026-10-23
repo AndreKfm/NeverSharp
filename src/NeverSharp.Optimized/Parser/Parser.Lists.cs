@@ -40,13 +40,18 @@ internal sealed partial class Parser
             case ParsingContext.SwitchClauses:
                 return Token() == SyntaxKind.CaseKeyword || Token() == SyntaxKind.DefaultKeyword;
             case ParsingContext.TypeMembers:
-                return LookAhead(new F.IsTypeMemberStart());
+                return IsTypeMemberStartWithoutScan() is var typeMember and not Tristate.Unknown
+                    ? typeMember == Tristate.True
+                    : LookAhead(new F.IsTypeMemberStart());
             case ParsingContext.ClassMembers:
                 // We allow semicolons as class elements (as specified by ES6) as long as we're
                 // not in error recovery.  If we're in error recovery, we don't want an errant
                 // semicolon to be treated as a class member (since they're almost always used
                 // for statements.
-                return LookAhead(new F.IsClassMemberStart()) || (Token() == SyntaxKind.SemicolonToken && !inErrorRecovery);
+                return (IsClassMemberStartWithoutScan() is var classMember and not Tristate.Unknown
+                        ? classMember == Tristate.True
+                        : LookAhead(new F.IsClassMemberStart()))
+                    || (Token() == SyntaxKind.SemicolonToken && !inErrorRecovery);
             case ParsingContext.EnumMembers:
                 // Include open bracket computed properties. This technically also lets in indexers,
                 // which would be a candidate for improved error reporting.

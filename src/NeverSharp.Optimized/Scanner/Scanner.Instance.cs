@@ -1440,6 +1440,88 @@ internal sealed partial class Scanner
     }
 
     /// <summary>
+    /// Track O (step O11 variant C, the parser's exact pre-decisions): the kind of the token <see cref="Scan"/> would
+    /// return next, read without scanning and without changing any state, when the way there is plain: from
+    /// <see cref="pos"/> only ASCII white space that is not a line break (trivia skipped), then an identifier or keyword
+    /// that <see cref="Scan"/> finishes on its fast path (an ASCII identifier start, ASCII identifier parts, ended by
+    /// the end or an ASCII character other than '\'; the kind is what <see cref="GetIdentifierTokenOfRange"/> returns),
+    /// a punctuator that is always one character (<see cref="AsciiSingleCharTokens"/>), or `=`, `&lt;`, `&gt;` or `?`
+    /// where <see cref="ScanToken"/> would return EqualsToken, LessThanToken, GreaterThanToken or QuestionToken
+    /// (the characters after them are read as ScanToken reads them, not at a line start, so no conflict marker).
+    /// The token then has no preceding line break, and no comment lies before it. <see cref="SyntaxKind.Unknown"/> in
+    /// every other case.
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal SyntaxKind PeekPlainToken()
+    {
+        if (!skipTrivia)
+        {
+            return SyntaxKind.Unknown;
+        }
+        var flags = AsciiCharFlags;
+        var p = pos;
+        while (p < end)
+        {
+            int ch = text[p];
+            if (ch >= 128)
+            {
+                return SyntaxKind.Unknown;
+            }
+            var f = flags[ch];
+            if ((f & (byte)CharFlags.LineBreak) != 0)
+            {
+                return SyntaxKind.Unknown;
+            }
+            if ((f & (byte)CharFlags.WhiteSpace) != 0)
+            {
+                p++;
+                continue;
+            }
+            if ((f & (byte)CharFlags.IdentifierStart) != 0)
+            {
+                var asciiEnd = SkipAsciiIdentifierParts(p + 1);
+                if (asciiEnd < end)
+                {
+                    int next = text[asciiEnd];
+                    if (next > (int)CharacterCodes.maxAsciiCharacter || next == (int)CharacterCodes.backslash)
+                    {
+                        return SyntaxKind.Unknown;
+                    }
+                }
+                var len = asciiEnd - p;
+                if (len >= 2 && len <= 12 && ch >= (int)CharacterCodes.a && ch <= (int)CharacterCodes.z && TryGetKeyword(text.AsSpan(p, len), out var keyword))
+                {
+                    return keyword;
+                }
+                return SyntaxKind.Identifier;
+            }
+            if ((f & (byte)CharFlags.SingleCharToken) != 0)
+            {
+                return (SyntaxKind)AsciiSingleCharTokens[ch];
+            }
+            if (p + 2 >= end || IsConflictMarkerTrivia(text, p))
+            {
+                return SyntaxKind.Unknown;
+            }
+            int next1 = text[p + 1];
+            switch (ch)
+            {
+                case (int)CharacterCodes.equals:
+                    return next1 != (int)CharacterCodes.equals && next1 != (int)CharacterCodes.greaterThan ? SyntaxKind.EqualsToken : SyntaxKind.Unknown;
+                case (int)CharacterCodes.lessThan:
+                    return next1 != (int)CharacterCodes.lessThan && next1 != (int)CharacterCodes.equals && next1 != (int)CharacterCodes.slash ? SyntaxKind.LessThanToken : SyntaxKind.Unknown;
+                case (int)CharacterCodes.greaterThan:
+                    return SyntaxKind.GreaterThanToken;
+                case (int)CharacterCodes.question:
+                    return next1 != (int)CharacterCodes.dot && next1 != (int)CharacterCodes.question ? SyntaxKind.QuestionToken : SyntaxKind.Unknown;
+                default:
+                    return SyntaxKind.Unknown;
+            }
+        }
+        return SyntaxKind.Unknown;
+    }
+
+    /// <summary>
     /// The loop of scanner.ts's scan (Track O, O23-B: entered from <see cref="Scan"/>, which has reset the token's flags
     /// and handled the common tokens).
     /// </summary>
