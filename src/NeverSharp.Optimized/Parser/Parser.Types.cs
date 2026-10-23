@@ -668,6 +668,68 @@ internal sealed partial class Parser
         return false;
     }
 
+    /// <summary>
+    /// Exact pre-decision for `lookAhead(isTypeMemberStart)` (Track O, step O11 variant C): the outcome of
+    /// <see cref="IsTypeMemberStart"/> when it returns before its first <c>nextToken</c>, reading only
+    /// <c>token()</c> (`(`, `&lt;`, `get`, `set`; `[` after no modifier; no modifier and no literal property name),
+    /// or after its one <c>nextToken</c> (past one modifier or one literal property name) when that token is plain
+    /// (<see cref="Scanner.PeekPlainToken"/>: kind known, no preceding line break, no comment before it; the
+    /// lookahead then changes nothing that outlives it) and the function needs no further token.
+    /// <see cref="Tristate.Unknown"/> otherwise (then the lookahead runs).
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private Tristate IsTypeMemberStartWithoutScan()
+    {
+        var token = Token();
+        if (token == SyntaxKind.OpenParenToken || token == SyntaxKind.LessThanToken || token == SyntaxKind.GetKeyword || token == SyntaxKind.SetKeyword)
+        {
+            return Tristate.True;
+        }
+        var isModifier = UtilitiesPublic.IsModifierKind(token);
+        if (!isModifier)
+        {
+            if (token == SyntaxKind.OpenBracketToken)
+            {
+                return Tristate.True;
+            }
+            if (!IsLiteralPropertyName(token))
+            {
+                return Tristate.False;
+            }
+        }
+        var next = scanner.PeekPlainToken();
+        if (next == SyntaxKind.Unknown)
+        {
+            return Tristate.Unknown;
+        }
+        if (isModifier)
+        {
+            // After the modifier: another modifier or a literal property name scans on; `[` is a member.
+            if (UtilitiesPublic.IsModifierKind(next) || IsLiteralPropertyName(next))
+            {
+                return Tristate.Unknown;
+            }
+            if (next == SyntaxKind.OpenBracketToken)
+            {
+                return Tristate.True;
+            }
+        }
+        switch (next)
+        {
+            case SyntaxKind.OpenParenToken:
+            case SyntaxKind.LessThanToken:
+            case SyntaxKind.QuestionToken:
+            case SyntaxKind.ColonToken:
+            case SyntaxKind.CommaToken:
+            // canParseSemicolon for a token without a preceding line break (a plain token is never the end of file)
+            case SyntaxKind.SemicolonToken:
+            case SyntaxKind.CloseBraceToken:
+                return Tristate.True;
+            default:
+                return Tristate.False;
+        }
+    }
+
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseTypeMember()
     {
@@ -846,7 +908,9 @@ internal sealed partial class Parser
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParseTupleElementNameOrTupleElementType()
     {
-        if (LookAhead(new F.IsTupleElementName()))
+        // Track O (step O11 variant C): exact pre-decision; neither `...` nor an identifier or keyword makes
+        // isTupleElementName return false after reading only token(), so the lookahead is skipped.
+        if ((Token() == SyntaxKind.DotDotDotToken || Scanner.TokenIsIdentifierOrKeyword(Token())) && LookAhead(new F.IsTupleElementName()))
         {
             var pos = GetNodePos();
             var hasJSDoc = HasPrecedingJSDocComment();
@@ -1004,6 +1068,12 @@ internal sealed partial class Parser
             case SyntaxKind.NeverKeyword:
             case SyntaxKind.ObjectKeyword:
                 // If these are followed by a dot, then parse these out as a dotted type reference instead.
+                // Track O (step O11 variant C): exact pre-decision; a plain next token (Scanner.PeekPlainToken) is never
+                // a dot, so the tryParse would succeed, and a successful tryParse restores nothing: call it directly.
+                if (scanner.PeekPlainToken() != SyntaxKind.Unknown)
+                {
+                    return ParseKeywordAndNoDot();
+                }
                 return (TryParse(new F.ParseKeywordAndNoDot()) is { IsNone: false } __t1 ? __t1 : ParseTypeReference());
             case SyntaxKind.AsteriskEqualsToken:
                 // If there is '*=', treat it as * followed by postfix =
@@ -1198,7 +1268,9 @@ internal sealed partial class Parser
     {
         var pos = GetNodePos();
         var name = ParseIdentifier();
-        var constraint = TryParse(new F.TryParseConstraintOfInferType());
+        // Track O (step O11 variant C): exact pre-decision; without `extends` the callback's parseOptional reads only
+        // token() and the callback returns undefined, so nothing would be rolled back.
+        var constraint = Token() == SyntaxKind.ExtendsKeyword ? TryParse(new F.TryParseConstraintOfInferType()) : default;
         var node = factory.CreateTypeParameterDeclaration(/*modifiers*/ default, name, constraint);
         return FinishNode(node, pos);
     }
@@ -1381,7 +1453,7 @@ internal sealed partial class Parser
     private Node ParseTypeOrTypePredicate()
     {
         var pos = GetNodePos();
-        var typePredicateVariable = IsIdentifier() ? TryParse(new F.ParseTypePredicatePrefix()) : default;
+        var typePredicateVariable = IsIdentifier() ? TryParseTypePredicatePrefix() : default;
         var type = ParseType();
         if (!typePredicateVariable.IsNone)
         {
@@ -1391,6 +1463,33 @@ internal sealed partial class Parser
         {
             return type;
         }
+    }
+
+    /// <summary>
+    /// `tryParse(parseTypePredicatePrefix)` on an identifier with an exact pre-decision (Track O, step O11 variant C).
+    /// The callback parses the identifier (one Identifier node: nodeCount and identifierCount grow by one) and scans
+    /// the token after it; it succeeds when that token is `is` without a preceding line break. When that token is
+    /// plain (<see cref="Scanner.PeekPlainToken"/>: kind known, no preceding line break, no comment before it): `is`
+    /// means success, and a successful tryParse restores nothing, so the callback is called directly; any other
+    /// kind means failure, whose rollback restores everything except the two counters (as TypeScript, whose
+    /// speculation does not restore nodeCount and identifierCount), so the counters grow here and the speculation is
+    /// skipped. Otherwise it speculates.
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private Node TryParseTypePredicatePrefix()
+    {
+        var next = scanner.PeekPlainToken();
+        if (next == SyntaxKind.Unknown)
+        {
+            return TryParse(new F.ParseTypePredicatePrefix());
+        }
+        if (next == SyntaxKind.IsKeyword)
+        {
+            return ParseTypePredicatePrefix();
+        }
+        nodeCount++;
+        identifierCount++;
+        return default;
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]

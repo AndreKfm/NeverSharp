@@ -536,10 +536,136 @@ internal sealed partial class Parser
         }
     }
 
+    /// <summary>
+    /// `lookAhead(isDeclaration)` with an exact pre-decision (Track O, step O11 variant C,
+    /// <see cref="IsDeclarationWithoutScan"/>); when it is not certain, the lookahead runs.
+    /// </summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsStartOfDeclaration()
     {
-        return LookAhead(new F.IsDeclaration());
+        var decided = IsDeclarationWithoutScan();
+        return decided != Tristate.Unknown ? decided == Tristate.True : LookAhead(new F.IsDeclaration());
+    }
+
+    /// <summary>
+    /// The result of <see cref="IsDeclaration"/> where it is certain without scanning (Track O, step O11 variant C):
+    /// the first iteration of its loop when that returns reading only <c>token()</c>
+    /// (<see cref="IsDeclarationFirstIteration"/>), else, when the next token is plain
+    /// (<see cref="Scanner.PeekPlainToken"/>: kind known, no preceding line break, no comment before it), the branch
+    /// of the current token evaluated on that kind, including the next iteration when it returns reading only
+    /// <c>token()</c>. A lookahead whose result is known and whose scans cross only plain characters changes nothing
+    /// that outlives it (it creates no node), so skipping it is exact. <see cref="Tristate.Unknown"/> otherwise.
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private Tristate IsDeclarationWithoutScan()
+    {
+        var current = Token();
+        var first = IsDeclarationFirstIteration(current);
+        if (first != Tristate.Unknown)
+        {
+            return first;
+        }
+        var next = scanner.PeekPlainToken();
+        if (next == SyntaxKind.Unknown)
+        {
+            return Tristate.Unknown;
+        }
+        switch (current)
+        {
+            case SyntaxKind.InterfaceKeyword:
+            case SyntaxKind.TypeKeyword:
+            case SyntaxKind.DeferKeyword:
+                // nextTokenIsIdentifierOnSameLine
+                return IsIdentifier(next) ? Tristate.True : Tristate.False;
+            case SyntaxKind.ModuleKeyword:
+            case SyntaxKind.NamespaceKeyword:
+                // nextTokenIsIdentifierOrStringLiteralOnSameLine
+                return IsIdentifier(next) || next == SyntaxKind.StringLiteral ? Tristate.True : Tristate.False;
+            case SyntaxKind.AbstractKeyword:
+            case SyntaxKind.AccessorKeyword:
+            case SyntaxKind.AsyncKeyword:
+            case SyntaxKind.DeclareKeyword:
+            case SyntaxKind.PrivateKeyword:
+            case SyntaxKind.ProtectedKeyword:
+            case SyntaxKind.PublicKeyword:
+            case SyntaxKind.ReadonlyKeyword:
+                // No line break (ASI), 'declare type', then the loop continues with the next token.
+                if (current == SyntaxKind.DeclareKeyword && next == SyntaxKind.TypeKeyword)
+                {
+                    return Tristate.True;
+                }
+                return IsDeclarationFirstIteration(next);
+            case SyntaxKind.GlobalKeyword:
+                return next == SyntaxKind.OpenBraceToken || next == SyntaxKind.Identifier || next == SyntaxKind.ExportKeyword ? Tristate.True : Tristate.False;
+            case SyntaxKind.ImportKeyword:
+                return next == SyntaxKind.DeferKeyword || next == SyntaxKind.StringLiteral || next == SyntaxKind.AsteriskToken ||
+                    next == SyntaxKind.OpenBraceToken || Scanner.TokenIsIdentifierOrKeyword(next) ? Tristate.True : Tristate.False;
+            case SyntaxKind.ExportKeyword:
+                if (next == SyntaxKind.TypeKeyword)
+                {
+                    return Tristate.Unknown;
+                }
+                if (
+                    next == SyntaxKind.EqualsToken || next == SyntaxKind.AsteriskToken ||
+                    next == SyntaxKind.OpenBraceToken || next == SyntaxKind.DefaultKeyword ||
+                    next == SyntaxKind.AsKeyword || next == SyntaxKind.AtToken)
+                {
+                    return Tristate.True;
+                }
+                return IsDeclarationFirstIteration(next);
+            case SyntaxKind.StaticKeyword:
+                return IsDeclarationFirstIteration(next);
+            case SyntaxKind.UsingKeyword:
+                // isUsingDeclaration: nextTokenIsBindingIdentifierOrStartOfDestructuringOnSameLine
+                return IsBindingIdentifier(next) || next == SyntaxKind.OpenBraceToken ? Tristate.True : Tristate.False;
+            case SyntaxKind.AwaitKeyword:
+                // isAwaitUsingDeclaration: false unless the next token is 'using' (which looks further)
+                return next == SyntaxKind.UsingKeyword ? Tristate.Unknown : Tristate.False;
+            default:
+                return Tristate.Unknown;
+        }
+    }
+
+    /// <summary>
+    /// One iteration of the loop of <see cref="IsDeclaration"/> for the token <paramref name="token"/> when it returns
+    /// reading only <c>token()</c>; <see cref="Tristate.Unknown"/> for the tokens whose case scans (Track O, step O11
+    /// variant C). The cases are those of the loop's switch.
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private static Tristate IsDeclarationFirstIteration(SyntaxKind token)
+    {
+        switch (token)
+        {
+            case SyntaxKind.VarKeyword:
+            case SyntaxKind.LetKeyword:
+            case SyntaxKind.ConstKeyword:
+            case SyntaxKind.FunctionKeyword:
+            case SyntaxKind.ClassKeyword:
+            case SyntaxKind.EnumKeyword:
+                return Tristate.True;
+            case SyntaxKind.UsingKeyword:
+            case SyntaxKind.AwaitKeyword:
+            case SyntaxKind.InterfaceKeyword:
+            case SyntaxKind.TypeKeyword:
+            case SyntaxKind.DeferKeyword:
+            case SyntaxKind.ModuleKeyword:
+            case SyntaxKind.NamespaceKeyword:
+            case SyntaxKind.AbstractKeyword:
+            case SyntaxKind.AccessorKeyword:
+            case SyntaxKind.AsyncKeyword:
+            case SyntaxKind.DeclareKeyword:
+            case SyntaxKind.PrivateKeyword:
+            case SyntaxKind.ProtectedKeyword:
+            case SyntaxKind.PublicKeyword:
+            case SyntaxKind.ReadonlyKeyword:
+            case SyntaxKind.GlobalKeyword:
+            case SyntaxKind.ImportKeyword:
+            case SyntaxKind.ExportKeyword:
+            case SyntaxKind.StaticKeyword:
+                return Tristate.Unknown;
+            default:
+                return Tristate.False;
+        }
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
@@ -620,6 +746,13 @@ internal sealed partial class Parser
     {
         // In ES6 'let' always starts a lexical declaration if followed by an identifier or {
         // or [.
+        // Track O (step O11 variant C): exact pre-decision on a plain next token (Scanner.PeekPlainToken: kind known,
+        // no preceding line break, no comment before it); the lookahead would change nothing that outlives it.
+        var next = scanner.PeekPlainToken();
+        if (next != SyntaxKind.Unknown)
+        {
+            return IsBindingIdentifier(next) || next == SyntaxKind.OpenBraceToken || next == SyntaxKind.OpenBracketToken;
+        }
         return LookAhead(new F.NextTokenIsBindingIdentifierOrStartOfDestructuring());
     }
 
@@ -653,6 +786,12 @@ internal sealed partial class Parser
         // 'using' always starts a lexical declaration if followed by an identifier. We also eagerly parse
         // |ObjectBindingPattern| so that we can report a grammar error during check. We don't parse out
         // |ArrayBindingPattern| since it potentially conflicts with element access (i.e., `using[x]`).
+        // Track O (step O11 variant C): exact pre-decision on a plain next token (no preceding line break).
+        var next = scanner.PeekPlainToken();
+        if (next != SyntaxKind.Unknown)
+        {
+            return IsBindingIdentifier(next) || next == SyntaxKind.OpenBraceToken;
+        }
         return LookAhead(new F.NextTokenIsBindingIdentifierOrStartOfDestructuringOnSameLine());
     }
 
@@ -672,6 +811,13 @@ internal sealed partial class Parser
         // 'await using' always starts a lexical declaration if followed by an identifier. We also eagerly parse
         // |ObjectBindingPattern| so that we can report a grammar error during check. We don't parse out
         // |ArrayBindingPattern| since it potentially conflicts with element access (i.e., `await using[x]`).
+        // Track O (step O11 variant C): exact pre-decision; a plain next token other than 'using' makes the callback
+        // return false (the lookahead would change nothing that outlives it).
+        var next = scanner.PeekPlainToken();
+        if (next != SyntaxKind.Unknown && next != SyntaxKind.UsingKeyword)
+        {
+            return false;
+        }
         return LookAhead(new F.NextTokenIsUsingKeywordThenBindingIdentifierOrStartOfObjectDestructuringOnSameLine());
     }
 

@@ -1303,8 +1303,19 @@ internal sealed partial class Parser
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsStartOfOptionalPropertyOrElementAccessChain()
     {
-        return Token() == SyntaxKind.QuestionDotToken
-            && LookAhead(new F.NextTokenIsIdentifierOrKeywordOrOpenBracketOrTemplate());
+        if (Token() != SyntaxKind.QuestionDotToken)
+        {
+            return false;
+        }
+        // Track O (step O11 variant C): exact pre-decision on a plain next token (Scanner.PeekPlainToken: kind known,
+        // no comment before it; never a template, which starts with '`'); the lookahead would change nothing that
+        // outlives it.
+        var next = scanner.PeekPlainToken();
+        if (next != SyntaxKind.Unknown)
+        {
+            return Scanner.TokenIsIdentifierOrKeyword(next) || next == SyntaxKind.OpenBracketToken;
+        }
+        return LookAhead(new F.NextTokenIsIdentifierOrKeywordOrOpenBracketOrTemplate());
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
@@ -1442,7 +1453,7 @@ internal sealed partial class Parser
                     expression = FinishNode(factory.CreateNonNullExpression(expression), pos);
                     continue;
                 }
-                var typeArguments = TryParse<F.ParseTypeArgumentsInExpression, NodeList>(new F.ParseTypeArgumentsInExpression());
+                var typeArguments = TryParseTypeArgumentsInExpression();
                 if (!typeArguments.IsNone)
                 {
                     expression = FinishNode(factory.CreateExpressionWithTypeArguments(expression, typeArguments), pos);
@@ -1495,7 +1506,7 @@ internal sealed partial class Parser
             var questionDotToken = ParseOptionalToken(SyntaxKind.QuestionDotToken);
             if (!questionDotToken.IsNone)
             {
-                typeArguments = TryParse<F.ParseTypeArgumentsInExpression, NodeList>(new F.ParseTypeArgumentsInExpression());
+                typeArguments = TryParseTypeArgumentsInExpression();
                 if (IsTemplateStartOfTaggedTemplate())
                 {
                     expression = ParseTaggedTemplateRest(pos, expression, questionDotToken, typeArguments);
@@ -1535,6 +1546,25 @@ internal sealed partial class Parser
         var result = ParseDelimitedList(ParsingContext.ArgumentExpressions, new F.ParseArgumentExpression());
         ParseExpected(SyntaxKind.CloseParenToken);
         return result;
+    }
+
+    /// <summary>
+    /// `tryParse(parseTypeArgumentsInExpression)` with an exact pre-decision (Track O, step O11 variant C). In a
+    /// JavaScript file, or when the scanner's token is neither `&lt;` nor `&lt;&lt;`, the callback returns undefined
+    /// before it changes anything (`reScanLessThanToken` changes the scanner only for `&lt;&lt;`; the parser's
+    /// `currentToken` it assigns is restored by the rollback): the speculation would create no node, scan nothing
+    /// and report nothing, and its rollback would restore what was already there. So the result is known without
+    /// it. Only a `&lt;` or `&lt;&lt;` in a TypeScript file speculates.
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private NodeList TryParseTypeArgumentsInExpression()
+    {
+        if ((contextFlags & NodeFlags.JavaScriptFile) != 0 ||
+            (scanner.GetToken() != SyntaxKind.LessThanToken && scanner.GetToken() != SyntaxKind.LessThanLessThanToken))
+        {
+            return default;
+        }
+        return TryParse<F.ParseTypeArgumentsInExpression, NodeList>(new F.ParseTypeArgumentsInExpression());
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]

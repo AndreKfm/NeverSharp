@@ -249,9 +249,20 @@ internal sealed partial class Parser
         return store.Texts.Equals(store.Text(literalNode), "constructor") ? literalNode : default;
     }
 
+    /// <summary>
+    /// `tryParse(() => ...)` of tryParseConstructorDeclaration with an exact pre-decision (Track O, step O11
+    /// variant C): on the `constructor` keyword, <see cref="ParseConstructorName"/> is `parseExpected` of the
+    /// current token, which succeeds, and every path after it returns the finished node, so the speculation always
+    /// succeeds; a successful tryParse restores nothing, which is the callback called directly. A string literal
+    /// name (`"constructor"`) speculates.
+    /// </summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node TryParseConstructorDeclaration(int pos, bool hasJSDoc, NodeList modifiers)
     {
+        if (Token() == SyntaxKind.ConstructorKeyword)
+        {
+            return ParseConstructorDeclarationAfterModifiers(pos, hasJSDoc, modifiers);
+        }
         return TryParse(new F.ParseConstructorDeclarationAfterModifiers(pos, hasJSDoc, modifiers));
     }
 
@@ -479,6 +490,61 @@ internal sealed partial class Parser
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Exact pre-decision for `lookAhead(isClassMemberStart)` (Track O, step O11 variant C): the outcome of
+    /// <see cref="IsClassMemberStart"/> when it returns before its first <c>nextToken</c>, reading only
+    /// <c>token()</c> (a decorator; a class member modifier; `*` or `[` after no modifier; no modifier, no literal
+    /// property name and no `[`), or, for a literal property name without modifiers, after its one
+    /// <c>nextToken</c> when that token is plain (<see cref="Scanner.PeekPlainToken"/>: kind known, no preceding line
+    /// break, no comment before it; the lookahead then changes nothing that outlives it).
+    /// <see cref="Tristate.Unknown"/> otherwise (then the lookahead runs).
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private Tristate IsClassMemberStartWithoutScan()
+    {
+        var token = Token();
+        if (token == SyntaxKind.AtToken)
+        {
+            return Tristate.True;
+        }
+        if (UtilitiesPublic.IsModifierKind(token))
+        {
+            return UtilitiesPublic.IsClassMemberModifier(token) ? Tristate.True : Tristate.Unknown;
+        }
+        if (token == SyntaxKind.AsteriskToken)
+        {
+            return Tristate.True;
+        }
+        if (IsLiteralPropertyName(token))
+        {
+            var next = scanner.PeekPlainToken();
+            if (next == SyntaxKind.Unknown)
+            {
+                return Tristate.Unknown;
+            }
+            if (next == SyntaxKind.OpenBracketToken || !Utilities.IsKeyword(token) || token == SyntaxKind.SetKeyword || token == SyntaxKind.GetKeyword)
+            {
+                return Tristate.True;
+            }
+            switch (next)
+            {
+                case SyntaxKind.OpenParenToken:
+                case SyntaxKind.LessThanToken:
+                case SyntaxKind.ExclamationToken:
+                case SyntaxKind.ColonToken:
+                case SyntaxKind.EqualsToken:
+                case SyntaxKind.QuestionToken:
+                // canParseSemicolon for a token without a preceding line break (a plain token is never the end of file)
+                case SyntaxKind.SemicolonToken:
+                case SyntaxKind.CloseBraceToken:
+                    return Tristate.True;
+                default:
+                    return Tristate.False;
+            }
+        }
+        return token == SyntaxKind.OpenBracketToken ? Tristate.True : Tristate.False;
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]

@@ -1065,39 +1065,54 @@ internal sealed partial class Parser : BaseNodeFactory
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsBindingIdentifier()
     {
-        if (Token() == SyntaxKind.Identifier)
+        return IsBindingIdentifier(Token());
+    }
+
+    // Track O (step O11 variant C): isBindingIdentifier for a token kind (the current token's, or a plain next one).
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private static bool IsBindingIdentifier(SyntaxKind token)
+    {
+        if (token == SyntaxKind.Identifier)
         {
             return true;
         }
 
         // `let await`/`let yield` in [Yield] or [Await] are allowed here and disallowed in the binder.
-        return Token() > SyntaxKind.LastReservedWord;
+        return token > SyntaxKind.LastReservedWord;
     }
 
     // Ignore strict mode flag because we will report an error in type checker instead.
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsIdentifier()
     {
-        if (Token() == SyntaxKind.Identifier)
+        return IsIdentifier(Token());
+    }
+
+    // Track O (step O11 variant C): isIdentifier for a token kind (the current token's, or a plain next one) in the
+    // current context.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private bool IsIdentifier(SyntaxKind token)
+    {
+        if (token == SyntaxKind.Identifier)
         {
             return true;
         }
 
         // If we have a 'yield' keyword, and we're in the [yield] context, then 'yield' is
         // considered a keyword and is not an identifier.
-        if (Token() == SyntaxKind.YieldKeyword && InYieldContext())
+        if (token == SyntaxKind.YieldKeyword && InYieldContext())
         {
             return false;
         }
 
         // If we have a 'await' keyword, and we're in the [Await] context, then 'await' is
         // considered a keyword and is not an identifier.
-        if (Token() == SyntaxKind.AwaitKeyword && InAwaitContext())
+        if (token == SyntaxKind.AwaitKeyword && InAwaitContext())
         {
             return false;
         }
 
-        return Token() > SyntaxKind.LastReservedWord;
+        return token > SyntaxKind.LastReservedWord;
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
@@ -1611,10 +1626,17 @@ internal sealed partial class Parser : BaseNodeFactory
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsLiteralPropertyName()
     {
-        return Scanner.TokenIsIdentifierOrKeyword(Token()) ||
-            Token() == SyntaxKind.StringLiteral ||
-            Token() == SyntaxKind.NumericLiteral ||
-            Token() == SyntaxKind.BigIntLiteral;
+        return IsLiteralPropertyName(Token());
+    }
+
+    // Track O (step O11 variant C): isLiteralPropertyName for a token kind (the current token's, or a plain next one).
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private static bool IsLiteralPropertyName(SyntaxKind token)
+    {
+        return Scanner.TokenIsIdentifierOrKeyword(token) ||
+            token == SyntaxKind.StringLiteral ||
+            token == SyntaxKind.NumericLiteral ||
+            token == SyntaxKind.BigIntLiteral;
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
@@ -1688,7 +1710,65 @@ internal sealed partial class Parser : BaseNodeFactory
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool ParseContextualModifier(SyntaxKind t)
     {
-        return Token() == t && TryParse<F.NextTokenCanFollowModifier, bool>(new F.NextTokenCanFollowModifier());
+        return Token() == t && TryParseNextTokenCanFollowModifier();
+    }
+
+    /// <summary>
+    /// `tryParse(nextTokenCanFollowModifier)` with an exact pre-decision (Track O, step O11 variant C). When the
+    /// next token is plain (<see cref="Scanner.PeekPlainToken"/>: its kind is known, it has no preceding line break
+    /// and no comment precedes it), <see cref="NextTokenCanFollowModifierWithoutScan"/> evaluates the callback on that
+    /// kind. A false result is a failed tryParse of a callback that creates no node: everything it changed is rolled
+    /// back, so skipping it changes nothing. A true result is a successful tryParse, which restores nothing: the
+    /// callback is called directly. Every other case speculates.
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private bool TryParseNextTokenCanFollowModifier()
+    {
+        switch (NextTokenCanFollowModifierWithoutScan())
+        {
+            case Tristate.False:
+                return false;
+            case Tristate.True:
+                return NextTokenCanFollowModifier();
+            default:
+                return TryParse<F.NextTokenCanFollowModifier, bool>(new F.NextTokenCanFollowModifier());
+        }
+    }
+
+    /// <summary>
+    /// The result of <see cref="NextTokenCanFollowModifier"/> for a plain next token of kind <c>next</c>, branch by
+    /// branch (Track O, step O11 variant C); <see cref="Tristate.Unknown"/> when the next token is not plain or the
+    /// branch looks further ahead.
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private Tristate NextTokenCanFollowModifierWithoutScan()
+    {
+        var next = scanner.PeekPlainToken();
+        if (next == SyntaxKind.Unknown)
+        {
+            return Tristate.Unknown;
+        }
+        switch (Token())
+        {
+            case SyntaxKind.ConstKeyword:
+                return next == SyntaxKind.EnumKeyword ? Tristate.True : Tristate.False;
+            case SyntaxKind.ExportKeyword:
+                if (next == SyntaxKind.DefaultKeyword || next == SyntaxKind.TypeKeyword)
+                {
+                    return Tristate.Unknown;
+                }
+                return CanFollowExportModifier(next) ? Tristate.True : Tristate.False;
+            case SyntaxKind.DefaultKeyword:
+                return Tristate.Unknown;
+            case SyntaxKind.StaticKeyword:
+                return CanFollowModifier(next) ? Tristate.True : Tristate.False;
+            case SyntaxKind.GetKeyword:
+            case SyntaxKind.SetKeyword:
+                return CanFollowGetOrSetKeyword(next) ? Tristate.True : Tristate.False;
+            default:
+                // nextTokenIsOnSameLineAndCanFollowModifier; a plain token has no preceding line break.
+                return CanFollowModifier(next) ? Tristate.True : Tristate.False;
+        }
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
@@ -1738,11 +1818,18 @@ internal sealed partial class Parser : BaseNodeFactory
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool CanFollowExportModifier()
     {
-        return Token() == SyntaxKind.AtToken
-            || Token() != SyntaxKind.AsteriskToken
-                && Token() != SyntaxKind.AsKeyword
-                && Token() != SyntaxKind.OpenBraceToken
-                && CanFollowModifier();
+        return CanFollowExportModifier(Token());
+    }
+
+    // Track O (step O11 variant C): canFollowExportModifier for a token kind (the current token's, or a plain next one).
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private static bool CanFollowExportModifier(SyntaxKind token)
+    {
+        return token == SyntaxKind.AtToken
+            || token != SyntaxKind.AsteriskToken
+                && token != SyntaxKind.AsKeyword
+                && token != SyntaxKind.OpenBraceToken
+                && CanFollowModifier(token);
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
@@ -1755,24 +1842,38 @@ internal sealed partial class Parser : BaseNodeFactory
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool ParseAnyContextualModifier()
     {
-        return UtilitiesPublic.IsModifierKind(Token()) && TryParse<F.NextTokenCanFollowModifier, bool>(new F.NextTokenCanFollowModifier());
+        return UtilitiesPublic.IsModifierKind(Token()) && TryParseNextTokenCanFollowModifier();
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool CanFollowModifier()
     {
-        return Token() == SyntaxKind.OpenBracketToken
-            || Token() == SyntaxKind.OpenBraceToken
-            || Token() == SyntaxKind.AsteriskToken
-            || Token() == SyntaxKind.DotDotDotToken
-            || IsLiteralPropertyName();
+        return CanFollowModifier(Token());
+    }
+
+    // Track O (step O11 variant C): canFollowModifier for a token kind (the current token's, or a plain next one).
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private static bool CanFollowModifier(SyntaxKind token)
+    {
+        return token == SyntaxKind.OpenBracketToken
+            || token == SyntaxKind.OpenBraceToken
+            || token == SyntaxKind.AsteriskToken
+            || token == SyntaxKind.DotDotDotToken
+            || IsLiteralPropertyName(token);
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool CanFollowGetOrSetKeyword()
     {
-        return Token() == SyntaxKind.OpenBracketToken
-            || IsLiteralPropertyName();
+        return CanFollowGetOrSetKeyword(Token());
+    }
+
+    // Track O (step O11 variant C): canFollowGetOrSetKeyword for a token kind.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private static bool CanFollowGetOrSetKeyword(SyntaxKind token)
+    {
+        return token == SyntaxKind.OpenBracketToken
+            || IsLiteralPropertyName(token);
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
