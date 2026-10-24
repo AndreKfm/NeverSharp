@@ -26,6 +26,7 @@ The list the Track O endpoint is reported with (pre-registration §8, A9). Each 
 | O26 | Token consumption: parser reads of scanner state, NextToken, ParseTokenNode (one attempt; brief [modules/O26.md](modules/O26.md)) | done 2026-10-23; vs main 0.976 [0.951, 0.997]; on O25 0.994 [0.978, 1.016], not slower | — (one attempt), merged | phase1-progress.md, results/track-o/O25-O26/ |
 | O27 | Identifier path and interning (one attempt; brief [modules/O27.md](modules/O27.md)) | done 2026-10-24; vs main 0.985 [0.958, 1.006]; on O28 0.990 [0.956, 1.006], not slower | — (one attempt), merged | phase1-progress.md, results/track-o/O27-O28/ |
 | O28 | Call/member rest and node lists (one attempt; brief [modules/O28.md](modules/O28.md)) | done 2026-10-24; 356 vs 370 ms (0.962 [0.940, 0.976]) | — (one attempt), merged | phase1-progress.md, results/track-o/O27-O28/ |
+| O29 | NativeAOT inlining audit of the hot paths (one attempt; brief [modules/O29.md](modules/O29.md)) | running | | |
 
 Endpoint (2026-10-22, after O1, Windows only): optimized track G = 0.60 [0.59, 0.61] vs tsgo7-parse (faster claim allowed); vs tsrs 1.52 [1.50, 1.54] (secondary). See results/track-o/endpoint/2026-10-22T18-55-52-105Z/VERDICT.md.
 
