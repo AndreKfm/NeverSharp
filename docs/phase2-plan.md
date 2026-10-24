@@ -18,7 +18,7 @@ For every source file: symbols for declarations (`Symbol`: name, `SymbolFlags`, 
 |---|---|---|
 | B0 | oracle, binder dump writer skeleton, compare, `--phase binder` in gate.mjs; Track O data layout decision for symbols and flow nodes (handles in per-thread slabs like the node store, or managed objects first) | the TS dump is deterministic (two runs identical); the C# skeleton compiles |
 | B1 | symbols, declarations, containers and scopes, symbol tables, `declareSymbol` and merging, module instance state | Gate B section `symbols` + `diagnostics` (declaration errors) |
-| B2 | control-flow graph | section `flow` |
+| B2 | control-flow graph (ported already in B1; verification and the missing flow fields moved to B3) | section `flow` |
 | B3 | the rest: JavaScript special assignments (`module.exports`, `this.x =`, prototype assignments), JSDoc typedefs and callbacks, strict-mode and other bind diagnostics | all sections, both modes |
 | B4 | parse+bind driver configurations (`cs-o-*-bind`, `tsgo7-bind`), measurement | — |
 
