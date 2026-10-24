@@ -25,10 +25,17 @@
 //        node harness/port/gate.mjs --track optimized [--main ...]   (Track O: all gates; Gate 2 with
 //        the Track O ruleset incl. the NoAlloc analyzer; tests/NeverSharp.Optimized.Tests and
 //        tools/NeverSharp.Dump.Optimized, i.e. the same tests and dump writers built against Track O)
+//        node harness/port/gate.mjs --track optimized --phase binder [--jsdoc-mode all,types] [--sections symbols,flow,diagnostics]
+//        [--main ...]   (Phase 2, Gate B: Track O Gate 2 build + headers, the tsc 6.0.3 binder dumps
+//        (harness/astdump/dump-ts-binder.mjs; reused while the oracle script, typescript and the manifest are unchanged),
+//        the Track O binder dumps (NeverSharp.Dump.Optimized binder) and harness/astdump/compare-binder.mjs per JSDoc
+//        mode; no parser gates)
 // Exit code 0 only if every gate passes; prints one line per gate and a JSON summary.
 
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { cpSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -37,6 +44,9 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const main = arg("--main", root);
 const track = arg("--track", "faithful");
 if (track !== "faithful" && track !== "optimized") throw new Error("--track must be faithful or optimized");
+const phase = arg("--phase", "parser");
+if (phase !== "parser" && phase !== "binder") throw new Error("--phase must be parser or binder");
+if (phase === "binder" && track !== "optimized") throw new Error("--phase binder is defined for --track optimized only (phase2-plan.md)");
 // Track O is always checked completely (it starts from the finished Track F): every gate of M5.
 const moduleId = track === "optimized" ? "M5" : arg("--module", "M1");
 if (!["M1", "M2", "M34", "M5"].includes(moduleId)) throw new Error(`no gate defined for ${moduleId}`);
@@ -45,7 +55,7 @@ const dumpProject = track === "optimized" ? "tools/NeverSharp.Dump.Optimized" : 
 const testProject = track === "optimized" ? "tests/NeverSharp.Optimized.Tests" : "tests/NeverSharp.Faithful.Tests";
 
 // Worktrees lack the untracked inputs: copy the unit-test vectors in (read-only use).
-for (const m of ["M1", "M2"]) {
+for (const m of phase === "binder" ? [] : ["M1", "M2"]) {
     const vectors = join(root, "artifacts", "vectors", m);
     if (existsSync(vectors)) continue;
     const source = join(main, "artifacts", "vectors", m);
@@ -69,6 +79,38 @@ function gate(name, command, args, { showOutput = false, ...opts } = {}) {
 const node = process.execPath;
 gate("gate2-build", "dotnet", ["build", `src/NeverSharp.${Track}`, "-c", "Release", "-nologo", "-v", "q", "-p:RunAnalyzersDuringBuild=true"]);
 gate("gate2-headers", node, ["scripts/check-headers.mjs"]);
+if (phase === "binder") {
+    // Gate B (phase2-plan.md): per JSDoc mode the tsc 6.0.3 binder dump (the oracle), Track O's binder dump and the compare.
+    const corpus = join(main, "artifacts", "equivalence");
+    const modes = arg("--jsdoc-mode", "all,types").split(",");
+    const sections = arg("--sections", "symbols,flow,diagnostics");
+    const oracle = join(root, "harness", "astdump", "dump-ts-binder.mjs");
+    // The oracle's dumps are reused while its inputs are unchanged: the script, typescript's version and the manifest.
+    const tsVersion = JSON.parse(readFileSync(createRequire(oracle).resolve("typescript/package.json"), "utf8")).version;
+    const stamp = createHash("sha256").update(readFileSync(oracle)).update(tsVersion).update(readFileSync(join(corpus, "manifest.json"))).digest("hex");
+    const valid = dir => existsSync(`${dir}.stamp`) && existsSync(`${dir}.outcomes.json`) && readFileSync(`${dir}.stamp`, "utf8") === stamp;
+    let dumpBuilt = false;
+    for (const mode of modes) {
+        // Expected: the main checkout's dumps if current (read only), else this checkout's, else a new oracle run here.
+        let expected = join(corpus, "dumps", `ts-binder-${mode}`);
+        if (!valid(expected)) {
+            expected = join(root, "artifacts", "dumps", `ts-binder-${mode}`);
+            if (valid(expected)) console.log(`(oracle dumps of mode ${mode} reused: ${expected})`);
+            else if (gate(`oracle-${mode}`, node, [oracle, "--corpus", corpus, "--jsdoc-mode", mode, "--out", expected], { timeout: 60 * 60 * 1000, showOutput: true })) writeFileSync(`${expected}.stamp`, stamp);
+            else continue;
+        }
+        else console.log(`(oracle dumps of mode ${mode} reused: ${expected})`);
+        // Built once (the project, the parser and the binder); then run without building per mode.
+        if (!dumpBuilt && !(dumpBuilt = gate("binder-dump-build", "dotnet", ["build", dumpProject, "-c", "Release", "-nologo", "-v", "q"], { showOutput: true }))) break;
+        const actual = join(root, "artifacts", "dumps", `cs-${track}-binder-${mode}`);
+        const dumped = gate(`binder-dump-${mode}`, "dotnet", ["run", "-c", "Release", "--no-build", "--project", dumpProject, "--", "binder", "--jsdoc-mode", mode, "--corpus", corpus, "--out", actual],
+            { timeout: 30 * 60 * 1000, showOutput: true });
+        if (dumped) gate(`binder-compare-${mode}`, node, ["harness/astdump/compare-binder.mjs", "--corpus", corpus, "--jsdoc-mode", mode, "--expected", expected, "--actual", actual, "--sections", sections, "--show", "15"], { showOutput: true });
+    }
+    const pass = results.every(r => r.pass);
+    console.log(JSON.stringify({ track, phase, modes, sections: sections.split(","), pass, results }));
+    process.exit(pass ? 0 : 1);
+}
 gate("unit-tests", "dotnet", ["test", "--project", testProject, "-c", "Release"]);
 if (moduleId !== "M1") {
     const corpus = join(main, "artifacts", "equivalence");

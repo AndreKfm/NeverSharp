@@ -140,6 +140,9 @@ internal sealed class SourceFile
     /// </summary>
     internal void Release() => Store.Release();
 
+    /// <summary>The binder output (Binder.BindSourceFile), owned by the result like the node store; null until bound.</summary>
+    internal BinderStore? Binding { get; set; }
+
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal List<DiagnosticWithLocation> ParseDiagnostics => Store.ParseDiagnostics(Root);
 
