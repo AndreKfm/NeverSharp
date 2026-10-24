@@ -116,9 +116,21 @@ internal sealed class BinderStore
     private Link[] links = new Link[16];
     private int linksUsed = 1;
 
+    /// <summary>
+    /// Module B3: the rare flow fields of conditional expressions in return position (flowNodeWhenTrue,
+    /// flowNodeWhenFalse) and of switch statements (possiblyExhaustive; only true values are stored).
+    /// </summary>
+    private struct FlowExtraFields
+    {
+        public FlowNode WhenTrue;
+        public FlowNode WhenFalse;
+        public bool PossiblyExhaustive;
+    }
+
     private NodeMap<DeclarationFields> declarationFields;
     private NodeMap<FlowNode> flowNodes;
     private NodeMap<ContainerFields> containerFields;
+    private NodeMap<FlowExtraFields> flowExtraFields;
 
     // Rare symbol members (UMD global exports, JavaScript assignment declarations): only files that have them pay.
     private Dictionary<int, SymbolTable>? globalExports;
@@ -140,6 +152,12 @@ internal sealed class BinderStore
 
     /// <summary>types.ts: SourceFile.symbolCount.</summary>
     internal int SymbolCount { get; set; }
+
+    /// <summary>types.ts: SourceFile.commonJsModuleIndicator (set by the binder; None when undefined).</summary>
+    internal Node CommonJsModuleIndicator { get; set; }
+
+    /// <summary>types.ts: SourceFile.jsGlobalAugmentations (None when undefined).</summary>
+    internal SymbolTable JsGlobalAugmentations { get; set; }
 
     // ---- symbols ----
 
@@ -534,6 +552,27 @@ internal sealed class BinderStore
     internal FlowNode FallthroughFlowNodeOf(Node node) => containerFields.Get(node).FallthroughFlowNode;
 
     internal void SetFallthroughFlowNodeOf(Node node, FlowNode value) => containerFields.GetOrAdd(node).FallthroughFlowNode = value;
+
+    /// <summary>types.ts: ConditionalExpression.flowNodeWhenTrue.</summary>
+    internal FlowNode FlowNodeWhenTrueOf(Node node) => flowExtraFields.Get(node).WhenTrue;
+
+    internal void SetFlowNodeWhenTrueOf(Node node, FlowNode value) => flowExtraFields.GetOrAdd(node).WhenTrue = value;
+
+    /// <summary>types.ts: ConditionalExpression.flowNodeWhenFalse.</summary>
+    internal FlowNode FlowNodeWhenFalseOf(Node node) => flowExtraFields.Get(node).WhenFalse;
+
+    internal void SetFlowNodeWhenFalseOf(Node node, FlowNode value) => flowExtraFields.GetOrAdd(node).WhenFalse = value;
+
+    /// <summary>types.ts: SwitchStatement.possiblyExhaustive (false, as createSwitchStatement initializes it, until the binder sets it).</summary>
+    internal bool PossiblyExhaustiveOf(Node node) => flowExtraFields.Get(node).PossiblyExhaustive;
+
+    internal void SetPossiblyExhaustiveOf(Node node, bool value)
+    {
+        if (value || flowExtraFields.Get(node).PossiblyExhaustive)
+        {
+            flowExtraFields.GetOrAdd(node).PossiblyExhaustive = value;
+        }
+    }
 
     // ---- chains ----
 

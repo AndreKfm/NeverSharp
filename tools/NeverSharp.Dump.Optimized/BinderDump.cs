@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Original code (not ported): binder dump of Track O for Gate B (module B0).
 //
-// Reproduces harness/astdump/dump-ts-binder.mjs (binder dump format version 1, described there): each unit is parsed
+// Reproduces harness/astdump/dump-ts-binder.mjs (binder dump format version 2, described there): each unit is parsed
 // with Parser.CreateSourceFile(fileName, text, { languageVersion: Latest, jsDocParsingMode }, setParentNodes: true,
 // scriptKind), bound with Binder.BindSourceFile(file, new CompilerOptions()) and written from Track O's binder output
 // (SourceFile.Binding): sections symbols, flow and diagnostics. Units that do not finish within the timeout are
@@ -400,12 +400,18 @@ internal static partial class BinderDump
             foreach (var (field, flow) in new[]
             {
                 ("flowNode", b.FlowNodeOf(n)), ("endFlowNode", b.EndFlowNodeOf(n)), ("returnFlowNode", b.ReturnFlowNodeOf(n)), ("fallthroughFlowNode", b.FallthroughFlowNodeOf(n)),
+                ("flowNodeWhenTrue", b.FlowNodeWhenTrueOf(n)), ("flowNodeWhenFalse", b.FlowNodeWhenFalseOf(n)),
             })
             {
                 if (!flow.IsNone)
                 {
                     line.Append(' ').Append(field).Append('=').Append(Fid(flow));
                 }
+            }
+            if (store.Kind(n) == SyntaxKind.SwitchStatement)
+            {
+                // (defined on every switch statement: createSwitchStatement initializes it to false)
+                line.Append(" possiblyExhaustive=").Append(b.PossiblyExhaustiveOf(n) ? "true" : "false");
             }
             if (line.Length > 0)
             {

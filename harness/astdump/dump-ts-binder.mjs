@@ -9,7 +9,8 @@
 //   --jsdoc-mode: all = ParseAll (default), none = ParseNone, types = ParseForTypeErrors (the measured mode)
 //   --out: default <corpus>/dumps/ts-binder-<mode>; the outcomes go to <out>.outcomes.json
 //
-// Binder dump format, version 1 (tools/NeverSharp.Dump.Optimized/BinderDump.cs writes the same):
+// Binder dump format, version 2 (tools/NeverSharp.Dump.Optimized/BinderDump.cs writes the same; version 2, module B3:
+// the flow lines also carry flowNodeWhenTrue, flowNodeWhenFalse and possiblyExhaustive):
 //
 //   Nodes are numbered #0, #1, ... in the order of the AST dump (dump-ts.mjs): pre-order, a node's jsDoc comments
 //   before its forEachChild children. A node reference is <Kind>:<pos>-<end>#<number> (#? for a node outside that
@@ -29,6 +30,7 @@
 //       members in bit order ("-" for 0)
 //   == flow
 //   #<n> <Kind> <pos> <end>[ flowNode=f<i>][ endFlowNode=f<i>][ returnFlowNode=f<i>][ fallthroughFlowNode=f<i>]
+//       [ flowNodeWhenTrue=f<i>][ flowNodeWhenFalse=f<i>][ possiblyExhaustive=true|false]
 //   f<i> <FlowFlags> <Names|...>[ node=<ref>|switch=<ref> clause=<start>-<end>|target=f<i> antecedents=[f<i>,...]]
 //       [ ante=f<i>|antes=[f<i>,...]]
 //       flow nodes numbered f0, f1, ... in first-visit order: per node line, its fields in the order above, each
@@ -168,9 +170,10 @@ function dumpUnit(text, unit, jsDocParsingMode) {
     out += "== flow\n";
     order.forEach((n, i) => {
         let line = "";
-        for (const field of ["flowNode", "endFlowNode", "returnFlowNode", "fallthroughFlowNode"]) {
+        for (const field of ["flowNode", "endFlowNode", "returnFlowNode", "fallthroughFlowNode", "flowNodeWhenTrue", "flowNodeWhenFalse"]) {
             if (n[field]) line += ` ${field}=${fid(n[field])}`;
         }
+        if (n.possiblyExhaustive !== undefined) line += ` possiblyExhaustive=${n.possiblyExhaustive}`;
         if (line) out += head(n, i) + line + "\n";
     });
     flows.forEach((f, k) => {

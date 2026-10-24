@@ -6,9 +6,8 @@
 //   https://github.com/microsoft/TypeScript at commit 050880ce59e30b356b686bd3144efe24f875ebc8
 // Port structure follows internal/binder/binder.go
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
-// Modified: translated from TypeScript to C#; the strict-mode and reserved-word checks of the binder, and the stubs of
-// module B3: the JavaScript special assignments (CommonJS exports, this/prototype/expando property assignments,
-// Object.defineProperty) and the delayed binding of JSDoc typedef/callback/enum tags.
+// Modified: translated from TypeScript to C#; the strict-mode and reserved-word checks of the binder (the JavaScript
+// special assignments and the delayed JSDoc typedef binding of module B3 are in Binder.JavaScript.cs).
 
 using System.Collections.Frozen;
 using NeverSharp.Generated;
@@ -20,80 +19,6 @@ internal sealed partial class Binder
     // utilitiesPublic.ts identifierToKeywordKind: textToKeyword looked up by the identifier's characters.
     private static readonly FrozenDictionary<string, SyntaxKind> Keywords = Scanner.TextToKeywordObj.ToFrozenDictionary(StringComparer.Ordinal);
     private static readonly FrozenDictionary<string, SyntaxKind>.AlternateLookup<ReadOnlySpan<char>> KeywordsBySpan = Keywords.GetAlternateLookup<ReadOnlySpan<char>>();
-
-    // ---- module B3: JavaScript special assignments and JSDoc typedefs (stubs: binder.ts binds them here) ----
-
-    /// <summary>binder.ts delayedBindJSDocTypedefTag (module B3; the tags are collected in delayedTypeAliases).</summary>
-    private static void DelayedBindJSDocTypedefTag()
-    {
-    }
-
-    /// <summary>binder.ts bindSpecialPropertyDeclaration (module B3).</summary>
-    private static void BindSpecialPropertyDeclaration(Node node)
-    {
-        _ = node;
-    }
-
-    /// <summary>binder.ts bindExportsPropertyAssignment (module B3).</summary>
-    private static void BindExportsPropertyAssignment(Node node)
-    {
-        _ = node;
-    }
-
-    /// <summary>binder.ts bindModuleExportsAssignment (module B3).</summary>
-    private static void BindModuleExportsAssignment(Node node)
-    {
-        _ = node;
-    }
-
-    /// <summary>binder.ts bindPrototypePropertyAssignment (module B3).</summary>
-    private static void BindPrototypePropertyAssignment(Node lhs, Node parent)
-    {
-        _ = lhs;
-        _ = parent;
-    }
-
-    /// <summary>binder.ts bindPrototypeAssignment (module B3).</summary>
-    private static void BindPrototypeAssignment(Node node)
-    {
-        _ = node;
-    }
-
-    /// <summary>binder.ts bindThisPropertyAssignment (module B3).</summary>
-    private static void BindThisPropertyAssignment(Node node)
-    {
-        _ = node;
-    }
-
-    /// <summary>binder.ts bindSpecialPropertyAssignment (module B3; in TypeScript files it binds expando members of functions).</summary>
-    private static void BindSpecialPropertyAssignment(Node node)
-    {
-        _ = node;
-    }
-
-    /// <summary>binder.ts bindObjectDefinePropertyAssignment (module B3).</summary>
-    private static void BindObjectDefinePropertyAssignment(Node node)
-    {
-        _ = node;
-    }
-
-    /// <summary>binder.ts bindObjectDefinePropertyExport (module B3).</summary>
-    private static void BindObjectDefinePropertyExport(Node node)
-    {
-        _ = node;
-    }
-
-    /// <summary>binder.ts bindObjectDefinePrototypeProperty (module B3).</summary>
-    private static void BindObjectDefinePrototypeProperty(Node node)
-    {
-        _ = node;
-    }
-
-    /// <summary>binder.ts bindCallExpression (module B3: a require call makes the file a CommonJS module, setCommonJsModuleIndicator).</summary>
-    private static void BindCallExpression(Node node)
-    {
-        _ = node;
-    }
 
     // ---- strict mode and reserved words ----
 

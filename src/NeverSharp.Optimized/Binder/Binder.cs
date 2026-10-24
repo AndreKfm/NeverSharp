@@ -217,7 +217,7 @@ internal sealed partial class Binder
         inAssignmentPattern = false;
         emitFlags = NodeFlags.None;
         nameCall = nameConstructor = nameNew = nameIndex = nameExportStar = nameGlobal = nameMissing = nameType = default;
-        nameObject = nameJSXAttributes = nameClass = nameFunction = nameComputed = nameExportEquals = nameDefault = namePrototype = default;
+        nameObject = nameJSXAttributes = nameClass = nameFunction = nameComputed = nameExportEquals = nameDefault = namePrototype = nameModule = default;
     }
 
     private bool BindInStrictMode(CompilerOptions opts)
@@ -1485,7 +1485,7 @@ internal sealed partial class Binder
                     Utilities.IsInJSFile(store, node) &&
                     !commonJsModuleIndicator.IsNone &&
                     Utilities.IsModuleExportsAccessExpression(store, node) &&
-                    LookupSymbolForName(blockScopeContainer, "module").IsNone)
+                    LookupSymbolForName(blockScopeContainer, NameModule).IsNone)
                 {
                     DeclareSymbol(b.LocalsOf(file), Symbol.None, store.Expression(node), SymbolFlags.FunctionScopedVariable | SymbolFlags.ModuleExports, SymbolFlags.FunctionScopedVariableExcludes);
                 }
@@ -2182,7 +2182,14 @@ internal sealed partial class Binder
             var exportSymbol = b.ExportSymbol(local);
             return !exportSymbol.IsNone ? exportSymbol : local;
         }
-        // (jsGlobalAugmentations of a source file: module B3.)
+        if (store.Kind(lookupContainer) == SyntaxKind.SourceFile && lookupContainer == file && !b.JsGlobalAugmentations.IsNone)
+        {
+            var augmentation = b.Get(b.JsGlobalAugmentations, name);
+            if (!augmentation.IsNone)
+            {
+                return augmentation;
+            }
+        }
         if (Utilities.CanHaveSymbol(store, lookupContainer))
         {
             var symbol = b.SymbolOf(lookupContainer);

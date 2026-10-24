@@ -911,7 +911,7 @@ internal sealed partial class Binder
         // We mark a switch statement as possibly exhaustive if it has no default clause and if all
         // case clauses have unreachable end points (e.g. they all return). Note, we no longer need
         // this property in control flow analysis, it's there only for backwards compatibility.
-        // (node.possiblyExhaustive: not kept, BinderStore has no field for it and nothing in Track O reads it.)
+        b.SetPossiblyExhaustiveOf(node, !hasDefault && !b.HasAntecedents(postSwitchLabel));
         if (!hasDefault)
         {
             AddAntecedent(postSwitchLabel, CreateFlowSwitchClause(preSwitchCaseFlow, node, 0, 0));
@@ -1323,12 +1323,18 @@ internal sealed partial class Binder
         hasFlowEffects = false;
         BindCondition(store.Condition(node), trueLabel, falseLabel);
         currentFlow = FinishFlowLabel(trueLabel);
-        // (inReturnPosition: node.flowNodeWhenTrue = currentFlow; not kept, BinderStore has no field for it yet.)
+        if (inReturnPosition)
+        {
+            b.SetFlowNodeWhenTrueOf(node, currentFlow);
+        }
         Bind(store.QuestionToken(node));
         Bind(store.WhenTrue(node));
         AddAntecedent(postExpressionLabel, currentFlow);
         currentFlow = FinishFlowLabel(falseLabel);
-        // (inReturnPosition: node.flowNodeWhenFalse = currentFlow; not kept either.)
+        if (inReturnPosition)
+        {
+            b.SetFlowNodeWhenFalseOf(node, currentFlow);
+        }
         Bind(store.ColonToken(node));
         Bind(store.WhenFalse(node));
         AddAntecedent(postExpressionLabel, currentFlow);

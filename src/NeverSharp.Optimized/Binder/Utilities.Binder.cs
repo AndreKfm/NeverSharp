@@ -1209,4 +1209,187 @@ internal static partial class Utilities
         var indexOfStar = pattern.IndexOf('*');
         return indexOfStar == -1 || pattern[(indexOfStar + 1)..].IndexOf('*') == -1;
     }
+
+    // ---- module B3: JavaScript special assignments ----
+
+    /// <summary>utilities.ts: getNameOrArgument.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal static Node GetNameOrArgument(NodeStore store, Node expr)
+    {
+        return store.Kind(expr) == SyntaxKind.PropertyAccessExpression ? store.Name(expr) : store.ArgumentExpression(expr);
+    }
+
+    /// <summary>utilities.ts: isLiteralLikeAccess (x.y OR x[0]).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private static bool IsLiteralLikeAccess(NodeStore store, Node node)
+    {
+        return store.Kind(node) == SyntaxKind.PropertyAccessExpression || IsLiteralLikeElementAccess(store, node);
+    }
+
+    /// <summary>utilities.ts: isEmptyObjectLiteral.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal static bool IsEmptyObjectLiteral(NodeStore store, Node expression)
+    {
+        return store.Kind(expression) == SyntaxKind.ObjectLiteralExpression && store.Length(store.Properties(expression)) == 0;
+    }
+
+    /// <summary>utilities.ts: isAliasableExpression.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal static bool IsAliasableExpression(NodeStore store, Node e)
+    {
+        return IsEntityNameExpression(store, e) || store.Kind(e) == SyntaxKind.ClassExpression;
+    }
+
+    /// <summary>utilitiesPublic.ts: isFunctionLikeDeclaration (false for undefined).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal static bool IsFunctionLikeDeclaration(NodeStore store, Node node)
+    {
+        return !node.IsNone && IsFunctionLikeDeclarationKind(store.Kind(node));
+    }
+
+    /// <summary>
+    /// utilities.ts: getAssignedExpandoInitializer. Get the assignment 'initializer' -- the righthand side-- when the
+    /// initializer is container-like (See getExpandoInitializer). We treat the right hand side of assignments with
+    /// container-like initializers as declarations.
+    /// </summary>
+    internal static Node GetAssignedExpandoInitializer(NodeStore store, Node node)
+    {
+        if (node.IsNone)
+        {
+            return default;
+        }
+        var parent = store.Parent(node);
+        if (!parent.IsNone && store.Kind(parent) == SyntaxKind.BinaryExpression && store.Kind(store.OperatorToken(parent)) == SyntaxKind.EqualsToken)
+        {
+            var isPrototypeAssignment = IsPrototypeAccess(store, store.Left(parent));
+            var expando = GetExpandoInitializer(store, store.Right(parent), isPrototypeAssignment);
+            return !expando.IsNone ? expando : GetDefaultedExpandoInitializer(store, store.Left(parent), store.Right(parent), isPrototypeAssignment);
+        }
+        if (store.Kind(node) == SyntaxKind.CallExpression && IsBindableObjectDefinePropertyCall(store, node))
+        {
+            var args = store.Arguments(node);
+            var result = HasExpandoValueProperty(store, store.Element(args, 2), store.Texts.Equals(store.Text(store.Element(args, 1)), "prototype"));
+            if (!result.IsNone)
+            {
+                return result;
+            }
+        }
+        return default;
+    }
+
+    // utilities.ts hasExpandoValueProperty (node: the third argument of Object.defineProperty; properties of anything but
+    // an object literal are undefined, forEach of undefined is undefined).
+    private static Node HasExpandoValueProperty(NodeStore store, Node node, bool isPrototypeAssignment)
+    {
+        if (store.Kind(node) != SyntaxKind.ObjectLiteralExpression)
+        {
+            return default;
+        }
+        foreach (var p in store.Nodes(store.Properties(node)))
+        {
+            if (store.Kind(p) == SyntaxKind.PropertyAssignment &&
+                store.Kind(store.Name(p)) == SyntaxKind.Identifier &&
+                store.Texts.Equals(store.EscapedText(store.Name(p)), "value") &&
+                !store.Initializer(p).IsNone)
+            {
+                var result = GetExpandoInitializer(store, store.Initializer(p), isPrototypeAssignment);
+                if (!result.IsNone)
+                {
+                    return result;
+                }
+            }
+        }
+        return default;
+    }
+
+    /// <summary>
+    /// utilities.ts: getExpandoInitializer. Recognized expando initializers are:
+    /// 1. (function() {})() -- IIFEs
+    /// 2. function() { } -- Function expressions
+    /// 3. class { } -- Class expressions
+    /// 4. {} -- Empty object literals
+    /// 5. { ... } -- Non-empty object literals, when used to initialize a prototype, like `C.prototype = { m() { } }`
+    ///
+    /// This function returns the provided initializer, or undefined if it is not valid.
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal static Node GetExpandoInitializer(NodeStore store, Node initializer, bool isPrototypeAssignment)
+    {
+        var kind = store.Kind(initializer);
+        if (kind == SyntaxKind.CallExpression)
+        {
+            var e = SkipParentheses(store, store.Expression(initializer));
+            return store.Kind(e) == SyntaxKind.FunctionExpression || store.Kind(e) == SyntaxKind.ArrowFunction ? initializer : default;
+        }
+        if (kind == SyntaxKind.FunctionExpression || kind == SyntaxKind.ClassExpression || kind == SyntaxKind.ArrowFunction)
+        {
+            return initializer;
+        }
+        if (kind == SyntaxKind.ObjectLiteralExpression && (store.Length(store.Properties(initializer)) == 0 || isPrototypeAssignment))
+        {
+            return initializer;
+        }
+        return default;
+    }
+
+    /// <summary>
+    /// utilities.ts: getDefaultedExpandoInitializer. A defaulted expando initializer matches the pattern
+    /// `Lhs = Lhs || ExpandoInitializer` or `var Lhs = Lhs || ExpandoInitializer`.
+    /// The second Lhs is required to be the same as the first except that it may be prefixed with
+    /// 'window.', 'global.' or 'self.' The second Lhs is otherwise ignored by the binder and checker.
+    /// </summary>
+    private static Node GetDefaultedExpandoInitializer(NodeStore store, Node name, Node initializer, bool isPrototypeAssignment)
+    {
+        if (store.Kind(initializer) != SyntaxKind.BinaryExpression)
+        {
+            return default;
+        }
+        var op = store.Kind(store.OperatorToken(initializer));
+        if (op != SyntaxKind.BarBarToken && op != SyntaxKind.QuestionQuestionToken)
+        {
+            return default;
+        }
+        var e = GetExpandoInitializer(store, store.Right(initializer), isPrototypeAssignment);
+        if (!e.IsNone && IsSameEntityName(store, name, store.Left(initializer)))
+        {
+            return e;
+        }
+        return default;
+    }
+
+    /// <summary>
+    /// utilities.ts: isSameEntityName. Is the 'declared' name the same as the one in the initializer?
+    /// true for identical entity names, as well as ones where the initializer is prefixed with
+    /// 'window', 'self' or 'global'. For example:
+    ///
+    /// var my = my || {}
+    /// var min = window.min || {}
+    /// my.app = self.my.app || class { }
+    /// </summary>
+    internal static bool IsSameEntityName(NodeStore store, Node name, Node initializer)
+    {
+        if (IsPropertyNameLiteral(store, name) && IsPropertyNameLiteral(store, initializer))
+        {
+            return store.Texts.Equals(GetTextOfIdentifierOrLiteral(store, name), GetTextOfIdentifierOrLiteral(store, initializer));
+        }
+        var nameKind = store.Kind(name);
+        if (
+            (nameKind == SyntaxKind.Identifier || nameKind == SyntaxKind.PrivateIdentifier) && IsLiteralLikeAccess(store, initializer) &&
+            (store.Kind(store.Expression(initializer)) == SyntaxKind.ThisKeyword ||
+                store.Kind(store.Expression(initializer)) == SyntaxKind.Identifier &&
+                    (store.Texts.Equals(store.EscapedText(store.Expression(initializer)), "window") ||
+                        store.Texts.Equals(store.EscapedText(store.Expression(initializer)), "self") ||
+                        store.Texts.Equals(store.EscapedText(store.Expression(initializer)), "global"))))
+        {
+            return IsSameEntityName(store, name, GetNameOrArgument(store, initializer));
+        }
+        if (IsLiteralLikeAccess(store, name) && IsLiteralLikeAccess(store, initializer))
+        {
+            var a = GetElementOrPropertyAccessName(store, name);
+            var b = GetElementOrPropertyAccessName(store, initializer);
+            return (a.IsNone && b.IsNone || store.Texts.Equals(a, b))
+                && IsSameEntityName(store, store.Expression(name), store.Expression(initializer));
+        }
+        return false;
+    }
 }
