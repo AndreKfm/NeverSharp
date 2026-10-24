@@ -14,7 +14,13 @@
 // With NEVERSHARP_PRIORITY=high the process first raises itself to the high priority class; the
 // class in effect is reported. Prints one JSON line (file count, bytes, node count, priority class).
 //
-// Usage: parse-rs [--single] <file list>
+// --bind (Phase 2, pre-registration §15): parse+bind. The same work item binds the file right after parsing it with
+// tsrs's binder, tsrs_binder::bind_source_file(file) (tsrs_binder/src/binder.rs; takes no compiler options, as
+// typescript-go 7.0.2's; Program::bind_source_files calls it through tsrs_compiler/src/fileregions.rs bind, which with
+// file regions off, the default outside the CLI's --noEmit check, is this plain call). The driver name carries
+// "-bind" and the JSON line adds "symbols" (sum of the files' symbol_count).
+//
+// Usage: parse-rs [--bind] [--single] <file list>
 
 use rayon::prelude::*;
 use std::sync::atomic::{AtomicI64, Ordering};
@@ -66,9 +72,16 @@ fn main() {
 
 fn run() {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
-    let single = args.first().is_some_and(|a| a == "--single");
-    if single {
-        args.remove(0);
+    let (mut single, mut bind) = (false, false);
+    while args.first().is_some_and(|a| a.starts_with("--")) {
+        match args.remove(0).as_str() {
+            "--single" => single = true,
+            "--bind" => bind = true,
+            other => {
+                eprintln!("unknown option {other}");
+                std::process::exit(2);
+            }
+        }
     }
     if std::env::var("NEVERSHARP_PRIORITY").is_ok_and(|v| v == "high") {
         priority::raise();
@@ -81,6 +94,7 @@ fn run() {
     let use_case_sensitive = fs.use_case_sensitive_file_names();
     let nodes = AtomicI64::new(0);
     let chars = AtomicI64::new(0);
+    let symbols = AtomicI64::new(0);
 
     let parse = |file: &String| {
         let text = fs.read_file(file).unwrap_or_else(|| panic!("cannot read {file}"));
@@ -93,6 +107,10 @@ fn run() {
         chars.fetch_add(text.len() as i64, Ordering::Relaxed);
         let source_file = tsrs_parser::parse_source_file_owned(opts, text, script_kind);
         nodes.fetch_add(source_file.node_count.get() as i64, Ordering::Relaxed);
+        if bind {
+            tsrs_binder::bind_source_file(source_file);
+            symbols.fetch_add(source_file.symbol_count.get() as i64, Ordering::Relaxed);
+        }
         source_file
     };
     let source_files: Vec<_> = if single {
@@ -104,6 +122,17 @@ fn run() {
     };
 
     let mode = if single { "single" } else { "parallel" };
+    if bind {
+        println!(
+            "{{\"driver\":\"tsrs-0.18.0-bind-{mode}\",\"files\":{},\"bytes\":{},\"nodes\":{},\"symbols\":{},\"priority\":\"{priority}\"}}",
+            source_files.len(),
+            chars.load(Ordering::Relaxed),
+            nodes.load(Ordering::Relaxed),
+            symbols.load(Ordering::Relaxed)
+        );
+        std::mem::forget(source_files);
+        return;
+    }
     println!(
         "{{\"driver\":\"tsrs-0.18.0-{mode}\",\"files\":{},\"bytes\":{},\"nodes\":{},\"priority\":\"{priority}\"}}",
         source_files.len(),

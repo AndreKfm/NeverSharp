@@ -12,6 +12,13 @@
 //
 // Usage: node bench.mjs [--repos a,b] [--configs x,y] [--runs 20] [--warmup 3]
 //                       [--mem-runs 5] [--priority high|normal] [--corpus benchmark|tuning] [--label text]
+//        node bench.mjs --check [--repos a,b] [--configs x,y] [--corpus benchmark|tuning]
+//
+// --check: functional check, not a measurement: step 1 only, for every selected configuration and repository
+// plus the empty file list; prints the drivers' file, node and symbol counts and writes nothing.
+//
+// Parse+bind configurations (`*-bind`, `*-bind-single`; pre-registration §15) run the drivers with --bind and
+// additionally require a symbol count above zero.
 //
 // Default: every configuration (C# drivers: build-cs.mjs). Before the C# parsers exist,
 // select the configurations with --configs.
@@ -46,6 +53,16 @@ const configurations = [
     // Secondary reference (prereg/v5): tsrs, the Rust port of TypeScript 7 / typescript-go (build-rs.mjs).
     { id: "tsrs-parse", label: "tsrs 0.18.0 (Rust), parallel (rayon, as tsrs parses files)", threads: "parallel", command: list => [parseRs, list] },
     { id: "tsrs-parse-single", label: "tsrs 0.18.0 (Rust), single-threaded", threads: "single", command: list => [parseRs, "--single", list] },
+    // Phase 2 (pre-registration §15): parse+bind per file in the same work item (--bind); the driver reports the
+    // symbols its binder created, which must be above zero.
+    { id: "tsgo7-bind", label: "typescript-go 7.0.2, parse+bind, parallel (default)", threads: "parallel", bind: true,
+        expectDriver: "tsgo-7.0.2-bind-parallel", command: list => [parseGo, "--bind", list] },
+    { id: "tsgo7-bind-single", label: "typescript-go 7.0.2, parse+bind, single-threaded", threads: "single", bind: true,
+        expectDriver: "tsgo-7.0.2-bind-single", command: list => [parseGo, "--bind", "--single", list] },
+    { id: "tsrs-bind", label: "tsrs 0.18.0 (Rust), parse+bind, parallel (rayon)", threads: "parallel", bind: true,
+        expectDriver: "tsrs-0.18.0-bind-parallel", command: list => [parseRs, "--bind", list] },
+    { id: "tsrs-bind-single", label: "tsrs 0.18.0 (Rust), parse+bind, single-threaded", threads: "single", bind: true,
+        expectDriver: "tsrs-0.18.0-bind-single", command: list => [parseRs, "--bind", "--single", list] },
 ];
 // C# configurations of pre-registration §6.4, built by build-cs.mjs. The driver reports the
 // runtime it actually runs with; the runner checks it against the configuration's name.
@@ -64,6 +81,15 @@ for (const [track, prefix] of [["faithful", "cs"], ["optimized", "cs-o"]]) {
                 expectDriver: `cs-${track}-${runtime}-parallel`, command: list => [driver, list] },
             { id: `${prefix}-${runtime}-single`, label: `C# Track ${track === "faithful" ? "F" : "O"}, ${description}, single-threaded`, threads: "single",
                 expectDriver: `cs-${track}-${runtime}-single`, command: list => [driver, "--single", list] });
+        // Parse+bind (pre-registration §15): Track O only, Track F has no binder.
+        if (track === "optimized") {
+            const endpoint = runtime === "aot-ws" ? " (parse+bind endpoint)" : "";
+            configurations.push(
+                { id: `${prefix}-${runtime}-bind`, label: `C# Track O, ${description}, parse+bind, parallel${endpoint}`, threads: "parallel", bind: true,
+                    expectDriver: `cs-${track}-${runtime}-bind-parallel`, command: list => [driver, "--bind", list] },
+                { id: `${prefix}-${runtime}-bind-single`, label: `C# Track O, ${description}, parse+bind, single-threaded`, threads: "single", bind: true,
+                    expectDriver: `cs-${track}-${runtime}-bind-single`, command: list => [driver, "--bind", "--single", list] });
+        }
     }
 }
 
@@ -84,6 +110,38 @@ const fileManifest = JSON.parse(readFileSync(join(benchDir, "filelists", corpusN
 const repos = (corpusName === "tuning" ? ["tuning"] : pins.benchmarkCorpus.repos.map(r => r.name)).filter(r => !repoFilter || repoFilter.includes(r));
 for (const id of configFilter ?? []) if (!configurations.some(c => c.id === id)) throw new Error(`unknown configuration ${id}`);
 const configs = configurations.filter(c => !configFilter || configFilter.includes(c.id));
+
+// Step 1 of measure(): one run, checked against the expected file count, the priority class, the driver name and,
+// for parse+bind configurations, a symbol count above zero. Returns the driver's report.
+function validate(name, list, expectedFiles, config) {
+    const command = config.command(list);
+    const check = spawnSync(command[0], command.slice(1), { encoding: "utf8", env: driverEnv });
+    if (check.status !== 0) throw new Error(`${config.id} on ${name} failed: ${check.stderr}`);
+    const output = JSON.parse(check.stdout.trim().split("\n").pop());
+    if (output.files !== expectedFiles) throw new Error(`${config.id} on ${name}: parsed ${output.files} files, expected ${expectedFiles}`);
+    if (output.priority !== priority) throw new Error(`${config.id} on ${name}: driver reports priority class ${output.priority}, expected ${priority}`);
+    if (config.expectDriver && output.driver !== config.expectDriver) throw new Error(`${config.id} on ${name}: driver reports ${output.driver}, expected ${config.expectDriver}`);
+    if (expectedFiles > 0 && !(output.nodes > 0)) throw new Error(`${config.id} on ${name}: driver reports ${output.nodes} nodes (no parser behind the driver?)`);
+    if (config.bind && typeof output.symbols !== "number") throw new Error(`${config.id} on ${name}: driver reports no symbol count (no bind mode?)`);
+    if (config.bind && expectedFiles > 0 && !(output.symbols > 0)) throw new Error(`${config.id} on ${name}: driver reports ${output.symbols} symbols (no binder behind the driver?)`);
+    return output;
+}
+
+// --check: functional check only (no rig checks, no timing, no memory runs, nothing written): validate every selected
+// configuration once per repository and print the drivers' counts.
+if (process.argv.includes("--check")) {
+    console.log("| Repository | Configuration | Driver | Files | Nodes | Symbols |");
+    console.log("|---|---|---|---:|---:|---:|");
+    for (const repo of repos) {
+        for (const config of configs) {
+            const output = validate(repo, join(benchDir, "filelists", `${repo}.txt`), fileManifest.repos[repo].files, config);
+            console.log(`| ${repo} | ${config.id} | ${output.driver} | ${output.files} | ${output.nodes} | ${output.symbols ?? "-"} |`);
+        }
+    }
+    for (const config of configs) validate("fixed-cost", join(benchDir, "filelists", "empty.txt"), 0, config);
+    console.log(`\nok: ${configs.length} configuration(s) on ${repos.join(", ")} and the empty file list`);
+    process.exit(0);
+}
 
 // hyperfine --shell=none splits the command line with POSIX shell-word rules, where a
 // backslash is an escape character: pass paths with forward slashes (valid on Windows).
@@ -116,13 +174,7 @@ if (!environment.protocolCompliant) console.log("  -> rig checks failed: results
 function measure(name, list, expectedFiles, config) {
     const command = config.command(list);
     // 1. validation
-    const check = spawnSync(command[0], command.slice(1), { encoding: "utf8", env: driverEnv });
-    if (check.status !== 0) throw new Error(`${config.id} on ${name} failed: ${check.stderr}`);
-    const output = JSON.parse(check.stdout.trim().split("\n").pop());
-    if (output.files !== expectedFiles) throw new Error(`${config.id} on ${name}: parsed ${output.files} files, expected ${expectedFiles}`);
-    if (output.priority !== priority) throw new Error(`${config.id} on ${name}: driver reports priority class ${output.priority}, expected ${priority}`);
-    if (config.expectDriver && output.driver !== config.expectDriver) throw new Error(`${config.id} on ${name}: driver reports ${output.driver}, expected ${config.expectDriver}`);
-    if (expectedFiles > 0 && !(output.nodes > 0)) throw new Error(`${config.id} on ${name}: driver reports ${output.nodes} nodes (no parser behind the driver?)`);
+    const output = validate(name, list, expectedFiles, config);
 
     // 2. wall-clock
     const exportFile = join(outDir, `hyperfine-${name}-${config.id}.json`);

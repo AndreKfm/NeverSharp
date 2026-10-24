@@ -14,6 +14,11 @@
 //   forward slashes, script kind from the extension, languageVersion Latest,
 //   JSDocParsingMode.ParseForTypeErrors (executeCommandLine.ts), setParentNodes false.
 // - Keep every result alive until the end; print one JSON line.
+// - --bind (Track O only; Phase 2, pre-registration §15): parse+bind. Each work item parses the file as above and then
+//   binds it with Binder.BindSourceFile(sourceFile, new CompilerOptions()) (binder.ts bindSourceFile with options {},
+//   as the Gate B oracle binds); the binder output stays alive with its result. The driver name carries "-bind" and
+//   the JSON line adds "symbols" (sum of the files' symbolCount).
+//   Usage: parse-cs-optimized-<runtime> [--bind] [--single] <file list>
 
 using System.Diagnostics;
 using System.Globalization;
@@ -25,8 +30,32 @@ using NeverSharp.Faithful;
 #endif
 using NeverSharp.Generated;
 
-var single = args.Length > 0 && args[0] == "--single";
-var listPath = args[single ? 1 : 0];
+var single = false;
+var bind = false;
+var argIndex = 0;
+for (; argIndex < args.Length && args[argIndex].StartsWith("--", StringComparison.Ordinal); argIndex++)
+{
+    switch (args[argIndex])
+    {
+        case "--single":
+            single = true;
+            break;
+        case "--bind":
+            bind = true;
+            break;
+        default:
+            Console.Error.WriteLine($"unknown option {args[argIndex]}");
+            return 2;
+    }
+}
+#if !TRACK_OPTIMIZED
+if (bind)
+{
+    Console.Error.WriteLine("--bind: Track F has no binder (pre-registration §15)");
+    return 2;
+}
+#endif
+var listPath = args[argIndex];
 
 var priority = "normal";
 if (Environment.GetEnvironmentVariable("NEVERSHARP_PRIORITY") == "high")
@@ -71,6 +100,11 @@ void ParseOne(int i)
     }
     // Track O reads files itself (step O1: SourceText.Read, sys.ts semantics, checked by tools/NeverSharp.ReaderCheck).
     sourceFiles[i] = Parser.ParseFile(files[i], files[i].Replace('\\', '/'), options, setParentNodes: false, KindOf(files[i]));
+    if (bind)
+    {
+        // Same work item: bind right after the parse (typescript-go: binder.BindSourceFile per file on its work group).
+        Binder.BindSourceFile(sourceFiles[i], new CompilerOptions());
+    }
 #else
     texts[i] = ReadFile(files[i]);
     sourceFiles[i] = Parser.CreateSourceFile(files[i].Replace('\\', '/'), texts[i], options, setParentNodes: false, KindOf(files[i]));
@@ -104,11 +138,15 @@ if (readOnly)
 }
 #endif
 
-long chars = 0, nodes = 0;
+long chars = 0, nodes = 0, symbols = 0;
 for (var i = 0; i < files.Length; i++)
 {
 #if TRACK_OPTIMIZED
     chars += sourceFiles[i].TextLength;
+    if (bind)
+    {
+        symbols += (sourceFiles[i].Binding ?? throw new InvalidOperationException($"{files[i]}: not bound")).SymbolCount;
+    }
 #else
     chars += texts[i].Length;
 #endif
@@ -124,8 +162,10 @@ var runtime = $"{(System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSu
 var mode = single ? "single" : "parallel";
 var inv = CultureInfo.InvariantCulture;
 var jsDocField = parseAllJsDoc ? "\"jsdoc\":\"all\"," : "";
+var bindName = bind ? "bind-" : "";
+var symbolsField = bind ? string.Create(inv, $"\"symbols\":{symbols},") : "";
 Console.WriteLine(string.Create(inv,
-    $"{{\"driver\":\"cs-{track}-{runtime}-{mode}\",\"files\":{files.Length},\"chars\":{chars},\"nodes\":{nodes},\"priority\":\"{priority}\",{jsDocField}" +
+    $"{{\"driver\":\"cs-{track}-{runtime}-{bindName}{mode}\",\"files\":{files.Length},\"chars\":{chars},\"nodes\":{nodes},{symbolsField}\"priority\":\"{priority}\",{jsDocField}" +
     $"\"allocatedBytes\":{GC.GetTotalAllocatedBytes(true)},\"gen0\":{GC.CollectionCount(0)},\"gen1\":{GC.CollectionCount(1)},\"gen2\":{GC.CollectionCount(2)}," +
     $"\"gcPauseMs\":{GC.GetTotalPauseDuration().TotalMilliseconds.ToString("0.###", inv)}}}"));
 GC.KeepAlive(texts);
