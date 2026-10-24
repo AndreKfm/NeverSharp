@@ -320,3 +320,7 @@ Profile binder at f10774a (idle 9.0 %), variance gate PASS: cs-o-aot-ws-bind vs 
 ### BO2: binder CPU hot paths (2026-10-24)
 
 Brief: [modules/BO2.md](modules/BO2.md). One attempt (Opus 5.5, high effort); commit a7554cb, merged; Gate B passes on the orchestrator's rerun (only `Binder/` changed, no parser gate needed). Changes (attempt's in-memory benchmark, bind time): modifier flags computed from the modifier list instead of writing `modifierFlagsCache` into the side table (−7.6 %); per-identifier and per-node checks (contextual reserved words ruled out by their characters, `isExpression` skipped where always true, `jsDoc` read before `canHaveJSDoc`, `setParent` without reading first; −13 %); children of the most frequent node kinds bound directly instead of through delegates (−9 % and −4 %); `declareSymbol` hashes once. Rejected: a struct visitor with a child stack (+1.8 %), `SkipLocalsInit` (noise). The constructor's zeroing was an EventPipe artefact (removing it: noise). In-memory bind 496 → 336 ms. **Run 1 (rig-compliant; tuning corpus, 20 runs):** cs-o-aot-ws-bind 469.8 → 439.8 ms, **0.936 [0.921, 0.956]**; single-threaded 0.925 [0.918, 0.935]. **Merged.** `results/phase2/BO2/`.
+
+### Binder additional run after BO2 (2026-10-24, Windows only)
+
+Profile binder at 07ac6df (idle 5.5 %), variance gate PASS: cs-o-aot-ws-bind vs tsgo7-bind **0.456 [0.451, 0.462]**; single-threaded 0.654; vs tsrs-bind **1.222 [1.207, 1.238]** (secondary; lower bound just above 1.20), single-threaded 1.209. `results/phase2/additional/2026-10-24T15-16-07-263Z/NOTE.md`.
