@@ -24,23 +24,31 @@ internal sealed partial class NodeFactory
     private NodeConverters? convertersValue;
 
     /// <summary>The factory's `parenthesizer` getter (TypeScript's memoized `parenthesizerRules()`).</summary>
+    /// <remarks>
+    /// Track O (step O29): the memoized value is returned in the caller, its creation is out of line
+    /// (<see cref="CreateParenthesizer"/>); NativeAOT called the getter in the create functions of calls, property
+    /// accesses and binary expressions.
+    /// </remarks>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal FactoryParenthesizerRules.NullParenthesizerRulesObject Parenthesizer
     {
-        get
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        get => parenthesizerRulesValue ?? CreateParenthesizer();
+    }
+
+    // The first call of the parenthesizer getter: memoizes the rules.
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private FactoryParenthesizerRules.NullParenthesizerRulesObject CreateParenthesizer()
+    {
+        if ((flags & NodeFactoryFlags.NoParenthesizerRules) == 0)
         {
-            if (parenthesizerRulesValue == null)
-            {
-                if ((flags & NodeFactoryFlags.NoParenthesizerRules) == 0)
-                {
-                    // createParenthesizerRules (factory/parenthesizerRules.ts) is not ported: the parser's factory
-                    // is created with NoParenthesizerRules.
-                    Debug.Fail("createParenthesizerRules is not ported");
-                }
-                parenthesizerRulesValue = FactoryParenthesizerRules.NullParenthesizerRules;
-            }
-            return parenthesizerRulesValue;
+            // createParenthesizerRules (factory/parenthesizerRules.ts) is not ported: the parser's factory
+            // is created with NoParenthesizerRules.
+            Debug.Fail("createParenthesizerRules is not ported");
         }
+        parenthesizerRulesValue = FactoryParenthesizerRules.NullParenthesizerRules;
+        return parenthesizerRulesValue;
     }
 
     /// <summary>The factory's `converters` getter (TypeScript's memoized `converters()`).</summary>

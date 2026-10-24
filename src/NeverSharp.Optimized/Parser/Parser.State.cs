@@ -393,14 +393,20 @@ internal sealed partial class Parser : BaseNodeFactory
         parseDiagnostics.Add(Utilities.CreateDetachedDiagnostic(fileName, sourceText, pos, end, diagnostic));
     }
 
+    // Track O (step O29): the test in the caller (most nodes have no JSDoc comment), the rest out of line
+    // (WithJSDocComments); NativeAOT called the whole function for every statement and declaration.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node WithJSDoc(Node node, bool hasJSDoc)
     {
-        if (!hasJSDoc)
-        {
-            return node;
-        }
+        return hasJSDoc ? WithJSDocComments(node) : node;
+    }
 
+    // The rest of withJSDoc: the node has a preceding JSDoc comment.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private Node WithJSDocComments(Node node)
+    {
         Debug.Assert(store.JsDoc(node) == null); // Should only be called once per node
         // TypeScript: `mapDefined(getJSDocCommentRanges(node, sourceText), comment => JSDocParser.parseJSDocComment(node,
         // comment.pos, comment.end - comment.pos))`, set as the node's jsDoc if not empty. Track O (O-NA): the comment
@@ -1521,8 +1527,24 @@ internal sealed partial class Parser : BaseNodeFactory
         return array;
     }
 
+    // Track O (step O29): finishNode(node, pos) without the optional end (the end is the current token's full start):
+    // no nullable argument to pass, and NativeAOT inlines it at some call sites (inlining it at all of them measured
+    // slower).
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private Node FinishNode(Node node, int pos, int? end = null)
+    private Node FinishNode(Node node, int pos)
+    {
+        var flags = contextFlags;
+        if (parseErrorBeforeNextFinishedNode)
+        {
+            parseErrorBeforeNextFinishedNode = false;
+            flags |= NodeFlags.ThisNodeHasError;
+        }
+        store.Finish(node, pos, scanner.GetTokenFullStart(), flags);
+        return node;
+    }
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private Node FinishNode(Node node, int pos, int? end)
     {
         // (Track O, step O12: pos, end and the added flags in one write of the record, NodeStore.Finish.)
         var flags = contextFlags;

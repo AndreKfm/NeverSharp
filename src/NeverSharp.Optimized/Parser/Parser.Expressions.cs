@@ -817,6 +817,7 @@ internal sealed partial class Parser
     /// (isUpdateExpression is true for all of them), `++`, `--` (parseUpdateExpression), `import` or `super`
     /// (parseLeftHandSideExpressionOrHigher); parsePrimaryExpression handles each of them itself.
     /// </summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool IsPlainPrimaryStart(SyntaxKind token)
     {
@@ -855,6 +856,7 @@ internal sealed partial class Parser
     /// takes its default case, `parseIdentifier(Diagnostics.Expression_expected)`, which creates the identifier
     /// (isIdentifier is true for it, so the message is not used).
     /// </summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private Node ParsePlainPrimaryExpression()
     {
@@ -866,6 +868,7 @@ internal sealed partial class Parser
     /// parseMemberExpressionOrHigher and parseAssignmentExpressionOrHigher act (<see cref="ExpressionTokens"/>). For
     /// any other token each of those levels only compares the token and returns the operand unchanged.
     /// </summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static bool ContinuesOperand(SyntaxKind token)
     {
@@ -879,6 +882,7 @@ internal sealed partial class Parser
     /// expression, `&lt;` or `&lt;&lt;` for type arguments: tryParse(parseTypeArgumentsInExpression) decides on any
     /// other token without changing anything, see TryParseTypeArgumentsInExpression).
     /// </summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static OperatorPrecedence BinaryOperatorPrecedence(SyntaxKind token)
     {
