@@ -328,3 +328,13 @@ typescript-go (the reference and the method this project copies); oxc and swc (R
 - [ ] Harness support for Linux (rig checks, peak memory) before the replication run (A4); may follow the tag.
 - [x] OpenTimestamps proof for the tag (§11.1): `docs/timestamps/prereg-v1.txt` and its `.ots` proof, opentimestamps-client 0.7.2.
 - [ ] Repository published when the author decides the project is done (not a condition for the tag; §11.1 covers the timestamp).
+
+## 15. Phase 2: binder (draft amendment `prereg/v7`, not yet accepted)
+
+**Scope (decided by the author, 2026-10-24).** The binder of TypeScript 6.0.3 (`src/compiler/binder.ts`) is ported for Track O only; Track F is not extended. Port rules of §5.4 apply. Plan: [phase2-plan.md](phase2-plan.md).
+
+**Gate B.** Byte-identical canonical binder dumps (symbols, symbol tables, containers, flow graph, node flags after binding, bind diagnostics) against tsc 6.0.3 (`ts.bindSourceFile` with options `{}`) for all 50,177 equivalence units, in JSDoc modes ParseAll and ParseForTypeErrors. Track O Gate 2 applies to the binder code.
+
+**Endpoint.** Parse+bind per file: `cs-o-aot-ws-bind` against `tsgo7-bind` (typescript-go 7.0.2: `parser.ParseSourceFile` and `binder.BindSourceFile` per file, parallel on its work group), with G, interval and decision rule as in §8, from the first protocol-compliant run after Gate B passes completely. Single-threaded and the other C# runtimes as secondary configurations, as in §8. Disclosed with every comparison: typescript-go's binder ports TypeScript 7 and differs from 6.0.3's in places.
+
+**Status.** Draft; to be accepted and tagged (`prereg/v7`, OpenTimestamps) by the author before any binder measurement.
