@@ -1,0 +1,25 @@
+NeverSharp pre-registration timestamp
+
+tag:                 prereg/v8
+tag object:          3fd7ca8657ea7fb07c2d37a2d1ee9c99d37d62f9
+tagged commit:       e64053b967b73ad56feddeebda4b817a05b47125
+commit tree:         960559138530ec158960f351506c02cd78d612ff
+commit date:         2026-10-24T12:47:34+02:00
+
+SHA-256 of files at the tagged commit (content as stored in git, `git show <commit>:<path> | sha256sum`):
+docs/preregistration.md                     624cfc8a9f33e8e3a0d775468edcace36c84a3be2bd9ae12b452e5c516f42059
+docs/phase2-plan.md                         402976f292f21be2c7d5e545d1c0294ec3e44a7a91ade03130b5109b581b4fbb
+docs/benchmark-harness.md                   7bb152c8bb8098ed2e2b60573a725046c14d61d4d81e205c5cc6d7ead55428b7
+docs/references.md                          dfe88a111f937c08d6f964ab6b9bf921c5af80a5ade87038a7b7ac05893abb28
+pins.json                                   d80f5bea7ff497eee20cdc801f4d968c4ea788c6d3c057effbad512ed814816d
+eng/Gate2.Optimized.props                   126d001b31867b0c0f9083507e9c7f13b7bcc006104707887e2d30949b0ae82f
+eng/optimized.noalloc-allowlist.toml        b36efa146c020eb85066e908346623cecb6d64daf25ff482d52f3e9f3965ff26
+harness/astdump/dump-ts-binder.mjs          e292dad7839bef150a96c4410df9497ab73782a8d9cad81887e552ed1e6c4cc3
+harness/astdump/compare-binder.mjs          78256a48ba44622ac9508cea448aa2a423f2c2e870d9bdd1f08c058d1f4f97c2
+harness/bench/report.mjs                    935db429da8bc4db233f4201deb05c1defa0b7dc632e9d5276fb67f31a064fa3
+harness/bench/bench.mjs                     2eb195583f704caaf3fd986e7886524c5d96383437da1d92deeb3d3dce64120c
+harness/bench/result.schema.json            62e7e8b0d15649a2a5f2f0b58a0180b1e61d6946244c93714cba56510896a376
+harness/bench/go/parse.go                   205d23958f3f693a3b2a3e80caaa757bc7118c56ee5948b46c93ded00c82c11c
+tools/NeverSharp.ParseDriver/Program.cs     11be71ff05ab346d7350a97e557169c613bac78d203aac43df0919a391e7dfc2
+
+Verify: ots verify docs/timestamps/prereg-v8.txt.ots  (after the proof has been upgraded with ots upgrade)

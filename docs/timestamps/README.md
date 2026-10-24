@@ -11,6 +11,7 @@ OpenTimestamps proofs for the pre-registration tags (pre-registration §11.1).
 | `prereg/v5` | `prereg-v5.txt` | `prereg-v5.txt.ots` | 2026-10-22, same four calendars | blocks 972607,972609 (proof upgraded 2026-10-22) |
 | `prereg/v6` | `prereg-v6.txt` | `prereg-v6.txt.ots` | 2026-10-22, same four calendars | upgraded 2026-10-24 (Bitcoin attestation) |
 | `prereg/v7` | `prereg-v7.txt` | `prereg-v7.txt.ots` | 2026-10-24, same four calendars | pending (upgrade in a few hours) |
+| `prereg/v8` | `prereg-v8.txt` | `prereg-v8.txt.ots` | 2026-10-24, same four calendars | pending (upgrade in a few hours) |
 
 Each stamp file lists the tag, the tagged commit and tree, and the SHA-256 of the protocol documents and frozen inputs at that commit. The proof covers the stamp file; the hashes inside it tie the proof to the commit.
 
