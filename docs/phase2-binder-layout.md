@@ -30,3 +30,7 @@ Decided in module B0 ([modules/B0.md](modules/B0.md), [phase2-plan.md](phase2-pl
 ## Starting point for later optimization
 
 B0's arrays are managed arrays per file, grown ×2 and kept by the result (no copy at the end). Candidates once profiled (not decided): per-thread pooled arrays or slabs as for the node data (step O9 variant C), a size estimate from the node count, a hash index for large tables, a binder word in the node records.
+
+## Added in B3
+
+`BinderStore` also holds the CommonJS module indicator and `jsGlobalAugmentations` per file, and a node map for the rare flow fields `flowNodeWhenTrue`, `flowNodeWhenFalse` and `possiblyExhaustive` (only `true` is stored; absent means `false`, as tsc's factory initializes every switch statement).
