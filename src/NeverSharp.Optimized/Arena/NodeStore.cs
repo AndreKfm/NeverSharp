@@ -27,6 +27,9 @@ namespace NeverSharp.Optimized;
 /// is an append-only log of entries (key, int value or object slot) with an open-addressing index over it, both in
 /// one region of the thread's side slab (Slab.cs), opened at a file's first entry and owned by the result like the
 /// records: no allocation per file, and a table that outgrows its region moves to a region twice the size.
+/// Step BO1: parents written after the parse (the binder sets one on every node) live in a dense array instead, one
+/// int per 4 record ints, allocated once per file in the thread's parents slab; the side table keeps only the parents
+/// the parse itself writes.
 /// </para>
 /// <para>
 /// Memory (step O9, variant C: per-thread slabs, Slab.cs): the records, the list headers, the list elements and the
@@ -143,6 +146,15 @@ internal sealed unsafe partial class NodeStore
     private int sideShift;
     private long sideTop;
 
+    // Parent pointers written after the parse (step BO1: the binder sets one for every node): dense, parentLength ints
+    // from parents on, the parent of the record at handle h in parents[h >> 2] (records are at least HeaderWords = 5
+    // ints long, so h >> 2 differs from record to record), 0 for none. A range of the thread's parents slab, allocated
+    // in one piece at the first parent written after the parse (the parents the parse wrote move there from the side
+    // table, which holds them until then: in the measured mode the parse sets few). Null until then.
+    private int* parents;
+    private int parentLength;
+    private SlabRange parentRange;
+
     /// <summary>A store for a source text, written into the slabs of the current thread until <see cref="Commit"/>.</summary>
     public NodeStore(NativeText sourceText)
     {
@@ -228,6 +240,9 @@ internal sealed unsafe partial class NodeStore
         sideCapacity = 0;
         sideCount = 0;
         sideTop = 0;
+        parentRange.Release();
+        parents = null;
+        parentLength = 0;
         ReleaseLists();
         refs.Slice(0, refCount).Clear();
         refArray = [];
@@ -242,6 +257,10 @@ internal sealed unsafe partial class NodeStore
     /// <summary>The number of records in use (including <see cref="Node.None"/>'s).</summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal int Count => count;
+
+    /// <summary>The record ints in use: every node handle is below it (step BO1: sizes the binder's dense arrays).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal int RecordWords => used;
 
     /// <summary>
     /// The number of nodes created so far, including those a truncation discarded since (the parser's nodeCount, which
@@ -342,6 +361,10 @@ internal sealed unsafe partial class NodeStore
     internal void Truncate(Mark mark)
     {
         Debug.Assert(mark.Words <= used && mark.Refs <= refCount && mark.Nodes <= count && mark.SideLog <= sideCount && mark.Lists <= listCount, "Mark is beyond the store's fill level");
+        if (parents != null)
+        {
+            ClearParents(mark.Words, used);
+        }
         used = mark.Words;
         refCount = mark.Refs;
         count = mark.Nodes;
@@ -356,6 +379,22 @@ internal sealed unsafe partial class NodeStore
         if (sideCount > mark.SideLog)
         {
             TruncateSide(mark);
+        }
+    }
+
+    /// <summary>
+    /// The dense parents of the records from <paramref name="from"/> to <paramref name="to"/> (discarded): cleared, so
+    /// that records created there later have none (the record before <paramref name="from"/> starts at least
+    /// HeaderWords ints before it, so its entry is before from >> 2).
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private void ClearParents(int from, int to)
+    {
+        var start = from >> 2;
+        var end = Math.Min(((to - 1) >> 2) + 1, parentLength);
+        if (start < end)
+        {
+            new Span<int>(parents + start, end - start).Clear();
         }
     }
 
@@ -475,10 +514,37 @@ internal sealed unsafe partial class NodeStore
     public void SetTransformFlags(Node node, TransformFlags value) => data[node.Index + TransformFlagsWord] = (int)value;
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    public Node Parent(Node node) => data[node.Index] >= 0 ? default : new Node(GetSideInt(node.Index, ParentSide));
+    public Node Parent(Node node)
+    {
+        if (parents != null)
+        {
+            var i = node.Index >> 2;
+            return (uint)i < (uint)parentLength ? new Node(parents[i]) : default;
+        }
+        return data[node.Index] >= 0 ? default : new Node(GetSideInt(node.Index, ParentSide));
+    }
 
+    /// <summary>
+    /// Sets the parent: during the parse in the side table (rare in the measured mode), afterwards in the dense parent
+    /// array (step BO1), which the first such write creates (<see cref="AddSide"/>, the arena growth of rare fields).
+    /// </summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    public void SetParent(Node node, Node value) => SetSideInt(node.Index, ParentSide, value.Index);
+    public void SetParent(Node node, Node value)
+    {
+        var i = node.Index >> 2;
+        if ((uint)i < (uint)parentLength)
+        {
+            parents[i] = value.Index;
+            return;
+        }
+        if (parents == null && IsActive)
+        {
+            SetSideInt(node.Index, ParentSide, value.Index);
+            return;
+        }
+        AddSide(node.Index, ParentSide);
+        parents[i] = value.Index;
+    }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public ModifierFlags ModifierFlagsCache(Node node) => data[node.Index] >= 0 ? default : (ModifierFlags)GetSideInt(node.Index, ModifierFlagsCacheSide);
@@ -633,11 +699,21 @@ internal sealed unsafe partial class NodeStore
     /// having side entries.
     /// A full table first moves to a region with twice the entries (the first region: <see cref="FirstSideCapacity"/>
     /// entries): after the current region if the range has room, otherwise in the thread's next side slab (or, for a
-    /// committed store, a slab of its own); the entries are copied and the index is rebuilt.
+    /// committed store, the thread's side slab if no parse runs on the thread, or a slab of its own); the entries are
+    /// copied and the index is rebuilt.
+    /// <para>
+    /// Step BO1: a parent written after the parse (<see cref="SetParent"/>) instead creates or grows the dense parent
+    /// array so that it covers the node, and the result is -1 (no entry).
+    /// </para>
     /// </summary>
     [NoAllocUnchecked("arena growth: a new side table entry (rare fields)")]
     private int AddSide(int node, int field)
     {
+        if (field == ParentSide && (parents != null || !IsActive))
+        {
+            EnsureParents(node);
+            return -1;
+        }
         if (sideCount == sideCapacity)
         {
             GrowSide();
@@ -660,6 +736,33 @@ internal sealed unsafe partial class NodeStore
         return position;
     }
 
+    // (Called by AddSide only.) The dense parent array covering the node: created in one piece in the thread's parents
+    // slab, with the parents the side table holds, or grown for a node created afterwards.
+    private void EnsureParents(int node)
+    {
+        var length = (Math.Max(used, node + 1) >> 2) + 1;
+        if (parents == null)
+        {
+            parents = (int*)parentRange.OpenCommitted(ThreadSlabs.Local, SlabKind.Parents, (long)length * sizeof(int));
+            new Span<int>(parents, length).Clear();
+            parentLength = length;
+            var entries = sideEntries;
+            for (var p = 0; p < sideCount; p++)
+            {
+                if ((int)(entries[p].Key & 0xFF) == ParentSide)
+                {
+                    parents[(int)(entries[p].Key >> 8) >> 2] = entries[p].Value;
+                }
+            }
+            return;
+        }
+        length = Math.Max(length, parentLength * 2);
+        var bytes = (long)length * sizeof(int);
+        parents = (int*)parentRange.GrowCommitted((long)parentLength * sizeof(int), bytes, bytes, SlabKind.Parents);
+        new Span<int>(parents + parentLength, length - parentLength).Clear();
+        parentLength = length;
+    }
+
     // (Called by AddSide only.)
     private void GrowSide()
     {
@@ -676,8 +779,22 @@ internal sealed unsafe partial class NodeStore
         if (sideRange.Capacity - sideTop < bytes)
         {
             // The old region stays readable: the range keeps its slab held.
-            sideRange.Grow(0, bytes, active, SlabKind.Side);
-            sideTop = 0;
+            if (active is not null)
+            {
+                sideRange.Grow(0, bytes, active, SlabKind.Side);
+                sideTop = 0;
+            }
+            else
+            {
+                // After the parse (step BO1: caches the binder writes): in place after the current region, or a new
+                // range in the thread's side slab.
+                var start = sideRange.Start;
+                var grown = sideRange.GrowCommitted(0, sideTop + bytes, bytes, SlabKind.Side);
+                if (start == null || grown != start)
+                {
+                    sideTop = 0;
+                }
+            }
         }
         var region = sideRange.Start + sideTop;
         sideTop = SlabRange.Align(sideTop + bytes);

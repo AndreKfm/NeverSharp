@@ -136,9 +136,13 @@ internal sealed class SourceFile
     /// Track O (step O1, variant C; step O9, variant C): frees the source text (native memory) now and drops the result's
     /// holds on the slabs that hold its node data, when the caller is done with the tree; the tree must not be read
     /// afterwards. Without this call, the finalizers free the text once the result is unreachable and a slab once no
-    /// result and no thread references it.
+    /// result and no thread references it. Step BO1: the binder output's slabs as well.
     /// </summary>
-    internal void Release() => Store.Release();
+    internal void Release()
+    {
+        Binding?.Release();
+        Store.Release();
+    }
 
     /// <summary>The binder output (Binder.BindSourceFile), owned by the result like the node store; null until bound.</summary>
     internal BinderStore? Binding { get; set; }

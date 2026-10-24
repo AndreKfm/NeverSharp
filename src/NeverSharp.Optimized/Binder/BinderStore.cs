@@ -17,12 +17,23 @@ namespace NeverSharp.Optimized;
 /// flowNodeArena, flowListArena in internal/binder/binder.go). Lists that grow by appending (declarations, label
 /// antecedents, table entries) are chains of links in one link array, kept in insertion order (TypeScript's arrays and
 /// Map order; typescript-go prepends flow list entries, the dumps follow TypeScript). The per-node fields (symbol,
-/// localSymbol, locals, nextContainer, flowNode, endFlowNode, returnFlowNode, fallthroughFlowNode) live in three
-/// open-addressing maps keyed by node handle, since node handles are record offsets and the node records have no room
-/// for them. Everything is read and written through this class, so the layout can change without touching the binder.
+/// localSymbol, locals, nextContainer, endFlowNode, returnFlowNode, fallthroughFlowNode) live in open-addressing maps
+/// keyed by node handle, since node handles are record offsets and the node records have no room for them; flowNode,
+/// which about half of all nodes carry, in a dense array indexed by handle >> 2 (step BO1; records are at least 5 ints
+/// long). Everything is read and written through this class, so the layout can change without touching the binder.
+/// </para>
+/// <para>
+/// Memory (step BO1, as the node store's in step O9): every array is a region of one range of the binding thread's
+/// binder slab (Slab.cs), native memory the thread fills binding after binding; regions are sized from the file's node
+/// count (on the tuning corpus and vscode a few per cent of the files outgrow one), and an array that outgrows its
+/// region moves to a region twice the size, the old one left unused. The range reaches to the end of the slab while
+/// the binding runs (<see cref="ThreadSlabs.ActiveBinder"/>) and shrinks to the regions in use at <see cref="Commit"/>;
+/// the next binding on the thread continues after it. The result holds its slabs (<see cref="Release"/>, called by
+/// <see cref="SourceFile.Release"/>; the slab's finalizer is the backstop): no array per file, and nothing for the
+/// collector to trace.
 /// </para>
 /// </summary>
-internal sealed class BinderStore
+internal sealed unsafe class BinderStore
 {
     // Bits of a symbol's rare boolean members; "Set" means the member is defined (TypeScript distinguishes undefined).
     [Flags]
@@ -102,19 +113,37 @@ internal sealed class BinderStore
         public FlowNode FallthroughFlowNode;
     }
 
-    private SymbolRecord[] symbols = new SymbolRecord[16];
+    // The arrays (regions of the binder range): capacity records each, of which ...Used are in use; record 0 of each is
+    // the undefined handle's (zero).
+    private SymbolRecord* symbols;
+    private int symbolsCapacity;
     private int symbolsUsed = 1; // record 0 is Symbol.None
-    private TableRecord[] tables = new TableRecord[16];
+    private TableRecord* tables;
+    private int tablesCapacity;
     private int tablesUsed = 1;
-    private EntryRecord[] entries = new EntryRecord[16];
+    private EntryRecord* entries;
+    private int entriesCapacity;
     private int entriesUsed = 1;
     // Module B1: a hash index over the entries of all tables (chains of entries by hash of table and name), so
-    // Map.get and Map.set do not scan a table; grown ×2 at load 1/2.
-    private int[] buckets = new int[32];
-    private FlowRecord[] flows = new FlowRecord[16];
+    // Map.get and Map.set do not scan a table; grown ×2 at load 1/2 (bucketsLength, a power of two).
+    private int* buckets;
+    private int bucketsLength;
+    private FlowRecord* flows;
+    private int flowsCapacity;
     private int flowsUsed = 1;
-    private Link[] links = new Link[16];
+    private Link* links;
+    private int linksCapacity;
     private int linksUsed = 1;
+
+    // Step BO1: node.flowNode, dense (flowNodeLength handles >> 2; 0 = undefined).
+    private int* flowNodeArray;
+    private int flowNodeLength;
+
+    // Step BO1: the binder range (Slab.cs): the regions above are allocated from top on; the thread's slabs while the
+    // binding runs (null afterwards, and for a binding that started while another one ran on the thread).
+    private SlabRange range;
+    private long top;
+    private ThreadSlabs? local;
 
     /// <summary>
     /// Module B3: the rare flow fields of conditional expressions in return position (flowNodeWhenTrue,
@@ -128,7 +157,6 @@ internal sealed class BinderStore
     }
 
     private NodeMap<DeclarationFields> declarationFields;
-    private NodeMap<FlowNode> flowNodes;
     private NodeMap<ContainerFields> containerFields;
     private NodeMap<FlowExtraFields> flowExtraFields;
 
@@ -136,9 +164,148 @@ internal sealed class BinderStore
     private Dictionary<int, SymbolTable>? globalExports;
     private Dictionary<int, (int First, int Last)>? assignmentDeclarationMembers;
 
+    /// <summary>
+    /// The binder output of the file of <paramref name="nodes"/>, written into the binder slab of the current thread
+    /// until <see cref="Commit"/>. The arrays are sized from the node count (per node on the tuning corpus and on vscode:
+    /// 0.12 to 0.16 symbols, 0.08 to 0.12 tables, 0.10 to 0.13 table entries, 0.16 to 0.17 flow nodes, 0.19 to 0.22
+    /// links, 0.12 to 0.14 declarations with a symbol, 0.02 to 0.04 containers), a little above the average so that few
+    /// files outgrow them.
+    /// </summary>
     internal BinderStore(NodeStore nodes)
     {
         Nodes = nodes;
+        var n = nodes.Count;
+        var symbolCapacity = (n / 5) + 8;
+        var tableCapacity = (n / 8) + 8;
+        var entryCapacity = (n / 6) + 8;
+        var flowCapacity = (n / 5) + 8;
+        var linkCapacity = (n / 4) + 8;
+        var bucketCount = PowerOfTwo(entryCapacity * 2);
+        var flowNodeCount = (nodes.RecordWords >> 2) + 1;
+        var declarationCount = NodeMap<DeclarationFields>.CapacityFor((n / 6) + 8);
+        var containerCount = NodeMap<ContainerFields>.CapacityFor((n / 24) + 4);
+        var estimate = ((long)symbolCapacity * sizeof(SymbolRecord)) + ((long)tableCapacity * sizeof(TableRecord)) +
+            ((long)entryCapacity * sizeof(EntryRecord)) + ((long)flowCapacity * sizeof(FlowRecord)) + ((long)linkCapacity * sizeof(Link)) +
+            (((long)bucketCount + flowNodeCount) * sizeof(int)) + ((long)declarationCount * (sizeof(int) + sizeof(DeclarationFields))) +
+            ((long)containerCount * (sizeof(int) + sizeof(ContainerFields))) + (16 * 16);
+        var thread = ThreadSlabs.Local;
+        if (thread.ActiveBinder is null)
+        {
+            thread.ActiveBinder = this;
+            local = thread;
+            range.Open(thread, SlabKind.Binder, estimate);
+        }
+        symbols = NewArray<SymbolRecord>(symbolCapacity);
+        symbolsCapacity = symbolCapacity;
+        tables = NewArray<TableRecord>(tableCapacity);
+        tablesCapacity = tableCapacity;
+        entries = NewArray<EntryRecord>(entryCapacity);
+        entriesCapacity = entryCapacity;
+        flows = NewArray<FlowRecord>(flowCapacity);
+        flowsCapacity = flowCapacity;
+        links = NewArray<Link>(linkCapacity);
+        linksCapacity = linkCapacity;
+        buckets = NewZeroed<int>(bucketCount);
+        bucketsLength = bucketCount;
+        flowNodeArray = NewZeroed<int>(flowNodeCount);
+        flowNodeLength = flowNodeCount;
+        declarationFields.Init(this, declarationCount);
+        containerFields.Init(this, containerCount);
+    }
+
+    /// <summary>
+    /// The end of the binding: the range shrinks to the regions in use and the thread's next binding starts after it;
+    /// arrays that grow afterwards move to memory of the store's own. (Idempotent.)
+    /// </summary>
+    internal void Commit()
+    {
+        var thread = local;
+        if (thread is null)
+        {
+            return;
+        }
+        range.Commit(top, thread, SlabKind.Binder);
+        if (ReferenceEquals(thread.ActiveBinder, this))
+        {
+            thread.ActiveBinder = null;
+        }
+        local = null;
+    }
+
+    /// <summary>Drops the store's holds on its slabs (SourceFile.Release): the binder output must not be read afterwards.</summary>
+    internal void Release()
+    {
+        Commit();
+        range.Release();
+        top = 0;
+        symbols = null;
+        symbolsCapacity = 0;
+        tables = null;
+        tablesCapacity = 0;
+        entries = null;
+        entriesCapacity = 0;
+        flows = null;
+        flowsCapacity = 0;
+        links = null;
+        linksCapacity = 0;
+        buckets = null;
+        bucketsLength = 0;
+        flowNodeArray = null;
+        flowNodeLength = 0;
+        declarationFields = default;
+        containerFields = default;
+        flowExtraFields = default;
+    }
+
+    // ---- memory ----
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private static int PowerOfTwo(int minimum) => (int)System.Numerics.BitOperations.RoundUpToPowerOf2((uint)Math.Max(minimum, 16));
+
+    /// <summary>
+    /// A region of <paramref name="bytes"/> bytes at the top of the range: while the binding runs, in the thread's
+    /// binder slab (a range that is full moves on to the thread's next slab, its old regions stay held); afterwards in
+    /// memory of the store's own.
+    /// </summary>
+    private byte* Region(long bytes)
+    {
+        bytes = SlabRange.Align(bytes);
+        if (range.Capacity - top < bytes)
+        {
+            // The regions in use stay where they are: the range keeps the slab it leaves held.
+            range.Grow(0, bytes, local, SlabKind.Binder);
+            top = 0;
+        }
+        var region = range.Start + top;
+        top += bytes;
+        return region;
+    }
+
+    // A region for capacity records whose record 0 is zero (the undefined handle's).
+    private T* NewArray<T>(int capacity)
+        where T : unmanaged
+    {
+        var array = (T*)Region((long)capacity * sizeof(T));
+        array[0] = default;
+        return array;
+    }
+
+    private T* NewZeroed<T>(int length)
+        where T : unmanaged
+    {
+        var array = (T*)Region((long)length * sizeof(T));
+        new Span<T>(array, length).Clear();
+        return array;
+    }
+
+    // The array in a region twice the size, with its used records copied.
+    private T* GrowArray<T>(T* array, ref int capacity, int used)
+        where T : unmanaged
+    {
+        var grown = (T*)Region((long)capacity * 2 * sizeof(T));
+        Buffer.MemoryCopy(array, grown, (long)capacity * 2 * sizeof(T), (long)used * sizeof(T));
+        capacity *= 2;
+        return grown;
     }
 
     /// <summary>The node store of the bound file's parse (names are texts of its <see cref="TextTable"/>).</summary>
@@ -163,9 +330,9 @@ internal sealed class BinderStore
 
     internal Symbol CreateSymbol(SymbolFlags flags, TextRef name)
     {
-        if (symbolsUsed == symbols.Length)
+        if (symbolsUsed == symbolsCapacity)
         {
-            Array.Resize(ref symbols, symbols.Length * 2);
+            symbols = GrowArray(symbols, ref symbolsCapacity, symbolsUsed);
         }
         symbols[symbolsUsed] = new SymbolRecord { Flags = flags, Name = name };
         return new Symbol(symbolsUsed++);
@@ -275,9 +442,9 @@ internal sealed class BinderStore
     /// <summary>utilities.ts: createSymbolTable() (an empty table).</summary>
     internal SymbolTable CreateTable()
     {
-        if (tablesUsed == tables.Length)
+        if (tablesUsed == tablesCapacity)
         {
-            Array.Resize(ref tables, tables.Length * 2);
+            tables = GrowArray(tables, ref tablesCapacity, tablesUsed);
         }
         tables[tablesUsed] = default;
         return new SymbolTable(tablesUsed++);
@@ -312,16 +479,16 @@ internal sealed class BinderStore
             entries[found].Symbol = symbol;
             return;
         }
-        if (entriesUsed == entries.Length)
+        if (entriesUsed == entriesCapacity)
         {
-            Array.Resize(ref entries, entries.Length * 2);
+            entries = GrowArray(entries, ref entriesCapacity, entriesUsed);
         }
         var entry = entriesUsed++;
-        if (entriesUsed * 2 > buckets.Length)
+        if (entriesUsed * 2 > bucketsLength)
         {
             GrowBuckets();
         }
-        var bucket = hash & (buckets.Length - 1);
+        var bucket = hash & (bucketsLength - 1);
         entries[entry] = new EntryRecord { Name = name, Symbol = symbol, Table = table.Index, Hash = hash, NextInBucket = buckets[bucket] };
         buckets[bucket] = entry;
         ref var t = ref tables[table.Index];
@@ -340,7 +507,7 @@ internal sealed class BinderStore
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private int Find(SymbolTable table, TextRef name, int hash)
     {
-        for (var e = buckets[hash & (buckets.Length - 1)]; e != 0; e = entries[e].NextInBucket)
+        for (var e = buckets[hash & (bucketsLength - 1)]; e != 0; e = entries[e].NextInBucket)
         {
             ref var entry = ref entries[e];
             if (entry.Hash == hash && entry.Table == table.Index && Nodes.Texts.Equals(entry.Name, name))
@@ -365,8 +532,9 @@ internal sealed class BinderStore
 
     private void GrowBuckets()
     {
-        buckets = new int[buckets.Length * 2];
-        var mask = buckets.Length - 1;
+        bucketsLength *= 2;
+        buckets = NewZeroed<int>(bucketsLength);
+        var mask = bucketsLength - 1;
         for (var e = 1; e < entriesUsed - 1; e++)
         {
             ref var entry = ref entries[e];
@@ -401,9 +569,9 @@ internal sealed class BinderStore
     /// <summary>binder.ts: createFlowNode.</summary>
     internal FlowNode CreateFlowNode(FlowFlags flags, Node node, FlowNode antecedent)
     {
-        if (flowsUsed == flows.Length)
+        if (flowsUsed == flowsCapacity)
         {
-            Array.Resize(ref flows, flows.Length * 2);
+            flows = GrowArray(flows, ref flowsCapacity, flowsUsed);
         }
         flows[flowsUsed] = new FlowRecord { Flags = flags, Node = node, Antecedent = antecedent };
         return new FlowNode(flowsUsed++);
@@ -521,56 +689,90 @@ internal sealed class BinderStore
 
     // ---- per-node fields ----
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Symbol SymbolOf(Node node) => declarationFields.Get(node).Symbol;
 
-    internal void SetSymbolOf(Node node, Symbol value) => declarationFields.GetOrAdd(node).Symbol = value;
+    internal void SetSymbolOf(Node node, Symbol value) => declarationFields.GetOrAdd(this, node).Symbol = value;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Symbol LocalSymbolOf(Node node) => declarationFields.Get(node).LocalSymbol;
 
-    internal void SetLocalSymbolOf(Node node, Symbol value) => declarationFields.GetOrAdd(node).LocalSymbol = value;
+    internal void SetLocalSymbolOf(Node node, Symbol value) => declarationFields.GetOrAdd(this, node).LocalSymbol = value;
 
-    internal FlowNode FlowNodeOf(Node node) => flowNodes.Get(node);
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal FlowNode FlowNodeOf(Node node)
+    {
+        var i = node.Index >> 2;
+        return (uint)i < (uint)flowNodeLength ? new FlowNode(flowNodeArray[i]) : FlowNode.None;
+    }
 
-    internal void SetFlowNodeOf(Node node, FlowNode value) => flowNodes.GetOrAdd(node) = value;
+    internal void SetFlowNodeOf(Node node, FlowNode value)
+    {
+        var i = node.Index >> 2;
+        if ((uint)i >= (uint)flowNodeLength)
+        {
+            GrowFlowNodes(i);
+        }
+        flowNodeArray[i] = value.Index;
+    }
 
+    // (A node created after the dense array was sized.)
+    private void GrowFlowNodes(int index)
+    {
+        var length = Math.Max(index + 1, flowNodeLength * 2);
+        var grown = (int*)Region((long)length * sizeof(int));
+        new Span<int>(flowNodeArray, flowNodeLength).CopyTo(new Span<int>(grown, length));
+        new Span<int>(grown + flowNodeLength, length - flowNodeLength).Clear();
+        flowNodeArray = grown;
+        flowNodeLength = length;
+    }
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SymbolTable LocalsOf(Node node) => containerFields.Get(node).Locals;
 
-    internal void SetLocalsOf(Node node, SymbolTable value) => containerFields.GetOrAdd(node).Locals = value;
+    internal void SetLocalsOf(Node node, SymbolTable value) => containerFields.GetOrAdd(this, node).Locals = value;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Node NextContainerOf(Node node) => containerFields.Get(node).NextContainer;
 
-    internal void SetNextContainerOf(Node node, Node value) => containerFields.GetOrAdd(node).NextContainer = value;
+    internal void SetNextContainerOf(Node node, Node value) => containerFields.GetOrAdd(this, node).NextContainer = value;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal FlowNode EndFlowNodeOf(Node node) => containerFields.Get(node).EndFlowNode;
 
-    internal void SetEndFlowNodeOf(Node node, FlowNode value) => containerFields.GetOrAdd(node).EndFlowNode = value;
+    internal void SetEndFlowNodeOf(Node node, FlowNode value) => containerFields.GetOrAdd(this, node).EndFlowNode = value;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal FlowNode ReturnFlowNodeOf(Node node) => containerFields.Get(node).ReturnFlowNode;
 
-    internal void SetReturnFlowNodeOf(Node node, FlowNode value) => containerFields.GetOrAdd(node).ReturnFlowNode = value;
+    internal void SetReturnFlowNodeOf(Node node, FlowNode value) => containerFields.GetOrAdd(this, node).ReturnFlowNode = value;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal FlowNode FallthroughFlowNodeOf(Node node) => containerFields.Get(node).FallthroughFlowNode;
 
-    internal void SetFallthroughFlowNodeOf(Node node, FlowNode value) => containerFields.GetOrAdd(node).FallthroughFlowNode = value;
+    internal void SetFallthroughFlowNodeOf(Node node, FlowNode value) => containerFields.GetOrAdd(this, node).FallthroughFlowNode = value;
 
     /// <summary>types.ts: ConditionalExpression.flowNodeWhenTrue.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal FlowNode FlowNodeWhenTrueOf(Node node) => flowExtraFields.Get(node).WhenTrue;
 
-    internal void SetFlowNodeWhenTrueOf(Node node, FlowNode value) => flowExtraFields.GetOrAdd(node).WhenTrue = value;
+    internal void SetFlowNodeWhenTrueOf(Node node, FlowNode value) => flowExtraFields.GetOrAdd(this, node).WhenTrue = value;
 
     /// <summary>types.ts: ConditionalExpression.flowNodeWhenFalse.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal FlowNode FlowNodeWhenFalseOf(Node node) => flowExtraFields.Get(node).WhenFalse;
 
-    internal void SetFlowNodeWhenFalseOf(Node node, FlowNode value) => flowExtraFields.GetOrAdd(node).WhenFalse = value;
+    internal void SetFlowNodeWhenFalseOf(Node node, FlowNode value) => flowExtraFields.GetOrAdd(this, node).WhenFalse = value;
 
     /// <summary>types.ts: SwitchStatement.possiblyExhaustive (false, as createSwitchStatement initializes it, until the binder sets it).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal bool PossiblyExhaustiveOf(Node node) => flowExtraFields.Get(node).PossiblyExhaustive;
 
     internal void SetPossiblyExhaustiveOf(Node node, bool value)
     {
         if (value || flowExtraFields.Get(node).PossiblyExhaustive)
         {
-            flowExtraFields.GetOrAdd(node).PossiblyExhaustive = value;
+            flowExtraFields.GetOrAdd(this, node).PossiblyExhaustive = value;
         }
     }
 
@@ -578,9 +780,9 @@ internal sealed class BinderStore
 
     private void Append(ref int first, ref int last, int value)
     {
-        if (linksUsed == links.Length)
+        if (linksUsed == linksCapacity)
         {
-            Array.Resize(ref links, links.Length * 2);
+            links = GrowArray(links, ref linksCapacity, linksUsed);
         }
         var link = linksUsed++;
         links[link] = new Link { Value = value };
@@ -758,30 +960,46 @@ internal sealed class BinderStore
 
     /// <summary>
     /// An open-addressing map from node handle to the binder's fields of the node (linear probing, multiplicative hash,
-    /// load at most 1/2); no table until the first entry. Node.None (0) marks a free slot.
+    /// load at most 1/2), keys and values in regions of the store's binder range (step BO1); no table until
+    /// <see cref="Init"/> or the first entry. Node.None (0) marks a free slot; a new entry's value starts as default.
     /// </summary>
     private struct NodeMap<T>
-        where T : struct
+        where T : unmanaged
     {
-        private int[]? keys;
-        private T[]? values;
+        private int* keys;
+        private T* values;
+        private int capacity; // a power of two; 0: no table
         private int count;
         private int shift;
+
+        /// <summary>The capacity that holds <paramref name="entries"/> entries at load 1/2.</summary>
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+        internal static int CapacityFor(int entries) => PowerOfTwo(entries * 2);
+
+        /// <summary>The table, empty, with <paramref name="size"/> slots (a power of two).</summary>
+        internal void Init(BinderStore store, int size)
+        {
+            keys = store.NewZeroed<int>(size);
+            values = (T*)store.Region((long)size * sizeof(T));
+            capacity = size;
+            count = 0;
+            shift = 32 - System.Numerics.BitOperations.Log2((uint)size);
+        }
 
         [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         public readonly T Get(Node node)
         {
-            if (keys is null)
+            if (capacity == 0)
             {
                 return default;
             }
-            var mask = keys.Length - 1;
+            var mask = capacity - 1;
             for (var i = Slot(node.Index, shift); ; i = (i + 1) & mask)
             {
                 var key = keys[i];
                 if (key == node.Index)
                 {
-                    return values![i];
+                    return values[i];
                 }
                 if (key == 0)
                 {
@@ -790,25 +1008,26 @@ internal sealed class BinderStore
             }
         }
 
-        public ref T GetOrAdd(Node node)
+        public ref T GetOrAdd(BinderStore store, Node node)
         {
-            if (keys is null || (count + 1) * 2 > keys.Length)
+            if ((count + 1) * 2 > capacity)
             {
-                Grow();
+                Grow(store);
             }
-            var mask = keys!.Length - 1;
+            var mask = capacity - 1;
             for (var i = Slot(node.Index, shift); ; i = (i + 1) & mask)
             {
                 var key = keys[i];
                 if (key == node.Index)
                 {
-                    return ref values![i];
+                    return ref values[i];
                 }
                 if (key == 0)
                 {
                     keys[i] = node.Index;
                     count++;
-                    return ref values![i];
+                    values[i] = default;
+                    return ref values[i];
                 }
             }
         }
@@ -816,20 +1035,14 @@ internal sealed class BinderStore
         [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         private static int Slot(int key, int shift) => (int)(((uint)key * 0x9E3779B9u) >> shift);
 
-        private void Grow()
+        private void Grow(BinderStore store)
         {
             var oldKeys = keys;
             var oldValues = values;
-            var capacity = oldKeys is null ? 64 : oldKeys.Length * 2;
-            keys = new int[capacity];
-            values = new T[capacity];
-            shift = 32 - System.Numerics.BitOperations.Log2((uint)capacity);
-            if (oldKeys is null)
-            {
-                return;
-            }
+            var oldCapacity = capacity;
+            Init(store, oldCapacity == 0 ? 16 : oldCapacity * 2);
             var mask = capacity - 1;
-            for (var j = 0; j < oldKeys.Length; j++)
+            for (var j = 0; j < oldCapacity; j++)
             {
                 if (oldKeys[j] == 0)
                 {
@@ -841,7 +1054,8 @@ internal sealed class BinderStore
                     i = (i + 1) & mask;
                 }
                 keys[i] = oldKeys[j];
-                values[i] = oldValues![j];
+                values[i] = oldValues[j];
+                count++;
             }
         }
     }

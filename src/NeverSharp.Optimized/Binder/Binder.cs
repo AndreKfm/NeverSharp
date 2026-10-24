@@ -169,6 +169,8 @@ internal sealed partial class Binder
         }
         finally
         {
+            // Step BO1: the binder store's range in the thread's binder slab ends here.
+            file.Binding?.Commit();
             binder.Clear();
             threadBinder = binder;
         }

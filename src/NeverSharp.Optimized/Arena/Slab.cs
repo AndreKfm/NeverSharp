@@ -9,7 +9,8 @@ namespace NeverSharp.Optimized;
 
 /// <summary>
 /// A large block of memory that holds the node data of many parse results (step O9, variant C): records, list headers,
-/// list elements, source texts and arena characters, or side tables of rare fields (step O10), one kind per slab. A thread fills its current slab of each kind
+/// list elements, source texts and arena characters, or side tables of rare fields (step O10), or dense parent arrays and
+/// binder output (step BO1), one kind per slab. A thread fills its current slab of each kind
 /// parse after parse, each parse writing one contiguous range after the ranges of the parses before it; a range, once
 /// its parse is committed, is never written by another parse (results stay independent).
 /// <para>
@@ -104,7 +105,17 @@ internal static class SlabKind
     internal const int ListElements = 2;
     internal const int Chars = 3;
     internal const int Side = 4;
-    internal const int Count = 5;
+
+    /// <summary>The kinds a parse writes to (its ranges stay open until <see cref="NodeStore.Commit"/>).</summary>
+    internal const int ParseKinds = 5;
+
+    /// <summary>Dense parent arrays (step BO1): allocated in one piece after a parse, never an open range.</summary>
+    internal const int Parents = 5;
+
+    /// <summary>Binder output (step BO1): the range of the binding that runs on the thread, open until the binding ends.</summary>
+    internal const int Binder = 6;
+
+    internal const int Count = 7;
 
     /// <summary>The size of a thread's first slab of each kind (at least; a thread's slabs double up to the full size).</summary>
     internal const long FirstSize = 64 << 10;
@@ -120,9 +131,11 @@ internal static class SlabKind
     // one slab of each kind holds the data of roughly 1.5 million characters of source text). Side tables of rare
     // fields (step O10): on the tuning corpus 14 % of the files have entries, 22,000 entries in all, at 24 bytes per
     // entry of table capacity (at least 384 bytes per file with entries); a thread opens its first side slab only when
-    // a file has entries, and its side slabs are native from the full size on.
+    // a file has entries, and its side slabs are native from the full size on. Step BO1: a bound file's dense parent
+    // array takes one int per 4 record words (about 7 bytes per node), its binder output about 25 to 30 bytes per
+    // node (symbols, tables, entries, flow nodes, links, the node maps and the dense flow node array).
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private static ReadOnlySpan<int> FullSizes => [4 << 20, 1 << 20, 512 << 10, 4 << 20, 64 << 10];
+    private static ReadOnlySpan<int> FullSizes => [4 << 20, 1 << 20, 512 << 10, 4 << 20, 64 << 10, 1 << 20, 4 << 20];
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static long FullSize(int kind) => FullSizes[kind];
@@ -194,6 +207,73 @@ internal unsafe struct SlabRange
         Start = slab.Memory;
         Capacity = slab.Size;
         return Start;
+    }
+
+    /// <summary>
+    /// Step BO1: opens an empty range of exactly <paramref name="bytes"/> bytes in the thread's current slab of the kind
+    /// (or a new one) and commits it at once: the thread's next allocation of the kind starts after it. Only for a kind
+    /// that has no open range on the thread (<see cref="ThreadSlabs.MayAllocate"/>).
+    /// </summary>
+    internal byte* OpenCommitted(ThreadSlabs local, int kind, long bytes)
+    {
+        var slab = local.Current[kind];
+        if (slab is not null && slab.Used != 0 && slab.OnlyOwner)
+        {
+            // Every range in the slab was released: start over at its beginning.
+            slab.Used = 0;
+        }
+        if (slab is null || slab.Size - slab.Used < bytes)
+        {
+            slab = local.Replace(kind, bytes);
+        }
+        slab.AddHolder();
+        Slab = slab;
+        Start = slab.Memory + slab.Used;
+        Capacity = bytes;
+        slab.Used = Align(slab.Used + bytes);
+        return Start;
+    }
+
+    /// <summary>
+    /// Step BO1: grows a committed range (writes after the end of the parse or of the binding, such as the binder's
+    /// parent pointers, names and caches) in the slabs of the current thread when no open range of the kind is there
+    /// (<see cref="ThreadSlabs.MayAllocate"/>), instead of a slab of the range's own: in place, to
+    /// <paramref name="inPlaceCapacity"/> bytes, if the range is the last one committed in the thread's current slab of
+    /// the kind and the slab has room (nothing is copied); otherwise to a new committed range of
+    /// <paramref name="freshCapacity"/> bytes after the thread's last one, the <paramref name="used"/> bytes copied (the
+    /// slab left stays held). Returns the range's start: unchanged if and only if it grew in place.
+    /// </summary>
+    internal byte* GrowCommitted(long used, long inPlaceCapacity, long freshCapacity, int kind)
+    {
+        var local = ThreadSlabs.Local;
+        if (!local.MayAllocate(kind))
+        {
+            return Grow(used, freshCapacity, null, kind);
+        }
+        var slab = Slab;
+        if (slab is not null && Start != null && ReferenceEquals(local.Current[kind], slab))
+        {
+            var offset = (long)(Start - slab.Memory);
+            if (Align(offset + Capacity) == slab.Used && slab.Size - offset >= inPlaceCapacity)
+            {
+                Capacity = inPlaceCapacity;
+                slab.Used = Align(offset + inPlaceCapacity);
+                return Start;
+            }
+        }
+        var old = Start;
+        var oldSlab = Slab;
+        Slab = null;
+        var start = OpenCommitted(local, kind, freshCapacity);
+        if (used != 0)
+        {
+            Buffer.MemoryCopy(old, start, freshCapacity, used);
+        }
+        if (oldSlab is not null)
+        {
+            Retire(oldSlab);
+        }
+        return start;
     }
 
     private void Retire(Slab slab)
@@ -269,7 +349,22 @@ internal sealed unsafe class ThreadSlabs
     /// <summary>The store whose parse writes to the thread's slabs (null between parses).</summary>
     internal object? Active;
 
+    /// <summary>Step BO1: the binder store whose binding writes to the thread's binder slab (null between bindings).</summary>
+    internal object? ActiveBinder;
+
     internal static ThreadSlabs Local => local ??= new ThreadSlabs();
+
+    /// <summary>
+    /// Step BO1: whether a committed range of the kind may take memory of the thread's current slab of the kind: no
+    /// open range of the kind reaches to the slab's end (parse kinds: no parse in progress on the thread; binder: no
+    /// binding in progress; parents: never open).
+    /// </summary>
+    internal bool MayAllocate(int kind) => kind switch
+    {
+        < SlabKind.ParseKinds => Active is null,
+        SlabKind.Binder => ActiveBinder is null,
+        _ => true,
+    };
 
     /// <summary>
     /// Makes <paramref name="store"/> the store that writes to the thread's slabs. A store that still owned them (a parse
@@ -279,7 +374,7 @@ internal sealed unsafe class ThreadSlabs
     {
         if (Active is not null && !ReferenceEquals(Active, store))
         {
-            for (var k = 0; k < SlabKind.Count; k++)
+            for (var k = 0; k < SlabKind.ParseKinds; k++)
             {
                 Current[k]?.RemoveHolder();
                 Current[k] = null;

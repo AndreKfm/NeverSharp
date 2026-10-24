@@ -518,10 +518,36 @@ internal sealed unsafe class TextTable
     private void GrowChars(int needed)
     {
         // A parse's table grows into the thread's next character slab while its parse owns the thread's slabs, other
-        // tables (and a parse's table after Seal) into memory of their own. The range it leaves stays held.
+        // tables into memory of their own. The range it leaves stays held.
+        if (!pooled && slabs is not null)
+        {
+            GrowSealedChars(needed);
+            return;
+        }
         var needs = Math.Max(Math.Max((long)charCapacity * 2, 256), needed);
         chars = (char*)charRange.Grow((long)charCount * sizeof(char), needs * sizeof(char), ActiveSlabs, SlabKind.Chars);
         charCapacity = (int)Math.Min(charRange.Capacity / sizeof(char), int.MaxValue);
+    }
+
+    // (Called by GrowChars only.) Step BO1: a parse's table after Seal (names the binder adds) grows its range in the
+    // character slab of the current thread if no parse runs there: in place if its range is the last one in the slab
+    // (the interned handles after the characters move up), otherwise into a new range there with the characters copied
+    // (the interned handles stay where they are); into memory of its own if a parse runs on the thread.
+    private void GrowSealedChars(int needed)
+    {
+        var needs = needed + Math.Max(256L, needed >> 3);
+        var interned = sealedInterned == null ? 0 : entryCount;
+        var at = (needs + 3) & ~3L;
+        var old = chars;
+        var start = (char*)charRange.GrowCommitted((long)charCount * sizeof(char), (at * sizeof(char)) + ((long)interned * sizeof(TextRef)), needs * sizeof(char), SlabKind.Chars);
+        if (start == old && interned != 0)
+        {
+            var moved = (TextRef*)(start + at);
+            new ReadOnlySpan<TextRef>(sealedInterned, interned).CopyTo(new Span<TextRef>(moved, interned));
+            sealedInterned = moved;
+        }
+        chars = start;
+        charCapacity = (int)needs;
     }
 
     /// <summary>The arena's characters from <paramref name="at"/> (after <see cref="Reserve"/>), for writing.</summary>
