@@ -1,6 +1,6 @@
 # Phase 2: binder (Track O only) — plan
 
-Decided by the author on 2026-10-24: Phase 2 ports the binder of TypeScript 6.0.3 (`src/compiler/binder.ts`, 3,916 lines; typescript-go's `internal/binder` about 3,600 lines of Go) **for Track O only**; Track F is not extended. Tests and gates are run only where a change affects them (binder changes run the binder gate; the parser gates run only when parser, scanner or store code changes). Draft pre-registration amendment: [preregistration.md](preregistration.md) §15 (`prereg/v7`, to be accepted and tagged by the author before any binder measurement).
+Decided by the author on 2026-10-24: Phase 2 ports the binder of TypeScript 6.0.3 (`src/compiler/binder.ts`, 3,916 lines; typescript-go's `internal/binder` about 3,600 lines of Go) **for Track O only**; Track F is not extended. Tests and gates are run only where a change affects them (binder changes run the binder gate; the parser gates run only when parser, scanner or store code changes). Pre-registration amendment: [preregistration.md](preregistration.md) §15 (`prereg/v7`, accepted and tagged 2026-10-24).
 
 ## What the binder produces
 

@@ -305,6 +305,7 @@ For transparency, the decisions that were revised during Phase 0, before this do
 | Date | Tag | Change | Reason | Where |
 |---|---|---|---|---|
 | 2026-10-22 | `prereg/v6` | §5.4 Track O Gate 2: second NoAlloc allowlist `eng/optimized.noalloc-allowlist.toml` (24 non-allocating runtime members; mirror entries of the `[NoAllocUnchecked]` exceptions) | written by step O-NA to keep 87 % NoAlloc coverage; accepted by the author; changes coverage reporting only, not speed; before the Track O endpoint run | eng/, phase1-progress.md |
+| 2026-10-24 | `prereg/v7` | §15 Phase 2: the binder of TypeScript 6.0.3 for Track O only; Gate B (byte-identical binder dumps against tsc 6.0.3 `bindSourceFile`, both JSDoc modes); endpoint parse+bind `cs-o-aot-ws-bind` vs `tsgo7-bind` with the §8 rule | scope decided by the author (Track F not extended); tagged after Gate B passed and before any binder measurement | phase2-plan.md, phase1-progress.md (Phase 2) |
 | 2026-10-22 | `prereg/v5` | Secondary reference tsrs 0.18.0 (`tsrs-parse`, `tsrs-parse-single`, report Table 2b), pins `references.tsrs` and `tools.rust` (Rust 1.99.1) | a Rust port of TypeScript 7 appeared (Cloudflare/Oxc, 2026-10); the author wants Track O compared with it as well; decided before any Track O measurement | §6.2, §6.4, §8, references.md §2a, pins.json |
 | 2026-10-22 | `prereg/v4` | §8 variance gate: binding for tsc6-parse, tsgo7-parse-single and the primary single-threaded C# configuration of each track; other single-threaded C# configurations reported with a variance note | M6 runs 1 and 2 failed the gate only in JIT/Server-GC "single-threaded" configurations (3.36–5.08 %) while the rig configurations stayed ≤ 1.43 % and cs-aot-ws-single ≤ 1.68 %; **decided after seeing both runs**; the verdict comes from a run after this tag | benchmark-harness.md B11, results/m6/ |
 | 2026-10-21 | `prereg/v3` | §5.2: 2 attempts per Track F module from M5 on (1 × Opus 5.5, 1 × Sonnet 5.5), agents at medium effort, high only for Track O | token cost; M3+M4 attempt 1 was stopped by the author before finishing (logged in phase1-progress.md) | phase1-progress.md, modules/README.md |
@@ -329,7 +330,7 @@ typescript-go (the reference and the method this project copies); oxc and swc (R
 - [x] OpenTimestamps proof for the tag (§11.1): `docs/timestamps/prereg-v1.txt` and its `.ots` proof, opentimestamps-client 0.7.2.
 - [ ] Repository published when the author decides the project is done (not a condition for the tag; §11.1 covers the timestamp).
 
-## 15. Phase 2: binder (draft amendment `prereg/v7`, not yet accepted)
+## 15. Phase 2: binder (amendment `prereg/v7`, accepted 2026-10-24)
 
 **Scope (decided by the author, 2026-10-24).** The binder of TypeScript 6.0.3 (`src/compiler/binder.ts`) is ported for Track O only; Track F is not extended. Port rules of §5.4 apply. Plan: [phase2-plan.md](phase2-plan.md).
 
@@ -337,4 +338,4 @@ typescript-go (the reference and the method this project copies); oxc and swc (R
 
 **Endpoint.** Parse+bind per file: `cs-o-aot-ws-bind` against `tsgo7-bind` (typescript-go 7.0.2: `parser.ParseSourceFile` and `binder.BindSourceFile` per file, parallel on its work group), with G, interval and decision rule as in §8, from the first protocol-compliant run after Gate B passes completely. Single-threaded and the other C# runtimes as secondary configurations, as in §8. Disclosed with every comparison: typescript-go's binder ports TypeScript 7 and differs from 6.0.3's in places.
 
-**Status.** Draft; to be accepted and tagged (`prereg/v7`, OpenTimestamps) by the author before any binder measurement.
+**Status.** Accepted by the author on 2026-10-24 and tagged `prereg/v7` (OpenTimestamps) after Gate B passed and before any binder measurement.
