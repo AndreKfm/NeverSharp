@@ -145,6 +145,25 @@ internal sealed unsafe class BinderStore
     private long top;
     private ThreadSlabs? local;
 
+    // Step BO3: a small file binds into the thread's scratch block (memory the thread reuses binding after binding, so
+    // it is already mapped and mostly in cache; the binder slab's fresh pages are what a binding into it pays for), and
+    // Commit copies what is in use, compacted, into the binder slab. While scratch is set, range.Start and
+    // range.Capacity are the current block (range.Slab stays null) and regions are allocated from top on; blocks left by
+    // an overflow stay alive in overflowBlocks until Commit. A block is a slab the thread holds, sized from twice the
+    // estimate of the bindings it served (at least ScratchBlockSize); as for the thread's other slabs, a small one is a
+    // pinned managed array (a thread that binds only a few files, as the dump tool's threads do, leaves garbage the
+    // collector sees), a large one native memory, freed when the thread replaces it or by the finalizer.
+    private const long ScratchLimit = 256 << 10;
+    private const long ScratchBlockSize = 64 << 10;
+
+    [ThreadStatic]
+    private static Slab? scratchBlock;
+
+    [ThreadStatic]
+    private static List<Slab>? overflowBlocks;
+
+    private bool scratch;
+
     /// <summary>
     /// Module B3: the rare flow fields of conditional expressions in return position (flowNodeWhenTrue,
     /// flowNodeWhenFalse) and of switch statements (possiblyExhaustive; only true values are stored).
@@ -193,7 +212,20 @@ internal sealed unsafe class BinderStore
         {
             thread.ActiveBinder = this;
             local = thread;
-            range.Open(thread, SlabKind.Binder, estimate);
+            if (estimate <= ScratchLimit)
+            {
+                var block = scratchBlock;
+                if (block is null || block.Size < estimate * 2)
+                {
+                    block?.RemoveHolder();
+                    block = NewScratchBlock(Math.Max(estimate * 2, (block?.Size ?? 0) * 2));
+                }
+                UseScratch(block);
+            }
+            else
+            {
+                range.Open(thread, SlabKind.Binder, estimate);
+            }
         }
         symbols = NewArray<SymbolRecord>(symbolCapacity);
         symbolsCapacity = symbolCapacity;
@@ -224,7 +256,14 @@ internal sealed unsafe class BinderStore
         {
             return;
         }
-        range.Commit(top, thread, SlabKind.Binder);
+        if (scratch)
+        {
+            CommitScratch(thread);
+        }
+        else
+        {
+            range.Commit(top, thread, SlabKind.Binder);
+        }
         if (ReferenceEquals(thread.ActiveBinder, this))
         {
             thread.ActiveBinder = null;
@@ -272,13 +311,105 @@ internal sealed unsafe class BinderStore
         bytes = SlabRange.Align(bytes);
         if (range.Capacity - top < bytes)
         {
-            // The regions in use stay where they are: the range keeps the slab it leaves held.
-            range.Grow(0, bytes, local, SlabKind.Binder);
-            top = 0;
+            if (scratch)
+            {
+                // Step BO3: the regions in use stay where they are, their block stays alive until Commit.
+                (overflowBlocks ??= []).Add(scratchBlock!);
+                UseScratch(NewScratchBlock(Math.Max(range.Capacity * 2, bytes * 2)));
+            }
+            else
+            {
+                // The regions in use stay where they are: the range keeps the slab it leaves held.
+                range.Grow(0, bytes, local, SlabKind.Binder);
+                top = 0;
+            }
         }
         var region = range.Start + top;
         top += bytes;
         return region;
+    }
+
+    private static Slab NewScratchBlock(long minimum)
+    {
+        var size = SlabRange.Align(Math.Max(minimum, ScratchBlockSize));
+        return new Slab(size, native: size >= SlabKind.NativeSize);
+    }
+
+    // Step BO3: regions from now on in the block, which becomes the thread's scratch block.
+    private void UseScratch(Slab block)
+    {
+        scratchBlock = block;
+        scratch = true;
+        range.Start = block.Memory;
+        range.Capacity = block.Size;
+        top = 0;
+    }
+
+    /// <summary>
+    /// Step BO3: the end of a binding in the scratch block. The arrays in use move to one committed range of the
+    /// thread's binder slab, each cut to the records in use (later additions grow them, as for any committed store); the
+    /// hash index and the node maps are rebuilt at the smallest size that keeps their load at most 1/2.
+    /// </summary>
+    private void CommitScratch(ThreadSlabs thread)
+    {
+        var bucketCount = PowerOfTwo(entriesUsed * 2);
+        var declarationCount = declarationFields.CompactCapacity;
+        var containerCount = containerFields.CompactCapacity;
+        var flowExtraCount = flowExtraFields.CompactCapacity;
+        var total = SlabRange.Align((long)symbolsUsed * sizeof(SymbolRecord)) + SlabRange.Align((long)tablesUsed * sizeof(TableRecord)) +
+            SlabRange.Align((long)entriesUsed * sizeof(EntryRecord)) + SlabRange.Align((long)flowsUsed * sizeof(FlowRecord)) +
+            SlabRange.Align((long)linksUsed * sizeof(Link)) + SlabRange.Align((long)bucketCount * sizeof(int)) +
+            SlabRange.Align((long)flowNodeLength * sizeof(int)) + NodeMap<DeclarationFields>.Bytes(declarationCount) +
+            NodeMap<ContainerFields>.Bytes(containerCount) + NodeMap<FlowExtraFields>.Bytes(flowExtraCount);
+        scratch = false;
+        range.Start = null;
+        range.Capacity = 0;
+        range.OpenCommitted(thread, SlabKind.Binder, total);
+        top = 0;
+        symbols = Compact(symbols, symbolsUsed);
+        symbolsCapacity = symbolsUsed;
+        tables = Compact(tables, tablesUsed);
+        tablesCapacity = tablesUsed;
+        entries = Compact(entries, entriesUsed);
+        entriesCapacity = entriesUsed;
+        flows = Compact(flows, flowsUsed);
+        flowsCapacity = flowsUsed;
+        links = Compact(links, linksUsed);
+        linksCapacity = linksUsed;
+        flowNodeArray = Compact(flowNodeArray, flowNodeLength);
+        // The hash index: the chains rebuilt (keys are unique, so the order within a chain does not matter).
+        bucketsLength = bucketCount;
+        buckets = NewZeroed<int>(bucketCount);
+        var mask = bucketCount - 1;
+        for (var e = 1; e < entriesUsed; e++)
+        {
+            ref var entry = ref entries[e];
+            var bucket = entry.Hash & mask;
+            entry.NextInBucket = buckets[bucket];
+            buckets[bucket] = e;
+        }
+        declarationFields.Rehash(this, declarationCount);
+        containerFields.Rehash(this, containerCount);
+        flowExtraFields.Rehash(this, flowExtraCount);
+        var overflow = overflowBlocks;
+        if (overflow is not null)
+        {
+            foreach (var block in overflow)
+            {
+                block.RemoveHolder();
+            }
+            overflow.Clear();
+        }
+    }
+
+    // The first used records of the array, copied to a new region of exactly that size.
+    private T* Compact<T>(T* array, int used)
+        where T : unmanaged
+    {
+        var bytes = (long)used * sizeof(T);
+        var compact = (T*)Region(bytes);
+        Buffer.MemoryCopy(array, compact, bytes, bytes);
+        return compact;
     }
 
     // A region for capacity records whose record 0 is zero (the undefined handle's).
@@ -1053,12 +1184,36 @@ internal sealed unsafe class BinderStore
         [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         private static int Slot(int key, int shift) => (int)(((uint)key * 0x9E3779B9u) >> shift);
 
-        private void Grow(BinderStore store)
+        /// <summary>Step BO3: the smallest capacity that holds the entries at load 1/2 (0: no table, if there are none).</summary>
+        internal readonly int CompactCapacity
+        {
+            [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+            get => count == 0 ? 0 : CapacityFor(count);
+        }
+
+        /// <summary>Step BO3: the bytes of the regions of a table with <paramref name="size"/> slots.</summary>
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+        internal static long Bytes(int size) => size == 0 ? 0 : SlabRange.Align((long)size * sizeof(int)) + SlabRange.Align((long)size * sizeof(T));
+
+        /// <summary>Step BO3: the entries moved to a new table with <paramref name="size"/> slots (0: no table; only when there are no entries).</summary>
+        internal void Rehash(BinderStore store, int size)
+        {
+            if (size == 0)
+            {
+                this = default;
+                return;
+            }
+            Move(store, size);
+        }
+
+        private void Grow(BinderStore store) => Move(store, capacity == 0 ? 16 : capacity * 2);
+
+        private void Move(BinderStore store, int size)
         {
             var oldKeys = keys;
             var oldValues = values;
             var oldCapacity = capacity;
-            Init(store, oldCapacity == 0 ? 16 : oldCapacity * 2);
+            Init(store, size);
             var mask = capacity - 1;
             for (var j = 0; j < oldCapacity; j++)
             {
