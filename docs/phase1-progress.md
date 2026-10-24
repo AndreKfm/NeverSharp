@@ -284,3 +284,7 @@ Brief: [modules/O29.md](modules/O29.md). One attempt (Opus 5.5, high effort, own
 ### Track O additional run after O29 (2026-10-24, Windows only)
 
 Protocol-compliant run at 95b038e (idle 7.6 %); variance gate PASS. cs-o-aot-ws vs tsgo7-parse **0.40 [0.39, 0.40]**; vs tsrs-parse **1.04 [1.03, 1.05]** (previous run 1.02 [1.01, 1.04]: within the run-to-run spread; single-threaded improved 1.029 → 1.021); vscode 0.92 against tsrs for the fourth run in a row (reported). `results/track-o/additional/2026-10-24T06-41-11-991Z/NOTE.md`.
+
+### Track O closed (2026-10-24)
+
+Closed by the author after the sixth additional run: the comparison against tsrs had reached its run-to-run spread (1.02 → 1.04 with overlapping intervals). Summary of verdicts, all runs, claims, disclosed differences, the A9 step list and process notes: [track-o-summary.md](track-o-summary.md). Not evaluated: O4, O7b, O8. Open: Linux replication (A4).

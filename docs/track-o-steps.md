@@ -1,5 +1,7 @@
 # Track O: steps evaluated and not evaluated (A9)
 
+Track O closed on 2026-10-24: summary in [track-o-summary.md](track-o-summary.md).
+
 The list the Track O endpoint is reported with (pre-registration §8, A9). Each step: up to 3 variants, Gate 1 and Track O Gate 2 on every variant, survivors measured on the tuning corpus (never on the benchmark repositories), winner by the pre-registered rule (lowest median; if the 95 % intervals overlap, fewer bytes allocated, then fewer lines). Order set by the profile in [track-o-profile.md](track-o-profile.md).
 
 | Step | What | Status | Winning variant | Record |
@@ -10,13 +12,13 @@ The list the Track O endpoint is reported with (pre-registration §8, A9). Each 
 | O5a | Text as spans plus character arena, interning with a span-keyed hash table (no variants; brief [modules/O5a.md](modules/O5a.md)) | done 2026-10-22; tuning corpus cs-o-aot-ws 579 ms vs main 837 ms (0.692 [0.674, 0.705]); M5 959 ms, 276 MB | — (no variants) | phase1-progress.md, results/track-o/O5a/ |
 | O5b | Identifier interning lookup: switch on length/first character, perfect hash (behind the O5a seam) | keyword lookup part evaluated inside O23 (both variants: perfect hash; merged with B); interning lookup done 2026-10-23 (brief [modules/O5b.md](modules/O5b.md)): 0.993 [0.950, 1.019], not slower | — (one attempt), merged | phase1-progress.md, results/track-o/O5b-O11/ |
 | O7a | Node lists as handles into a list store, ranges in one index arena (no variants; brief [modules/O7a.md](modules/O7a.md)) | done 2026-10-22; tuning corpus cs-o-aot-ws 845 ms vs main 1,100 ms (0.768 [0.760, 0.774]); M5 1.206 s, 417 MB | — (no variants) | phase1-progress.md, results/track-o/O7a/ |
-| O7b | Node list layouts: up to 2 more behind the O7a seam (pooled arrays, small-list inline) | not started; depends on O7a | | |
+| O7b | Node list layouts: up to 2 more behind the O7a seam (pooled arrays, small-list inline) | not evaluated (Track O closed 2026-10-24) | | |
 | O-NA | Remaining allocations and NoAlloc coverage (phase1-plan §9 "NoAlloc compliance"; no variants; brief [modules/ONA.md](modules/ONA.md)) | done 2026-10-22; tuning corpus cs-o-aot-ws 473 ms vs main 581 ms (0.815 [0.800, 0.833]); NoAlloc 2,119 of 2,437 methods, 55 exceptions | — (no variants) | phase1-progress.md, results/track-o/ONA/ |
 | O1 | File reading and decoding: A seam baseline (string), B pooled bytes + SIMD decode into a char arena, C memory-mapped + native text (brief [modules/O1.md](modules/O1.md)) | done 2026-10-22; tuning corpus cs-o-aot-ws: A 481 ms, B 461 ms, C 450 ms; C/B 0.977 [0.962, 1.003] overlaps, bytes decide (C 291 MB, B 392 MB, A 405 MB) | **C: native text** (C/A 0.935 [0.917, 0.956]) | phase1-progress.md, results/track-o/O1/ |
 | O2 | Character classification | done 2026-10-23 as part of O23 (brief [modules/O23.md](modules/O23.md)) | see O23 | phase1-progress.md |
 | O3 | Trivia and comment skipping | done 2026-10-23 as part of O23: run 2 on O10: B 393 ms, C 398 ms (C/B 1.013 [0.983, 1.050]), bytes decide | **O23 B: lookup tables** (B/O10 0.949 [0.911, 0.977]) | phase1-progress.md, results/track-o/O10-O23/ |
-| O4 | String, template and numeric literals | not started | | |
-| O8 | Parallel scheduling | not started (probe 2026-10-23: Track O scales slightly better than tsrs; low priority) | | |
+| O4 | String, template and numeric literals | not evaluated (Track O closed 2026-10-24; string and template bodies and simple integers covered in O24) | | |
+| O8 | Parallel scheduling | not evaluated (Track O closed 2026-10-24; probe: Track O scales better than tsrs) | | |
 | O9 | Per-file overhead after the endpoint: Seal copies, parser pool, hash tables (brief [modules/O9.md](modules/O9.md)); A main, B hand over the scratch, C per-thread slabs | done 2026-10-23; tuning corpus cs-o-aot-ws: A 444 ms, B 456 ms, C 408 ms; single A 2,840, B 2,809, C 2,651 ms | **C: per-thread slabs** (C/A 0.918 [0.893, 0.936]; 97 vs 290 MB) | phase1-progress.md, results/track-o/O9/ |
 | O10 | Side table of rare node fields without per-file allocation (no variants; brief [modules/O10.md](modules/O10.md)) | done 2026-10-23; 409 vs 415 ms (0.987 [0.964, 1.010]), not slower | — (no variants), merged | phase1-progress.md, results/track-o/O10-O23/ |
 | O11 | Speculative parsing: B token replay, C exact pre-decisions (brief [modules/O11.md](modules/O11.md)) | done 2026-10-23; main 401 ms, B 406 ms, C 387 ms; C on O5b 0.945 [0.924, 0.970] | **C: exact pre-decisions** (C/main 0.965 [0.935, 0.998]) | phase1-progress.md, results/track-o/O5b-O11/ |
