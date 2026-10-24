@@ -271,3 +271,12 @@ Briefs: [modules/O27.md](modules/O27.md), [modules/O28.md](modules/O28.md); chos
 ### Track O additional run after O27 and O28 (2026-10-24, Windows only)
 
 Protocol-compliant run at 3c6cb2d (idle 4.3 %); variance gate PASS. cs-o-aot-ws vs tsgo7-parse **0.40 [0.39, 0.40]**; vs tsrs-parse **1.02 [1.01, 1.04]** (secondary, within 20 %; vscode 0.92 [0.88, 0.94], third run in a row below 1, reported); single-threaded 0.545 vs typescript-go, 1.029 vs tsrs. The endpoint stays 0.60. `results/track-o/additional/2026-10-24T03-34-00-173Z/NOTE.md`.
+
+### O29: NativeAOT inlining audit (after the fifth additional run)
+
+Brief: [modules/O29.md](modules/O29.md). One attempt (Opus 5.5, high effort, own worktree); passed the full Track O gate on the orchestrator's rerun, and Track F's gate. Branch `attempts/O29` (6df134f).
+
+- **Method:** the published NativeAOT driver disassembled with Visual Studio's `dumpbin -disasm` (method names from the PDB); scratch scripts list every call and tail jump in the hot functions with the callee's size and diff call counts between builds. Examined: scanner, token consumption, the whole expression descent, statements, lists, types, declarations, node creation, side table.
+- **Kept** (attempt's interleaved in-memory benchmark): O25's `ContinuesOperand`, `IsPlainPrimaryStart`, `BinaryOperatorPrecedence`, `ParsePlainPrimaryExpression` inlined (0.983); a `FinishNode(Node, int)` overload without the nullable end, which NativeAOT inlines at about 30 sites (0.996); `WithJSDoc` test in line, work out of line (0.992); `NodeFactory.Parenthesizer` memoized value in line (0.997). **Dropped:** `AggressiveInlining` on `FinishNode` everywhere (1.016), inline `FinishNode` copies, `ParseTokenNode`/`IsIdentifier`, `IsPropertyName`/`EscapeLeadingUnderscores`, context wrappers, yield/arrow pre-checks, small parse helpers (all 0.998–1.007). In-memory parse overall 0.969 [0.965, 0.970] in the attempt. 1 gate run.
+- **Run 1 (rig-compliant; tuning corpus, 20 runs):** main 358.1 ms, O29 358.8 ms, O29/main 1.002 [0.972, 1.027], single-threaded 0.991 [0.982, 1.001]; not slower, so **O29 merged** (fast-forward, checked). File reading dominates the tuning corpus.
+- **After the merge:** `M5.ParseTuningCorpus` 407.4 ms, 39.9 MB (after O28: 410.7 ms); smaller than the attempt's in-memory ratio (BenchmarkDotNet run-to-run spread was 3–7 % in earlier steps). `results/track-o/O29/`.
