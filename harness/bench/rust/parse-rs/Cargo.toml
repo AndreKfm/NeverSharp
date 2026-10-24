@@ -11,6 +11,7 @@ license = "Apache-2.0"
 
 [dependencies]
 tsrs_parser = { path = "../../../../external/tsrs/crates/tsrs_parser" }
+tsrs_binder = { path = "../../../../external/tsrs/crates/tsrs_binder" }
 tsrs_ast = { path = "../../../../external/tsrs/crates/tsrs_ast" }
 tsrs_core = { path = "../../../../external/tsrs/crates/tsrs_core" }
 tsrs_vfs = { path = "../../../../external/tsrs/crates/tsrs_vfs" }

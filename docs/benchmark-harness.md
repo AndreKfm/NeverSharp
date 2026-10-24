@@ -88,8 +88,9 @@ Every parse-only driver, existing or future (tsc 6.0.3, typescript-go 7.0.2, eve
 | Output | exactly one JSON line on stdout as the last line: `driver` (string), `files` (count parsed), `nodes` (sum of the parser's node counts), `priority` (`"high"` or `"normal"`, the class in effect), and the size read (`chars` or `bytes`). |
 | C# drivers additionally | `allocatedBytes` (`GC.GetTotalAllocatedBytes(true)`), `gen0`, `gen1`, `gen2` (`GC.CollectionCount`), `gcPauseMs` (`GC.GetTotalPauseDuration()`), all read after the last file is parsed; the runner stores them as `runtime` in run.json and reports them in the runtime-metrics table. |
 | Exit code | 0 on success; anything else fails the run. |
+| Parse+bind mode (Phase 2, pre-registration §15) | `<driver> --bind [--single] <file list>`: the same work item binds each file right after parsing it, with default options, and the binder output stays alive with its tree. C# Track O: `Binder.BindSourceFile(sourceFile, new CompilerOptions())` (binder.ts `bindSourceFile(file, {})`, as the Gate B oracle binds); typescript-go 7.0.2: `binder.BindSourceFile(sourceFile)` (takes no options in 7.0.2); tsrs 0.18.0: `tsrs_binder::bind_source_file(file)`. Track F and tsc have no bind mode. The driver name carries `-bind` before the mode (`cs-optimized-aot-ws-bind-parallel`, `tsgo-7.0.2-bind-single`, `tsrs-0.18.0-bind-parallel`) and the JSON line adds `symbols` (sum of the files' symbol counts). |
 
-The runner checks `files` against the parse set and `priority` against the requested class before timing (section 2).
+The runner checks `files` against the parse set and `priority` against the requested class before timing (section 2); for the parse+bind configurations (`*-bind`, `*-bind-single`) it also checks the driver name and `symbols` > 0. `bench.mjs --check` runs only this validation, once per selected configuration and repository plus the empty file list, and prints the counts (functional check, no timing, nothing written).
 
 ## 5. Measurement
 

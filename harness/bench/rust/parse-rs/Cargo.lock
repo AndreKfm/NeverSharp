@@ -281,6 +281,7 @@ dependencies = [
  "mimalloc-safe",
  "rayon",
  "tsrs_ast",
+ "tsrs_binder",
  "tsrs_core",
  "tsrs_parser",
  "tsrs_vfs",
@@ -419,6 +420,18 @@ dependencies = [
  "tsrs_core",
  "tsrs_diagnostics",
  "tsrs_spanmap",
+]
+
+[[package]]
+name = "tsrs_binder"
+version = "0.18.0"
+dependencies = [
+ "bitflags",
+ "rustc-hash",
+ "tsrs_ast",
+ "tsrs_core",
+ "tsrs_diagnostics",
+ "tsrs_scanner",
 ]
 
 [[package]]
