@@ -83,7 +83,14 @@ internal sealed partial class Binder
         {
             return false;
         }
-        var text = texts.Span(store.EscapedText(node));
+        // (Step BO3: the length from the text handle first; only these lengths, 3, 5, 6, 7, 9 and 10, can match.)
+        var name = store.EscapedText(node);
+        var length = (uint)(name.Size - 1);
+        if (length > 10 || ((0x6E8u >> (int)length) & 1) == 0)
+        {
+            return false;
+        }
+        var text = texts.Span(name);
         switch (text.Length)
         {
             case 3:

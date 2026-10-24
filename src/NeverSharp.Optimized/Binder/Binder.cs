@@ -1537,6 +1537,11 @@ internal sealed partial class Binder
             return;
         }
         SetParentOf(node, parent);
+        if (store.Kind(node) <= SyntaxKind.LastToken)
+        {
+            BindToken(node);
+            return;
+        }
         var saveInStrictMode = inStrictMode;
 
         // Even though in the AST the jsdoc @typedef node belongs to the current node,
@@ -1565,32 +1570,49 @@ internal sealed partial class Binder
         // the current 'container' node when it changes. This helps us know which symbol table
         // a local should go into for example. Since terminal nodes are known not to have
         // children, as an optimization we don't process those.
-        if (store.Kind(node) > SyntaxKind.LastToken)
+        var saveParent = parent;
+        parent = node;
+        var containerFlags = GetContainerFlags(store, node);
+        if (containerFlags == ContainerFlags.None)
         {
-            var saveParent = parent;
-            parent = node;
-            var containerFlags = GetContainerFlags(store, node);
-            if (containerFlags == ContainerFlags.None)
-            {
-                BindChildren(node);
-            }
-            else
-            {
-                BindContainer(node, containerFlags);
-            }
-            parent = saveParent;
+            BindChildren(node);
         }
         else
         {
-            var saveParent = parent;
-            if (store.Kind(node) == SyntaxKind.EndOfFileToken)
+            BindContainer(node, containerFlags);
+        }
+        parent = saveParent;
+        inStrictMode = saveInStrictMode;
+    }
+
+    // Bind for a token (Track O, step BO3: split from Bind, the most frequent nodes). Of the tokens, bindWorker acts
+    // only on identifiers, private identifiers, `this` and `super`, and none of its token cases changes inStrictMode
+    // (nested binds restore it themselves), so it needs no saving here.
+    private void BindToken(Node node)
+    {
+        var kind = store.Kind(node);
+        if (kind == SyntaxKind.Identifier && (store.Flags(node) & NodeFlags.IdentifierIsInJSDocNamespace) == 0)
+        {
+            // bindWorker's case for identifiers outside JSDoc namespaces.
+            if (!currentFlow.IsNone)
             {
-                parent = node;
+                b.SetFlowNodeOf(node, currentFlow);
             }
+            CheckContextualIdentifier(node);
+        }
+        else if (kind is SyntaxKind.Identifier or SyntaxKind.PrivateIdentifier or SyntaxKind.ThisKeyword or SyntaxKind.SuperKeyword)
+        {
+            BindWorker(node);
+        }
+        if (kind == SyntaxKind.EndOfFileToken)
+        {
+            var saveParent = parent;
+            parent = node;
             BindJSDoc(node);
             parent = saveParent;
+            return;
         }
-        inStrictMode = saveInStrictMode;
+        BindJSDoc(node);
     }
 
     // setParent(node, parent). (Track O, step BO2: written without reading the old parent first; writing the same

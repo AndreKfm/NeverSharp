@@ -153,7 +153,7 @@ internal sealed unsafe class BinderStore
     // estimate of the bindings it served (at least ScratchBlockSize); as for the thread's other slabs, a small one is a
     // pinned managed array (a thread that binds only a few files, as the dump tool's threads do, leaves garbage the
     // collector sees), a large one native memory, freed when the thread replaces it or by the finalizer.
-    private const long ScratchLimit = 256 << 10;
+    private const long ScratchLimit = 384 << 10;
     private const long ScratchBlockSize = 64 << 10;
 
     [ThreadStatic]
@@ -187,19 +187,20 @@ internal sealed unsafe class BinderStore
     /// The binder output of the file of <paramref name="nodes"/>, written into the binder slab of the current thread
     /// until <see cref="Commit"/>. The arrays are sized from the node count (per node on the tuning corpus and on vscode:
     /// 0.12 to 0.16 symbols, 0.08 to 0.12 tables, 0.10 to 0.13 table entries, 0.16 to 0.17 flow nodes, 0.19 to 0.22
-    /// links, 0.12 to 0.14 declarations with a symbol, 0.02 to 0.04 containers), a little above the average so that few
-    /// files outgrow them.
+    /// links, 0.12 to 0.14 declarations with a symbol, 0.02 to 0.04 containers). Step BO3: the record arrays well above
+    /// the average (a file outgrowing one copies it; capacity that is never written costs neither a copy nor, in a fresh
+    /// slab or the scratch block, a page), the zeroed ones (hash index, node maps) a little above it.
     /// </summary>
     internal BinderStore(NodeStore nodes)
     {
         Nodes = nodes;
         var n = nodes.Count;
-        var symbolCapacity = (n / 5) + 8;
-        var tableCapacity = (n / 8) + 8;
-        var entryCapacity = (n / 6) + 8;
-        var flowCapacity = (n / 5) + 8;
-        var linkCapacity = (n / 4) + 8;
-        var bucketCount = PowerOfTwo(entryCapacity * 2);
+        var symbolCapacity = (n / 4) + 16;
+        var tableCapacity = (n / 5) + 16;
+        var entryCapacity = (n / 4) + 16;
+        var flowCapacity = (n / 4) + 16;
+        var linkCapacity = (n / 3) + 16;
+        var bucketCount = PowerOfTwo(((n / 6) + 8) * 2);
         var flowNodeCount = (nodes.RecordWords >> 2) + 1;
         var declarationCount = NodeMap<DeclarationFields>.CapacityFor((n / 6) + 8);
         var containerCount = NodeMap<ContainerFields>.CapacityFor((n / 24) + 4);
