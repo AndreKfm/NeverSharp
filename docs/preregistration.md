@@ -306,6 +306,7 @@ For transparency, the decisions that were revised during Phase 0, before this do
 |---|---|---|---|---|
 | 2026-10-22 | `prereg/v6` | §5.4 Track O Gate 2: second NoAlloc allowlist `eng/optimized.noalloc-allowlist.toml` (24 non-allocating runtime members; mirror entries of the `[NoAllocUnchecked]` exceptions) | written by step O-NA to keep 87 % NoAlloc coverage; accepted by the author; changes coverage reporting only, not speed; before the Track O endpoint run | eng/, phase1-progress.md |
 | 2026-10-24 | `prereg/v7` | §15 Phase 2: the binder of TypeScript 6.0.3 for Track O only; Gate B (byte-identical binder dumps against tsc 6.0.3 `bindSourceFile`, both JSDoc modes); endpoint parse+bind `cs-o-aot-ws-bind` vs `tsgo7-bind` with the §8 rule | scope decided by the author (Track F not extended); tagged after Gate B passed and before any binder measurement | phase2-plan.md, phase1-progress.md (Phase 2) |
+| 2026-10-24 | `prereg/v8` | §16 measurement profiles (full, quick, binder) with the variance gate binding per profile; binder endpoint with the NativeAOT runtimes only | run time; decided by the author before any binder measurement; earlier results unchanged | benchmark-harness.md, bench.mjs, report.mjs |
 | 2026-10-22 | `prereg/v5` | Secondary reference tsrs 0.18.0 (`tsrs-parse`, `tsrs-parse-single`, report Table 2b), pins `references.tsrs` and `tools.rust` (Rust 1.99.1) | a Rust port of TypeScript 7 appeared (Cloudflare/Oxc, 2026-10); the author wants Track O compared with it as well; decided before any Track O measurement | §6.2, §6.4, §8, references.md §2a, pins.json |
 | 2026-10-22 | `prereg/v4` | §8 variance gate: binding for tsc6-parse, tsgo7-parse-single and the primary single-threaded C# configuration of each track; other single-threaded C# configurations reported with a variance note | M6 runs 1 and 2 failed the gate only in JIT/Server-GC "single-threaded" configurations (3.36–5.08 %) while the rig configurations stayed ≤ 1.43 % and cs-aot-ws-single ≤ 1.68 %; **decided after seeing both runs**; the verdict comes from a run after this tag | benchmark-harness.md B11, results/m6/ |
 | 2026-10-21 | `prereg/v3` | §5.2: 2 attempts per Track F module from M5 on (1 × Opus 5.5, 1 × Sonnet 5.5), agents at medium effort, high only for Track O | token cost; M3+M4 attempt 1 was stopped by the author before finishing (logged in phase1-progress.md) | phase1-progress.md, modules/README.md |
@@ -339,3 +340,15 @@ typescript-go (the reference and the method this project copies); oxc and swc (R
 **Endpoint.** Parse+bind per file: `cs-o-aot-ws-bind` against `tsgo7-bind` (typescript-go 7.0.2: `parser.ParseSourceFile` and `binder.BindSourceFile` per file, parallel on its work group), with G, interval and decision rule as in §8, from the first protocol-compliant run after Gate B passes completely. Single-threaded and the other C# runtimes as secondary configurations, as in §8. Disclosed with every comparison: typescript-go's binder ports TypeScript 7 and differs from 6.0.3's in places.
 
 **Status.** Accepted by the author on 2026-10-24 and tagged `prereg/v7` (OpenTimestamps) after Gate B passed and before any binder measurement.
+
+## 16. Measurement profiles (amendment `prereg/v8`, accepted 2026-10-24)
+
+**Decided by the author on 2026-10-24, before any binder measurement.** Protocol runs select one of three fixed configuration sets (`harness/bench/bench.mjs --profile`; the profile is recorded in run.json):
+
+| Profile | Configurations | Variance gate binds | Used for |
+|---|---|---|---|
+| `full` | every configuration | tsc6-parse, tsgo7-parse-single, cs-aot-ws-single, cs-o-aot-ws-single (prereg/v4) | runs that report every configuration |
+| `quick` | tsgo7-parse(-single), tsrs-parse(-single), cs-o-aot-ws(-single) | tsgo7-parse-single, cs-o-aot-ws-single | additional parse-only runs of Track O |
+| `binder` | tsgo7-bind(-single), tsrs-bind(-single), cs-o-aot-ws-bind(-single), cs-o-aot-srv-bind(-single) | tsgo7-bind-single, cs-o-aot-ws-bind-single | the Phase 2 binder endpoint (§15) and its additional runs |
+
+Every binding configuration of the run's profile must be present and below the limit; otherwise the gate fails. This replaces §15's "the other C# runtimes as secondary configurations" for the binder: the binder endpoint reports the NativeAOT runtimes (Workstation and Server GC) only; the JIT runtimes are not measured for the binder (secondary configurations in every Phase 1 run, never close to the primary one). Reason: run time (the last full parse-only run took 45 minutes, of which tsc6-parse 24 %, Track F 16 % and the JIT single-threaded configurations 25 %). The Track F verdict, the Track O endpoint and the six additional runs are unchanged and keep the rules they were measured under.

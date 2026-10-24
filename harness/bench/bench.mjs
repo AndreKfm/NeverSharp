@@ -10,7 +10,7 @@
 // plus the raw hyperfine exports. A run whose rig checks fail is still written
 // but marked protocolCompliant=false; the report labels it as a probe.
 //
-// Usage: node bench.mjs [--repos a,b] [--configs x,y] [--runs 20] [--warmup 3]
+// Usage: node bench.mjs [--repos a,b] [--profile full|quick|binder | --configs x,y] [--runs 20] [--warmup 3]
 //                       [--mem-runs 5] [--priority high|normal] [--corpus benchmark|tuning] [--label text]
 //        node bench.mjs --check [--repos a,b] [--configs x,y] [--corpus benchmark|tuning]
 //
@@ -108,8 +108,20 @@ const corpusName = arg("--corpus", "benchmark");
 if (corpusName !== "benchmark" && corpusName !== "tuning") throw new Error("--corpus must be benchmark or tuning");
 const fileManifest = JSON.parse(readFileSync(join(benchDir, "filelists", corpusName === "tuning" ? "tuning-manifest.json" : "manifest.json"), "utf8"));
 const repos = (corpusName === "tuning" ? ["tuning"] : pins.benchmarkCorpus.repos.map(r => r.name)).filter(r => !repoFilter || repoFilter.includes(r));
-for (const id of configFilter ?? []) if (!configurations.some(c => c.id === id)) throw new Error(`unknown configuration ${id}`);
-const configs = configurations.filter(c => !configFilter || configFilter.includes(c.id));
+// --profile (prereg/v8): fixed configuration sets for protocol runs. full: every configuration; quick: additional
+// parse-only runs of Track O; binder: the Phase 2 binder endpoint set. A profile and --configs exclude each other.
+// The variance gate binds per profile (report.mjs, PROFILE_RIG_CHECK).
+const PROFILES = {
+    quick: ["tsgo7-parse", "tsgo7-parse-single", "tsrs-parse", "tsrs-parse-single", "cs-o-aot-ws", "cs-o-aot-ws-single"],
+    binder: ["tsgo7-bind", "tsgo7-bind-single", "tsrs-bind", "tsrs-bind-single",
+        "cs-o-aot-ws-bind", "cs-o-aot-ws-bind-single", "cs-o-aot-srv-bind", "cs-o-aot-srv-bind-single"],
+};
+const profile = arg("--profile", configFilter ? undefined : "full");
+if (profile && configFilter) throw new Error("--profile and --configs exclude each other");
+if (profile && profile !== "full" && !PROFILES[profile]) throw new Error(`unknown profile ${profile} (full, ${Object.keys(PROFILES).join(", ")})`);
+const selected = configFilter ?? (profile === "full" ? undefined : PROFILES[profile]);
+for (const id of selected ?? []) if (!configurations.some(c => c.id === id)) throw new Error(`unknown configuration ${id}`);
+const configs = configurations.filter(c => !selected || selected.includes(c.id));
 
 // Step 1 of measure(): one run, checked against the expected file count, the priority class, the driver name and,
 // for parse+bind configurations, a symbol count above zero. Returns the driver's report.
@@ -252,6 +264,7 @@ const run = {
     schemaVersion: 1,
     runId,
     label,
+    profile: profile ?? "custom",
     startedAt: startedAt.toISOString(),
     finishedAt: new Date().toISOString(),
     protocolCompliant: environment.protocolCompliant,

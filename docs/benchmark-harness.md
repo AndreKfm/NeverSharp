@@ -238,3 +238,7 @@ Feasibility check (2026-10-21; tsgo numbers from this session, driver numbers fr
 - **Full builds** (`tsc -p` / `tsgo -p` per repository, Microsoft's published comparison). Reproducing them would show that the rig reproduces Microsoft's ratio, but it requires installing each repository's npm dependencies (thousands of packages, several GB) and picking a tsconfig per repository. Proposed as a separate, optional step (with `--ignore-scripts`), labeled as a rig sanity check, not as a protocol metric for Phase 1.
 - **C# configurations** and BenchmarkDotNet: with the first ported code.
 - **Linux or macOS**: `env.mjs` and `peakmem` are Windows-only, matching the reference machine.
+
+## Profiles (prereg/v8)
+
+`node bench.mjs --profile full|quick|binder` selects a fixed configuration set (pre-registration §16); `--configs` selects a custom set instead (recorded as profile `custom`, not a protocol profile). `report.mjs` binds the variance gate per profile and fails the gate if a binding configuration of the profile is missing. Runs recorded before prereg/v8 carry no profile and keep the earlier rule.

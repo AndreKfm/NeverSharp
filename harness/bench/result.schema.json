@@ -9,6 +9,7 @@
     "schemaVersion": { "const": 1 },
     "runId": { "type": "string" },
     "label": { "type": "string" },
+    "profile": { "enum": ["full", "quick", "binder", "custom"], "description": "Configuration set (prereg/v8); absent in runs before it (treated as full)." },
     "startedAt": { "type": "string", "format": "date-time" },
     "finishedAt": { "type": "string", "format": "date-time" },
     "protocolCompliant": { "type": "boolean", "description": "True only if every environment check passed. Non-compliant runs are probes and are never reported as results." },

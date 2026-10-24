@@ -127,11 +127,22 @@ for (const [table, reference, note] of [
 // (tsc6-parse, tsgo7-parse-single) and the primary single-threaded C# configuration of each track;
 // all other configurations report their spread (JIT and Server GC run background threads even in
 // "single-threaded" mode, so their spread belongs to the program, not to the rig).
-const RIG_CHECK = new Set(["tsc6-parse", "tsgo7-parse-single", "cs-aot-ws-single", "cs-o-aot-ws-single"]);
+// prereg/v8: reduced profiles bind the single-threaded baseline and the primary single-threaded Track O configuration
+// of what they measure; every binding configuration of the run's profile must be present.
+const PROFILE_RIG_CHECK = {
+    full: ["tsc6-parse", "tsgo7-parse-single", "cs-aot-ws-single", "cs-o-aot-ws-single"],
+    quick: ["tsgo7-parse-single", "cs-o-aot-ws-single"],
+    binder: ["tsgo7-bind-single", "cs-o-aot-ws-bind-single"],
+};
+const runProfile = run.profile ?? "full";
+const RIG_CHECK = new Set(PROFILE_RIG_CHECK[runProfile] ?? PROFILE_RIG_CHECK.full);
 push(`## Table 3. Variance gate (MAD/median < ${VARIANCE_LIMIT} %)`, "",
-    "Binding rows (rig check): tsc6-parse, tsgo7-parse-single and the primary single-threaded C# configuration of each track. Other rows: reported spread, not gated; a secondary configuration above the limit carries a variance note wherever its ratio is used (docs/benchmark-harness.md, B11 as amended by prereg/v4).", "",
+    `Profile: ${runProfile}. Binding rows (rig check): ${[...RIG_CHECK].join(", ")}${runProfile === "full" || runProfile === "custom" ? " (B11 as amended by prereg/v4)" : " (prereg/v8)"}. Other rows: reported spread, not gated; a secondary configuration above the limit carries a variance note wherever its ratio is used (docs/benchmark-harness.md).`, "",
     row(["Configuration", "Role", ...repos, "Worst"]), row(["---", "---", ...repos.map(() => "---:"), "---:"]));
 let gatePass = true;
+// Runs before prereg/v8 (no profile) and custom selections keep the earlier rule: binding where present.
+const missing = !run.profile || runProfile === "custom" ? [] : [...RIG_CHECK].filter(id => !configs.some(c => c.id === id));
+if (missing.length) { gatePass = false; push(`Missing binding configuration(s) for profile ${runProfile}: ${missing.join(", ")}.`, ""); }
 for (const c of configs) {
     const binding = RIG_CHECK.has(c.id);
     const v = repos.map(r => result(r, c.id)?.timing.madOverMedianPercent);
