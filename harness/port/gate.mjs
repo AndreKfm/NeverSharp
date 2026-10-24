@@ -87,7 +87,9 @@ if (phase === "binder") {
     const oracle = join(root, "harness", "astdump", "dump-ts-binder.mjs");
     // The oracle's dumps are reused while its inputs are unchanged: the script, typescript's version and the manifest.
     const tsVersion = JSON.parse(readFileSync(createRequire(oracle).resolve("typescript/package.json"), "utf8")).version;
-    const stamp = createHash("sha256").update(readFileSync(oracle)).update(tsVersion).update(readFileSync(join(corpus, "manifest.json"))).digest("hex");
+    // Line endings normalized: checkouts differ (CRLF in the main checkout, LF in worktrees), the script does not.
+    const lf = file => readFileSync(file, "utf8").replaceAll("\r\n", "\n");
+    const stamp = createHash("sha256").update(lf(oracle)).update(tsVersion).update(readFileSync(join(corpus, "manifest.json"))).digest("hex");
     const valid = dir => existsSync(`${dir}.stamp`) && existsSync(`${dir}.outcomes.json`) && readFileSync(`${dir}.stamp`, "utf8") === stamp;
     let dumpBuilt = false;
     for (const mode of modes) {
