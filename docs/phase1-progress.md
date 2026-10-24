@@ -288,3 +288,11 @@ Protocol-compliant run at 95b038e (idle 7.6 %); variance gate PASS. cs-o-aot-ws 
 ### Track O closed (2026-10-24)
 
 Closed by the author after the sixth additional run: the comparison against tsrs had reached its run-to-run spread (1.02 → 1.04 with overlapping intervals). Summary of verdicts, all runs, claims, disclosed differences, the A9 step list and process notes: [track-o-summary.md](track-o-summary.md). Not evaluated: O4, O7b, O8. Open: Linux replication (A4).
+
+## Phase 2: binder (Track O only)
+
+Plan: [phase2-plan.md](phase2-plan.md); draft amendment preregistration.md §15 (`prereg/v7`, not yet accepted).
+
+### B0: oracle, dump, gate, layout (2026-10-24)
+
+Brief: [modules/B0.md](modules/B0.md). One attempt (Opus 5.5, medium effort); commit 7bc540e, merged. `harness/astdump/dump-ts-binder.mjs` (tsc 6.0.3 `bindSourceFile(file, {})` after a parse with parent pointers; dump format v1 with sections `symbols`, `flow`, `diagnostics`; the shared unreachable flow node's Referenced/Shared bits masked), `compare-binder.mjs` (`--sections`), Track O `Binder/` skeleton (handles and `BinderStore`, empty `Binder.BindSourceFile`), `SourceFile.Binding`, a binder mode in `tools/NeverSharp.Dump.Optimized`, `gate.mjs --track optimized --phase binder` (build, headers, cached oracle dumps, C# binder dumps, compare). Oracle: 50,177 units in each mode (ParseAll, ParseForTypeErrors), deterministic over two runs, about 2 minutes per mode; dumps in `artifacts/equivalence/dumps/ts-binder-{all,types}`. Layout: [phase2-binder-layout.md](phase2-binder-layout.md) (records and int handles per file, insertion-ordered chains, per-node binder fields in open-addressing maps keyed by node handle). Gate B fails on all units with the empty binder, as expected; the full Track O parser gate passed once (because of the `Types.cs` change).
