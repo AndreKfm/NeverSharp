@@ -267,3 +267,7 @@ Briefs: [modules/O27.md](modules/O27.md), [modules/O28.md](modules/O28.md); chos
 - **Run 1 (all rig-compliant; tuning corpus, 20 runs):** main 370.3 ms, O27 364.6 ms, **O28 356.1 ms**; O27/main 0.985 [0.958, 1.006] (single-threaded 0.999), **O28/main 0.962 [0.940, 0.976]** (single-threaded 0.974 [0.965, 0.987]). **O28 merged** (fast-forward, checked).
 - **Run 2 (O27 rebased onto O28):** O28 366.0 ms, O27 362.3 ms, O27/O28 0.990 [0.956, 1.006], single-threaded 1.007 [0.998, 1.017]; not slower, so **O27 merged** by the brief's rule (its gain is within noise in the parse-only harness).
 - **After both merges:** `M5.ParseTuningCorpus` 410.7 ms, 39.9 MB (after O26: 430.1 ms, 38.9 MB). `results/track-o/O27-O28/`.
+
+### Track O additional run after O27 and O28 (2026-10-24, Windows only)
+
+Protocol-compliant run at 3c6cb2d (idle 4.3 %); variance gate PASS. cs-o-aot-ws vs tsgo7-parse **0.40 [0.39, 0.40]**; vs tsrs-parse **1.02 [1.01, 1.04]** (secondary, within 20 %; vscode 0.92 [0.88, 0.94], third run in a row below 1, reported); single-threaded 0.545 vs typescript-go, 1.029 vs tsrs. The endpoint stays 0.60. `results/track-o/additional/2026-10-24T03-34-00-173Z/NOTE.md`.
