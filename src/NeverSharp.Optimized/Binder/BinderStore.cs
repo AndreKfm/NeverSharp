@@ -349,7 +349,8 @@ internal sealed unsafe class BinderStore
     /// <summary>
     /// Step BO3: the end of a binding in the scratch block. The arrays in use move to one committed range of the
     /// thread's binder slab, each cut to the records in use (later additions grow them, as for any committed store); the
-    /// hash index and the node maps are rebuilt at the smallest size that keeps their load at most 1/2.
+    /// hash index and the node maps take the smallest size that keeps their load at most 1/2 (copied if they have it,
+    /// rebuilt otherwise).
     /// </summary>
     private void CommitScratch(ThreadSlabs thread)
     {
@@ -378,16 +379,24 @@ internal sealed unsafe class BinderStore
         links = Compact(links, linksUsed);
         linksCapacity = linksUsed;
         flowNodeArray = Compact(flowNodeArray, flowNodeLength);
-        // The hash index: the chains rebuilt (keys are unique, so the order within a chain does not matter).
-        bucketsLength = bucketCount;
-        buckets = NewZeroed<int>(bucketCount);
-        var mask = bucketCount - 1;
-        for (var e = 1; e < entriesUsed; e++)
+        // The hash index: copied if it already has the size, otherwise the chains rebuilt (keys are unique, so the order
+        // within a chain does not matter).
+        if (bucketCount == bucketsLength)
         {
-            ref var entry = ref entries[e];
-            var bucket = entry.Hash & mask;
-            entry.NextInBucket = buckets[bucket];
-            buckets[bucket] = e;
+            buckets = Compact(buckets, bucketCount);
+        }
+        else
+        {
+            bucketsLength = bucketCount;
+            buckets = NewZeroed<int>(bucketCount);
+            var mask = bucketCount - 1;
+            for (var e = 1; e < entriesUsed; e++)
+            {
+                ref var entry = ref entries[e];
+                var bucket = entry.Hash & mask;
+                entry.NextInBucket = buckets[bucket];
+                buckets[bucket] = e;
+            }
         }
         declarationFields.Rehash(this, declarationCount);
         containerFields.Rehash(this, containerCount);
@@ -1202,6 +1211,13 @@ internal sealed unsafe class BinderStore
             if (size == 0)
             {
                 this = default;
+                return;
+            }
+            if (size == capacity)
+            {
+                // The same size: the table copied as it is.
+                keys = store.Compact(keys, size);
+                values = store.Compact(values, size);
                 return;
             }
             Move(store, size);
