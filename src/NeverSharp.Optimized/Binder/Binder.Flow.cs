@@ -99,7 +99,7 @@ internal sealed partial class Binder
         var kind = store.Kind(node);
         var isImmediatelyInvoked = (
             (containerFlags & ContainerFlags.IsFunctionExpression) != 0 &&
-            !Utilities.HasSyntacticModifier(store, node, ModifierFlags.Async) &&
+            !Utilities.HasSyntacticModifierUncached(store, node, ModifierFlags.Async) &&
             store.AsteriskToken(node).IsNone &&
             !Utilities.GetImmediatelyInvokedFunctionExpression(store, node).IsNone) || kind == SyntaxKind.ClassStaticBlockDeclaration;
         // A non-async, non-generator IIFE is considered part of the containing control flow. Return statements behave
@@ -173,19 +173,15 @@ internal sealed partial class Binder
         inAssignmentPattern = false;
 
         // Clear Unreachable flag from previous binding (for incremental scenarios)
-        var isPotentiallyExecutable = Utilities.IsPotentiallyExecutableNode(store, node);
-        if (isPotentiallyExecutable)
-        {
-            store.SetFlags(node, store.Flags(node) & ~NodeFlags.Unreachable);
-        }
-
+        // (Track O, step BO2: isPotentiallyExecutableNode is computed only where its result is used: in unreachable
+        // code, and where the flag is set and would be cleared; the flags end up the same.)
         if (currentFlow == unreachableFlow)
         {
             if (Utilities.CanHaveFlowNode(store, node) && !b.FlowNodeOf(node).IsNone)
             {
                 b.SetFlowNodeOf(node, FlowNode.None);
             }
-            if (isPotentiallyExecutable)
+            if (Utilities.IsPotentiallyExecutableNode(store, node))
             {
                 store.SetFlags(node, store.Flags(node) | NodeFlags.Unreachable);
             }
@@ -194,9 +190,14 @@ internal sealed partial class Binder
             inAssignmentPattern = saveInAssignmentPattern;
             return;
         }
+        if ((store.Flags(node) & NodeFlags.Unreachable) != 0 && Utilities.IsPotentiallyExecutableNode(store, node))
+        {
+            store.SetFlags(node, store.Flags(node) & ~NodeFlags.Unreachable);
+        }
 
         var kind = store.Kind(node);
-        if (SyntaxKind.FirstStatement <= kind && kind <= SyntaxKind.LastStatement && Utilities.CanHaveFlowNode(store, node))
+        // (canHaveFlowNode is true for every statement.)
+        if (SyntaxKind.FirstStatement <= kind && kind <= SyntaxKind.LastStatement)
         {
             b.SetFlowNodeOf(node, currentFlow);
         }
@@ -321,6 +322,7 @@ internal sealed partial class Binder
         inAssignmentPattern = saveInAssignmentPattern;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsNarrowingExpression(Node expr)
     {
         switch (store.Kind(expr))
@@ -351,6 +353,7 @@ internal sealed partial class Binder
         return false;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsNarrowableReference(Node expr)
     {
         switch (store.Kind(expr))
@@ -376,11 +379,13 @@ internal sealed partial class Binder
         return false;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool ContainsNarrowableReference(Node expr)
     {
         return IsNarrowableReference(expr) || UtilitiesPublic.IsOptionalChain(store, expr) && ContainsNarrowableReference(store.Expression(expr));
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool HasNarrowableArgument(Node expr)
     {
         var arguments = store.Arguments(expr);
@@ -404,11 +409,13 @@ internal sealed partial class Binder
         return false;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsNarrowingTypeofOperands(Node expr1, Node expr2)
     {
         return store.Kind(expr1) == SyntaxKind.TypeOfExpression && IsNarrowableOperand(store.Expression(expr1)) && UtilitiesPublic.IsStringLiteralLike(store, expr2);
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsNarrowingBinaryExpression(Node expr)
     {
         switch (store.Kind(store.OperatorToken(expr)))
@@ -437,8 +444,10 @@ internal sealed partial class Binder
         return false;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsBooleanLiteral(Node node) => store.Kind(node) == SyntaxKind.TrueKeyword || store.Kind(node) == SyntaxKind.FalseKeyword;
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsNarrowableOperand(Node expr)
     {
         switch (store.Kind(expr))
@@ -555,6 +564,7 @@ internal sealed partial class Binder
         return flow;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsStatementCondition(Node node)
     {
         var nodeParent = store.Parent(node);
@@ -571,6 +581,7 @@ internal sealed partial class Binder
         return false;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsLogicalExpression(Node node)
     {
         while (true)
@@ -590,11 +601,13 @@ internal sealed partial class Binder
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsLogicalAssignmentExpression(Node node)
     {
         return Utilities.IsLogicalOrCoalescingAssignmentExpression(store, Utilities.SkipParentheses(store, node));
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsTopLevelLogicalExpression(Node node)
     {
         while (
@@ -757,6 +770,7 @@ internal sealed partial class Binder
         hasFlowEffects = true;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private int FindActiveLabel(TextRef name)
     {
         for (var label = activeLabelList; label >= 0; label = activeLabels[label].Next)
@@ -1367,6 +1381,7 @@ internal sealed partial class Binder
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsForInOrOfStatement(Node node) => store.Kind(node) == SyntaxKind.ForInStatement || store.Kind(node) == SyntaxKind.ForOfStatement;
 
     private void BindBindingElementFlow(Node node)

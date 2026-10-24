@@ -27,6 +27,13 @@ internal sealed partial class Binder
     // [Yield] or [Await] contexts, respectively.
     private void CheckContextualIdentifier(Node node)
     {
+        // Track O (step BO2): the checks below report only for the future reserved words and `await` and `yield`;
+        // every other identifier (and `this`) is ruled out first by its characters, before the conditions on the file
+        // and the parent (all free of side effects, so the order does not change the result).
+        if (!MayBeContextualReservedWord(node))
+        {
+            return;
+        }
         // Report error only if there are no parse errors in file
         var flags = store.Flags(node);
         if (
@@ -67,6 +74,35 @@ internal sealed partial class Binder
         }
     }
 
+    // Step BO2: whether the node is an identifier whose text is a future reserved word (implements, interface, let,
+    // package, private, protected, public, static, yield) or `await`: the only keywords checkContextualIdentifier acts on.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private bool MayBeContextualReservedWord(Node node)
+    {
+        if (store.Kind(node) != SyntaxKind.Identifier)
+        {
+            return false;
+        }
+        var text = texts.Span(store.EscapedText(node));
+        switch (text.Length)
+        {
+            case 3:
+                return text.SequenceEqual("let");
+            case 5:
+                return text.SequenceEqual("yield") || text.SequenceEqual("await");
+            case 6:
+                return text.SequenceEqual("public") || text.SequenceEqual("static");
+            case 7:
+                return text.SequenceEqual("package") || text.SequenceEqual("private");
+            case 9:
+                return text.SequenceEqual("interface") || text.SequenceEqual("protected");
+            case 10:
+                return text.SequenceEqual("implements");
+            default:
+                return false;
+        }
+    }
+
     // utilitiesPublic.ts identifierToKeywordKind (Unknown for undefined); `this` has no escapedText.
     private SyntaxKind IdentifierToKeywordKind(Node node)
     {
@@ -79,6 +115,7 @@ internal sealed partial class Binder
     }
 
     // utilities.ts isIdentifierName.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsIdentifierName(Node node)
     {
         var nodeParent = store.Parent(node);

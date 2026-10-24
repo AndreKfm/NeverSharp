@@ -291,6 +291,7 @@ internal sealed partial class Binder
         }
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool HasDeclaration(Symbol symbol, Node node)
     {
         foreach (var declaration in b.Declarations(symbol))
@@ -319,6 +320,7 @@ internal sealed partial class Binder
     }
 
     /// <summary>utilities.ts: isAssignmentDeclaration.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsAssignmentDeclaration(Node decl)
     {
         var kind = store.Kind(decl);
@@ -327,6 +329,7 @@ internal sealed partial class Binder
     }
 
     /// <summary>utilities.ts: isEffectiveModuleDeclaration.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private bool IsEffectiveModuleDeclaration(Node node)
     {
         return store.Kind(node) == SyntaxKind.ModuleDeclaration || store.Kind(node) == SyntaxKind.Identifier;
@@ -478,7 +481,7 @@ internal sealed partial class Binder
     {
         Debug.Assert(isComputedName || !Utilities.HasDynamicName(store, node));
 
-        var isDefaultExport = Utilities.HasSyntacticModifier(store, node, ModifierFlags.Default) || store.Kind(node) == SyntaxKind.ExportSpecifier && Utilities.ModuleExportNameIsDefault(store, store.Name(node));
+        var isDefaultExport = Utilities.HasSyntacticModifierUncached(store, node, ModifierFlags.Default) || store.Kind(node) == SyntaxKind.ExportSpecifier && Utilities.ModuleExportNameIsDefault(store, store.Name(node));
 
         // The exported symbol for an export default function/class node is always named "default"
         var name = isComputedName ? Constant(ref nameComputed, InternalSymbolName.Computed)
@@ -515,14 +518,15 @@ internal sealed partial class Binder
             // Otherwise, we'll be merging into a compatible existing symbol (for example when
             // you have multiple 'vars' with the same name in the same container).  In this case
             // just add this node into the declarations list of the symbol.
-            symbol = b.Get(symbolTable, name);
+            // (Track O, step BO2: the name is hashed once for the lookup and the insertion.)
+            symbol = b.Get(symbolTable, name, out var nameHash);
 
             // (classifiableNames: not kept.)
 
             if (symbol.IsNone)
             {
                 symbol = CreateSymbol(SymbolFlags.None, name);
-                b.Set(symbolTable, name, symbol);
+                b.AddNew(symbolTable, name, symbol, nameHash);
                 if (isReplaceableByMethod)
                 {
                     b.SetIsReplaceableByMethod(symbol, true);
@@ -612,7 +616,7 @@ internal sealed partial class Binder
         }
 
         var relatedInformation = new List<DiagnosticRelatedInformation>();
-        if (store.Kind(node) == SyntaxKind.TypeAliasDeclaration && Utilities.NodeIsMissing(store, store.Type(node)) && Utilities.HasSyntacticModifier(store, node, ModifierFlags.Export)
+        if (store.Kind(node) == SyntaxKind.TypeAliasDeclaration && Utilities.NodeIsMissing(store, store.Type(node)) && Utilities.HasSyntacticModifierUncached(store, node, ModifierFlags.Export)
             && (b.Flags(symbol) & (SymbolFlags.Alias | SymbolFlags.Type | SymbolFlags.Namespace)) != 0)
         {
             // export type T; - may have meant export type { T }?
@@ -677,7 +681,7 @@ internal sealed partial class Binder
         //       and should never be merged directly with other augmentation, and the latter case would be possible if automatic merge is allowed.
         if (!Utilities.IsAmbientModule(store, node) && (hasExportModifier || (store.Flags(container) & NodeFlags.ExportContext) != 0))
         {
-            if (!Utilities.CanHaveLocals(store, container) || b.LocalsOf(container).IsNone || (Utilities.HasSyntacticModifier(store, node, ModifierFlags.Default) && GetDeclarationName(node).IsNone))
+            if (!Utilities.CanHaveLocals(store, container) || b.LocalsOf(container).IsNone || (Utilities.HasSyntacticModifierUncached(store, node, ModifierFlags.Default) && GetDeclarationName(node).IsNone))
             {
                 return DeclareSymbol(b.Exports(containerSymbol), containerSymbol, node, symbolFlags, symbolExcludes); // No local symbol for an unnamed default!
             }
@@ -861,9 +865,233 @@ internal sealed partial class Binder
         }
     }
 
+    // forEachChild(node, bind, bindEach). Track O (step BO2): the kinds that reach here most often (on the tuning
+    // corpus about two thirds of the calls) bind their children directly, in forEachChild's order (Generated/
+    // NodeVisitor.g.cs; bind and bindEach return undefined, so every child is visited); the others through the
+    // callbacks.
     private void BindEachChild(Node node)
     {
-        NodeVisitor.ForEachChild(store, node, bindCallback, bindEachCallback);
+        switch (store.Kind(node))
+        {
+            case SyntaxKind.PropertyAccessExpression:
+                Bind(store.Expression(node));
+                Bind(store.QuestionDotToken(node));
+                Bind(store.Name(node));
+                return;
+            case SyntaxKind.ElementAccessExpression:
+                Bind(store.Expression(node));
+                Bind(store.QuestionDotToken(node));
+                Bind(store.ArgumentExpression(node));
+                return;
+            case SyntaxKind.CallExpression:
+                Bind(store.Expression(node));
+                Bind(store.QuestionDotToken(node));
+                BindEach(store.TypeArguments(node));
+                BindEach(store.Arguments(node));
+                return;
+            case SyntaxKind.NewExpression:
+                Bind(store.Expression(node));
+                BindEach(store.TypeArguments(node));
+                BindEach(store.Arguments(node));
+                return;
+            case SyntaxKind.TypeReference:
+                Bind(store.TypeName(node));
+                BindEach(store.TypeArguments(node));
+                return;
+            case SyntaxKind.VariableDeclaration:
+                Bind(store.Name(node));
+                Bind(store.ExclamationToken(node));
+                Bind(store.Type(node));
+                Bind(store.Initializer(node));
+                return;
+            case SyntaxKind.VariableDeclarationList:
+                BindEach(store.Declarations(node));
+                return;
+            case SyntaxKind.VariableStatement:
+                BindEach(store.Modifiers(node));
+                Bind(store.DeclarationList(node));
+                return;
+            case SyntaxKind.PropertyAssignment:
+                BindEach(store.Modifiers(node));
+                Bind(store.Name(node));
+                Bind(store.QuestionToken(node));
+                Bind(store.ExclamationToken(node));
+                Bind(store.Initializer(node));
+                return;
+            case SyntaxKind.ObjectLiteralExpression:
+                BindEach(store.Properties(node));
+                return;
+            case SyntaxKind.ArrayLiteralExpression:
+                BindEach(store.Elements(node));
+                return;
+            case SyntaxKind.ParenthesizedExpression:
+                Bind(store.Expression(node));
+                return;
+            case SyntaxKind.ImportSpecifier:
+                Bind(store.PropertyName(node));
+                Bind(store.Name(node));
+                return;
+            case SyntaxKind.FunctionDeclaration:
+                BindEach(store.Modifiers(node));
+                Bind(store.AsteriskToken(node));
+                Bind(store.Name(node));
+                BindEach(store.TypeParameters(node));
+                BindEach(store.Parameters(node));
+                Bind(store.Type(node));
+                Bind(store.Body(node));
+                return;
+            case SyntaxKind.MethodDeclaration:
+                BindEach(store.Modifiers(node));
+                Bind(store.AsteriskToken(node));
+                Bind(store.Name(node));
+                Bind(store.QuestionToken(node));
+                Bind(store.ExclamationToken(node));
+                BindEach(store.TypeParameters(node));
+                BindEach(store.Parameters(node));
+                Bind(store.Type(node));
+                Bind(store.Body(node));
+                return;
+            case SyntaxKind.ArrowFunction:
+                BindEach(store.Modifiers(node));
+                BindEach(store.TypeParameters(node));
+                BindEach(store.Parameters(node));
+                Bind(store.Type(node));
+                Bind(store.EqualsGreaterThanToken(node));
+                Bind(store.Body(node));
+                return;
+            case SyntaxKind.FunctionType:
+                BindEach(store.Modifiers(node));
+                BindEach(store.TypeParameters(node));
+                BindEach(store.Parameters(node));
+                Bind(store.Type(node));
+                return;
+            case SyntaxKind.MethodSignature:
+                BindEach(store.Modifiers(node));
+                Bind(store.Name(node));
+                Bind(store.QuestionToken(node));
+                BindEach(store.TypeParameters(node));
+                BindEach(store.Parameters(node));
+                Bind(store.Type(node));
+                return;
+            case SyntaxKind.PropertySignature:
+                BindEach(store.Modifiers(node));
+                Bind(store.Name(node));
+                Bind(store.QuestionToken(node));
+                Bind(store.Type(node));
+                Bind(store.Initializer(node));
+                return;
+            case SyntaxKind.PropertyDeclaration:
+                BindEach(store.Modifiers(node));
+                Bind(store.Name(node));
+                Bind(store.QuestionToken(node));
+                Bind(store.ExclamationToken(node));
+                Bind(store.Type(node));
+                Bind(store.Initializer(node));
+                return;
+            case SyntaxKind.ShorthandPropertyAssignment:
+                BindEach(store.Modifiers(node));
+                Bind(store.Name(node));
+                Bind(store.QuestionToken(node));
+                Bind(store.ExclamationToken(node));
+                Bind(store.EqualsToken(node));
+                Bind(store.ObjectAssignmentInitializer(node));
+                return;
+            case SyntaxKind.ClassDeclaration:
+            case SyntaxKind.InterfaceDeclaration:
+                BindEach(store.Modifiers(node));
+                Bind(store.Name(node));
+                BindEach(store.TypeParameters(node));
+                BindEach(store.HeritageClauses(node));
+                BindEach(store.Members(node));
+                return;
+            case SyntaxKind.TypeAliasDeclaration:
+                BindEach(store.Modifiers(node));
+                Bind(store.Name(node));
+                BindEach(store.TypeParameters(node));
+                Bind(store.Type(node));
+                return;
+            case SyntaxKind.ModuleDeclaration:
+                BindEach(store.Modifiers(node));
+                Bind(store.Name(node));
+                Bind(store.Body(node));
+                return;
+            case SyntaxKind.ImportDeclaration:
+                BindEach(store.Modifiers(node));
+                Bind(store.ImportClause(node));
+                Bind(store.ModuleSpecifier(node));
+                Bind(store.Attributes(node));
+                return;
+            case SyntaxKind.ImportClause:
+                Bind(store.Name(node));
+                Bind(store.NamedBindings(node));
+                return;
+            case SyntaxKind.TypeParameter:
+                BindEach(store.Modifiers(node));
+                Bind(store.Name(node));
+                Bind(store.Constraint(node));
+                Bind(store.Default(node));
+                Bind(store.Expression(node));
+                return;
+            case SyntaxKind.EnumMember:
+                Bind(store.Name(node));
+                Bind(store.Initializer(node));
+                return;
+            case SyntaxKind.QualifiedName:
+                Bind(store.Left(node));
+                Bind(store.Right(node));
+                return;
+            case SyntaxKind.AsExpression:
+                Bind(store.Expression(node));
+                Bind(store.Type(node));
+                return;
+            case SyntaxKind.ExpressionWithTypeArguments:
+                Bind(store.Expression(node));
+                BindEach(store.TypeArguments(node));
+                return;
+            case SyntaxKind.TemplateExpression:
+                Bind(store.Head(node));
+                BindEach(store.TemplateSpans(node));
+                return;
+            case SyntaxKind.TemplateSpan:
+                Bind(store.Expression(node));
+                Bind(store.Literal(node));
+                return;
+            case SyntaxKind.IndexedAccessType:
+                Bind(store.ObjectType(node));
+                Bind(store.IndexType(node));
+                return;
+            case SyntaxKind.LiteralType:
+                Bind(store.Literal(node));
+                return;
+            case SyntaxKind.PrefixUnaryExpression:
+                Bind(store.Operand(node));
+                return;
+            case SyntaxKind.ArrayType:
+                Bind(store.ElementType(node));
+                return;
+            case SyntaxKind.TypeOperator:
+                Bind(store.Type(node));
+                return;
+            case SyntaxKind.SpreadElement:
+                Bind(store.Expression(node));
+                return;
+            case SyntaxKind.UnionType:
+            case SyntaxKind.IntersectionType:
+            case SyntaxKind.HeritageClause:
+                BindEach(store.Types(node));
+                return;
+            case SyntaxKind.TypeLiteral:
+                BindEach(store.Members(node));
+                return;
+            case SyntaxKind.ArrayBindingPattern:
+            case SyntaxKind.ObjectBindingPattern:
+            case SyntaxKind.NamedImports:
+                BindEach(store.Elements(node));
+                return;
+            default:
+                NodeVisitor.ForEachChild(store, node, bindCallback, bindEachCallback);
+                return;
+        }
     }
 
     private void AddToContainerChain(Node next)
@@ -989,7 +1217,7 @@ internal sealed partial class Binder
         SetExportContextFlag(node);
         if (Utilities.IsAmbientModule(store, node))
         {
-            if (Utilities.HasSyntacticModifier(store, node, ModifierFlags.Export))
+            if (Utilities.HasSyntacticModifierUncached(store, node, ModifierFlags.Export))
             {
                 ErrorOnFirstToken(node, Diagnostics.export_modifier_cannot_be_applied_to_ambient_modules_and_module_augmentations_since_they_are_always_visible);
             }
@@ -1090,7 +1318,7 @@ internal sealed partial class Binder
             // 3. non-exported import declarations
             case SyntaxKind.ImportDeclaration:
             case SyntaxKind.ImportEqualsDeclaration:
-                if (!Utilities.HasSyntacticModifier(store, node, ModifierFlags.Export))
+                if (!Utilities.HasSyntacticModifierUncached(store, node, ModifierFlags.Export))
                 {
                     return ModuleInstanceState.NonInstantiated;
                 }
@@ -1365,10 +1593,11 @@ internal sealed partial class Binder
         inStrictMode = saveInStrictMode;
     }
 
-    // setParent(node, parent): the parse with parent nodes already set them; written only where they differ.
+    // setParent(node, parent). (Track O, step BO2: written without reading the old parent first; writing the same
+    // parent again changes nothing.)
     private void SetParentOf(Node node, Node newParent)
     {
-        if (!newParent.IsNone && store.Parent(node) != newParent)
+        if (!newParent.IsNone)
         {
             store.SetParent(node, newParent);
         }
@@ -1376,9 +1605,11 @@ internal sealed partial class Binder
 
     private void BindJSDoc(Node node)
     {
-        if (UtilitiesPublic.HasJSDocNodes(store, node))
+        // hasJSDocNodes(node), with the node's jsDoc read first (Track O, step BO2: a node without side-table entries
+        // has none, which one bit of its record tells; canHaveJSDoc is a switch over the kinds).
+        var jsDoc = store.JsDoc(node);
+        if (jsDoc is not null && jsDoc.Count > 0 && Utilities.CanHaveJSDoc(store, node))
         {
-            var jsDoc = store.JsDoc(node)!;
             if (Utilities.IsInJSFile(store, node))
             {
                 for (var i = 0; i < jsDoc.Count; i++)
@@ -1453,7 +1684,8 @@ internal sealed partial class Binder
                     seenThisKeyword = true;
                 }
                 // TODO: Why use `isExpression` here? both Identifier and ThisKeyword are expressions.
-                if (!currentFlow.IsNone && (UtilitiesPublic.IsExpression(store, node) || store.Kind(parent) == SyntaxKind.ShorthandPropertyAssignment))
+                // (Track O, step BO2: isExpression is true for both kinds, primary expressions, so only currentFlow is tested.)
+                if (!currentFlow.IsNone)
                 {
                     b.SetFlowNodeOf(node, currentFlow);
                 }

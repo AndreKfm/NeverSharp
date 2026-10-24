@@ -316,7 +316,7 @@ internal static partial class Utilities
     internal static bool IsStatic(NodeStore store, Node node)
     {
         // https://tc39.es/ecma262/#sec-static-semantics-isstatic
-        return IsClassElement(store, node) && HasSyntacticModifier(store, node, ModifierFlags.Static) || store.Kind(node) == SyntaxKind.ClassStaticBlockDeclaration;
+        return IsClassElement(store, node) && HasSyntacticModifierUncached(store, node, ModifierFlags.Static) || store.Kind(node) == SyntaxKind.ClassStaticBlockDeclaration;
     }
 
     /// <summary>utilities.ts: isPropertyNameLiteral.</summary>
@@ -381,6 +381,32 @@ internal static partial class Utilities
     }
 
     /// <summary>
+    /// utilities.ts getSyntacticModifierFlags for the binder. Track O (step BO2): computed from the node's modifiers
+    /// every time instead of through modifierFlagsCache, which Track O keeps in the node store's side table; the binder
+    /// asked for it on most declarations, and each first write after the parse grew the side table (and made every
+    /// later side-field read of the node probe it). The cache holds exactly this value (the syntactic flags; the JSDoc
+    /// flags are cached separately and never selected here), so the results are the same. typescript-go likewise reads
+    /// the flags the parser computed for the modifier list.
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal static ModifierFlags GetSyntacticModifierFlagsUncached(NodeStore store, Node node)
+    {
+        var kind = store.Kind(node);
+        if (kind >= SyntaxKind.FirstToken && kind <= SyntaxKind.LastToken)
+        {
+            return ModifierFlags.None;
+        }
+        return GetSyntacticModifierFlagsNoCache(store, node) & ModifierFlags.SyntacticModifiers;
+    }
+
+    /// <summary>utilities.ts hasSyntacticModifier for the binder (see <see cref="GetSyntacticModifierFlagsUncached"/>).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal static bool HasSyntacticModifierUncached(NodeStore store, Node node, ModifierFlags flags)
+    {
+        return (GetSyntacticModifierFlagsUncached(store, node) & flags) != 0;
+    }
+
+    /// <summary>
     /// utilitiesPublic.ts: getCombinedModifierFlags. Track O: with the syntactic modifier flags; the JSDoc modifier
     /// flags getEffectiveModifierFlags adds in JavaScript files (accessibility, readonly, override, deprecated) are
     /// never among the flags the binder tests (Export, Default, Const).
@@ -391,19 +417,19 @@ internal static partial class Utilities
         {
             node = WalkUpBindingElementsAndPatterns(store, node);
         }
-        var flags = GetSyntacticModifierFlags(store, node);
+        var flags = GetSyntacticModifierFlagsUncached(store, node);
         if (store.Kind(node) == SyntaxKind.VariableDeclaration)
         {
             node = store.Parent(node);
         }
         if (!node.IsNone && store.Kind(node) == SyntaxKind.VariableDeclarationList)
         {
-            flags |= GetSyntacticModifierFlags(store, node);
+            flags |= GetSyntacticModifierFlagsUncached(store, node);
             node = store.Parent(node);
         }
         if (!node.IsNone && store.Kind(node) == SyntaxKind.VariableStatement)
         {
-            flags |= GetSyntacticModifierFlags(store, node);
+            flags |= GetSyntacticModifierFlagsUncached(store, node);
         }
         return flags;
     }
@@ -566,7 +592,7 @@ internal static partial class Utilities
             case SyntaxKind.MethodDeclaration:
                 return !store.Body(node).IsNone
                     && store.AsteriskToken(node).IsNone
-                    && HasSyntacticModifier(store, node, ModifierFlags.Async);
+                    && HasSyntacticModifierUncached(store, node, ModifierFlags.Async);
         }
         return false;
     }
@@ -574,13 +600,13 @@ internal static partial class Utilities
     /// <summary>utilitiesPublic.ts: isAutoAccessorPropertyDeclaration.</summary>
     internal static bool IsAutoAccessorPropertyDeclaration(NodeStore store, Node node)
     {
-        return store.Kind(node) == SyntaxKind.PropertyDeclaration && HasSyntacticModifier(store, node, ModifierFlags.Accessor);
+        return store.Kind(node) == SyntaxKind.PropertyDeclaration && HasSyntacticModifierUncached(store, node, ModifierFlags.Accessor);
     }
 
     /// <summary>utilitiesPublic.ts: isParameterPropertyDeclaration.</summary>
     internal static bool IsParameterPropertyDeclaration(NodeStore store, Node node, Node parent)
     {
-        return store.Kind(node) == SyntaxKind.Parameter && HasSyntacticModifier(store, node, ModifierFlags.ParameterPropertyModifier) && store.Kind(parent) == SyntaxKind.Constructor;
+        return store.Kind(node) == SyntaxKind.Parameter && HasSyntacticModifierUncached(store, node, ModifierFlags.ParameterPropertyModifier) && store.Kind(parent) == SyntaxKind.Constructor;
     }
 
     /// <summary>utilities.ts: exportAssignmentIsAlias (getExportAssignmentExpression, isAliasableExpression).</summary>

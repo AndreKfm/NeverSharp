@@ -469,6 +469,15 @@ internal sealed unsafe class BinderStore
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal bool Has(SymbolTable table, TextRef name) => Find(table, name, Hash(table, name)) != 0;
 
+    /// <summary>Map.get, with the hash of the key for a following <see cref="AddNew"/> (step BO2).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal Symbol Get(SymbolTable table, TextRef name, out int hash)
+    {
+        hash = Hash(table, name);
+        var e = Find(table, name, hash);
+        return e == 0 ? Symbol.None : entries[e].Symbol;
+    }
+
     /// <summary>Map.set: replaces the value of an existing key in place (its position is kept), otherwise appends.</summary>
     internal void Set(SymbolTable table, TextRef name, Symbol symbol)
     {
@@ -479,6 +488,15 @@ internal sealed unsafe class BinderStore
             entries[found].Symbol = symbol;
             return;
         }
+        AddNew(table, name, symbol, hash);
+    }
+
+    /// <summary>
+    /// Map.set for a key the table does not have (the caller has just looked it up, <see cref="Get(SymbolTable, TextRef, out int)"/>,
+    /// which gave <paramref name="hash"/>): appends.
+    /// </summary>
+    internal void AddNew(SymbolTable table, TextRef name, Symbol symbol, int hash)
+    {
         if (entriesUsed == entriesCapacity)
         {
             entries = GrowArray(entries, ref entriesCapacity, entriesUsed);
