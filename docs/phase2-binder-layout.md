@@ -34,3 +34,7 @@ B0's arrays are managed arrays per file, grown ×2 and kept by the result (no co
 ## Added in B3
 
 `BinderStore` also holds the CommonJS module indicator and `jsGlobalAugmentations` per file, and a node map for the rare flow fields `flowNodeWhenTrue`, `flowNodeWhenFalse` and `possiblyExhaustive` (only `true` is stored; absent means `false`, as tsc's factory initializes every switch statement).
+
+## Changed in BO1
+
+All `BinderStore` arrays (symbols, tables, entries, buckets, flows, links, node-map keys and values) are regions of one range in a per-thread `SlabKind.Binder` slab, sized from the node count (about 0.12–0.16 symbols and 0.16–0.17 flow nodes per node); an array that outgrows its region moves to a region twice the size. `node.flowNode` is a dense array indexed by `handle >> 2` instead of a node map. Parents written after the parse live in a dense per-file array (`SlabKind.Parents`), not in the side table. The binding is committed at the end of `BindSourceFile`, owned by the result and released with `SourceFile.Release()`.

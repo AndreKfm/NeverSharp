@@ -1,0 +1,640 @@
+{
+ "schemaVersion": 1,
+ "runId": "2026-10-24T12-29-10-787Z",
+ "label": "BO1-A",
+ "profile": "custom",
+ "startedAt": "2026-10-24T12:29:10.787Z",
+ "finishedAt": "2026-10-24T12:31:49.873Z",
+ "protocolCompliant": true,
+ "suite": "parse-tuning",
+ "settings": {
+  "runs": 20,
+  "warmup": 3,
+  "memRuns": 5,
+  "hyperfineShell": "none",
+  "processPriority": "high"
+ },
+ "environment": {
+  "machine": {
+   "cpu": "AMD Ryzen 9 3900X 12-Core Processor",
+   "cores": 12,
+   "logicalProcessors": 24,
+   "nominalMHz": 4150,
+   "ramBytes": 68667592704,
+   "board": "Micro-Star International Co., Ltd. X570-A PRO (MS-7C37)",
+   "bios": "H.60",
+   "os": "Microsoft Windows 11 Pro",
+   "osVersion": "10.0.26200.6584"
+  },
+  "rig": {
+   "scheme": "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c",
+   "minProcessorStateAc": 100,
+   "maxProcessorStateAc": 100,
+   "idleCpuPercent": 7.639398509938366,
+   "idleCpuSamplesPercent": [
+    9.8,
+    11.4,
+    11.4,
+    2.7,
+    3.1,
+    2.7,
+    5.5,
+    5.5,
+    10.8,
+    11.5
+   ],
+   "processorPerformanceUnderLoadPercent": 99,
+   "defenderExclusion": "not verifiable without administrator rights"
+  },
+  "toolchain": {
+   "node": "v24.21.0",
+   "hyperfine": "hyperfine 1.20.0",
+   "goToolset": "go1.26.4-1-microsoft",
+   "dotnetSdk": "10.0.402",
+   "rust": "rustc 1.94.0-nightly (fa5eda19b 2025-12-12)",
+   "typescript6": "6.0.3",
+   "typescript7": "7.0.2"
+  },
+  "git": {
+   "commit": "571177ac6c282e1a47451ccc687548273ec3672a",
+   "dirty": false
+  },
+  "pinsSha256": "4a7207fd124a521f3e6fc27fb097d8f1286746e445bab437caa7a6f0d904dc9f",
+  "checks": [
+   {
+    "id": "min-processor-state",
+    "required": "100",
+    "value": "100",
+    "ok": true
+   },
+   {
+    "id": "max-processor-state",
+    "required": "100",
+    "value": "100",
+    "ok": true
+   },
+   {
+    "id": "boost-off",
+    "required": "processor performance under all-core load <= 101 %",
+    "value": "99 %",
+    "ok": true
+   },
+   {
+    "id": "idle-before-run",
+    "required": "median CPU of ten 1 s windows < 12 %",
+    "value": "7.6 % (range 2.7-11.5 %)",
+    "ok": true
+   },
+   {
+    "id": "harness-committed",
+    "required": "clean working tree",
+    "value": "clean",
+    "ok": true
+   }
+  ],
+  "protocolCompliant": true
+ },
+ "corpus": {
+  "tuning": {
+   "commit": "050880ce59e30b356b686bd3144efe24f875ebc8",
+   "files": 24511,
+   "bytes": 39292727,
+   "contentSha256": "4ba5477894510052930ca84859daad05441a122a7f77b64cc8459607b41584bb"
+  }
+ },
+ "configurations": [
+  {
+   "id": "cs-o-aot-ws",
+   "label": "C# Track O, NativeAOT, Workstation GC, parallel (primary Track O configuration)",
+   "threads": "parallel"
+  },
+  {
+   "id": "cs-o-aot-ws-bind",
+   "label": "C# Track O, NativeAOT, Workstation GC, parse+bind, parallel (parse+bind endpoint)",
+   "threads": "parallel"
+  },
+  {
+   "id": "cs-o-aot-ws-bind-single",
+   "label": "C# Track O, NativeAOT, Workstation GC, parse+bind, single-threaded",
+   "threads": "single"
+  }
+ ],
+ "results": [
+  {
+   "repo": "tuning",
+   "kind": "parse",
+   "config": "cs-o-aot-ws",
+   "configLabel": "C# Track O, NativeAOT, Workstation GC, parallel (primary Track O configuration)",
+   "command": [
+    "artifacts/bin/cs/optimized-aot-ws/parse-cs-optimized-aot-ws.exe",
+    "artifacts/bench/filelists/tuning.txt"
+   ],
+   "output": {
+    "driver": "cs-optimized-aot-ws-parallel",
+    "files": 24511,
+    "chars": 39291052,
+    "nodes": 3628086,
+    "priority": "high",
+    "allocatedBytes": 88945856,
+    "gen0": 9,
+    "gen1": 7,
+    "gen2": 3,
+    "gcPauseMs": 81.295
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.35819100000000004,
+     0.35445970000000004,
+     0.35506000000000004,
+     0.35913710000000004,
+     0.3487001,
+     0.35002320000000003,
+     0.3526552,
+     0.37096460000000003,
+     0.3444323,
+     0.35592660000000004,
+     0.35563300000000003,
+     0.3566434,
+     0.34462000000000004,
+     0.34481100000000003,
+     0.3510527,
+     0.35782620000000004,
+     0.3430976,
+     0.3497786,
+     0.3486595,
+     0.3778094
+    ],
+    "median": 0.35355745000000005,
+    "mad": 0.004451149999999987,
+    "madOverMedianPercent": 1.2589608845747662,
+    "mean": 0.35397406000000003,
+    "stddev": 0.008619232481241254,
+    "min": 0.3430976,
+    "max": 0.3778094,
+    "userMean": 1.34765625,
+    "systemMean": 3.3890625
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     323006464,
+     322453504,
+     330858496,
+     324182016,
+     323928064
+    ],
+    "peakCommitBytes": [
+     508145664,
+     497733632,
+     492257280,
+     480256000,
+     491102208
+    ],
+    "medianPeakWorkingSetBytes": 323928064,
+    "medianPeakCommitBytes": 492257280
+   },
+   "runtime": {
+    "allocatedBytes": 88945856,
+    "gen0": 9,
+    "gen1": 7,
+    "gen2": 3,
+    "pauseMs": 81.295
+   },
+   "hyperfineExport": "hyperfine-tuning-cs-o-aot-ws.json",
+   "throughput": {
+    "filesPerSecond": 69326.78126284709,
+    "megabytesPerSecond": 111.13533882541577
+   }
+  },
+  {
+   "repo": "tuning",
+   "kind": "parse",
+   "config": "cs-o-aot-ws-bind",
+   "configLabel": "C# Track O, NativeAOT, Workstation GC, parse+bind, parallel (parse+bind endpoint)",
+   "command": [
+    "artifacts/bin/cs/optimized-aot-ws/parse-cs-optimized-aot-ws.exe",
+    "--bind",
+    "artifacts/bench/filelists/tuning.txt"
+   ],
+   "output": {
+    "driver": "cs-optimized-aot-ws-bind-parallel",
+    "files": 24511,
+    "chars": 39291052,
+    "nodes": 3628086,
+    "symbols": 514806,
+    "priority": "high",
+    "allocatedBytes": 1070680096,
+    "gen0": 55,
+    "gen1": 36,
+    "gen2": 6,
+    "gcPauseMs": 427.252
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.8357899000000001,
+     0.8546953,
+     0.8800410000000001,
+     0.9342522000000001,
+     0.9442417000000001,
+     0.9153946000000001,
+     0.8875798,
+     0.9086691,
+     0.8480153,
+     0.8910365,
+     0.8899391000000001,
+     0.9262841,
+     0.9252776,
+     0.9272602000000001,
+     0.8825402000000001,
+     0.9000883000000001,
+     0.8931743000000001,
+     0.8696088000000001,
+     0.9062414000000001,
+     0.8676042
+    ],
+    "median": 0.8921054,
+    "mad": 0.022892899999999994,
+    "madOverMedianPercent": 2.5661653880808246,
+    "mean": 0.8943866799999999,
+    "stddev": 0.029789606054365942,
+    "min": 0.8357899000000001,
+    "max": 0.9442417000000001,
+    "userMean": 3.66953125,
+    "systemMean": 4.384375
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     972849152,
+     977473536,
+     977940480,
+     982913024,
+     978989056
+    ],
+    "peakCommitBytes": [
+     1370824704,
+     1370947584,
+     1371906048,
+     1382313984,
+     1378635776
+    ],
+    "medianPeakWorkingSetBytes": 977940480,
+    "medianPeakCommitBytes": 1371906048
+   },
+   "runtime": {
+    "allocatedBytes": 1070680096,
+    "gen0": 55,
+    "gen1": 36,
+    "gen2": 6,
+    "pauseMs": 427.252
+   },
+   "hyperfineExport": "hyperfine-tuning-cs-o-aot-ws-bind.json",
+   "throughput": {
+    "filesPerSecond": 27475.453012614875,
+    "megabytesPerSecond": 44.044937963608334
+   }
+  },
+  {
+   "repo": "tuning",
+   "kind": "parse",
+   "config": "cs-o-aot-ws-bind-single",
+   "configLabel": "C# Track O, NativeAOT, Workstation GC, parse+bind, single-threaded",
+   "command": [
+    "artifacts/bin/cs/optimized-aot-ws/parse-cs-optimized-aot-ws.exe",
+    "--bind",
+    "--single",
+    "artifacts/bench/filelists/tuning.txt"
+   ],
+   "output": {
+    "driver": "cs-optimized-aot-ws-bind-single",
+    "files": 24511,
+    "chars": 39291052,
+    "nodes": 3628086,
+    "symbols": 514806,
+    "priority": "high",
+    "allocatedBytes": 1019658616,
+    "gen0": 50,
+    "gen1": 37,
+    "gen2": 7,
+    "gcPauseMs": 190.497
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     3.4934655,
+     3.4766089,
+     3.4893191,
+     3.4534805,
+     3.4823474,
+     3.4977438,
+     3.4954376,
+     3.5003913,
+     3.4608636,
+     3.4856614,
+     3.4909721,
+     3.4883992,
+     3.4942724,
+     3.4888599,
+     3.4832426,
+     3.5101558,
+     3.4750927000000003,
+     3.5211049,
+     3.4827141,
+     3.5152802000000003
+    ],
+    "median": 3.4890895,
+    "mad": 0.006558749999999947,
+    "madOverMedianPercent": 0.1879788408981755,
+    "mean": 3.4892706499999995,
+    "stddev": 0.016214926620750282,
+    "min": 3.4534805,
+    "max": 3.5211049,
+    "userMean": 1.7390625,
+    "systemMean": 1.84375
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     921903104,
+     921501696,
+     921616384,
+     921817088,
+     922337280
+    ],
+    "peakCommitBytes": [
+     1170112512,
+     1169797120,
+     1169805312,
+     1170063360,
+     1169797120
+    ],
+    "medianPeakWorkingSetBytes": 921817088,
+    "medianPeakCommitBytes": 1169805312
+   },
+   "runtime": {
+    "allocatedBytes": 1019658616,
+    "gen0": 50,
+    "gen1": 37,
+    "gen2": 7,
+    "pauseMs": 190.497
+   },
+   "hyperfineExport": "hyperfine-tuning-cs-o-aot-ws-bind-single.json",
+   "throughput": {
+    "filesPerSecond": 7025.041919962214,
+    "megabytesPerSecond": 11.26159905041129
+   }
+  }
+ ],
+ "fixedCost": [
+  {
+   "config": "cs-o-aot-ws",
+   "configLabel": "C# Track O, NativeAOT, Workstation GC, parallel (primary Track O configuration)",
+   "command": [
+    "artifacts/bin/cs/optimized-aot-ws/parse-cs-optimized-aot-ws.exe",
+    "artifacts/bench/filelists/empty.txt"
+   ],
+   "output": {
+    "driver": "cs-optimized-aot-ws-parallel",
+    "files": 0,
+    "chars": 0,
+    "nodes": 0,
+    "priority": "high",
+    "allocatedBytes": 59472,
+    "gen0": 0,
+    "gen1": 0,
+    "gen2": 0,
+    "gcPauseMs": 0
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.0237458,
+     0.023874600000000003,
+     0.024621200000000003,
+     0.0245526,
+     0.0234912,
+     0.023933100000000002,
+     0.024017800000000002,
+     0.0244362,
+     0.024645100000000003,
+     0.024305900000000002,
+     0.024014300000000002,
+     0.029434900000000003,
+     0.0244994,
+     0.024118200000000003,
+     0.0245194,
+     0.024988000000000003,
+     0.024625400000000002,
+     0.0245907,
+     0.025081100000000002,
+     0.0242221
+    ],
+    "median": 0.0244678,
+    "mad": 0.00029765,
+    "madOverMedianPercent": 1.2164967835277385,
+    "mean": 0.024585850000000006,
+    "stddev": 0.0012112771735043274,
+    "min": 0.0234912,
+    "max": 0.029434900000000003,
+    "userMean": 0.00859375,
+    "systemMean": 0.01015625
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     10924032,
+     10645504,
+     10911744,
+     10911744,
+     10919936
+    ],
+    "peakCommitBytes": [
+     4055040,
+     3772416,
+     4038656,
+     4046848,
+     4046848
+    ],
+    "medianPeakWorkingSetBytes": 10911744,
+    "medianPeakCommitBytes": 4046848
+   },
+   "runtime": {
+    "allocatedBytes": 59472,
+    "gen0": 0,
+    "gen1": 0,
+    "gen2": 0,
+    "pauseMs": 0
+   },
+   "hyperfineExport": "hyperfine-fixed-cost-cs-o-aot-ws.json"
+  },
+  {
+   "config": "cs-o-aot-ws-bind",
+   "configLabel": "C# Track O, NativeAOT, Workstation GC, parse+bind, parallel (parse+bind endpoint)",
+   "command": [
+    "artifacts/bin/cs/optimized-aot-ws/parse-cs-optimized-aot-ws.exe",
+    "--bind",
+    "artifacts/bench/filelists/empty.txt"
+   ],
+   "output": {
+    "driver": "cs-optimized-aot-ws-bind-parallel",
+    "files": 0,
+    "chars": 0,
+    "nodes": 0,
+    "symbols": 0,
+    "priority": "high",
+    "allocatedBytes": 60704,
+    "gen0": 0,
+    "gen1": 0,
+    "gen2": 0,
+    "gcPauseMs": 0
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.0258816,
+     0.024578600000000003,
+     0.0252623,
+     0.0257556,
+     0.024188,
+     0.0240198,
+     0.02383,
+     0.023628600000000003,
+     0.0239049,
+     0.024974800000000002,
+     0.023709200000000003,
+     0.0237235,
+     0.023607200000000002,
+     0.0240968,
+     0.023712200000000003,
+     0.0240969,
+     0.0253312,
+     0.0241208,
+     0.0247379,
+     0.026052400000000003
+    ],
+    "median": 0.02410885,
+    "mad": 0.00043469999999999967,
+    "madOverMedianPercent": 1.8030723157678596,
+    "mean": 0.024460614999999998,
+    "stddev": 0.0008088225465875819,
+    "min": 0.023607200000000002,
+    "max": 0.026052400000000003,
+    "userMean": 0.00859375,
+    "systemMean": 0.01171875
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     10911744,
+     10911744,
+     10907648,
+     10911744,
+     10915840
+    ],
+    "peakCommitBytes": [
+     4046848,
+     4042752,
+     4042752,
+     4046848,
+     4050944
+    ],
+    "medianPeakWorkingSetBytes": 10911744,
+    "medianPeakCommitBytes": 4046848
+   },
+   "runtime": {
+    "allocatedBytes": 60704,
+    "gen0": 0,
+    "gen1": 0,
+    "gen2": 0,
+    "pauseMs": 0
+   },
+   "hyperfineExport": "hyperfine-fixed-cost-cs-o-aot-ws-bind.json"
+  },
+  {
+   "config": "cs-o-aot-ws-bind-single",
+   "configLabel": "C# Track O, NativeAOT, Workstation GC, parse+bind, single-threaded",
+   "command": [
+    "artifacts/bin/cs/optimized-aot-ws/parse-cs-optimized-aot-ws.exe",
+    "--bind",
+    "--single",
+    "artifacts/bench/filelists/empty.txt"
+   ],
+   "output": {
+    "driver": "cs-optimized-aot-ws-bind-single",
+    "files": 0,
+    "chars": 0,
+    "nodes": 0,
+    "symbols": 0,
+    "priority": "high",
+    "allocatedBytes": 60736,
+    "gen0": 0,
+    "gen1": 0,
+    "gen2": 0,
+    "gcPauseMs": 0
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.02322,
+     0.0232328,
+     0.0228665,
+     0.023121000000000003,
+     0.023172400000000003,
+     0.023275800000000003,
+     0.0231937,
+     0.0235028,
+     0.0236944,
+     0.023896,
+     0.023406200000000002,
+     0.023353600000000002,
+     0.0226038,
+     0.023358900000000002,
+     0.023271100000000003,
+     0.023407,
+     0.0231764,
+     0.023284600000000003,
+     0.02304,
+     0.023215600000000003
+    ],
+    "median": 0.02325195,
+    "mad": 0.00010430000000000161,
+    "madOverMedianPercent": 0.4485645289964997,
+    "mean": 0.02326463,
+    "stddev": 0.0002705508398570745,
+    "min": 0.0226038,
+    "max": 0.023896,
+    "userMean": 0.01171875,
+    "systemMean": 0.01015625
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     10919936,
+     10645504,
+     10915840,
+     10911744,
+     10915840
+    ],
+    "peakCommitBytes": [
+     4038656,
+     3768320,
+     4042752,
+     4046848,
+     4046848
+    ],
+    "medianPeakWorkingSetBytes": 10915840,
+    "medianPeakCommitBytes": 4042752
+   },
+   "runtime": {
+    "allocatedBytes": 60736,
+    "gen0": 0,
+    "gen1": 0,
+    "gen2": 0,
+    "pauseMs": 0
+   },
+   "hyperfineExport": "hyperfine-fixed-cost-cs-o-aot-ws-bind-single.json"
+  }
+ ]
+}
