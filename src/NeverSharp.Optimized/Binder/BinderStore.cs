@@ -47,6 +47,7 @@ internal sealed class BinderStore
         public SymbolTable Members;
         public SymbolTable Exports;
         public SymbolBits Bits;
+        public int Id; // checker.ts/utilities.ts getSymbolId: 0 until assigned
     }
 
     // A link of a chain: a handle (node, flow node) and the next link (0: end).
@@ -68,6 +69,9 @@ internal sealed class BinderStore
         public TextRef Name;
         public Symbol Symbol;
         public int Next;
+        public int Table;      // the table the entry belongs to
+        public int Hash;       // hash of the table and the name's characters
+        public int NextInBucket;
     }
 
     private struct FlowRecord
@@ -104,6 +108,9 @@ internal sealed class BinderStore
     private int tablesUsed = 1;
     private EntryRecord[] entries = new EntryRecord[16];
     private int entriesUsed = 1;
+    // Module B1: a hash index over the entries of all tables (chains of entries by hash of table and name), so
+    // Map.get and Map.set do not scan a table; grown ×2 at load 1/2.
+    private int[] buckets = new int[32];
     private FlowRecord[] flows = new FlowRecord[16];
     private int flowsUsed = 1;
     private Link[] links = new Link[16];
@@ -265,37 +272,41 @@ internal sealed class BinderStore
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal TableEntries Entries(SymbolTable table) => new(this, tables[table.Index].First);
 
-    /// <summary>Map.get. (Module B1 adds a hash index for large tables; the skeleton scans.)</summary>
+    /// <summary>Map.get.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal Symbol Get(SymbolTable table, TextRef name)
     {
-        for (var e = tables[table.Index].First; e != 0; e = entries[e].Next)
-        {
-            if (Nodes.Texts.Equals(entries[e].Name, name))
-            {
-                return entries[e].Symbol;
-            }
-        }
-        return Symbol.None;
+        var e = Find(table, name, Hash(table, name));
+        return e == 0 ? Symbol.None : entries[e].Symbol;
     }
+
+    /// <summary>Map.has.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal bool Has(SymbolTable table, TextRef name) => Find(table, name, Hash(table, name)) != 0;
 
     /// <summary>Map.set: replaces the value of an existing key in place (its position is kept), otherwise appends.</summary>
     internal void Set(SymbolTable table, TextRef name, Symbol symbol)
     {
-        ref var t = ref tables[table.Index];
-        for (var e = t.First; e != 0; e = entries[e].Next)
+        var hash = Hash(table, name);
+        var found = Find(table, name, hash);
+        if (found != 0)
         {
-            if (Nodes.Texts.Equals(entries[e].Name, name))
-            {
-                entries[e].Symbol = symbol;
-                return;
-            }
+            entries[found].Symbol = symbol;
+            return;
         }
         if (entriesUsed == entries.Length)
         {
             Array.Resize(ref entries, entries.Length * 2);
         }
         var entry = entriesUsed++;
-        entries[entry] = new EntryRecord { Name = name, Symbol = symbol };
+        if (entriesUsed * 2 > buckets.Length)
+        {
+            GrowBuckets();
+        }
+        var bucket = hash & (buckets.Length - 1);
+        entries[entry] = new EntryRecord { Name = name, Symbol = symbol, Table = table.Index, Hash = hash, NextInBucket = buckets[bucket] };
+        buckets[bucket] = entry;
+        ref var t = ref tables[table.Index];
         if (t.First == 0)
         {
             t.First = entry;
@@ -307,6 +318,65 @@ internal sealed class BinderStore
         t.Last = entry;
         t.Count++;
     }
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private int Find(SymbolTable table, TextRef name, int hash)
+    {
+        for (var e = buckets[hash & (buckets.Length - 1)]; e != 0; e = entries[e].NextInBucket)
+        {
+            ref var entry = ref entries[e];
+            if (entry.Hash == hash && entry.Table == table.Index && Nodes.Texts.Equals(entry.Name, name))
+            {
+                return e;
+            }
+        }
+        return 0;
+    }
+
+    // FNV-1a over the name's characters, mixed with the table.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private int Hash(SymbolTable table, TextRef name)
+    {
+        var h = 2166136261u ^ (uint)table.Index;
+        foreach (var c in Nodes.Texts.Span(name))
+        {
+            h = (h ^ c) * 16777619u;
+        }
+        return (int)(h ^ (h >> 15));
+    }
+
+    private void GrowBuckets()
+    {
+        buckets = new int[buckets.Length * 2];
+        var mask = buckets.Length - 1;
+        for (var e = 1; e < entriesUsed - 1; e++)
+        {
+            ref var entry = ref entries[e];
+            var bucket = entry.Hash & mask;
+            entry.NextInBucket = buckets[bucket];
+            buckets[bucket] = e;
+        }
+    }
+
+    /// <summary>
+    /// checker.ts getSymbolId: the symbol's id, assigned on first use from the process-wide counter (TypeScript's
+    /// module-level nextSymbolId, which starts at 1). The binder needs it for the names of private identifiers.
+    /// </summary>
+    internal int SymbolId(Symbol symbol)
+    {
+        ref var s = ref symbols[symbol.Index];
+        if (s.Id == 0)
+        {
+            s.Id = Interlocked.Increment(ref nextSymbolId);
+            (AssignedSymbolIds ??= []).Add(s.Id);
+        }
+        return s.Id;
+    }
+
+    private static int nextSymbolId;
+
+    /// <summary>The symbol ids this file's binding assigned, in order (null if none).</summary>
+    internal List<int>? AssignedSymbolIds { get; private set; }
 
     // ---- flow nodes ----
 
@@ -369,6 +439,55 @@ internal sealed class BinderStore
         ref var f = ref flows[label.Index];
         Append(ref f.FirstAntecedent, ref f.LastAntecedent, antecedent.Index);
     }
+
+    /// <summary>
+    /// binder.ts bindTryStatement: `finallyLabel.antecedent = concatenate(concatenate(a, b), c)` (the antecedents of
+    /// the three labels appended in order; undefined if all three are). TypeScript may share one of the arrays instead
+    /// of copying it; none of them is changed afterwards, so a copy reads the same.
+    /// </summary>
+    internal void ConcatenateAntecedents(FlowNode target, FlowNode a, FlowNode b, FlowNode c)
+    {
+        foreach (var label in (ReadOnlySpan<FlowNode>)[a, b, c])
+        {
+            for (var l = flows[label.Index].FirstAntecedent; l != 0; l = links[l].Next)
+            {
+                var value = links[l].Value;
+                Append(ref flows[target.Index].FirstAntecedent, ref flows[target.Index].LastAntecedent, value);
+            }
+        }
+    }
+
+    /// <summary>Whether the label's antecedent array contains the flow node (core.ts contains).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal bool HasAntecedent(FlowNode label, FlowNode antecedent)
+    {
+        for (var l = flows[label.Index].FirstAntecedent; l != 0; l = links[l].Next)
+        {
+            if (links[l].Value == antecedent.Index)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>The label's single antecedent if it has exactly one, None otherwise; <paramref name="count"/>: 0, 1 or 2 (two or more).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal FlowNode SingleAntecedent(FlowNode label, out int count)
+    {
+        var first = flows[label.Index].FirstAntecedent;
+        if (first == 0)
+        {
+            count = 0;
+            return FlowNode.None;
+        }
+        count = links[first].Next == 0 ? 1 : 2;
+        return count == 1 ? new FlowNode(links[first].Value) : FlowNode.None;
+    }
+
+    /// <summary>Whether the label's antecedent array is defined.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal bool HasAntecedents(FlowNode label) => flows[label.Index].FirstAntecedent != 0;
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal int ClauseStart(FlowNode switchClause) => flows[switchClause.Index].A;

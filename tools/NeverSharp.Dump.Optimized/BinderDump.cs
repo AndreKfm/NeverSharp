@@ -11,12 +11,13 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using NeverSharp.Generated;
 using NeverSharp.Optimized;
 
 namespace NeverSharp.Dump;
 
-internal static class BinderDump
+internal static partial class BinderDump
 {
     private const int StackSize = 256 * 1024 * 1024;
 
@@ -61,6 +62,17 @@ internal static class BinderDump
         var ok = new List<string>();
         var timeout = new List<string>();
         var error = new List<(string Id, string Error)>();
+        // Units whose binding assigned symbol ids (the names of private identifiers, `__#<id>@#name`): TypeScript's
+        // ids come from one process-wide counter, and the oracle binds the units one after another in manifest order,
+        // so the ids a unit's names show are the count of ids the units before it assigned, plus its own. The binder
+        // here assigns ids from a process-wide counter too, in whatever order the parallel units run; such units are
+        // written at the end, with their ids renumbered as the oracle's sequence has them.
+        var withIds = new List<(int Index, List<int> Ids, string Text)>();
+        var unitIndex = new Dictionary<string, int>(units.Count);
+        for (var i = 0; i < units.Count; i++)
+        {
+            unitIndex[units[i].Id] = i;
+        }
         var started = DateTime.UtcNow;
         Parallel.ForEach(units, unit =>
         {
@@ -68,12 +80,13 @@ internal static class BinderDump
             // As AstDump.Run: each unit on its own thread with a large stack (parser and binder recurse as deeply as
             // the source nests); a unit that never finishes keeps its thread, the process exits at the end regardless.
             string? result = null;
+            List<int>? ids = null;
             string? outcome = null;
             var thread = new Thread(() =>
             {
                 try
                 {
-                    result = DumpUnit(text, unit, mode);
+                    (result, ids) = DumpUnit(text, unit, mode);
                 }
                 catch (Exception e)
                 {
@@ -103,11 +116,30 @@ internal static class BinderDump
                     error.Add((unit.Id, outcome));
                 }
             }
-            if (outcome is null)
+            if (outcome is null && ids is not null)
+            {
+                lock (withIds)
+                {
+                    withIds.Add((unitIndex[unit.Id], ids, result!));
+                }
+            }
+            else if (outcome is null)
             {
                 File.WriteAllText(Path.Combine(outDir, unit.Id + ".txt"), result!, Common.Utf8);
             }
         });
+        withIds.Sort((a, b) => a.Index.CompareTo(b.Index));
+        var nextId = 1;
+        foreach (var (index, ids, text) in withIds)
+        {
+            var renumbered = new Dictionary<string, string>();
+            foreach (var id in ids)
+            {
+                renumbered[id.ToString(CultureInfo.InvariantCulture)] = nextId++.ToString(CultureInfo.InvariantCulture);
+            }
+            var fixedText = PrivateNameId().Replace(text, m => renumbered.TryGetValue(m.Groups[1].Value, out var to) ? "__#" + to + "@" : m.Value);
+            File.WriteAllText(Path.Combine(outDir, units[index].Id + ".txt"), fixedText, Common.Utf8);
+        }
         ok.Sort(string.CompareOrdinal);
         timeout.Sort(string.CompareOrdinal);
         error.Sort((a, b) => string.CompareOrdinal(a.Id, b.Id));
@@ -152,7 +184,10 @@ internal static class BinderDump
         return order;
     }
 
-    private static string DumpUnit(string text, Unit unit, JSDocParsingMode mode)
+    [GeneratedRegex(@"__#(\d+)@")]
+    private static partial Regex PrivateNameId();
+
+    private static (string Text, List<int>? SymbolIds) DumpUnit(string text, Unit unit, JSDocParsingMode mode)
     {
         var scriptKind = unit.Kind switch
         {
@@ -463,7 +498,7 @@ internal static class BinderDump
             }
             sb.Append('\n');
         }
-        return sb.ToString();
+        return (sb.ToString(), b.AssignedSymbolIds);
     }
 
     private static string FlagsText((int Bit, string Name)[] bits, int value)

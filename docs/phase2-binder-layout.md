@@ -8,7 +8,7 @@ Decided in module B0 ([modules/B0.md](modules/B0.md), [phase2-plan.md](phase2-pl
 |---|---|---|---|
 | Symbol | object (`Symbol` constructor) | `*ast.Symbol` from the binder's `symbolArena` | `Symbol` handle (int, 0 = undefined): a record in `BinderStore.symbols` (flags, name as a `TextRef`, declaration chain, value declaration, parent, export symbol, members, exports, defined bits for `constEnumOnlyModule` / `isReplaceableByMethod`) |
 | `declarations` | array | slice | link chain (first, last) in the store's link array; undefined = no chain (TypeScript never creates it empty) |
-| SymbolTable (`members`, `exports`, `locals`, `globalExports`) | `Map` (insertion order) | Go `map` (no order) | `SymbolTable` handle: entry chain in insertion order (Map order, needed for the dump and for checker iteration order); undefined (`None`) and empty are distinct. Lookup: scan in B0; B1 adds a hash index per table once it grows past a few entries |
+| SymbolTable (`members`, `exports`, `locals`, `globalExports`) | `Map` (insertion order) | Go `map` (no order) | `SymbolTable` handle: entry chain in insertion order (Map order, needed for the dump and for checker iteration order); undefined (`None`) and empty are distinct. Lookup: scan in B0; since B1 one hash index per file over the entries of all its tables (key: table and name characters, chained buckets, grown ×2 at load 1/2) |
 | FlowNode | object `{ flags, node, antecedent }` | `*ast.FlowNode` from `flowNodeArena`, lists from `flowListArena` | `FlowNode` handle: a record in `BinderStore.flows` (flags, node, antecedent, label antecedent chain, two data ints: switch clause start/end or reduce label target/antecedent chain) |
 | Label antecedents | array, appended | `FlowList`, prepended | link chain, appended (TypeScript's order; the dump follows TypeScript) |
 | `symbol`, `localSymbol` | node properties | `DeclarationBase.Symbol`, `ExportableBase.LocalSymbol` in the node struct | open-addressing map node handle → (symbol, localSymbol) |
@@ -16,6 +16,7 @@ Decided in module B0 ([modules/B0.md](modules/B0.md), [phase2-plan.md](phase2-pl
 | `locals`, `nextContainer`, `endFlowNode`, `returnFlowNode`, `fallthroughFlowNode` | node properties | `LocalsContainerBase`, `BodyBase`, `CaseOrDefaultClause` | open-addressing map node handle → (locals, nextContainer, endFlowNode, returnFlowNode, fallthroughFlowNode) |
 | NodeFlags set by the binder | `node.flags \|=` | `node.Flags \|=` | written into the parse's node records (`NodeStore.SetFlags`), like both references |
 | `bindDiagnostics`, `bindSuggestionDiagnostics`, `symbolCount` | SourceFile properties | SourceFile fields | `BinderStore` properties (`List<DiagnosticWithLocation>`, as the parser's diagnostics) |
+| Symbol ids (`getSymbolId`, used by the binder only for private names `__#<id>@#name`) | lazily from the process-wide `nextSymbolId` | — | lazily from a process-wide counter (Interlocked), kept in the symbol record; the binder dump renumbers them in manifest order, as the oracle's sequential run assigns them |
 | Rare members (`globalExports`, `assignmentDeclarationMembers`) | Symbol properties | (moved elsewhere in TS 7) | small dictionaries in the store, allocated only by files that have them (UMD, JavaScript) |
 
 ## Why
