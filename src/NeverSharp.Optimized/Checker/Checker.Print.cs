@@ -165,7 +165,7 @@ internal sealed partial class Checker
         if (accessibleSymbolChain is null)
         {
             // Go up and add our parent.
-            var parents = GetContainersOfSymbol(symbol, enclosingDeclaration);
+            var parents = GetContainersOfSymbol(symbol, enclosingDeclaration, meaning);
             foreach (var parent in parents)
             {
                 var parentChain = GetSymbolChain(parent, GetQualifiedLeftMeaning(meaning), endOfChain: false, enclosingDeclaration, depth + 1);
@@ -216,12 +216,36 @@ internal sealed partial class Checker
     }
 
     // checker.ts getContainersOfSymbol (re-export and object literal variable containers: C2)
-    private List<SymbolRef> GetContainersOfSymbol(SymbolRef symbol, NodeRef enclosingDeclaration)
+    private List<SymbolRef> GetContainersOfSymbol(SymbolRef symbol, NodeRef enclosingDeclaration, SymbolFlags meaning = SymbolFlags.None)
     {
         var container = GetParentOfSymbol(symbol);
         // Type parameters end up in the `members` lists but are not externally visible
         if (!container.IsNone && (SymbolFlagsOf(symbol) & SymbolFlags.TypeParameter) == 0)
         {
+            // getWithAlternativeContainers: a variable whose type is the container's declared type (module C3: the
+            // `Symbol.iterator` names of late-bound members)
+            var containerFlags = SymbolFlagsOf(container);
+            if (meaning == SymbolFlags.Value && (containerFlags & GetQualifiedLeftMeaning(meaning)) == 0 && (containerFlags & SymbolFlags.Type) != 0 &&
+                (Types.Flags(GetDeclaredTypeOfSymbol(container)) & TypeFlags.Object) != 0)
+            {
+                var declaredType = GetDeclaredTypeOfSymbol(container);
+                var firstVariableMatch = ForEachSymbolTableInScope(enclosingDeclaration, (table, _) =>
+                {
+                    for (var i = 0; i < table.Count; i++)
+                    {
+                        var s = table.ValueAt(i);
+                        if ((SymbolFlagsOf(s) & GetQualifiedLeftMeaning(meaning)) != 0 && GetTypeOfSymbol(s) == declaredType)
+                        {
+                            return (object)s;
+                        }
+                    }
+                    return null;
+                });
+                if (firstVariableMatch is SymbolRef match)
+                {
+                    return [match, container];
+                }
+            }
             return [container];
         }
         var candidates = new List<SymbolRef>();
@@ -932,6 +956,10 @@ internal sealed partial class Checker
         }
         if ((flags & TypeFlags.Object) != 0)
         {
+            if (GenericTypeToText(type, enclosingDeclaration, depth) is { } genericText)
+            {
+                return genericText; // tuples and generic mapped types (module C3)
+            }
             if ((objectFlags & ObjectFlags.Reference) != 0 && !Types.Object(type).Target.IsNone)
             {
                 var target = Types.Object(type).Target;
@@ -998,8 +1026,8 @@ internal sealed partial class Checker
                 printingTypes.Remove(type);
             }
         }
-        // TODO(C2/C3): template literal, string mapping, index, indexed access, conditional, substitution types
-        return "any";
+        // template literal, string mapping, index, indexed access, conditional, substitution types (module C3)
+        return GenericTypeToText(type, enclosingDeclaration, depth) ?? "any";
     }
 
     // checker.ts formatUnionTypes
@@ -1091,13 +1119,13 @@ internal sealed partial class Checker
         }
         foreach (var info in resolved.IndexInfos!)
         {
-            sb.Append(info.IsReadonly ? "readonly " : "").Append("[key: ").Append(TypeToText(info.KeyType, enclosingDeclaration, false, false, depth + 1))
+            sb.Append(info.IsReadonly ? "readonly " : "").Append('[').Append(IndexInfoParameterName(info)).Append(": ").Append(TypeToText(info.KeyType, enclosingDeclaration, false, false, depth + 1))
                 .Append("]: ").Append(TypeToText(info.Type, enclosingDeclaration, false, false, depth + 1)).Append("; ");
         }
         foreach (var property in properties)
         {
             var propertyFlags = SymbolFlagsOf(property);
-            var name = GetPropertyNameText(property);
+            var name = GetPropertyNameText(property, enclosingDeclaration);
             if ((propertyFlags & SymbolFlags.Method) != 0)
             {
                 foreach (var signature in GetSignaturesOfSymbol(property))
@@ -1127,8 +1155,14 @@ internal sealed partial class Checker
 
     // nodebuilder getPropertyNameNodeForSymbol / createPropertyNameNodeForIdentifierOrLiteral (name types of late-bound
     // members: C3)
-    private string GetPropertyNameText(SymbolRef symbol)
+    private string GetPropertyNameText(SymbolRef symbol, NodeRef enclosingDeclaration = default)
     {
+        // late-bound members named by a unique symbol type: a computed property name (module C3)
+        var nameType = ValueSymbolLinks.Has(symbol) ? ValueSymbolLinks.Get(symbol).NameType : Type.None;
+        if (!nameType.IsNone && (Types.Flags(nameType) & TypeFlags.UniqueESSymbol) != 0)
+        {
+            return "[" + SymbolToString(Types.Symbol(nameType), enclosingDeclaration, SymbolFlags.Value) + "]";
+        }
         var declarations = DeclarationsOf(symbol);
         var stringNamed = declarations is { Count: > 0 } && declarations.TrueForAll(IsStringNamed);
         var singleQuote = declarations is { Count: > 0 } && declarations.TrueForAll(IsSingleQuotedStringNamed);
@@ -1193,6 +1227,10 @@ internal sealed partial class Checker
 
     private bool IsReadonlySymbol(SymbolRef symbol)
     {
+        if ((GetCheckFlags(symbol) & CheckFlags.Readonly) != 0)
+        {
+            return true; // mapped and tuple properties (module C3)
+        }
         var declaration = ValueDeclarationOf(symbol);
         return !declaration.IsNone && Utilities.HasSyntacticModifierUncached(StoreOf(declaration), declaration.Node, ModifierFlags.Readonly);
     }

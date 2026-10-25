@@ -43,7 +43,12 @@ internal sealed partial class Checker
         {
             return cached;
         }
+        // (currentNode and instantiationCount: module C3)
+        var saveCurrentNode = currentNode;
+        currentNode = node;
+        instantiationCount = 0;
         var type = CheckExpressionWorker(node);
+        currentNode = saveCurrentNode;
         expressionTypes[node] = type;
         return type;
     }
@@ -267,6 +272,13 @@ internal sealed partial class Checker
         foreach (var e in store.Nodes(store.Elements(node.Node)))
         {
             var t = CheckExpressionForMutableLocation(At(node, e));
+            if (store.Kind(e) == SyntaxKind.SpreadElement && (IsArrayType(t) || IsTupleType(t)))
+            {
+                // checkArrayLiteral: a variadic element of an array-like spread contributes T[number] (module C3; the
+                // iterated types of other spreads: C5)
+                var indexed = GetIndexedAccessTypeOrUndefined(t, numberType);
+                t = indexed.IsNone ? anyType : indexed;
+            }
             elementTypes.Add(t);
         }
         var elementType = elementTypes.Count > 0 ? GetUnionType(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(elementTypes), UnionReduction.Subtype) : neverType;
@@ -952,12 +964,6 @@ internal sealed partial class Checker
                     return typeArguments[0];
                 }
             }
-            if (Types.Object(target).LocalTypeParameters.Count > 0 || Types.Object(target).OuterTypeParameters.Count > 0)
-            {
-                // the members of generic references are not instantiated before C3
-                uncertainExpressions.Add(node);
-                return anyType;
-            }
         }
         if ((Types.Flags(apparentType) & TypeFlags.Object) != 0 && (indexFlags & (TypeFlags.StringLike | TypeFlags.NumberLike)) != 0)
         {
@@ -1221,25 +1227,25 @@ internal sealed partial class Checker
         var typeArgumentNodes = store.TypeArguments(node.Node);
         if (!typeArgumentNodes.IsNone && store.Length(typeArgumentNodes) > 0 && !IsUncertainExpression(callee))
         {
-            // explicit type arguments: the first signature of that arity, its return type instantiated where C1 can
-            var typeArguments = new List<Type>();
-            foreach (var argumentNode in store.Nodes(typeArgumentNodes))
+            // explicit type arguments: the first signature of a matching arity, instantiated with them (getSignatureInstantiation;
+            // the choice among several candidates is C5's overload resolution)
+            var typeArguments = new Type[store.Length(typeArgumentNodes)];
+            for (var i = 0; i < typeArguments.Length; i++)
             {
-                typeArguments.Add(GetTypeFromTypeNode(At(node, argumentNode)));
+                typeArguments[i] = GetTypeFromTypeNode(At(node, store.Element(typeArgumentNodes, i)));
             }
-            var candidates = signatures.FindAll(s => Signatures.Record(s).TypeParameters.Count == typeArguments.Count);
+            var candidates = signatures.FindAll(s =>
+            {
+                var typeParameters = Types.Elements(Signatures.Record(s).TypeParameters).ToArray();
+                return typeArguments.Length >= GetMinTypeArgumentCount(typeParameters) && typeArguments.Length <= typeParameters.Length;
+            });
             if (candidates.Count > 0)
             {
-                var candidateTypeParameters = Types.Elements(Signatures.Record(candidates[0]).TypeParameters).ToArray();
-                var instantiated = InstantiateSimple(GetReturnTypeOfSignature(candidates[0]), candidateTypeParameters, typeArguments, 0);
-                if (!instantiated.IsNone)
+                if (candidates.Count > 1)
                 {
-                    if (candidates.Count > 1)
-                    {
-                        uncertainExpressions.Add(node);
-                    }
-                    return instantiated;
+                    uncertainExpressions.Add(node);
                 }
+                return GetReturnTypeOfSignature(GetSignatureInstantiation(candidates[0], typeArguments, Utilities.IsInJSFile(store, node.Node)));
             }
         }
         var signature = signatures[0];
@@ -1250,70 +1256,40 @@ internal sealed partial class Checker
             // no diagnostics are derived from it.
             uncertainExpressions.Add(node);
         }
-        return GetReturnTypeOfSignature(signature);
+        var returnType = GetReturnTypeOfSignature(signature);
+        if ((Types.Flags(returnType) & TypeFlags.ESSymbolLike) != 0 && IsSymbolOrSymbolForCall(node))
+        {
+            // checkCallExpression: `const s = Symbol()` declares a unique symbol (module C3)
+            var parent = Parent(node);
+            while (Kind(parent) == SyntaxKind.ParenthesizedExpression)
+            {
+                parent = Parent(parent);
+            }
+            return GetESSymbolLikeTypeForNode(parent);
+        }
+        return returnType;
     }
 
-    // A minimal instantiation of a type for explicit type arguments (TODO(C3): instantiateType). None when the type has
-    // a shape C1 cannot instantiate (anonymous and other structured types).
-    private Type InstantiateSimple(Type type, Type[] typeParameters, List<Type> typeArguments, int depth)
+    // checker.ts isSymbolOrSymbolForCall
+    private bool IsSymbolOrSymbolForCall(NodeRef node)
     {
-        if (depth > 8)
+        var store = StoreOf(node);
+        if (store.Kind(node.Node) != SyntaxKind.CallExpression)
         {
-            return Type.None;
+            return false;
         }
-        var flags = Types.Flags(type);
-        if ((flags & TypeFlags.TypeParameter) != 0)
+        var left = store.Expression(node.Node);
+        if (store.Kind(left) == SyntaxKind.PropertyAccessExpression && store.Texts.Equals(store.EscapedText(store.Name(left)), "for"))
         {
-            var index = Array.IndexOf(typeParameters, type);
-            return index >= 0 ? typeArguments[index] : Types.TypeParameter(type).IsThisType ? type : Type.None;
+            left = store.Expression(left);
         }
-        if ((flags & TypeFlags.Union) != 0)
+        if (store.Kind(left) != SyntaxKind.Identifier || !store.Texts.Equals(store.EscapedText(left), "Symbol"))
         {
-            var members = Types.Elements(Types.Union(type).Types).ToArray();
-            var mapped = new Type[members.Length];
-            for (var i = 0; i < members.Length; i++)
-            {
-                mapped[i] = InstantiateSimple(members[i], typeParameters, typeArguments, depth + 1);
-                if (mapped[i].IsNone)
-                {
-                    return Type.None;
-                }
-            }
-            return GetUnionType(mapped);
+            return false;
         }
-        if ((flags & TypeFlags.Object) != 0)
-        {
-            var objectFlags = Types.Record(type).ObjectFlags;
-            if ((objectFlags & ObjectFlags.Reference) != 0 && !Types.Object(type).Target.IsNone)
-            {
-                var target = Types.Object(type).Target;
-                if (target == type)
-                {
-                    return type;
-                }
-                var arguments = GetTypeArguments(type).ToArray();
-                var mapped = new Type[arguments.Length];
-                for (var i = 0; i < arguments.Length; i++)
-                {
-                    mapped[i] = InstantiateSimple(arguments[i], typeParameters, typeArguments, depth + 1);
-                    if (mapped[i].IsNone)
-                    {
-                        return Type.None;
-                    }
-                }
-                return CreateTypeReference(target, mapped);
-            }
-            if ((objectFlags & ObjectFlags.ClassOrInterface) != 0 && Types.Object(type).LocalTypeParameters.Count == 0 && Types.Object(type).OuterTypeParameters.Count == 0)
-            {
-                return type;
-            }
-            return Type.None;
-        }
-        if ((flags & (TypeFlags.Intersection | TypeFlags.Instantiable)) != 0)
-        {
-            return Type.None;
-        }
-        return type;
+        // make sure `Symbol` is the global symbol
+        var globalESSymbol = GetGlobalSymbol("Symbol", SymbolFlags.Value, null);
+        return !globalESSymbol.IsNone && globalESSymbol == ResolveName(At(node, left), "Symbol", NodeRef.None, SymbolFlags.Value, null, isUse: false);
     }
 
     // Expressions whose C1 type is an approximation (calls without overload resolution and inference, and what is

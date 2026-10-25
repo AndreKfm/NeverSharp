@@ -70,21 +70,38 @@ internal sealed partial class Checker
             case SyntaxKind.TypeQuery:
                 return GetTypeFromTypeQueryNode(node);
             case SyntaxKind.ArrayType:
-                return GetTypeFromArrayTypeNode(node);
+            case SyntaxKind.TupleType:
+                return GetTypeFromArrayOrTupleTypeNode(node);
+            case SyntaxKind.OptionalType:
+                return GetTypeFromOptionalTypeNode(node);
             case SyntaxKind.UnionType:
                 return GetTypeFromUnionTypeNode(node);
             case SyntaxKind.IntersectionType:
                 return GetTypeFromIntersectionTypeNode(node);
+            case SyntaxKind.NamedTupleMember:
+                return GetTypeFromNamedTupleTypeNode(node);
             case SyntaxKind.ParenthesizedType:
             case SyntaxKind.JSDocNonNullableType:
             case SyntaxKind.JSDocTypeExpression:
                 return GetTypeFromTypeNode(At(node, store.Type(node.Node)));
+            case SyntaxKind.RestType:
+                return GetTypeFromRestTypeNode(node);
             case SyntaxKind.FunctionType:
             case SyntaxKind.ConstructorType:
             case SyntaxKind.TypeLiteral:
                 return GetTypeFromTypeLiteralOrFunctionOrConstructorTypeNode(node);
             case SyntaxKind.TypeOperator:
                 return GetTypeFromTypeOperatorNode(node);
+            case SyntaxKind.IndexedAccessType:
+                return GetTypeFromIndexedAccessTypeNode(node);
+            case SyntaxKind.MappedType:
+                return GetTypeFromMappedTypeNode(node);
+            case SyntaxKind.ConditionalType:
+                return GetTypeFromConditionalTypeNode(node);
+            case SyntaxKind.InferType:
+                return GetTypeFromInferTypeNode(node);
+            case SyntaxKind.TemplateLiteralType:
+                return GetTypeFromTemplateTypeNode(node);
             case SyntaxKind.Identifier:
             case SyntaxKind.QualifiedName:
             case SyntaxKind.PropertyAccessExpression:
@@ -94,9 +111,9 @@ internal sealed partial class Checker
             }
             default:
             {
-                // TODO(C3): tuple, optional, rest, indexed access, mapped, conditional, infer, template literal and import
-                // types. C1 gives the type node of a type alias a placeholder type that carries the alias (so references
-                // to the alias are written by name) and errorType elsewhere.
+                // TODO(C5/C9): import types (module references), JSDoc types. C1 gives the type node of a type alias a
+                // placeholder type that carries the alias (so references to the alias are written by name) and
+                // errorType elsewhere.
                 var cached = GetCachedNodeType(node);
                 if (!cached.IsNone)
                 {
@@ -361,51 +378,38 @@ internal sealed partial class Checker
             var typeArgumentNodes = TypeArgumentsOf(node);
             var numTypeArguments = typeArgumentNodes.IsNone ? 0 : store.Length(typeArgumentNodes);
             var minTypeArgumentCount = GetMinTypeArgumentCount(typeParameters);
-            if (numTypeArguments < minTypeArgumentCount || numTypeArguments > typeParameters.Count)
+            var isJs = Utilities.IsInJSFile(store, node.Node);
+            var isJsImplicitAny = !noImplicitAny && isJs;
+            if (!isJsImplicitAny && (numTypeArguments < minTypeArgumentCount || numTypeArguments > typeParameters.Count))
             {
+                var missingAugmentsTag = isJs && store.Kind(node.Node) == SyntaxKind.ExpressionWithTypeArguments && store.Kind(store.Parent(node.Node)) != SyntaxKind.JSDocAugmentsTag;
                 var diag = minTypeArgumentCount == typeParameters.Count
-                    ? Diagnostics.Generic_type_0_requires_1_type_argument_s
-                    : Diagnostics.Generic_type_0_requires_between_1_and_2_type_arguments;
+                    ? missingAugmentsTag ? Diagnostics.Expected_0_type_arguments_provide_these_with_an_extends_tag : Diagnostics.Generic_type_0_requires_1_type_argument_s
+                    : missingAugmentsTag ? Diagnostics.Expected_0_1_type_arguments_provide_these_with_an_extends_tag : Diagnostics.Generic_type_0_requires_between_1_and_2_type_arguments;
                 var typeStr = TypeToString(type, NodeRef.None, TypeFormatFlags.WriteArrayAsGenericType);
                 Error(node, diag, typeStr, minTypeArgumentCount, typeParameters.Count);
-                return errorType;
+                if (!isJs)
+                {
+                    // TODO: Adopt same permissive behavior in TS as in JS to reduce follow-on editing experience failures (requires editing fillMissingTypeArguments)
+                    return errorType;
+                }
             }
             if (store.Kind(node.Node) == SyntaxKind.TypeReference && IsDeferredTypeReferenceNode(node, numTypeArguments != typeParameters.Count))
             {
-                var aliasSymbol = GetAliasSymbolForTypeNode(node);
-                return CreateDeferredTypeReference(type, node, aliasSymbol, GetTypeArgumentsForAliasSymbol(aliasSymbol));
+                return CreateDeferredTypeReference(type, node, null);
             }
             // In a type reference, the outer type parameters of the referenced class or interface are automatically
             // supplied as type arguments and the type reference only specifies arguments for the local type parameters
             // of the class or interface.
             var typeArguments = new List<Type>(Types.Elements(data.OuterTypeParameters).ToArray());
-            var given = TypeArgumentsFromTypeReferenceNode(node);
-            typeArguments.AddRange(given);
-            for (var i = given.Length; i < typeParameters.Count; i++)
-            {
-                // fillMissingTypeArguments: the defaults (TODO(C3): instantiated defaults)
-                var defaultType = GetDefaultFromTypeParameter(Types.Elements(typeParameters)[i]);
-                typeArguments.Add(defaultType.IsNone ? errorType : defaultType);
-            }
+            typeArguments.AddRange(FillMissingTypeArguments(TypeArgumentsFromTypeReferenceNode(node), Types.Elements(typeParameters).ToArray(), minTypeArgumentCount, isJs));
             return CreateTypeReference(type, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(typeArguments));
         }
         return CheckNoTypeArguments(node, symbol) ? type : errorType;
     }
 
     // checker.ts getMinTypeArgumentCount
-    private int GetMinTypeArgumentCount(TypeList typeParameters)
-    {
-        var minTypeArgumentCount = 0;
-        var elements = Types.Elements(typeParameters).ToArray();
-        for (var i = 0; i < elements.Length; i++)
-        {
-            if (!HasTypeParameterDefault(elements[i]))
-            {
-                minTypeArgumentCount = i + 1;
-            }
-        }
-        return minTypeArgumentCount;
-    }
+    private int GetMinTypeArgumentCount(TypeList typeParameters) => GetMinTypeArgumentCount(Types.Elements(typeParameters).ToArray());
 
     private bool HasTypeParameterDefault(Type typeParameter)
     {
@@ -417,32 +421,6 @@ internal sealed partial class Checker
             }
         }
         return false;
-    }
-
-    // checker.ts getDefaultFromTypeParameter (uninstantiated)
-    private Type GetDefaultFromTypeParameter(Type typeParameter)
-    {
-        var data = Types.TypeParameter(typeParameter);
-        if (!data.Default.IsNone)
-        {
-            return data.Default == resolvingDefaultType ? Type.None : data.Default;
-        }
-        data.Default = resolvingDefaultType;
-        var result = Type.None;
-        foreach (var declaration in DeclarationsOf(Types.Symbol(typeParameter)) ?? [])
-        {
-            if (Kind(declaration) == SyntaxKind.TypeParameter)
-            {
-                var defaultNode = StoreOf(declaration).Default(declaration.Node);
-                if (!defaultNode.IsNone)
-                {
-                    result = GetTypeFromTypeNode(At(declaration, defaultNode));
-                    break;
-                }
-            }
-        }
-        data.Default = result.IsNone ? noConstraintType : result;
-        return result;
     }
 
     // checker.ts checkNoTypeArguments
@@ -458,7 +436,7 @@ internal sealed partial class Checker
         return true;
     }
 
-    // checker.ts getTypeFromTypeAliasReference (TODO(C3): generic aliases)
+    // checker.ts getTypeFromTypeAliasReference
     private Type GetTypeFromTypeAliasReference(NodeRef node, SymbolRef symbol)
     {
         if ((TransientCheckFlags(symbol) & CheckFlags.Unresolved) != 0)
@@ -477,11 +455,46 @@ internal sealed partial class Checker
             return unresolved;
         }
         var type = GetDeclaredTypeOfSymbol(symbol);
-        var typeParameters = GetLocalTypeParametersOfClassOrInterfaceOrTypeAlias(symbol);
+        var typeParameters = aliasInstantiations.TryGetValue(symbol, out var entry) ? entry.TypeParameters : null;
         if (typeParameters is not null)
         {
-            // TODO(C3): getTypeAliasInstantiation
-            return type;
+            var store = StoreOf(node);
+            var typeArgumentNodes = TypeArgumentsOf(node);
+            var numTypeArguments = typeArgumentNodes.IsNone ? 0 : store.Length(typeArgumentNodes);
+            var minTypeArgumentCount = GetMinTypeArgumentCount(typeParameters);
+            if (numTypeArguments < minTypeArgumentCount || numTypeArguments > typeParameters.Length)
+            {
+                Error(node, minTypeArgumentCount == typeParameters.Length ? Diagnostics.Generic_type_0_requires_1_type_argument_s : Diagnostics.Generic_type_0_requires_between_1_and_2_type_arguments,
+                    SymbolToString(symbol), minTypeArgumentCount, typeParameters.Length);
+                return errorType;
+            }
+            // We refrain from associating a local type alias with an instantiation of a top-level type alias
+            // because the local alias may end up being referenced in an inferred return type where it is not
+            // accessible--which in turn may lead to a large structural expansion of the type when generating
+            // a .d.ts file. See #43622 for an example.
+            var aliasSymbol = GetAliasSymbolForTypeNode(node);
+            var newAliasSymbol = !aliasSymbol.IsNone && (IsLocalTypeAlias(symbol) || !IsLocalTypeAlias(aliasSymbol)) ? aliasSymbol : SymbolRef.None;
+            TypeList aliasTypeArguments = default;
+            if (!newAliasSymbol.IsNone)
+            {
+                aliasTypeArguments = GetTypeArgumentsForAliasSymbol(newAliasSymbol);
+            }
+            else if (store.Kind(node.Node) is SyntaxKind.TypeReference or SyntaxKind.ExpressionWithTypeArguments)
+            {
+                var importAlias = ResolveTypeReferenceName(node, SymbolFlags.Alias, ignoreErrors: true);
+                // refers to an alias import/export/reexport - by making sure we use the target as an aliasSymbol,
+                // we ensure the exported symbol is used to refer to the type when it's reserialized later
+                if (!importAlias.IsNone && importAlias != unknownSymbol)
+                {
+                    var resolved = ResolveAlias(importAlias);
+                    if (!resolved.IsNone && (SymbolFlagsOf(resolved) & SymbolFlags.TypeAlias) != 0)
+                    {
+                        newAliasSymbol = resolved;
+                        aliasTypeArguments = Types.CreateList(TypeArgumentsFromTypeReferenceNode(node));
+                    }
+                }
+            }
+            return GetTypeAliasInstantiation(symbol, TypeArgumentsFromTypeReferenceNode(node), newAliasSymbol, aliasTypeArguments);
         }
         return CheckNoTypeArguments(node, symbol) ? type : errorType;
     }
@@ -528,30 +541,6 @@ internal sealed partial class Checker
                 // (import types in type queries: C3)
                 return errorType;
         }
-    }
-
-    private Type GetTypeFromArrayTypeNode(NodeRef node)
-    {
-        var cached = GetCachedNodeType(node);
-        if (!cached.IsNone)
-        {
-            return cached;
-        }
-        var store = StoreOf(node);
-        var parent = store.Parent(node.Node);
-        var isReadonly = store.Kind(parent) == SyntaxKind.TypeOperator && store.Operator(parent) == SyntaxKind.ReadonlyKeyword;
-        var target = isReadonly ? globalReadonlyArrayType : globalArrayType;
-        if (target == emptyGenericType)
-        {
-            return SetCachedNodeType(node, emptyObjectType);
-        }
-        if (IsDeferredTypeReferenceNode(node, hasDefaultTypeArguments: false))
-        {
-            var aliasSymbol = GetAliasSymbolForTypeNode(node);
-            return SetCachedNodeType(node, CreateDeferredTypeReference(target, node, aliasSymbol, GetTypeArgumentsForAliasSymbol(aliasSymbol)));
-        }
-        var elementType = GetTypeFromTypeNode(At(node, store.ElementType(node.Node)));
-        return SetCachedNodeType(node, CreateTypeReference(target, [elementType]));
     }
 
     // checker.ts isDeferredTypeReferenceNode: directly aliased, or possibly in a circular chain of eagerly resolved types
@@ -731,24 +720,6 @@ internal sealed partial class Checker
             record.AliasTypeArguments = GetTypeArgumentsForAliasSymbol(aliasSymbol);
         }
         return SetCachedNodeType(node, type);
-    }
-
-    private Type GetTypeFromTypeOperatorNode(NodeRef node)
-    {
-        var cached = GetCachedNodeType(node);
-        if (!cached.IsNone)
-        {
-            return cached;
-        }
-        var store = StoreOf(node);
-        switch (store.Operator(node.Node))
-        {
-            case SyntaxKind.ReadonlyKeyword:
-                return SetCachedNodeType(node, GetTypeFromTypeNode(At(node, store.Type(node.Node))));
-            default:
-                // TODO(C3): keyof (getIndexType) and unique symbol types
-                return SetCachedNodeType(node, errorType);
-        }
     }
 
     // checker.ts getAliasSymbolForTypeNode

@@ -668,8 +668,12 @@ internal sealed partial class Checker
         return SymbolRef.None;
     }
 
-    /// <summary>checker.ts getSymbolOfDeclaration (late-bound symbols: TODO(C3), dynamic member names).</summary>
-    internal SymbolRef GetSymbolOfDeclaration(NodeRef node) => GetMergedSymbol(NodeSymbol(node));
+    /// <summary>checker.ts getSymbolOfDeclaration (late-bound symbols: module C3).</summary>
+    internal SymbolRef GetSymbolOfDeclaration(NodeRef node)
+    {
+        var symbol = NodeSymbol(node);
+        return GetMergedSymbol(symbol.IsNone ? symbol : GetLateBoundSymbol(symbol));
+    }
 
     /// <summary>checker.ts getSymbolOfNode.</summary>
     internal SymbolRef GetSymbolOfNode(NodeRef node) =>
@@ -740,20 +744,18 @@ internal sealed partial class Checker
             || ((flags & SymbolFlags.Alias) != 0 && (GetSymbolFlags(symbol, !includeTypeOnlyMembers) & SymbolFlags.Value) != 0);
     }
 
-    /// <summary>
-    /// checker.ts getExportsOfSymbol. TODO(C3): late-bound members of classes, functions and literals
-    /// (getResolvedMembersOrExportsOfSymbol); C1 uses the declared exports.
-    /// </summary>
+    /// <summary>checker.ts getExportsOfSymbol (late-bound members: Checker.LateBound.cs, module C3).</summary>
     internal SymTable GetExportsOfSymbol(SymbolRef symbol)
     {
         var flags = SymbolFlagsOf(symbol);
-        return (flags & SymbolFlags.LateBindingContainer) != 0 ? ExportsOf(symbol) ?? emptySymbols
+        return (flags & SymbolFlags.LateBindingContainer) != 0 ? GetResolvedMembersOrExportsOfSymbol(symbol, isStatic: true)
             : (flags & SymbolFlags.Module) != 0 ? GetExportsOfModule(symbol)
             : ExportsOf(symbol) ?? emptySymbols;
     }
 
-    /// <summary>checker.ts getMembersOfSymbol (late-bound members: TODO(C3)).</summary>
-    internal SymTable GetMembersOfSymbol(SymbolRef symbol) => MembersOf(symbol) ?? emptySymbols;
+    /// <summary>checker.ts getMembersOfSymbol (late-bound members: Checker.LateBound.cs, module C3).</summary>
+    internal SymTable GetMembersOfSymbol(SymbolRef symbol) =>
+        (SymbolFlagsOf(symbol) & SymbolFlags.LateBindingContainer) != 0 ? GetResolvedMembersOrExportsOfSymbol(symbol, isStatic: false) : MembersOf(symbol) ?? emptySymbols;
 
     private readonly Dictionary<SymbolRef, SymTable> resolvedModuleExports = [];
 

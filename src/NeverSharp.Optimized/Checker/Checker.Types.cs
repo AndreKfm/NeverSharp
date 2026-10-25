@@ -153,9 +153,7 @@ internal sealed partial class Checker
         stringNumberSymbolType = GetUnionType([stringType, numberType, esSymbolType]);
         numberOrBigIntType = GetUnionType([numberType, bigintType]);
         templateConstraintType = GetUnionType([stringType, numberType, booleanType, bigintType, nullType, undefinedType]);
-        // numericStringType = getTemplateLiteralType(["", ""], [numberType]): TODO(C3), template literal types; the type is
-        // created here in TypeScript, so its id is reserved to keep the following ids in step.
-        Types.Create(TypeFlags.TemplateLiteral);
+        numericStringType = GetTemplateLiteralType(["", ""], [numberType]);
         uniqueLiteralType = Intrinsic(TypeFlags.Never, "never", ObjectFlags.None, "unique literal");
         emptyObjectType = CreateAnonymousType(SymbolRef.None, emptySymbols);
         emptyJsxObjectType = CreateAnonymousType(SymbolRef.None, emptySymbols);
@@ -964,13 +962,20 @@ internal sealed partial class Checker
         return type;
     }
 
-    /// <summary>checker.ts createDeferredTypeReference (mappers: C3).</summary>
-    internal Type CreateDeferredTypeReference(Type target, NodeRef node, SymbolRef aliasSymbol, TypeList aliasTypeArguments)
+    /// <summary>checker.ts createDeferredTypeReference.</summary>
+    internal Type CreateDeferredTypeReference(Type target, NodeRef node, TypeMapper? mapper, SymbolRef aliasSymbol = default, TypeList aliasTypeArguments = default)
     {
+        if (aliasSymbol.IsNone)
+        {
+            aliasSymbol = GetAliasSymbolForTypeNode(node);
+            var localAliasTypeArguments = GetTypeArgumentsForAliasSymbol(aliasSymbol);
+            aliasTypeArguments = mapper is not null ? InstantiateTypeList(localAliasTypeArguments, mapper) : localAliasTypeArguments;
+        }
         var type = CreateObjectType(ObjectFlags.Reference, Types.Symbol(target));
         var data = Types.Object(type);
         data.Target = target;
         data.Node = node;
+        data.Mapper = mapper;
         ref var record = ref Types.Record(type);
         record.AliasSymbol = aliasSymbol;
         record.AliasTypeArguments = aliasTypeArguments;
@@ -997,12 +1002,7 @@ internal sealed partial class Checker
                 {
                     case SyntaxKind.TypeReference:
                         typeArguments.AddRange(Types.Elements(targetData.OuterTypeParameters).ToArray());
-                        typeArguments.AddRange(TypeArgumentsFromTypeReferenceNode(node));
-                        for (var i = typeArguments.Count - targetData.OuterTypeParameters.Count; i < targetData.LocalTypeParameters.Count; i++)
-                        {
-                            var defaultType = GetDefaultFromTypeParameter(Types.Elements(targetData.LocalTypeParameters)[i]);
-                            typeArguments.Add(defaultType.IsNone ? errorType : defaultType);
-                        }
+                        typeArguments.AddRange(GetEffectiveTypeArguments(node, Types.Elements(targetData.LocalTypeParameters).ToArray()));
                         break;
                     case SyntaxKind.ArrayType:
                         typeArguments.Add(GetTypeFromTypeNode(At(node, store.ElementType(node.Node))));
@@ -1019,7 +1019,12 @@ internal sealed partial class Checker
             {
                 if (!data.HasResolvedTypeArguments)
                 {
-                    data.ResolvedTypeArguments = Types.CreateList(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(typeArguments));
+                    var resolved = typeArguments.ToArray();
+                    if (data.Mapper is not null)
+                    {
+                        resolved = InstantiateTypes(resolved, data.Mapper, out _);
+                    }
+                    data.ResolvedTypeArguments = Types.CreateList(resolved);
                     data.HasResolvedTypeArguments = true;
                 }
             }
