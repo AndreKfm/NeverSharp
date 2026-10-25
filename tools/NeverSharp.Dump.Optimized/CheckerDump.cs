@@ -28,7 +28,14 @@ internal static class CheckerDump
     /// <summary>The Gate C options (phase3-plan.md): <c>{ noResolve: true }</c>, as the oracle's compilerOptions.</summary>
     private const string OptionsJson = "{\"noResolve\":true}";
 
+    /// <summary>JavaScript/JSX units add <c>allowJs: true</c> (preregistration.md §17; the oracle's optionsFor).</summary>
+    private const string OptionsJsonJs = "{\"noResolve\":true,\"allowJs\":true}";
+
+    private static bool IsJavaScript(Unit unit) => unit.Kind is "JS" or "JSX";
+
     private static CompilerOptions GateOptions() => new() { NoResolve = true };
+
+    private static CompilerOptions GateOptions(Unit unit) => IsJavaScript(unit) ? new() { NoResolve = true, AllowJs = true } : GateOptions();
 
     public static int Run(Options options)
     {
@@ -143,7 +150,7 @@ internal static class CheckerDump
     internal static string DumpUnit(string text, Unit unit, JSDocParsingMode mode, DefaultLibrary library)
     {
         var host = new MemoryCompilerHost(unit.FileName, text, ScriptKindOf(unit), library, mode);
-        var options = GateOptions();
+        var options = GateOptions(unit);
         var program = TsProgram.Create([unit.FileName], options, host);
         var sourceFile = program.GetSourceFile(unit.FileName);
         var inProgram = sourceFile is not null;
@@ -156,7 +163,7 @@ internal static class CheckerDump
 
         var sb = new StringBuilder();
         sb.Append(CultureInfo.InvariantCulture, $"checker-dump 1\nfile {unit.FileName} {unit.Kind} inProgram={Bool(inProgram)} hadErrors={Bool(hadErrors)}\n");
-        sb.Append("options ").Append(OptionsJson).Append('\n');
+        sb.Append("options ").Append(IsJavaScript(unit) ? OptionsJsonJs : OptionsJson).Append('\n');
         sb.Append("computed");
         foreach (var (name, value) in options.ComputedOptionValues())
         {

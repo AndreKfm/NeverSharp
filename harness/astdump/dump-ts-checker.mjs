@@ -76,6 +76,8 @@ const scriptKinds = { TS: ts.ScriptKind.TS, TSX: ts.ScriptKind.TSX, JS: ts.Scrip
 const jsDocModes = { all: ts.JSDocParsingMode.ParseAll, none: ts.JSDocParsingMode.ParseNone, types: ts.JSDocParsingMode.ParseForTypeErrors };
 export const libFolder = "/.ts/";
 export const compilerOptions = { noResolve: true };
+// JavaScript/JSX units with allowJs, so that their typing is checked (author's decision, 2026-10-25; preregistration.md §17).
+export const optionsFor = unit => unit.kind === "JS" || unit.kind === "JSX" ? { noResolve: true, allowJs: true } : compilerOptions;
 const libDir = dirname(createRequire(import.meta.url).resolve("typescript/lib/lib.d.ts"));
 
 const kindNames = new Map();
@@ -137,8 +139,9 @@ function writeDiagnostics(tag, list, unitName) {
 
 function header(unit, inProgram, hadErrors, program) {
     let out = `checker-dump 1\nfile ${unit.fileName} ${unit.kind} inProgram=${inProgram} hadErrors=${hadErrors}\n`;
-    out += `options ${JSON.stringify(compilerOptions)}\n`;
-    out += `computed ${Object.entries(ts.computedOptions).map(([name, o]) => `${name}=${JSON.stringify(o.computeValue(compilerOptions))}`).join(" ")}\n`;
+    const options = optionsFor(unit);
+    out += `options ${JSON.stringify(options)}\n`;
+    out += `computed ${Object.entries(ts.computedOptions).map(([name, o]) => `${name}=${JSON.stringify(o.computeValue(options))}`).join(" ")}\n`;
     const libs = program.getSourceFiles().filter(f => isLibName(f.fileName)).map(f => baseName(f.fileName));
     out += `libs ${libs.length}${libs.map(l => " " + l).join("")}\n`;
     return out;
@@ -278,7 +281,7 @@ function walk(program, checker, sourceFile, hadErrorBaseline, isSymbolWalk) {
 
 export function dumpUnit(text, unit, jsDocParsingMode) {
     const host = createHost(unit.fileName, text, scriptKinds[unit.kind], jsDocParsingMode);
-    const program = ts.createProgram([unit.fileName], compilerOptions, host);
+    const program = ts.createProgram([unit.fileName], optionsFor(unit), host);
     const sourceFile = program.getSourceFile(unit.fileName);
     const inProgram = sourceFile !== undefined;
     const optionDiagnostics = program.getOptionsDiagnostics();
