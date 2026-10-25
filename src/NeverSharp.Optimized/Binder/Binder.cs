@@ -2027,7 +2027,17 @@ internal sealed partial class Binder
 
     private void BindSourceFileAsExternalModule()
     {
-        BindAnonymousDeclaration(file, SymbolFlags.ValueModule, texts.Add("\"" + Utilities.RemoveFileExtension(store.FileName(file)) + "\""));
+        // `"\"" + removeFileExtension(file.fileName) + "\""`, written into the file's text arena directly (step BO4: no
+        // strings per file).
+        var fileName = store.FileName(file);
+        var length = Utilities.RemoveFileExtensionLength(fileName) + 2;
+        var at = texts.Reserve(length);
+        var name = texts.ArenaSpan(at, length);
+        name[0] = '"';
+        fileName.AsSpan(0, length - 2).CopyTo(name[1..]);
+        name[length - 1] = '"';
+        texts.SetCharCount(at + length);
+        BindAnonymousDeclaration(file, SymbolFlags.ValueModule, TextRef.Arena(at, length));
     }
 
     private void BindExportAssignment(Node node)

@@ -1213,17 +1213,17 @@ internal static partial class Utilities
             && !UtilitiesPublic.GetJSDocTypeTag(store, parent).IsNone;
     }
 
-    /// <summary>utilities.ts: removeFileExtension.</summary>
-    internal static string RemoveFileExtension(string path)
+    /// <summary>utilities.ts: removeFileExtension, as the length of the result (a prefix of the path; step BO4: no string).</summary>
+    internal static int RemoveFileExtensionLength(string path)
     {
         foreach (var ext in RemovableExtensions)
         {
             if (TsPath.FileExtensionIs(path, ext))
             {
-                return path[..(path.Length - ext.Length)];
+                return path.Length - ext.Length;
             }
         }
-        return path;
+        return path.Length;
     }
 
     // utilities.ts: extensionsToRemove.

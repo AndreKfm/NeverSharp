@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Original code (not ported): Track O's storage of binder output (module B0, docs/phase2-binder-layout.md).
 
+using System.Diagnostics;
 using NeverSharp.Generated;
 
 namespace NeverSharp.Optimized;
@@ -57,6 +58,11 @@ internal sealed unsafe class BinderStore
         public Symbol ExportSymbol;
         public SymbolTable Members;
         public SymbolTable Exports;
+    }
+
+    // Step BO4: a symbol's rare members, in a map keyed by symbol (symbols that have neither take no room).
+    private struct SymbolExtras
+    {
         public SymbolBits Bits;
         public int Id; // checker.ts/utilities.ts getSymbolId: 0 until assigned
     }
@@ -85,22 +91,19 @@ internal sealed unsafe class BinderStore
         public int NextInBucket;
     }
 
+    // Step BO4: two words after the flags, read by kind (labels have neither a node nor a single antecedent, the other
+    // kinds no antecedent list); the two data words of switch clauses and reduce labels in a map keyed by flow node.
     private struct FlowRecord
     {
         public FlowFlags Flags;
-        public Node Node;               // the node it refers to; for a switch clause the switch statement
-        public FlowNode Antecedent;     // all but labels
-        public int FirstAntecedent;     // labels: link chain of antecedents; 0: undefined
-        public int LastAntecedent;
-        public int A;                   // switch clause: clauseStart; reduce label: target
-        public int B;                   // switch clause: clauseEnd; reduce label: first link of its antecedents
+        public int X;                   // labels: first link of the antecedents (0: undefined); others: the node it refers to (switch clause: the switch statement)
+        public int Y;                   // labels: last link of the antecedents; others: the antecedent
     }
 
-    /// <summary>The per-node fields of declarations.</summary>
-    private struct DeclarationFields
+    private struct FlowData
     {
-        public Symbol Symbol;
-        public Symbol LocalSymbol;
+        public int A;                   // switch clause: clauseStart; reduce label: target
+        public int B;                   // switch clause: clauseEnd; reduce label: first link of its antecedents
     }
 
     /// <summary>The per-node fields of containers and of the nodes that end or fall through a flow.</summary>
@@ -175,13 +178,36 @@ internal sealed unsafe class BinderStore
         public bool PossiblyExhaustive;
     }
 
-    private NodeMap<DeclarationFields> declarationFields;
+    // The per-node fields of declarations: node.symbol, and in a map of its own node.localSymbol, which only exported
+    // declarations and a few others have (step BO4: the frequent map's slots are half the size).
+    private NodeMap<Symbol> symbolFields;
+    private NodeMap<Symbol> localSymbolFields;
     private NodeMap<ContainerFields> containerFields;
     private NodeMap<FlowExtraFields> flowExtraFields;
 
+    // Step BO4: the rare members of symbols, keyed by symbol, and the data words of switch clauses and reduce labels,
+    // keyed by flow node (NodeMaps whose keys are symbol or flow node handles).
+    private NodeMap<SymbolExtras> symbolExtras;
+    private NodeMap<FlowData> flowData;
+
     // Rare symbol members (UMD global exports, JavaScript assignment declarations): only files that have them pay.
-    private Dictionary<int, SymbolTable>? globalExports;
-    private Dictionary<int, (int First, int Last)>? assignmentDeclarationMembers;
+    // Step BO4: what few files have (rare symbol members, diagnostics, the symbol ids assigned, JavaScript module
+    // fields), in an object of its own created on first use, so that the store object stays small (a store is alive as
+    // long as its result, and the collector copies what survives).
+    private sealed class RareFields
+    {
+        public Dictionary<int, SymbolTable>? GlobalExports;
+        public Dictionary<int, (int First, int Last)>? AssignmentDeclarationMembers;
+        public List<DiagnosticWithLocation>? BindDiagnostics;
+        public List<DiagnosticWithLocation>? BindSuggestionDiagnostics;
+        public List<int>? AssignedSymbolIds;
+        public Node CommonJsModuleIndicator;
+        public SymbolTable JsGlobalAugmentations;
+    }
+
+    private RareFields? rare;
+
+    private RareFields Rare => rare ??= new RareFields();
 
     /// <summary>
     /// The binder output of the file of <paramref name="nodes"/>, written into the binder slab of the current thread
@@ -201,12 +227,12 @@ internal sealed unsafe class BinderStore
         var flowCapacity = (n / 4) + 16;
         var linkCapacity = (n / 3) + 16;
         var bucketCount = PowerOfTwo(((n / 6) + 8) * 2);
-        var flowNodeCount = (nodes.RecordWords >> 2) + 1;
-        var declarationCount = NodeMap<DeclarationFields>.CapacityFor((n / 6) + 8);
+        var flowNodeCount = (nodes.RecordWords / 5) + 1;
+        var declarationCount = NodeMap<Symbol>.CapacityFor((n / 6) + 8);
         var containerCount = NodeMap<ContainerFields>.CapacityFor((n / 24) + 4);
         var estimate = ((long)symbolCapacity * sizeof(SymbolRecord)) + ((long)tableCapacity * sizeof(TableRecord)) +
             ((long)entryCapacity * sizeof(EntryRecord)) + ((long)flowCapacity * sizeof(FlowRecord)) + ((long)linkCapacity * sizeof(Link)) +
-            (((long)bucketCount + flowNodeCount) * sizeof(int)) + ((long)declarationCount * (sizeof(int) + sizeof(DeclarationFields))) +
+            (((long)bucketCount + flowNodeCount) * sizeof(int)) + ((long)declarationCount * (sizeof(int) + sizeof(Symbol))) +
             ((long)containerCount * (sizeof(int) + sizeof(ContainerFields))) + (16 * 16);
         var thread = ThreadSlabs.Local;
         if (thread.ActiveBinder is null)
@@ -242,7 +268,7 @@ internal sealed unsafe class BinderStore
         bucketsLength = bucketCount;
         flowNodeArray = NewZeroed<int>(flowNodeCount);
         flowNodeLength = flowNodeCount;
-        declarationFields.Init(this, declarationCount);
+        symbolFields.Init(this, declarationCount);
         containerFields.Init(this, containerCount);
     }
 
@@ -292,9 +318,12 @@ internal sealed unsafe class BinderStore
         bucketsLength = 0;
         flowNodeArray = null;
         flowNodeLength = 0;
-        declarationFields = default;
+        symbolFields = default;
+        localSymbolFields = default;
         containerFields = default;
         flowExtraFields = default;
+        symbolExtras = default;
+        flowData = default;
     }
 
     // ---- memory ----
@@ -349,20 +378,24 @@ internal sealed unsafe class BinderStore
     /// <summary>
     /// Step BO3: the end of a binding in the scratch block. The arrays in use move to one committed range of the
     /// thread's binder slab, each cut to the records in use (later additions grow them, as for any committed store); the
-    /// hash index and the node maps take the smallest size that keeps their load at most 1/2 (copied if they have it,
-    /// rebuilt otherwise).
+    /// node maps take the smallest size that keeps their load at most 1/2 (copied if they have it, rebuilt otherwise).
+    /// Step BO4: the hash index is not kept (a lookup after the binding scans the table, <see cref="Scan"/>; adding an
+    /// entry rebuilds it).
     /// </summary>
     private void CommitScratch(ThreadSlabs thread)
     {
-        var bucketCount = PowerOfTwo(entriesUsed * 2);
-        var declarationCount = declarationFields.CompactCapacity;
+        var symbolCount = symbolFields.CompactCapacity;
+        var localSymbolCount = localSymbolFields.CompactCapacity;
         var containerCount = containerFields.CompactCapacity;
         var flowExtraCount = flowExtraFields.CompactCapacity;
-        var total = SlabRange.Align((long)symbolsUsed * sizeof(SymbolRecord)) + SlabRange.Align((long)tablesUsed * sizeof(TableRecord)) +
+        var symbolExtraCount = symbolExtras.CompactCapacity;
+        var flowDataCount = flowData.CompactCapacity;
+        var total =SlabRange.Align((long)symbolsUsed * sizeof(SymbolRecord)) + SlabRange.Align((long)tablesUsed * sizeof(TableRecord)) +
             SlabRange.Align((long)entriesUsed * sizeof(EntryRecord)) + SlabRange.Align((long)flowsUsed * sizeof(FlowRecord)) +
-            SlabRange.Align((long)linksUsed * sizeof(Link)) + SlabRange.Align((long)bucketCount * sizeof(int)) +
-            SlabRange.Align((long)flowNodeLength * sizeof(int)) + NodeMap<DeclarationFields>.Bytes(declarationCount) +
-            NodeMap<ContainerFields>.Bytes(containerCount) + NodeMap<FlowExtraFields>.Bytes(flowExtraCount);
+            SlabRange.Align((long)linksUsed * sizeof(Link)) + SlabRange.Align((long)flowNodeLength * sizeof(int)) +
+            NodeMap<Symbol>.Bytes(symbolCount) + NodeMap<Symbol>.Bytes(localSymbolCount) +
+            NodeMap<ContainerFields>.Bytes(containerCount) + NodeMap<FlowExtraFields>.Bytes(flowExtraCount) +
+            NodeMap<SymbolExtras>.Bytes(symbolExtraCount) + NodeMap<FlowData>.Bytes(flowDataCount);
         scratch = false;
         range.Start = null;
         range.Capacity = 0;
@@ -379,28 +412,14 @@ internal sealed unsafe class BinderStore
         links = Compact(links, linksUsed);
         linksCapacity = linksUsed;
         flowNodeArray = Compact(flowNodeArray, flowNodeLength);
-        // The hash index: copied if it already has the size, otherwise the chains rebuilt (keys are unique, so the order
-        // within a chain does not matter).
-        if (bucketCount == bucketsLength)
-        {
-            buckets = Compact(buckets, bucketCount);
-        }
-        else
-        {
-            bucketsLength = bucketCount;
-            buckets = NewZeroed<int>(bucketCount);
-            var mask = bucketCount - 1;
-            for (var e = 1; e < entriesUsed; e++)
-            {
-                ref var entry = ref entries[e];
-                var bucket = entry.Hash & mask;
-                entry.NextInBucket = buckets[bucket];
-                buckets[bucket] = e;
-            }
-        }
-        declarationFields.Rehash(this, declarationCount);
+        buckets = null;
+        bucketsLength = 0;
+        symbolFields.Rehash(this, symbolCount);
+        localSymbolFields.Rehash(this, localSymbolCount);
         containerFields.Rehash(this, containerCount);
         flowExtraFields.Rehash(this, flowExtraCount);
+        symbolExtras.Rehash(this, symbolExtraCount);
+        flowData.Rehash(this, flowDataCount);
         var overflow = overflowBlocks;
         if (overflow is not null)
         {
@@ -452,20 +471,32 @@ internal sealed unsafe class BinderStore
     /// <summary>The node store of the bound file's parse (names are texts of its <see cref="TextTable"/>).</summary>
     internal NodeStore Nodes { get; }
 
-    /// <summary>types.ts: SourceFile.bindDiagnostics.</summary>
-    internal List<DiagnosticWithLocation> BindDiagnostics { get; } = [];
+    /// <summary>types.ts: SourceFile.bindDiagnostics (step BO4: the list is created when first read; most files have none).</summary>
+    internal List<DiagnosticWithLocation> BindDiagnostics => Rare.BindDiagnostics ??= [];
 
     /// <summary>types.ts: SourceFile.bindSuggestionDiagnostics (undefined until the first one).</summary>
-    internal List<DiagnosticWithLocation>? BindSuggestionDiagnostics { get; set; }
+    internal List<DiagnosticWithLocation>? BindSuggestionDiagnostics
+    {
+        get => rare?.BindSuggestionDiagnostics;
+        set => Rare.BindSuggestionDiagnostics = value;
+    }
 
     /// <summary>types.ts: SourceFile.symbolCount.</summary>
     internal int SymbolCount { get; set; }
 
     /// <summary>types.ts: SourceFile.commonJsModuleIndicator (set by the binder; None when undefined).</summary>
-    internal Node CommonJsModuleIndicator { get; set; }
+    internal Node CommonJsModuleIndicator
+    {
+        get => rare is null ? Node.None : rare.CommonJsModuleIndicator;
+        set => Rare.CommonJsModuleIndicator = value;
+    }
 
     /// <summary>types.ts: SourceFile.jsGlobalAugmentations (None when undefined).</summary>
-    internal SymbolTable JsGlobalAugmentations { get; set; }
+    internal SymbolTable JsGlobalAugmentations
+    {
+        get => rare is null ? SymbolTable.None : rare.JsGlobalAugmentations;
+        set => Rare.JsGlobalAugmentations = value;
+    }
 
     // ---- symbols ----
 
@@ -531,18 +562,18 @@ internal sealed unsafe class BinderStore
     internal void SetExports(Symbol symbol, SymbolTable value) => symbols[symbol.Index].Exports = value;
 
     /// <summary>types.ts: Symbol.globalExports.</summary>
-    internal SymbolTable GlobalExports(Symbol symbol) => globalExports is not null && globalExports.TryGetValue(symbol.Index, out var table) ? table : SymbolTable.None;
+    internal SymbolTable GlobalExports(Symbol symbol) => rare?.GlobalExports is { } globalExports && globalExports.TryGetValue(symbol.Index, out var table) ? table : SymbolTable.None;
 
-    internal void SetGlobalExports(Symbol symbol, SymbolTable value) => (globalExports ??= [])[symbol.Index] = value;
+    internal void SetGlobalExports(Symbol symbol, SymbolTable value) => (Rare.GlobalExports ??= [])[symbol.Index] = value;
 
     /// <summary>types.ts: Symbol.assignmentDeclarationMembers, the declarations in insertion order.</summary>
     internal NodeChain AssignmentDeclarationMembers(Symbol symbol) =>
-        new(this, assignmentDeclarationMembers is not null && assignmentDeclarationMembers.TryGetValue(symbol.Index, out var chain) ? chain.First : 0);
+        new(this, rare?.AssignmentDeclarationMembers is { } members && members.TryGetValue(symbol.Index, out var chain) ? chain.First : 0);
 
     /// <summary>Adds a declaration to Symbol.assignmentDeclarationMembers (the caller skips one already there, as the Map keyed by node id does).</summary>
     internal void AddAssignmentDeclarationMember(Symbol symbol, Node declaration)
     {
-        assignmentDeclarationMembers ??= [];
+        var assignmentDeclarationMembers = Rare.AssignmentDeclarationMembers ??= [];
         assignmentDeclarationMembers.TryGetValue(symbol.Index, out var chain);
         Append(ref chain.First, ref chain.Last, declaration.Index);
         assignmentDeclarationMembers[symbol.Index] = chain;
@@ -552,14 +583,13 @@ internal sealed unsafe class BinderStore
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal bool? ConstEnumOnlyModule(Symbol symbol)
     {
-        var bits = symbols[symbol.Index].Bits;
+        var bits = symbolExtras.Get(new Node(symbol.Index)).Bits;
         return (bits & SymbolBits.ConstEnumOnlyModuleSet) == 0 ? null : (bits & SymbolBits.ConstEnumOnlyModule) != 0;
     }
 
-    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal void SetConstEnumOnlyModule(Symbol symbol, bool value)
     {
-        ref var bits = ref symbols[symbol.Index].Bits;
+        ref var bits = ref symbolExtras.GetOrAdd(this, new Node(symbol.Index)).Bits;
         bits = (bits & ~SymbolBits.ConstEnumOnlyModule) | SymbolBits.ConstEnumOnlyModuleSet | (value ? SymbolBits.ConstEnumOnlyModule : SymbolBits.None);
     }
 
@@ -567,14 +597,13 @@ internal sealed unsafe class BinderStore
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal bool? IsReplaceableByMethod(Symbol symbol)
     {
-        var bits = symbols[symbol.Index].Bits;
+        var bits = symbolExtras.Get(new Node(symbol.Index)).Bits;
         return (bits & SymbolBits.ReplaceableByMethodSet) == 0 ? null : (bits & SymbolBits.ReplaceableByMethod) != 0;
     }
 
-    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal void SetIsReplaceableByMethod(Symbol symbol, bool value)
     {
-        ref var bits = ref symbols[symbol.Index].Bits;
+        ref var bits = ref symbolExtras.GetOrAdd(this, new Node(symbol.Index)).Bits;
         bits = (bits & ~SymbolBits.ReplaceableByMethod) | SymbolBits.ReplaceableByMethodSet | (value ? SymbolBits.ReplaceableByMethod : SymbolBits.None);
     }
 
@@ -666,10 +695,29 @@ internal sealed unsafe class BinderStore
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private int Find(SymbolTable table, TextRef name, int hash)
     {
+        if (bucketsLength == 0)
+        {
+            return Scan(table, name);
+        }
         for (var e = buckets[hash & (bucketsLength - 1)]; e != 0; e = entries[e].NextInBucket)
         {
             ref var entry = ref entries[e];
             if (entry.Hash == hash && entry.Table == table.Index && Nodes.Texts.Equals(entry.Name, name))
+            {
+                return e;
+            }
+        }
+        return 0;
+    }
+
+    // Step BO4: a lookup in a store committed without its hash index (lookups after the binding are rare; adding an
+    // entry rebuilds the index): the table's entries in order.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private int Scan(SymbolTable table, TextRef name)
+    {
+        for (var e = tables[table.Index].First; e != 0; e = entries[e].Next)
+        {
+            if (Nodes.Texts.Equals(entries[e].Name, name))
             {
                 return e;
             }
@@ -689,12 +737,21 @@ internal sealed unsafe class BinderStore
         return (int)(h ^ (h >> 15));
     }
 
+    // A full hash index (or, step BO4, none: a store committed from the scratch block does not keep it) moves to a new
+    // one at load at most 1/2. (The entry being added, the last one, is linked by the caller.)
     private void GrowBuckets()
     {
-        bucketsLength *= 2;
-        buckets = NewZeroed<int>(bucketsLength);
-        var mask = bucketsLength - 1;
-        for (var e = 1; e < entriesUsed - 1; e++)
+        Index(Math.Max(bucketsLength * 2, PowerOfTwo(entriesUsed * 2)), entriesUsed - 1);
+    }
+
+    // A new hash index of the given size over the entries before <paramref name="end"/> (keys are unique, so the order
+    // within a chain does not matter).
+    private void Index(int length, int end)
+    {
+        bucketsLength = length;
+        buckets = NewZeroed<int>(length);
+        var mask = length - 1;
+        for (var e = 1; e < end; e++)
         {
             ref var entry = ref entries[e];
             var bucket = entry.Hash & mask;
@@ -709,11 +766,11 @@ internal sealed unsafe class BinderStore
     /// </summary>
     internal int SymbolId(Symbol symbol)
     {
-        ref var s = ref symbols[symbol.Index];
+        ref var s = ref symbolExtras.GetOrAdd(this, new Node(symbol.Index));
         if (s.Id == 0)
         {
             s.Id = Interlocked.Increment(ref nextSymbolId);
-            (AssignedSymbolIds ??= []).Add(s.Id);
+            (Rare.AssignedSymbolIds ??= []).Add(s.Id);
         }
         return s.Id;
     }
@@ -721,7 +778,7 @@ internal sealed unsafe class BinderStore
     private static int nextSymbolId;
 
     /// <summary>The symbol ids this file's binding assigned, in order (null if none).</summary>
-    internal List<int>? AssignedSymbolIds { get; private set; }
+    internal List<int>? AssignedSymbolIds => rare?.AssignedSymbolIds;
 
     // ---- flow nodes ----
 
@@ -732,7 +789,8 @@ internal sealed unsafe class BinderStore
         {
             flows = GrowArray(flows, ref flowsCapacity, flowsUsed);
         }
-        flows[flowsUsed] = new FlowRecord { Flags = flags, Node = node, Antecedent = antecedent };
+        // (A label is created with neither: its words are an empty antecedent list.)
+        flows[flowsUsed] = new FlowRecord { Flags = flags, X = node.Index, Y = antecedent.Index };
         return new FlowNode(flowsUsed++);
     }
 
@@ -740,8 +798,7 @@ internal sealed unsafe class BinderStore
     internal FlowNode CreateSwitchClause(FlowNode antecedent, Node switchStatement, int clauseStart, int clauseEnd)
     {
         var flow = CreateFlowNode(FlowFlags.SwitchClause, switchStatement, antecedent);
-        flows[flow.Index].A = clauseStart;
-        flows[flow.Index].B = clauseEnd;
+        flowData.GetOrAdd(this, new Node(flow.Index)) = new FlowData { A = clauseStart, B = clauseEnd };
         return flow;
     }
 
@@ -749,8 +806,7 @@ internal sealed unsafe class BinderStore
     internal FlowNode CreateReduceLabel(FlowNode target, FlowNode antecedentsOf, FlowNode antecedent)
     {
         var flow = CreateFlowNode(FlowFlags.ReduceLabel, Node.None, antecedent);
-        flows[flow.Index].A = target.Index;
-        flows[flow.Index].B = flows[antecedentsOf.Index].FirstAntecedent;
+        flowData.GetOrAdd(this, new Node(flow.Index)) = new FlowData { A = target.Index, B = flows[antecedentsOf.Index].X };
         return flow;
     }
 
@@ -762,27 +818,37 @@ internal sealed unsafe class BinderStore
 
     /// <summary>FlowNode.node where it is a node (for a switch clause: the switch statement).</summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal Node NodeOf(FlowNode flow) => flows[flow.Index].Node;
+    internal Node NodeOf(FlowNode flow)
+    {
+        ref var f = ref flows[flow.Index];
+        return (f.Flags & FlowFlags.Label) != 0 ? Node.None : new Node(f.X);
+    }
 
+    /// <summary>Sets FlowNode.node of a flow node that is not a label (a start node's).</summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal void SetNodeOf(FlowNode flow, Node value) => flows[flow.Index].Node = value;
+    internal void SetNodeOf(FlowNode flow, Node value)
+    {
+        Debug.Assert((flows[flow.Index].Flags & FlowFlags.Label) == 0, "a label has no node");
+        flows[flow.Index].X = value.Index;
+    }
 
-    /// <summary>FlowNode.antecedent of a node that is not a label.</summary>
+    /// <summary>FlowNode.antecedent of a node that is not a label (None for a label).</summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal FlowNode Antecedent(FlowNode flow) => flows[flow.Index].Antecedent;
-
-    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal void SetAntecedent(FlowNode flow, FlowNode value) => flows[flow.Index].Antecedent = value;
+    internal FlowNode Antecedent(FlowNode flow)
+    {
+        ref var f = ref flows[flow.Index];
+        return (f.Flags & FlowFlags.Label) != 0 ? FlowNode.None : new FlowNode(f.Y);
+    }
 
     /// <summary>FlowLabel.antecedent (<see cref="FlowChain.IsUndefined"/> when undefined).</summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal FlowChain Antecedents(FlowNode label) => new(this, flows[label.Index].FirstAntecedent);
+    internal FlowChain Antecedents(FlowNode label) => new(this, flows[label.Index].X);
 
     /// <summary>Appends to a label's antecedents (binder.ts addAntecedent checks reachability and uniqueness).</summary>
     internal void AddAntecedent(FlowNode label, FlowNode antecedent)
     {
         ref var f = ref flows[label.Index];
-        Append(ref f.FirstAntecedent, ref f.LastAntecedent, antecedent.Index);
+        Append(ref f.X, ref f.Y, antecedent.Index);
     }
 
     /// <summary>
@@ -794,10 +860,10 @@ internal sealed unsafe class BinderStore
     {
         foreach (var label in (ReadOnlySpan<FlowNode>)[a, b, c])
         {
-            for (var l = flows[label.Index].FirstAntecedent; l != 0; l = links[l].Next)
+            for (var l = flows[label.Index].X; l != 0; l = links[l].Next)
             {
                 var value = links[l].Value;
-                Append(ref flows[target.Index].FirstAntecedent, ref flows[target.Index].LastAntecedent, value);
+                Append(ref flows[target.Index].X, ref flows[target.Index].Y, value);
             }
         }
     }
@@ -806,7 +872,7 @@ internal sealed unsafe class BinderStore
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal bool HasAntecedent(FlowNode label, FlowNode antecedent)
     {
-        for (var l = flows[label.Index].FirstAntecedent; l != 0; l = links[l].Next)
+        for (var l = flows[label.Index].X; l != 0; l = links[l].Next)
         {
             if (links[l].Value == antecedent.Index)
             {
@@ -820,7 +886,7 @@ internal sealed unsafe class BinderStore
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal FlowNode SingleAntecedent(FlowNode label, out int count)
     {
-        var first = flows[label.Index].FirstAntecedent;
+        var first = flows[label.Index].X;
         if (first == 0)
         {
             count = 0;
@@ -832,48 +898,53 @@ internal sealed unsafe class BinderStore
 
     /// <summary>Whether the label's antecedent array is defined.</summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal bool HasAntecedents(FlowNode label) => flows[label.Index].FirstAntecedent != 0;
+    internal bool HasAntecedents(FlowNode label) => flows[label.Index].X != 0;
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal int ClauseStart(FlowNode switchClause) => flows[switchClause.Index].A;
+    internal int ClauseStart(FlowNode switchClause) => flowData.Get(new Node(switchClause.Index)).A;
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal int ClauseEnd(FlowNode switchClause) => flows[switchClause.Index].B;
+    internal int ClauseEnd(FlowNode switchClause) => flowData.Get(new Node(switchClause.Index)).B;
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal FlowNode ReduceTarget(FlowNode reduceLabel) => new(flows[reduceLabel.Index].A);
+    internal FlowNode ReduceTarget(FlowNode reduceLabel) => new(flowData.Get(new Node(reduceLabel.Index)).A);
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal FlowChain ReduceAntecedents(FlowNode reduceLabel) => new(this, flows[reduceLabel.Index].B);
+    internal FlowChain ReduceAntecedents(FlowNode reduceLabel) => new(this, flowData.Get(new Node(reduceLabel.Index)).B);
 
     // ---- per-node fields ----
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal Symbol SymbolOf(Node node) => declarationFields.Get(node).Symbol;
+    internal Symbol SymbolOf(Node node) => symbolFields.Get(node);
 
-    internal void SetSymbolOf(Node node, Symbol value) => declarationFields.GetOrAdd(this, node).Symbol = value;
+    internal void SetSymbolOf(Node node, Symbol value) => symbolFields.GetOrAdd(this, node) = value;
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal Symbol LocalSymbolOf(Node node) => declarationFields.Get(node).LocalSymbol;
+    internal Symbol LocalSymbolOf(Node node) => localSymbolFields.Get(node);
 
-    internal void SetLocalSymbolOf(Node node, Symbol value) => declarationFields.GetOrAdd(this, node).LocalSymbol = value;
+    internal void SetLocalSymbolOf(Node node, Symbol value) => localSymbolFields.GetOrAdd(this, node) = value;
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal FlowNode FlowNodeOf(Node node)
     {
-        var i = node.Index >> 2;
+        var i = FlowNodeSlot(node);
         return (uint)i < (uint)flowNodeLength ? new FlowNode(flowNodeArray[i]) : FlowNode.None;
     }
 
     internal void SetFlowNodeOf(Node node, FlowNode value)
     {
-        var i = node.Index >> 2;
+        var i = FlowNodeSlot(node);
         if ((uint)i >= (uint)flowNodeLength)
         {
             GrowFlowNodes(i);
         }
         flowNodeArray[i] = value.Index;
     }
+
+    // Step BO4: the slot of a node's flowNode, handle / 5 (records are at least 5 ints long, so the slots of two records
+    // differ; one slot per 5 record words instead of 4).
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private static int FlowNodeSlot(Node node) => (int)((uint)node.Index / 5);
 
     // (A node created after the dense array was sized.)
     private void GrowFlowNodes(int index)
@@ -1121,28 +1192,34 @@ internal sealed unsafe class BinderStore
     /// An open-addressing map from node handle to the binder's fields of the node (linear probing, multiplicative hash,
     /// load at most 1/2), keys and values in regions of the store's binder range (step BO1); no table until
     /// <see cref="Init"/> or the first entry. Node.None (0) marks a free slot; a new entry's value starts as default.
+    /// Step BO4: keys and values in one region (the values after the keys), the hash shift taken from the capacity, so
+    /// that the map is 16 bytes of the store object.
     /// </summary>
     private struct NodeMap<T>
         where T : unmanaged
     {
         private int* keys;
-        private T* values;
         private int capacity; // a power of two; 0: no table
         private int count;
-        private int shift;
 
         /// <summary>The capacity that holds <paramref name="entries"/> entries at load 1/2.</summary>
         [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
         internal static int CapacityFor(int entries) => PowerOfTwo(entries * 2);
 
+        // The values, after the keys.
+        private readonly T* Values
+        {
+            [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+            get => (T*)(keys + capacity);
+        }
+
         /// <summary>The table, empty, with <paramref name="size"/> slots (a power of two).</summary>
         internal void Init(BinderStore store, int size)
         {
-            keys = store.NewZeroed<int>(size);
-            values = (T*)store.Region((long)size * sizeof(T));
+            keys = (int*)store.Region((long)size * (sizeof(int) + sizeof(T)));
+            new Span<int>(keys, size).Clear();
             capacity = size;
             count = 0;
-            shift = 32 - System.Numerics.BitOperations.Log2((uint)size);
         }
 
         [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
@@ -1153,12 +1230,12 @@ internal sealed unsafe class BinderStore
                 return default;
             }
             var mask = capacity - 1;
-            for (var i = Slot(node.Index, shift); ; i = (i + 1) & mask)
+            for (var i = Slot(node.Index, capacity); ; i = (i + 1) & mask)
             {
                 var key = keys[i];
                 if (key == node.Index)
                 {
-                    return values[i];
+                    return Values[i];
                 }
                 if (key == 0)
                 {
@@ -1174,25 +1251,27 @@ internal sealed unsafe class BinderStore
                 Grow(store);
             }
             var mask = capacity - 1;
-            for (var i = Slot(node.Index, shift); ; i = (i + 1) & mask)
+            for (var i = Slot(node.Index, capacity); ; i = (i + 1) & mask)
             {
                 var key = keys[i];
                 if (key == node.Index)
                 {
-                    return ref values[i];
+                    return ref Values[i];
                 }
                 if (key == 0)
                 {
                     keys[i] = node.Index;
                     count++;
+                    var values = Values;
                     values[i] = default;
                     return ref values[i];
                 }
             }
         }
 
+        // Multiplicative hash: the top log2(capacity) bits of the product.
         [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-        private static int Slot(int key, int shift) => (int)(((uint)key * 0x9E3779B9u) >> shift);
+        private static int Slot(int key, int capacity) => (int)(((uint)key * 0x9E3779B9u) >> (System.Numerics.BitOperations.LeadingZeroCount((uint)capacity) + 1));
 
         /// <summary>Step BO3: the smallest capacity that holds the entries at load 1/2 (0: no table, if there are none).</summary>
         internal readonly int CompactCapacity
@@ -1203,7 +1282,7 @@ internal sealed unsafe class BinderStore
 
         /// <summary>Step BO3: the bytes of the regions of a table with <paramref name="size"/> slots.</summary>
         [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-        internal static long Bytes(int size) => size == 0 ? 0 : SlabRange.Align((long)size * sizeof(int)) + SlabRange.Align((long)size * sizeof(T));
+        internal static long Bytes(int size) => size == 0 ? 0 : SlabRange.Align((long)size * (sizeof(int) + sizeof(T)));
 
         /// <summary>Step BO3: the entries moved to a new table with <paramref name="size"/> slots (0: no table; only when there are no entries).</summary>
         internal void Rehash(BinderStore store, int size)
@@ -1216,8 +1295,7 @@ internal sealed unsafe class BinderStore
             if (size == capacity)
             {
                 // The same size: the table copied as it is.
-                keys = store.Compact(keys, size);
-                values = store.Compact(values, size);
+                keys = (int*)store.Compact((byte*)keys, size * (sizeof(int) + sizeof(T)));
                 return;
             }
             Move(store, size);
@@ -1228,9 +1306,10 @@ internal sealed unsafe class BinderStore
         private void Move(BinderStore store, int size)
         {
             var oldKeys = keys;
-            var oldValues = values;
+            var oldValues = Values;
             var oldCapacity = capacity;
             Init(store, size);
+            var values = Values;
             var mask = capacity - 1;
             for (var j = 0; j < oldCapacity; j++)
             {
@@ -1238,7 +1317,7 @@ internal sealed unsafe class BinderStore
                 {
                     continue;
                 }
-                var i = Slot(oldKeys[j], shift);
+                var i = Slot(oldKeys[j], capacity);
                 while (keys[i] != 0)
                 {
                     i = (i + 1) & mask;
