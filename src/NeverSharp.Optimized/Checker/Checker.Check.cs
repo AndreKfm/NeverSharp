@@ -138,6 +138,7 @@ internal sealed partial class Checker
             case SyntaxKind.ClassExpression:
                 // checkClassExpression: checkClassLikeDeclaration now, the members deferred
                 VisitChildren(node, except: store.Members(n));
+                CheckMembersForOverrideModifier(node);
                 CheckPropertyInitialization(node);
                 CheckNodeDeferred(node);
                 return;
@@ -168,6 +169,7 @@ internal sealed partial class Checker
                 break;
             }
             case SyntaxKind.ClassDeclaration:
+                CheckMembersForOverrideModifier(node);
                 CheckPropertyInitialization(node);
                 RegisterForUnusedIdentifiersCheck(node);
                 break;
@@ -187,6 +189,114 @@ internal sealed partial class Checker
                     RegisterForUnusedIdentifiersCheck(node);
                 }
                 break;
+        }
+    }
+
+    // checker.ts checkMembersForOverrideModifier / checkExistingMemberForOverrideModifier / checkMemberForOverrideModifier
+    // (TODO(C3): getTypeWithThisArgument; members with dynamic names are left to C8)
+    private void CheckMembersForOverrideModifier(NodeRef node)
+    {
+        var store = StoreOf(node);
+        var classSymbol = GetSymbolOfDeclaration(node);
+        if (classSymbol.IsNone)
+        {
+            return;
+        }
+        var type = GetDeclaredTypeOfSymbol(classSymbol);
+        if ((Types.Flags(type) & TypeFlags.Object) == 0)
+        {
+            return;
+        }
+        var baseTypeNode = GetBaseTypeNodeOfClass(node);
+        var baseTypes = baseTypeNode.IsNone ? [] : GetBaseTypes(type);
+        var baseWithThis = baseTypes.Count > 0 ? baseTypes[0] : Type.None;
+        var nodeInAmbientContext = (store.Flags(node.Node) & NodeFlags.Ambient) != 0;
+        foreach (var member in store.Nodes(store.Members(node.Node)))
+        {
+            if (Utilities.HasSyntacticModifierUncached(store, member, ModifierFlags.Ambient))
+            {
+                continue;
+            }
+            if (store.Kind(member) == SyntaxKind.Constructor)
+            {
+                foreach (var parameter in store.Nodes(store.Parameters(member)))
+                {
+                    if (Utilities.IsParameterPropertyDeclaration(store, parameter, member))
+                    {
+                        CheckExistingMemberForOverrideModifier(node, type, classSymbol, baseWithThis, At(node, parameter), memberIsParameterProperty: true, nodeInAmbientContext);
+                    }
+                }
+                continue;
+            }
+            if (store.Kind(member) is SyntaxKind.PropertyDeclaration or SyntaxKind.MethodDeclaration or SyntaxKind.GetAccessor or SyntaxKind.SetAccessor)
+            {
+                CheckExistingMemberForOverrideModifier(node, type, classSymbol, baseWithThis, At(node, member), memberIsParameterProperty: false, nodeInAmbientContext);
+            }
+        }
+    }
+
+    private void CheckExistingMemberForOverrideModifier(NodeRef node, Type type, SymbolRef classSymbol, Type baseWithThis, NodeRef member, bool memberIsParameterProperty, bool nodeInAmbientContext)
+    {
+        var store = StoreOf(member);
+        var nameNode = store.Name(member.Node);
+        if (nameNode.IsNone || store.Kind(nameNode) == SyntaxKind.ComputedPropertyName)
+        {
+            return;
+        }
+        var declaredProp = GetSymbolOfDeclaration(member);
+        if (declaredProp.IsNone)
+        {
+            return;
+        }
+        var memberHasOverrideModifier = Utilities.HasSyntacticModifierUncached(store, member.Node, ModifierFlags.Override);
+        var memberHasAbstractModifier = Utilities.HasSyntacticModifierUncached(store, member.Node, ModifierFlags.Abstract);
+        var memberIsStatic = !memberIsParameterProperty && Utilities.IsStatic(store, member.Node);
+        if (!baseWithThis.IsNone && (memberHasOverrideModifier || compilerOptions.NoImplicitOverride == true))
+        {
+            var thisType = memberIsStatic ? GetTypeOfSymbol(classSymbol) : type;
+            var baseType = memberIsStatic ? GetBaseConstructorTypeOfClass(type) : baseWithThis;
+            var name = NameOf(declaredProp);
+            var prop = GetPropertyOfType(thisType, name);
+            var baseProp = (Types.Flags(baseType) & (TypeFlags.Object | TypeFlags.Intersection)) != 0 ? GetPropertyOfType(baseType, name) : SymbolRef.None;
+            if ((Types.Flags(baseType) & TypeFlags.Any) != 0)
+            {
+                return; // (an any base: every member exists)
+            }
+            var baseClassName = TypeToString(baseWithThis);
+            if (!prop.IsNone && baseProp.IsNone && memberHasOverrideModifier)
+            {
+                var suggestion = GetSpellingSuggestionForName(SymbolName(declaredProp), GetPropertiesOfType(baseType), SymbolFlags.ClassMember);
+                if (!suggestion.IsNone)
+                {
+                    Error(member, Diagnostics.This_member_cannot_have_an_override_modifier_because_it_is_not_declared_in_the_base_class_0_Did_you_mean_1, baseClassName, SymbolToString(suggestion));
+                }
+                else
+                {
+                    Error(member, Diagnostics.This_member_cannot_have_an_override_modifier_because_it_is_not_declared_in_the_base_class_0, baseClassName);
+                }
+            }
+            else if (!prop.IsNone && !baseProp.IsNone && DeclarationsOf(baseProp) is { } baseDeclarations && compilerOptions.NoImplicitOverride == true && !nodeInAmbientContext)
+            {
+                var baseHasAbstract = baseDeclarations.Exists(d => Utilities.HasSyntacticModifierUncached(StoreOf(d), d.Node, ModifierFlags.Abstract));
+                if (memberHasOverrideModifier)
+                {
+                    return;
+                }
+                if (!baseHasAbstract)
+                {
+                    Error(member, memberIsParameterProperty
+                        ? Diagnostics.This_parameter_property_must_have_an_override_modifier_because_it_overrides_a_member_in_base_class_0
+                        : Diagnostics.This_member_must_have_an_override_modifier_because_it_overrides_a_member_in_the_base_class_0, baseClassName);
+                }
+                else if (memberHasAbstractModifier)
+                {
+                    Error(member, Diagnostics.This_member_must_have_an_override_modifier_because_it_overrides_an_abstract_method_that_is_declared_in_the_base_class_0, baseClassName);
+                }
+            }
+        }
+        else if (memberHasOverrideModifier)
+        {
+            Error(member, Diagnostics.This_member_cannot_have_an_override_modifier_because_its_containing_class_0_does_not_extend_another_class, TypeToString(type));
         }
     }
 
@@ -394,6 +504,9 @@ internal sealed partial class Checker
                 return false;
             }
             case SyntaxKind.Parameter:
+                CheckGrammarParameterDecorators(node);
+                CheckVariableLikeDeclarationType(node);
+                return true;
             case SyntaxKind.VariableDeclaration:
             case SyntaxKind.PropertyDeclaration:
             case SyntaxKind.PropertySignature:
@@ -479,7 +592,18 @@ internal sealed partial class Checker
         var n = node.Node;
         if (Utilities.IsBindingPattern(store, store.Name(n)))
         {
-            return; // TODO(C5): destructuring
+            // the implicit any errors of the pattern's elements (getTypeOfSymbol of a binding pattern parameter); TODO(C5):
+            // destructuring checks
+            if (store.Kind(n) == SyntaxKind.Parameter && store.Type(n).IsNone && store.Initializer(n).IsNone &&
+                !(IsContextSensitiveFunctionOrObjectLiteralMethod(store, store.Parent(n)) && HasContextualType(At(node, store.Parent(n)))))
+            {
+                var patternSymbol = GetSymbolOfDeclaration(node);
+                if (!patternSymbol.IsNone)
+                {
+                    GetTypeOfSymbol(patternSymbol);
+                }
+            }
+            return;
         }
         var symbol = GetSymbolOfDeclaration(node);
         if (symbol.IsNone)
@@ -705,6 +829,40 @@ internal sealed partial class Checker
         {
             diagnostics.Add(CreateDiagnosticForNode(node, message, args));
         }
+    }
+
+    // checker.ts grammarErrorOnFirstToken: reported only when the file has no parse errors
+    private void GrammarErrorOnFirstToken(NodeRef node, DiagnosticMessage message, params object?[] args)
+    {
+        var file = FileAt(node.File);
+        if (file.ParseDiagnostics.Count == 0)
+        {
+            var span = Utilities.GetSpanOfTokenAtPosition(file.Store, file.Root, file.Store.Pos(node.Node));
+            diagnostics.Add(ProgramDiagnostic.FromFile(file, Utilities.CreateFileDiagnostic(file.Store, file.Root, span.Start, span.Length, message, args)));
+        }
+    }
+
+    // checkGrammarModifiers, the decorator part for parameters (TODO(C8): the remaining modifier grammar): without
+    // experimentalDecorators, nodeCanBeDecorated is false for parameters
+    private void CheckGrammarParameterDecorators(NodeRef parameter)
+    {
+        var store = StoreOf(parameter);
+        var modifiers = store.Modifiers(parameter.Node);
+        if (modifiers.IsNone || compilerOptions.ExperimentalDecorators == true)
+        {
+            return;
+        }
+        var first = store.Nodes(modifiers);
+        if (first.Length == 0 || store.Kind(first[0]) != SyntaxKind.Decorator)
+        {
+            return;
+        }
+        var name = store.Name(parameter.Node);
+        if (store.Kind(name) == SyntaxKind.Identifier && store.Texts.Equals(store.EscapedText(name), "this"))
+        {
+            return; // (Neither_decorators_nor_modifiers_may_be_applied_to_this_parameters: C8)
+        }
+        GrammarErrorOnFirstToken(parameter, Diagnostics.Decorators_are_not_valid_here);
     }
 
     // checker.ts checkExportDeclaration

@@ -1899,6 +1899,17 @@ internal sealed partial class Checker
             return GetWidenedType(type);
         }
         var store = StoreOf(declaration);
+        var declarationName = Utilities.GetNameOfDeclaration(store, declaration.Node);
+        if (store.Kind(declaration.Node) is SyntaxKind.Parameter or SyntaxKind.VariableDeclaration && !declarationName.IsNone && Utilities.IsBindingPattern(store, declarationName))
+        {
+            // getTypeFromBindingPattern(name, includePatternInType: false, reportErrors) (the pattern's type: C5)
+            if (reportErrors)
+            {
+                ReportImplicitAnyInBindingPattern(At(declaration, declarationName));
+            }
+            MarkUncertainDeclaration(declaration);
+            return anyType;
+        }
         // Rest parameters default to type any[], other parameters default to type any
         type = store.Kind(declaration.Node) == SyntaxKind.Parameter && !store.DotDotDotToken(declaration.Node).IsNone ? anyArrayType : anyType;
         // Report implicit any errors unless this is a private property within an ambient declaration
@@ -1907,6 +1918,50 @@ internal sealed partial class Checker
             ReportImplicitAny(declaration, type);
         }
         return type;
+    }
+
+    // getTypeFromObjectBindingPattern / getTypeFromArrayBindingPattern / getTypeFromBindingElement with reportErrors: the
+    // implicit any errors of elements without initializers
+    private void ReportImplicitAnyInBindingPattern(NodeRef pattern)
+    {
+        var store = StoreOf(pattern);
+        var elements = store.Nodes(store.Elements(pattern.Node));
+        var isObjectPattern = store.Kind(pattern.Node) == SyntaxKind.ObjectBindingPattern;
+        if (!isObjectPattern)
+        {
+            var last = elements.Length > 0 ? elements[^1] : Node.None;
+            var hasRest = !last.IsNone && store.Kind(last) == SyntaxKind.BindingElement && !store.DotDotDotToken(last).IsNone;
+            if (elements.Length == 0 || (elements.Length == 1 && hasRest))
+            {
+                return;
+            }
+        }
+        foreach (var element in elements)
+        {
+            if (store.Kind(element) != SyntaxKind.BindingElement)
+            {
+                continue; // omitted expressions
+            }
+            if (isObjectPattern && !store.DotDotDotToken(element).IsNone)
+            {
+                continue;
+            }
+            if (!store.Initializer(element).IsNone)
+            {
+                continue;
+            }
+            var name = store.Name(element);
+            if (Utilities.IsBindingPattern(store, name))
+            {
+                ReportImplicitAnyInBindingPattern(At(pattern, name));
+                continue;
+            }
+            var elementRef = At(pattern, element);
+            if (!DeclarationBelongsToPrivateAmbientMember(elementRef))
+            {
+                ReportImplicitAny(elementRef, anyType);
+            }
+        }
     }
 
     private bool DeclarationBelongsToPrivateAmbientMember(NodeRef declaration)
@@ -1920,6 +1975,151 @@ internal sealed partial class Checker
     private static bool IsPrivateWithinAmbient(NodeStore store, Node node) =>
         (Utilities.HasSyntacticModifierUncached(store, node, ModifierFlags.Private) || (Utilities.GetNameOfDeclaration(store, node) is var name && !name.IsNone && store.Kind(name) == SyntaxKind.PrivateIdentifier))
         && (store.Flags(node) & NodeFlags.Ambient) != 0;
+
+    // The type of the declaration's symbol is a C1 approximation: no diagnostics are derived from its uses
+    private void MarkUncertainDeclaration(NodeRef declaration)
+    {
+        var symbol = GetSymbolOfDeclaration(declaration);
+        if (!symbol.IsNone)
+        {
+            uncertainSymbols.Add(symbol);
+        }
+    }
+
+    // TODO(C5): checkRightHandSideOfForOf / getIteratedTypeOrElementType. C1: any, arrays and strings; None otherwise.
+    private Type GetForOfElementTypeApproximation(NodeRef forOf)
+    {
+        var store = StoreOf(forOf);
+        if (!store.AwaitModifier(forOf.Node).IsNone)
+        {
+            return Type.None;
+        }
+        var expression = At(forOf, store.Expression(forOf.Node));
+        var type = CheckExpressionCached(expression);
+        if (IsUncertainExpression(expression) || IsUnsupportedType(type))
+        {
+            return Type.None;
+        }
+        if ((Types.Flags(type) & TypeFlags.Any) != 0)
+        {
+            return IsErrorType(type) ? errorType : anyType;
+        }
+        if ((Types.Flags(type) & TypeFlags.StringLike) != 0)
+        {
+            return stringType;
+        }
+        return GetArrayElementTypeOrNone(type);
+    }
+
+    private Type GetArrayElementTypeOrNone(Type type)
+    {
+        if ((Types.ObjectFlagsOf(type) & ObjectFlags.Reference) != 0 && Types.Object(type).Target is var target && (target == globalArrayType || target == globalReadonlyArrayType))
+        {
+            var typeArguments = GetTypeArguments(type);
+            return typeArguments.Length > 0 ? typeArguments[0] : Type.None;
+        }
+        return Type.None;
+    }
+
+    // TODO(C5): getTypeForBindingElement. C1: elements of any-typed parents, properties of non-generic object types
+    // without defaults and array elements; None otherwise.
+    private Type GetBindingElementTypeApproximation(NodeRef element)
+    {
+        var store = StoreOf(element);
+        var n = element.Node;
+        if (store.Kind(n) != SyntaxKind.BindingElement || !store.DotDotDotToken(n).IsNone)
+        {
+            return Type.None;
+        }
+        var pattern = store.Parent(n);
+        var container = At(element, store.Parent(pattern));
+        Type parentType;
+        switch (store.Kind(container.Node))
+        {
+            case SyntaxKind.VariableDeclaration:
+            {
+                var typeNode = store.Type(container.Node);
+                var initializer = store.Initializer(container.Node);
+                if (!typeNode.IsNone)
+                {
+                    parentType = GetTypeFromTypeNode(At(container, typeNode));
+                }
+                else if (store.Kind(store.Parent(store.Parent(container.Node))) == SyntaxKind.ForOfStatement)
+                {
+                    parentType = GetForOfElementTypeApproximation(At(container, store.Parent(store.Parent(container.Node))));
+                }
+                else if (!initializer.IsNone)
+                {
+                    var initializerRef = At(container, initializer);
+                    parentType = CheckExpressionCached(initializerRef);
+                    if (IsUncertainExpression(initializerRef))
+                    {
+                        return Type.None;
+                    }
+                }
+                else
+                {
+                    return Type.None;
+                }
+                break;
+            }
+            case SyntaxKind.Parameter:
+            {
+                var typeNode = store.Type(container.Node);
+                if (typeNode.IsNone)
+                {
+                    return Type.None;
+                }
+                parentType = GetTypeFromTypeNode(At(container, typeNode));
+                break;
+            }
+            case SyntaxKind.BindingElement:
+            {
+                var symbol = GetSymbolOfDeclaration(container);
+                if (symbol.IsNone || store.Kind(store.Name(container.Node)) == SyntaxKind.Identifier)
+                {
+                    return Type.None;
+                }
+                parentType = GetBindingElementTypeApproximation(container);
+                break;
+            }
+            default:
+                return Type.None;
+        }
+        if (parentType.IsNone || IsUnsupportedType(parentType))
+        {
+            return Type.None;
+        }
+        if ((Types.Flags(parentType) & TypeFlags.Any) != 0)
+        {
+            return IsErrorType(parentType) ? errorType : anyType;
+        }
+        if (!store.Initializer(n).IsNone)
+        {
+            return Type.None; // (defaults: C5)
+        }
+        if (store.Kind(pattern) == SyntaxKind.ArrayBindingPattern)
+        {
+            return GetArrayElementTypeOrNone(parentType);
+        }
+        var propertyNameNode = store.PropertyName(n);
+        var nameNode = propertyNameNode.IsNone ? store.Name(n) : propertyNameNode;
+        if (store.Kind(nameNode) is not (SyntaxKind.Identifier or SyntaxKind.StringLiteral))
+        {
+            return Type.None;
+        }
+        if ((Types.Flags(parentType) & TypeFlags.Object) == 0 || (Types.ObjectFlagsOf(parentType) & ObjectFlags.Reference) != 0 && GetTypeArguments(parentType).Length > 0)
+        {
+            return Type.None;
+        }
+        var name = store.Kind(nameNode) == SyntaxKind.Identifier ? store.Texts.GetString(store.EscapedText(nameNode))! : store.Texts.GetString(store.Text(nameNode))!;
+        var prop = GetPropertyOfType(GetApparentType(parentType), name);
+        if (prop.IsNone || (SymbolFlagsOf(prop) & SymbolFlags.Optional) != 0)
+        {
+            return Type.None;
+        }
+        return GetTypeOfSymbol(prop);
+    }
 
     // checker.ts getTypeForVariableLikeDeclaration (destructuring: C5; contextual parameter types: C5/C6; for-in/of: C5)
     private Type GetTypeForVariableLikeDeclaration(NodeRef declaration, bool includeOptionality)
@@ -1935,13 +2135,23 @@ internal sealed partial class Checker
         }
         if (kind == SyntaxKind.VariableDeclaration && store.Kind(store.Parent(parent)) == SyntaxKind.ForOfStatement)
         {
-            // TODO(C5): checkRightHandSideOfForOf
-            return anyType;
+            var elementType = GetForOfElementTypeApproximation(At(declaration, store.Parent(parent)));
+            if (elementType.IsNone)
+            {
+                MarkUncertainDeclaration(declaration);
+                return anyType;
+            }
+            return elementType;
         }
         if (Utilities.IsBindingPattern(store, parent))
         {
-            // TODO(C5): getTypeForBindingElement
-            return anyType;
+            var bindingType = GetBindingElementTypeApproximation(declaration);
+            if (bindingType.IsNone)
+            {
+                MarkUncertainDeclaration(declaration);
+                return anyType;
+            }
+            return bindingType;
         }
         var isProperty = (kind == SyntaxKind.PropertyDeclaration && !Utilities.HasSyntacticModifierUncached(store, node, ModifierFlags.Accessor)) || kind == SyntaxKind.PropertySignature;
         var isOptional = includeOptionality && kind is SyntaxKind.Parameter or SyntaxKind.PropertyDeclaration or SyntaxKind.PropertySignature && !store.QuestionToken(node).IsNone;
@@ -2010,11 +2220,7 @@ internal sealed partial class Checker
             var type = WidenTypeInferredFromInitializer(declaration, CheckExpressionCached(At(declaration, initializer)));
             if (IsUncertainExpression(At(declaration, initializer)))
             {
-                var symbol = GetSymbolOfDeclaration(declaration);
-                if (!symbol.IsNone)
-                {
-                    uncertainSymbols.Add(symbol);
-                }
+                MarkUncertainDeclaration(declaration);
             }
             return AddOptionality(type, isProperty, isOptional);
         }
@@ -2067,13 +2273,12 @@ internal sealed partial class Checker
         {
             var args = GetTypeArguments(type).ToArray();
             var widened = new Type[args.Length];
-            var changed = false;
             for (var i = 0; i < args.Length; i++)
             {
                 widened[i] = GetWidenedType(args[i]);
-                changed |= widened[i] != args[i];
             }
-            return changed ? CreateTypeReference(Types.Object(type).Target, widened) : type;
+            // (the regular reference, not the array literal's fresh form)
+            return CreateTypeReference(Types.Object(type).Target, widened);
         }
         if ((flags & TypeFlags.Union) != 0)
         {

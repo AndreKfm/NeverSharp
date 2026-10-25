@@ -116,6 +116,24 @@ internal sealed partial class Checker
             {
                 // TODO(C5): checkObjectLiteral (property types, spreads, contextual types, freshness)
                 var symbol = NodeSymbol(node);
+                foreach (var property in store.Nodes(store.Properties(n)))
+                {
+                    if (store.Kind(property) == SyntaxKind.SpreadAssignment)
+                    {
+                        // (getSpreadType: C5) a spread of any makes the literal any; other spreads are not merged yet
+                        var spreadExpression = At(node, store.Expression(property));
+                        var spreadType = CheckExpressionCached(spreadExpression);
+                        if ((Types.Flags(spreadType) & TypeFlags.Any) != 0 && !IsUncertainExpression(spreadExpression))
+                        {
+                            return anyType;
+                        }
+                        uncertainExpressions.Add(node);
+                    }
+                    else if (store.Kind(property) is SyntaxKind.PropertyAssignment or SyntaxKind.MethodDeclaration && store.Kind(store.Name(property)) == SyntaxKind.ComputedPropertyName)
+                    {
+                        uncertainExpressions.Add(node);
+                    }
+                }
                 var type = CreateObjectType(ObjectFlags.Anonymous | ObjectFlags.ObjectLiteral | ObjectFlags.ContainsObjectOrArrayLiteral, symbol);
                 return type;
             }
@@ -177,8 +195,32 @@ internal sealed partial class Checker
                 CheckExpression(At(node, store.Expression(n)));
                 return stringType; // TODO(C5): the union of the typeof result literals
             case SyntaxKind.AwaitExpression:
-                CheckExpression(At(node, store.Expression(n)));
-                return anyType; // TODO(C5): awaited types
+            {
+                // TODO(C5): checkAwaitExpression / getAwaitedType. C1: any, primitives and Promise<T> references.
+                var operand = At(node, store.Expression(n));
+                var operandType = CheckExpression(operand);
+                if (IsUncertainExpression(operand) || IsUnsupportedType(operandType))
+                {
+                    uncertainExpressions.Add(node);
+                    return anyType;
+                }
+                if ((Types.Flags(operandType) & TypeFlags.Any) != 0)
+                {
+                    return IsErrorType(operandType) ? errorType : anyType;
+                }
+                if ((Types.Flags(operandType) & (TypeFlags.Object | TypeFlags.UnionOrIntersection | TypeFlags.Instantiable | TypeFlags.Unknown)) == 0)
+                {
+                    return operandType;
+                }
+                CreatePromiseType(unknownType); // resolves the global Promise type
+                var promised = GetPromisedTypeOfPromise(operandType);
+                if (!promised.IsNone && GetPromisedTypeOfPromise(promised).IsNone && (Types.Flags(promised) & (TypeFlags.Instantiable | TypeFlags.UnionOrIntersection)) == 0)
+                {
+                    return promised;
+                }
+                uncertainExpressions.Add(node);
+                return anyType;
+            }
             case SyntaxKind.SpreadElement:
                 return CheckExpression(At(node, store.Expression(n)));
             case SyntaxKind.ElementAccessExpression:
@@ -478,7 +520,13 @@ internal sealed partial class Checker
             return indexOfParameter < args.Length ? GetWidenedLiteralType(CheckExpressionCached(At(func, args[indexOfParameter])))
                 : !store.Initializer(parameter.Node).IsNone ? Type.None : undefinedWideningType;
         }
-        return HasContextualType(func) ? anyType : Type.None;
+        if (HasContextualType(func))
+        {
+            // the contextual parameter type is not computed before C5/C6: an approximation
+            MarkUncertainDeclaration(parameter);
+            return anyType;
+        }
+        return Type.None;
     }
 
     // Whether a function expression or object literal method has a contextual signature (C1 approximation of
@@ -486,7 +534,28 @@ internal sealed partial class Checker
     private bool HasContextualType(NodeRef func)
     {
         var contextualType = GetApproximateContextualType(func, 0);
-        return contextualType == unknownContextualType || (!contextualType.IsNone && HasSignatures(contextualType));
+        return contextualType == unknownContextualType || (!contextualType.IsNone && MayHaveContextualSignature(contextualType));
+    }
+
+    // getContextualSignature, approximated: a contextual type with call signatures, or one C1 cannot see into
+    // (unsupported types, type parameters and unions or intersections with such members)
+    private bool MayHaveContextualSignature(Type type)
+    {
+        if (HasSignatures(type) || IsUnsupportedType(type) || (Types.Flags(type) & TypeFlags.Instantiable) != 0)
+        {
+            return true;
+        }
+        if ((Types.Flags(type) & TypeFlags.UnionOrIntersection) != 0)
+        {
+            foreach (var member in Types.Elements(Types.Union(type).Types))
+            {
+                if (MayHaveContextualSignature(member))
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     // A marker for a contextual type that exists but C1 does not compute (contextual signatures' return types, generic
@@ -564,6 +633,10 @@ internal sealed partial class Checker
                 {
                     return arrayContextualType;
                 }
+                if (IsUnsupportedType(arrayContextualType))
+                {
+                    return unknownContextualType; // (tuples: C3)
+                }
                 if ((Types.ObjectFlagsOf(arrayContextualType) & ObjectFlags.Reference) != 0 &&
                     Types.Object(arrayContextualType).Target is var target && (target == globalArrayType || target == globalReadonlyArrayType))
                 {
@@ -587,6 +660,10 @@ internal sealed partial class Checker
                     return Type.None;
                 }
                 var calleeType = CheckExpressionCached(At(node, store.Expression(parent)));
+                if (IsUncertainExpression(At(node, store.Expression(parent))))
+                {
+                    return unknownContextualType;
+                }
                 if ((Types.Flags(calleeType) & TypeFlags.Any) != 0)
                 {
                     return Type.None;
@@ -594,7 +671,8 @@ internal sealed partial class Checker
                 var signatures = GetSignaturesOfType(calleeType, store.Kind(parent) == SyntaxKind.NewExpression ? SignatureKind.Construct : SignatureKind.Call);
                 if (signatures.Count == 0)
                 {
-                    return Type.None;
+                    // (signatures of unions, intersections and type variables: C3/C5)
+                    return (Types.Flags(calleeType) & (TypeFlags.UnionOrIntersection | TypeFlags.Instantiable)) != 0 || IsUnsupportedType(calleeType) ? unknownContextualType : Type.None;
                 }
                 if (signatures.Count > 1 || Signatures.Record(signatures[0]).TypeParameters.Count > 0)
                 {
@@ -637,12 +715,27 @@ internal sealed partial class Checker
         var typeNode = store.Type(func.Node);
         if (!typeNode.IsNone)
         {
-            return unknownContextualType; // (the awaited or iterated return type: C5)
+            if (!store.AsteriskToken(func.Node).IsNone || Utilities.HasSyntacticModifierUncached(store, func.Node, ModifierFlags.Async))
+            {
+                return unknownContextualType; // (the awaited or iterated return type: C5)
+            }
+            var annotated = GetTypeFromTypeNode(At(func, typeNode));
+            return (Types.Flags(annotated) & TypeFlags.Any) != 0 ? Type.None : annotated;
         }
         if (IsContextSensitiveFunctionOrObjectLiteralMethod(store, func.Node))
         {
             var contextualType = GetApproximateContextualType(func, depth + 1);
-            return contextualType == unknownContextualType || (!contextualType.IsNone && HasSignatures(contextualType)) ? unknownContextualType : Type.None;
+            if (contextualType == unknownContextualType || (!contextualType.IsNone && MayHaveContextualSignature(contextualType)))
+            {
+                return unknownContextualType;
+            }
+        }
+        // getContextualReturnType: the contextual type of an immediately invoked function's call
+        var iife = Utilities.GetImmediatelyInvokedFunctionExpression(store, func.Node);
+        if (!iife.IsNone)
+        {
+            var iifeContextualType = GetApproximateContextualType(At(func, iife), depth + 1);
+            return iifeContextualType.IsNone ? Type.None : unknownContextualType;
         }
         return Type.None;
     }
@@ -747,15 +840,21 @@ internal sealed partial class Checker
             // isAnyLike: the error type itself, not the unresolved alias the left side was printed with
             return errorType;
         }
-        if ((Types.Flags(leftType) & TypeFlags.Any) != 0)
-        {
-            return leftType;
-        }
         var leftNode = StoreOf(node).Kind(node.Node) == SyntaxKind.PropertyAccessExpression ? StoreOf(node).Expression(node.Node) : StoreOf(node).Left(node.Node);
         var leftUncertain = IsUncertainExpression(At(node, leftNode));
         if (leftUncertain)
         {
             uncertainExpressions.Add(node);
+        }
+        if ((Types.Flags(leftType) & TypeFlags.Any) != 0)
+        {
+            return leftType;
+        }
+        if ((Types.Flags(leftType) & TypeFlags.Unknown) != 0)
+        {
+            // checkNonNullExpression reports 18046 unless the reference is narrowed (TODO(C7)); no diagnostics in C1
+            uncertainExpressions.Add(node);
+            return errorType;
         }
         var apparentType = GetApparentType(GetNonNullableType(leftType));
         var prop = GetPropertyOfType(apparentType, name);
@@ -791,6 +890,11 @@ internal sealed partial class Checker
         var isSelfTypeAccess = store.Kind(left) == SyntaxKind.ThisKeyword ||
             (store.Kind(left) == SyntaxKind.Identifier && SymbolNodeLinks.Has(At(node, left)) && SymbolNodeLinks.Get(At(node, left)).ResolvedSymbol == GetParentOfSymbol(prop));
         MarkPropertyAsReferenced(prop, node, isSelfTypeAccess);
+        if ((TransientCheckFlags(prop) & CheckFlags.SyntheticProperty) != 0)
+        {
+            // the type of a synthetic union or intersection property is not computed before C4/C5
+            uncertainExpressions.Add(node);
+        }
         return GetTypeOfSymbol(prop);
     }
 
@@ -1093,6 +1197,10 @@ internal sealed partial class Checker
         }
         if ((Types.Flags(funcType) & TypeFlags.Any) != 0)
         {
+            if (IsUncertainExpression(callee))
+            {
+                uncertainExpressions.Add(node);
+            }
             return anyType;
         }
         var signatures = GetSignaturesOfType(funcType, isNew ? SignatureKind.Construct : SignatureKind.Call);
