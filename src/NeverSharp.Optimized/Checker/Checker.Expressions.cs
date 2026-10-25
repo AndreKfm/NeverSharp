@@ -197,8 +197,9 @@ internal sealed partial class Checker
                 return GetUnionType([t1, t2], UnionReduction.Subtype);
             }
             case SyntaxKind.TypeOfExpression:
+                // checkTypeOfExpression: the union of the typeof result literals (created at initialization, module C3)
                 CheckExpression(At(node, store.Expression(n)));
-                return stringType; // TODO(C5): the union of the typeof result literals
+                return typeofType;
             case SyntaxKind.AwaitExpression:
             {
                 // TODO(C5): checkAwaitExpression / getAwaitedType. C1: any, primitives and Promise<T> references.
