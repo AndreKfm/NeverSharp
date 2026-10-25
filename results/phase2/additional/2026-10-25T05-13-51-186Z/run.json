@@ -1,0 +1,4159 @@
+{
+ "schemaVersion": 1,
+ "runId": "2026-10-25T05-13-51-186Z",
+ "label": "binder-additional-run-after-BO4",
+ "profile": "binder",
+ "startedAt": "2026-10-25T05:13:51.186Z",
+ "finishedAt": "2026-10-25T05:32:30.467Z",
+ "protocolCompliant": true,
+ "suite": "parse",
+ "settings": {
+  "runs": 20,
+  "warmup": 3,
+  "memRuns": 5,
+  "hyperfineShell": "none",
+  "processPriority": "high"
+ },
+ "environment": {
+  "machine": {
+   "cpu": "AMD Ryzen 9 3900X 12-Core Processor",
+   "cores": 12,
+   "logicalProcessors": 24,
+   "nominalMHz": 4150,
+   "ramBytes": 68667592704,
+   "board": "Micro-Star International Co., Ltd. X570-A PRO (MS-7C37)",
+   "bios": "H.60",
+   "os": "Microsoft Windows 11 Pro",
+   "osVersion": "10.0.26200.6584"
+  },
+  "rig": {
+   "scheme": "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c",
+   "minProcessorStateAc": 100,
+   "maxProcessorStateAc": 100,
+   "idleCpuPercent": 5.176398288301531,
+   "idleCpuSamplesPercent": [
+    19.5,
+    4.8,
+    1.8,
+    3.1,
+    2.3,
+    2.5,
+    14.4,
+    14.4,
+    6,
+    5.6
+   ],
+   "processorPerformanceUnderLoadPercent": 99,
+   "defenderExclusion": "not verifiable without administrator rights"
+  },
+  "toolchain": {
+   "node": "v24.21.0",
+   "hyperfine": "hyperfine 1.20.0",
+   "goToolset": "go1.26.4-1-microsoft",
+   "dotnetSdk": "10.0.402",
+   "rust": "rustc 1.94.0-nightly (fa5eda19b 2025-12-12)",
+   "typescript6": "6.0.3",
+   "typescript7": "7.0.2"
+  },
+  "git": {
+   "commit": "68a782963610a910c62dd76554b29f68f9064904",
+   "dirty": false
+  },
+  "pinsSha256": "4a7207fd124a521f3e6fc27fb097d8f1286746e445bab437caa7a6f0d904dc9f",
+  "checks": [
+   {
+    "id": "min-processor-state",
+    "required": "100",
+    "value": "100",
+    "ok": true
+   },
+   {
+    "id": "max-processor-state",
+    "required": "100",
+    "value": "100",
+    "ok": true
+   },
+   {
+    "id": "boost-off",
+    "required": "processor performance under all-core load <= 101 %",
+    "value": "99 %",
+    "ok": true
+   },
+   {
+    "id": "idle-before-run",
+    "required": "median CPU of ten 1 s windows < 12 %",
+    "value": "5.2 % (range 1.8-19.5 %)",
+    "ok": true
+   },
+   {
+    "id": "harness-committed",
+    "required": "clean working tree",
+    "value": "clean",
+    "ok": true
+   }
+  ],
+  "protocolCompliant": true
+ },
+ "corpus": {
+  "vscode": {
+   "commit": "f507e492b81074fff62b0806d47760671c3990b5",
+   "files": 11724,
+   "bytes": 141176715,
+   "contentSha256": "f33e0251c23c3cee54409172978b1ef7aacd4e17dcadafbb885f3ad89efdc979"
+  },
+  "sentry": {
+   "commit": "b4e1ddf51f55e4aa973b2d0c028485f13de779a6",
+   "files": 8932,
+   "bytes": 45939778,
+   "contentSha256": "3ba46c2b876d0df7fbbceb524bdd81303ba35b6e398e4ab9c315734c03a9b5b3"
+  },
+  "bluesky": {
+   "commit": "ea3d6827c75c2c2063bdb8d3240c62d8f041c7fa",
+   "files": 1688,
+   "bytes": 7193919,
+   "contentSha256": "638f361331b171ea89434b49ef7c59620f53b95b646f01e9cd58db0daa5b812c"
+  },
+  "playwright": {
+   "commit": "a061d963659048a43169bd87c84960d89f496cdb",
+   "files": 1415,
+   "bytes": 17232419,
+   "contentSha256": "8973287a414f44ab46e091db5192a937af06f3e04ce749cca506580ee1c9f64a"
+  },
+  "tldraw": {
+   "commit": "9986114e3493118095f60146becd0219e100745e",
+   "files": 2508,
+   "bytes": 13626240,
+   "contentSha256": "6bdd86f34367126da15dd2a7c4ad6e576972af039cd607681d58f514ed3385cc"
+  }
+ },
+ "configurations": [
+  {
+   "id": "tsgo7-bind",
+   "label": "typescript-go 7.0.2, parse+bind, parallel (default)",
+   "threads": "parallel"
+  },
+  {
+   "id": "tsgo7-bind-single",
+   "label": "typescript-go 7.0.2, parse+bind, single-threaded",
+   "threads": "single"
+  },
+  {
+   "id": "tsrs-bind",
+   "label": "tsrs 0.18.0 (Rust), parse+bind, parallel (rayon)",
+   "threads": "parallel"
+  },
+  {
+   "id": "tsrs-bind-single",
+   "label": "tsrs 0.18.0 (Rust), parse+bind, single-threaded",
+   "threads": "single"
+  },
+  {
+   "id": "cs-o-aot-ws-bind",
+   "label": "C# Track O, NativeAOT, Workstation GC, parse+bind, parallel (parse+bind endpoint)",
+   "threads": "parallel"
+  },
+  {
+   "id": "cs-o-aot-ws-bind-single",
+   "label": "C# Track O, NativeAOT, Workstation GC, parse+bind, single-threaded",
+   "threads": "single"
+  },
+  {
+   "id": "cs-o-aot-srv-bind",
+   "label": "C# Track O, NativeAOT, Server GC, parse+bind, parallel",
+   "threads": "parallel"
+  },
+  {
+   "id": "cs-o-aot-srv-bind-single",
+   "label": "C# Track O, NativeAOT, Server GC, parse+bind, single-threaded",
+   "threads": "single"
+  }
+ ],
+ "results": [
+  {
+   "repo": "vscode",
+   "kind": "parse",
+   "config": "tsgo7-bind",
+   "configLabel": "typescript-go 7.0.2, parse+bind, parallel (default)",
+   "command": [
+    "artifacts/bin/parse-go.exe",
+    "--bind",
+    "artifacts/bench/filelists/vscode.txt"
+   ],
+   "output": {
+    "driver": "tsgo-7.0.2-bind-parallel",
+    "files": 11724,
+    "bytes": 141176715,
+    "nodes": 16924254,
+    "symbols": 2033744,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     1.2682998,
+     1.3179888,
+     1.3842643,
+     1.3028806,
+     1.3609338,
+     1.2926245,
+     1.3719222,
+     1.3162979,
+     1.3710934,
+     1.2504565,
+     1.3617354000000002,
+     1.2997245,
+     1.3780934,
+     1.3095875000000001,
+     1.3921185,
+     1.2590123,
+     1.3312644,
+     1.288291,
+     1.3797541,
+     1.3819956
+    ],
+    "median": 1.3246266,
+    "mad": 0.04178780000000004,
+    "madOverMedianPercent": 3.154685252432651,
+    "mean": 1.330916925,
+    "stddev": 0.04611252121556201,
+    "min": 1.2504565,
+    "max": 1.3921185,
+    "userMean": 12.32421875,
+    "systemMean": 6.4515625
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     2898997248,
+     2893017088,
+     2909216768,
+     2888933376,
+     2897821696
+    ],
+    "peakCommitBytes": [
+     2926858240,
+     2931982336,
+     2931810304,
+     2940973056,
+     2921398272
+    ],
+    "medianPeakWorkingSetBytes": 2897821696,
+    "medianPeakCommitBytes": 2931810304
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-vscode-tsgo7-bind.json",
+   "throughput": {
+    "filesPerSecond": 8850.796141342775,
+    "megabytesPerSecond": 106.57849917856096
+   }
+  },
+  {
+   "repo": "vscode",
+   "kind": "parse",
+   "config": "tsgo7-bind-single",
+   "configLabel": "typescript-go 7.0.2, parse+bind, single-threaded",
+   "command": [
+    "artifacts/bin/parse-go.exe",
+    "--bind",
+    "--single",
+    "artifacts/bench/filelists/vscode.txt"
+   ],
+   "output": {
+    "driver": "tsgo-7.0.2-bind-single",
+    "files": 11724,
+    "bytes": 141176715,
+    "nodes": 16924254,
+    "symbols": 2033744,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     6.4074962,
+     6.4687552,
+     6.4763591,
+     6.4659776,
+     6.480709,
+     6.4121041,
+     6.3723247,
+     6.4190792,
+     6.4685133,
+     6.4735918,
+     6.4179736,
+     6.337479,
+     6.4339906,
+     6.4430052,
+     6.4519185,
+     6.4059843,
+     6.4069465,
+     6.3578918,
+     6.4033764,
+     6.4775934
+    ],
+    "median": 6.4265349,
+    "mad": 0.03241315,
+    "madOverMedianPercent": 0.5043643348143959,
+    "mean": 6.429053475000001,
+    "stddev": 0.04218188688432484,
+    "min": 6.337479,
+    "max": 6.480709,
+    "userMean": 8.06484375,
+    "systemMean": 2.45546875
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     2822791168,
+     2820505600,
+     2825834496,
+     2810597376,
+     2814611456
+    ],
+    "peakCommitBytes": [
+     2858430464,
+     2863017984,
+     2857177088,
+     2879340544,
+     2868981760
+    ],
+    "medianPeakWorkingSetBytes": 2820505600,
+    "medianPeakCommitBytes": 2863017984
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-vscode-tsgo7-bind-single.json",
+   "throughput": {
+    "filesPerSecond": 1824.31126297937,
+    "megabytesPerSecond": 21.967781580086026
+   }
+  },
+  {
+   "repo": "vscode",
+   "kind": "parse",
+   "config": "tsrs-bind",
+   "configLabel": "tsrs 0.18.0 (Rust), parse+bind, parallel (rayon)",
+   "command": [
+    "artifacts/bin/parse-rs.exe",
+    "--bind",
+    "artifacts/bench/filelists/vscode.txt"
+   ],
+   "output": {
+    "driver": "tsrs-0.18.0-bind-parallel",
+    "files": 11724,
+    "bytes": 141176715,
+    "nodes": 16669260,
+    "symbols": 2033744,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.3897068,
+     0.39192560000000004,
+     0.3528908,
+     0.4812541,
+     0.3899919,
+     0.3741486,
+     0.43551110000000004,
+     0.4066696,
+     0.400521,
+     0.45187920000000004,
+     0.4734743,
+     0.4119724,
+     0.41442530000000005,
+     0.4464983,
+     0.3951966,
+     0.3862648,
+     0.4079165,
+     0.46457820000000005,
+     0.37861,
+     0.400297
+    ],
+    "median": 0.4035953,
+    "mad": 0.01560949999999997,
+    "madOverMedianPercent": 3.8676119370071875,
+    "mean": 0.41268660500000004,
+    "stddev": 0.035059130431337765,
+    "min": 0.3528908,
+    "max": 0.4812541,
+    "userMean": 2.9578125,
+    "systemMean": 2.52421875
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     1203879936,
+     1203314688,
+     1203478528,
+     1203572736,
+     1203884032
+    ],
+    "peakCommitBytes": [
+     2425421824,
+     2419437568,
+     2399600640,
+     2471600128,
+     2369585152
+    ],
+    "medianPeakWorkingSetBytes": 1203572736,
+    "medianPeakCommitBytes": 2419437568
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-vscode-tsrs-bind.json",
+   "throughput": {
+    "filesPerSecond": 29048.901213666264,
+    "megabytesPerSecond": 349.7977181597506
+   }
+  },
+  {
+   "repo": "vscode",
+   "kind": "parse",
+   "config": "tsrs-bind-single",
+   "configLabel": "tsrs 0.18.0 (Rust), parse+bind, single-threaded",
+   "command": [
+    "artifacts/bin/parse-rs.exe",
+    "--bind",
+    "--single",
+    "artifacts/bench/filelists/vscode.txt"
+   ],
+   "output": {
+    "driver": "tsrs-0.18.0-bind-single",
+    "files": 11724,
+    "bytes": 141176715,
+    "nodes": 16669260,
+    "symbols": 2033744,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     3.3239891,
+     3.2705781,
+     3.2963873,
+     3.2906283,
+     3.3021519,
+     3.2904514000000002,
+     3.2987924,
+     3.2643024,
+     3.297279,
+     3.3287493,
+     3.2835187,
+     3.3058456,
+     3.3189409,
+     3.3044008,
+     3.2692952,
+     3.3266929,
+     3.2831399,
+     3.2968929,
+     3.2769467,
+     3.3036865
+    ],
+    "median": 3.29708595,
+    "mad": 0.011163449999999964,
+    "madOverMedianPercent": 0.33858534989055905,
+    "mean": 3.2966334650000007,
+    "stddev": 0.018777128353069775,
+    "min": 3.2643024,
+    "max": 3.3287493,
+    "userMean": 2.06171875,
+    "systemMean": 1.21640625
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     1187254272,
+     1187258368,
+     1187266560,
+     1187266560,
+     1187262464
+    ],
+    "peakCommitBytes": [
+     1334476800,
+     1334484992,
+     1334484992,
+     1334489088,
+     1334489088
+    ],
+    "medianPeakWorkingSetBytes": 1187262464,
+    "medianPeakCommitBytes": 1334484992
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-vscode-tsrs-bind-single.json",
+   "throughput": {
+    "filesPerSecond": 3555.8672651527327,
+    "megabytesPerSecond": 42.81863352697857
+   }
+  },
+  {
+   "repo": "vscode",
+   "kind": "parse",
+   "config": "cs-o-aot-ws-bind",
+   "configLabel": "C# Track O, NativeAOT, Workstation GC, parse+bind, parallel (parse+bind endpoint)",
+   "command": [
+    "artifacts/bin/cs/optimized-aot-ws/parse-cs-optimized-aot-ws.exe",
+    "--bind",
+    "artifacts/bench/filelists/vscode.txt"
+   ],
+   "output": {
+    "driver": "cs-optimized-aot-ws-bind-parallel",
+    "files": 11724,
+    "chars": 141087167,
+    "nodes": 16928765,
+    "symbols": 2033744,
+    "priority": "high",
+    "allocatedBytes": 89171528,
+    "gen0": 8,
+    "gen1": 6,
+    "gen2": 3,
+    "gcPauseMs": 50.24
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.45847720000000003,
+     0.4433404,
+     0.44793970000000005,
+     0.460334,
+     0.4469579,
+     0.45237940000000004,
+     0.48360820000000004,
+     0.46120770000000005,
+     0.45034430000000003,
+     0.46481690000000003,
+     0.4594359,
+     0.44922520000000005,
+     0.4536491,
+     0.43710590000000005,
+     0.44967910000000005,
+     0.44449170000000005,
+     0.4430272,
+     0.43523100000000003,
+     0.43949950000000004,
+     0.46380940000000004
+    ],
+    "median": 0.4500117,
+    "mad": 0.00772500000000001,
+    "madOverMedianPercent": 1.716622034493772,
+    "mean": 0.45222798500000005,
+    "stddev": 0.011436386567962297,
+    "min": 0.43523100000000003,
+    "max": 0.48360820000000004,
+    "userMean": 4.08671875,
+    "systemMean": 2.05859375
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     1474891776,
+     1472622592,
+     1470652416,
+     1475674112,
+     1470787584
+    ],
+    "peakCommitBytes": [
+     1820753920,
+     1796542464,
+     1808142336,
+     1829728256,
+     1796554752
+    ],
+    "medianPeakWorkingSetBytes": 1472622592,
+    "medianPeakCommitBytes": 1808142336
+   },
+   "runtime": {
+    "allocatedBytes": 89171528,
+    "gen0": 8,
+    "gen1": 6,
+    "gen2": 3,
+    "pauseMs": 50.24
+   },
+   "hyperfineExport": "hyperfine-vscode-cs-o-aot-ws-bind.json",
+   "throughput": {
+    "filesPerSecond": 26052.65596427826,
+    "megabytesPerSecond": 313.71787666853993
+   }
+  },
+  {
+   "repo": "vscode",
+   "kind": "parse",
+   "config": "cs-o-aot-ws-bind-single",
+   "configLabel": "C# Track O, NativeAOT, Workstation GC, parse+bind, single-threaded",
+   "command": [
+    "artifacts/bin/cs/optimized-aot-ws/parse-cs-optimized-aot-ws.exe",
+    "--bind",
+    "--single",
+    "artifacts/bench/filelists/vscode.txt"
+   ],
+   "output": {
+    "driver": "cs-optimized-aot-ws-bind-single",
+    "files": 11724,
+    "chars": 141087167,
+    "nodes": 16928765,
+    "symbols": 2033744,
+    "priority": "high",
+    "allocatedBytes": 46339512,
+    "gen0": 6,
+    "gen1": 3,
+    "gen2": 1,
+    "gcPauseMs": 27.028
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     3.9177222,
+     3.9352347,
+     3.928539,
+     3.9504726000000003,
+     4.0935098,
+     3.9253203,
+     3.9339765,
+     3.9042394,
+     3.9449929,
+     3.9105775,
+     3.952689,
+     3.9029003,
+     3.9356368,
+     3.9312159,
+     3.9114849,
+     3.9427933,
+     3.9176793,
+     3.9333354,
+     3.9343598,
+     3.946562
+    ],
+    "median": 3.93365595,
+    "mad": 0.012121500000000118,
+    "madOverMedianPercent": 0.30814845411175623,
+    "mean": 3.93766208,
+    "stddev": 0.039542915342761914,
+    "min": 3.9029003,
+    "max": 4.0935098,
+    "userMean": 2.875,
+    "systemMean": 1.0515625
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     1430253568,
+     1429348352,
+     1429618688,
+     1429987328,
+     1429643264
+    ],
+    "peakCommitBytes": [
+     1514172416,
+     1514164224,
+     1514156032,
+     1514151936,
+     1514201088
+    ],
+    "medianPeakWorkingSetBytes": 1429643264,
+    "medianPeakCommitBytes": 1514164224
+   },
+   "runtime": {
+    "allocatedBytes": 46339512,
+    "gen0": 6,
+    "gen1": 3,
+    "gen2": 1,
+    "pauseMs": 27.028
+   },
+   "hyperfineExport": "hyperfine-vscode-cs-o-aot-ws-bind-single.json",
+   "throughput": {
+    "filesPerSecond": 2980.4335074093096,
+    "megabytesPerSecond": 35.889441474921064
+   }
+  },
+  {
+   "repo": "vscode",
+   "kind": "parse",
+   "config": "cs-o-aot-srv-bind",
+   "configLabel": "C# Track O, NativeAOT, Server GC, parse+bind, parallel",
+   "command": [
+    "artifacts/bin/cs/optimized-aot-srv/parse-cs-optimized-aot-srv.exe",
+    "--bind",
+    "artifacts/bench/filelists/vscode.txt"
+   ],
+   "output": {
+    "driver": "cs-optimized-aot-srv-bind-parallel",
+    "files": 11724,
+    "chars": 141087167,
+    "nodes": 16928765,
+    "symbols": 2033744,
+    "priority": "high",
+    "allocatedBytes": 87545432,
+    "gen0": 7,
+    "gen1": 5,
+    "gen2": 4,
+    "gcPauseMs": 25.255
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.439985,
+     0.440966,
+     0.454768,
+     0.42902270000000003,
+     0.4277398,
+     0.42463120000000004,
+     0.438958,
+     0.46356260000000005,
+     0.44247210000000003,
+     0.4313037,
+     0.4385427,
+     0.4416413,
+     0.46198500000000003,
+     0.4676753,
+     0.44752070000000005,
+     0.4367152,
+     0.4756658,
+     0.4274084,
+     0.43453050000000004,
+     0.4331225
+    ],
+    "median": 0.4394715,
+    "mad": 0.008108500000000018,
+    "madOverMedianPercent": 1.8450570742357624,
+    "mean": 0.44291082499999995,
+    "stddev": 0.014552709260003249,
+    "min": 0.42463120000000004,
+    "max": 0.4756658,
+    "userMean": 4.15703125,
+    "systemMean": 2.07421875
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     1509343232,
+     1483067392,
+     1476255744,
+     1486082048,
+     1481334784
+    ],
+    "peakCommitBytes": [
+     1951621120,
+     1862549504,
+     1813659648,
+     1860952064,
+     1883955200
+    ],
+    "medianPeakWorkingSetBytes": 1483067392,
+    "medianPeakCommitBytes": 1862549504
+   },
+   "runtime": {
+    "allocatedBytes": 87545432,
+    "gen0": 7,
+    "gen1": 5,
+    "gen2": 4,
+    "pauseMs": 25.255
+   },
+   "hyperfineExport": "hyperfine-vscode-cs-o-aot-srv-bind.json",
+   "throughput": {
+    "filesPerSecond": 26677.497858222887,
+    "megabytesPerSecond": 321.24202593342227
+   }
+  },
+  {
+   "repo": "vscode",
+   "kind": "parse",
+   "config": "cs-o-aot-srv-bind-single",
+   "configLabel": "C# Track O, NativeAOT, Server GC, parse+bind, single-threaded",
+   "command": [
+    "artifacts/bin/cs/optimized-aot-srv/parse-cs-optimized-aot-srv.exe",
+    "--bind",
+    "--single",
+    "artifacts/bench/filelists/vscode.txt"
+   ],
+   "output": {
+    "driver": "cs-optimized-aot-srv-bind-single",
+    "files": 11724,
+    "chars": 141087167,
+    "nodes": 16928765,
+    "symbols": 2033744,
+    "priority": "high",
+    "allocatedBytes": 46335928,
+    "gen0": 3,
+    "gen1": 1,
+    "gen2": 0,
+    "gcPauseMs": 8.414
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     3.9702862000000003,
+     3.9914606,
+     3.9783527000000003,
+     3.9924481,
+     3.9833733000000002,
+     3.98734,
+     3.995918,
+     3.9883346,
+     3.9770843,
+     3.9879663,
+     4.0091181,
+     3.9800886,
+     3.9960557000000003,
+     3.9918028000000003,
+     3.9956853,
+     4.0016674,
+     3.9701104000000003,
+     3.9933671,
+     3.9616635000000002,
+     3.9931234
+    ],
+    "median": 3.9898976,
+    "mad": 0.006089250000000268,
+    "madOverMedianPercent": 0.15261669873433012,
+    "mean": 3.98726232,
+    "stddev": 0.011548558696610185,
+    "min": 3.9616635000000002,
+    "max": 4.0091181,
+    "userMean": 2.97109375,
+    "systemMean": 1.00703125
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     1430151168,
+     1429700608,
+     1431031808,
+     1430298624,
+     1429782528
+    ],
+    "peakCommitBytes": [
+     1523793920,
+     1523679232,
+     1523761152,
+     1523658752,
+     1523675136
+    ],
+    "medianPeakWorkingSetBytes": 1430151168,
+    "medianPeakCommitBytes": 1523679232
+   },
+   "runtime": {
+    "allocatedBytes": 46335928,
+    "gen0": 3,
+    "gen1": 1,
+    "gen2": 0,
+    "pauseMs": 8.414
+   },
+   "hyperfineExport": "hyperfine-vscode-cs-o-aot-srv-bind-single.json",
+   "throughput": {
+    "filesPerSecond": 2938.421276776627,
+    "megabytesPerSecond": 35.38354342727994
+   }
+  },
+  {
+   "repo": "sentry",
+   "kind": "parse",
+   "config": "tsgo7-bind",
+   "configLabel": "typescript-go 7.0.2, parse+bind, parallel (default)",
+   "command": [
+    "artifacts/bin/parse-go.exe",
+    "--bind",
+    "artifacts/bench/filelists/sentry.txt"
+   ],
+   "output": {
+    "driver": "tsgo-7.0.2-bind-parallel",
+    "files": 8932,
+    "bytes": 45939778,
+    "nodes": 5509288,
+    "symbols": 978799,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.5311777000000001,
+     0.5281371,
+     0.5184310000000001,
+     0.53134,
+     0.5270352,
+     0.5244279000000001,
+     0.5437379,
+     0.5377011,
+     0.5121370000000001,
+     0.5404906,
+     0.5250469,
+     0.5221941,
+     0.48210030000000004,
+     0.5219172000000001,
+     0.5112081,
+     0.5179561,
+     0.4942385,
+     0.5419574,
+     0.49421610000000005,
+     0.5450851
+    ],
+    "median": 0.5247374,
+    "mad": 0.009690849999999973,
+    "madOverMedianPercent": 1.8467999422187122,
+    "mean": 0.5225267650000001,
+    "stddev": 0.017189050678335743,
+    "min": 0.48210030000000004,
+    "max": 0.5450851,
+    "userMean": 4.81796875,
+    "systemMean": 3.43515625
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     1108819968,
+     1092112384,
+     1093853184,
+     1101844480,
+     1095524352
+    ],
+    "peakCommitBytes": [
+     1128161280,
+     1118224384,
+     1121030144,
+     1129746432,
+     1121767424
+    ],
+    "medianPeakWorkingSetBytes": 1095524352,
+    "medianPeakCommitBytes": 1121767424
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-sentry-tsgo7-bind.json",
+   "throughput": {
+    "filesPerSecond": 17021.84749933967,
+    "megabytesPerSecond": 87.54812978834745
+   }
+  },
+  {
+   "repo": "sentry",
+   "kind": "parse",
+   "config": "tsgo7-bind-single",
+   "configLabel": "typescript-go 7.0.2, parse+bind, single-threaded",
+   "command": [
+    "artifacts/bin/parse-go.exe",
+    "--bind",
+    "--single",
+    "artifacts/bench/filelists/sentry.txt"
+   ],
+   "output": {
+    "driver": "tsgo-7.0.2-bind-single",
+    "files": 8932,
+    "bytes": 45939778,
+    "nodes": 5509288,
+    "symbols": 978799,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     2.8763170000000002,
+     2.8307817,
+     2.8730622,
+     2.8849146,
+     2.8711511,
+     2.8968686,
+     2.8283662,
+     2.8839948,
+     2.8660309,
+     2.8535310000000003,
+     2.9005476,
+     2.8681663,
+     2.9057637,
+     2.8704902,
+     2.8470266,
+     2.8539014,
+     2.8494216,
+     2.8836998,
+     2.8796652,
+     2.8607641
+    ],
+    "median": 2.8708206499999998,
+    "mad": 0.013634050000000286,
+    "madOverMedianPercent": 0.4749182084920661,
+    "mean": 2.86922323,
+    "stddev": 0.021188137826874513,
+    "min": 2.8283662,
+    "max": 2.9057637,
+    "userMean": 2.91171875,
+    "systemMean": 1.446875
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     1059749888,
+     1059602432,
+     1057161216,
+     1058516992,
+     1059962880
+    ],
+    "peakCommitBytes": [
+     1088077824,
+     1087225856,
+     1096343552,
+     1083629568,
+     1088323584
+    ],
+    "medianPeakWorkingSetBytes": 1059602432,
+    "medianPeakCommitBytes": 1088077824
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-sentry-tsgo7-bind-single.json",
+   "throughput": {
+    "filesPerSecond": 3111.305472879332,
+    "megabytesPerSecond": 16.00231557481656
+   }
+  },
+  {
+   "repo": "sentry",
+   "kind": "parse",
+   "config": "tsrs-bind",
+   "configLabel": "tsrs 0.18.0 (Rust), parse+bind, parallel (rayon)",
+   "command": [
+    "artifacts/bin/parse-rs.exe",
+    "--bind",
+    "artifacts/bench/filelists/sentry.txt"
+   ],
+   "output": {
+    "driver": "tsrs-0.18.0-bind-parallel",
+    "files": 8932,
+    "bytes": 45939778,
+    "nodes": 5525091,
+    "symbols": 978799,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.2006159,
+     0.17636960000000002,
+     0.189092,
+     0.1872107,
+     0.18946000000000002,
+     0.18581460000000002,
+     0.17540360000000002,
+     0.1830649,
+     0.1844241,
+     0.1866528,
+     0.1741876,
+     0.1814143,
+     0.18099880000000002,
+     0.1701146,
+     0.1702895,
+     0.19124470000000002,
+     0.17958670000000002,
+     0.1924374,
+     0.1739917,
+     0.19355860000000003
+    ],
+    "median": 0.1837445,
+    "mad": 0.006545200000000001,
+    "madOverMedianPercent": 3.5621202267278753,
+    "mean": 0.18329660500000006,
+    "stddev": 0.0082818472748965,
+    "min": 0.1701146,
+    "max": 0.2006159,
+    "userMean": 1.18359375,
+    "systemMean": 1.48203125
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     441729024,
+     442155008,
+     442064896,
+     442040320,
+     441831424
+    ],
+    "peakCommitBytes": [
+     833490944,
+     815755264,
+     831942656,
+     828227584,
+     804352000
+    ],
+    "medianPeakWorkingSetBytes": 442040320,
+    "medianPeakCommitBytes": 828227584
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-sentry-tsrs-bind.json",
+   "throughput": {
+    "filesPerSecond": 48610.978832019464,
+    "megabytesPerSecond": 250.0198808671824
+   }
+  },
+  {
+   "repo": "sentry",
+   "kind": "parse",
+   "config": "tsrs-bind-single",
+   "configLabel": "tsrs 0.18.0 (Rust), parse+bind, single-threaded",
+   "command": [
+    "artifacts/bin/parse-rs.exe",
+    "--bind",
+    "--single",
+    "artifacts/bench/filelists/sentry.txt"
+   ],
+   "output": {
+    "driver": "tsrs-0.18.0-bind-single",
+    "files": 8932,
+    "bytes": 45939778,
+    "nodes": 5525091,
+    "symbols": 978799,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     1.5916068,
+     1.5926558000000002,
+     1.5772537,
+     1.5740592,
+     1.5717237000000002,
+     1.5989334,
+     1.5961921000000001,
+     1.5790135,
+     1.5694752,
+     1.585238,
+     1.5872451,
+     1.5959737,
+     1.575058,
+     1.5756261,
+     1.595834,
+     1.5709427,
+     1.5652611,
+     1.5824956000000001,
+     1.5966029000000002,
+     1.5762453
+    ],
+    "median": 1.58075455,
+    "mad": 0.009421349999999884,
+    "madOverMedianPercent": 0.5960033453643947,
+    "mean": 1.582871795,
+    "stddev": 0.010756361060442575,
+    "min": 1.5652611,
+    "max": 1.5989334,
+    "userMean": 0.828125,
+    "systemMean": 0.74765625
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     429219840,
+     429215744,
+     429219840,
+     429215744,
+     429219840
+    ],
+    "peakCommitBytes": [
+     672632832,
+     672694272,
+     672636928,
+     672694272,
+     672632832
+    ],
+    "medianPeakWorkingSetBytes": 429219840,
+    "medianPeakCommitBytes": 672636928
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-sentry-tsrs-bind-single.json",
+   "throughput": {
+    "filesPerSecond": 5650.466101773992,
+    "megabytesPerSecond": 29.061929949845787
+   }
+  },
+  {
+   "repo": "sentry",
+   "kind": "parse",
+   "config": "cs-o-aot-ws-bind",
+   "configLabel": "C# Track O, NativeAOT, Workstation GC, parse+bind, parallel (parse+bind endpoint)",
+   "command": [
+    "artifacts/bin/cs/optimized-aot-ws/parse-cs-optimized-aot-ws.exe",
+    "--bind",
+    "artifacts/bench/filelists/sentry.txt"
+   ],
+   "output": {
+    "driver": "cs-optimized-aot-ws-bind-parallel",
+    "files": 8932,
+    "chars": 45930262,
+    "nodes": 5516696,
+    "symbols": 978798,
+    "priority": "high",
+    "allocatedBytes": 89671840,
+    "gen0": 5,
+    "gen1": 5,
+    "gen2": 3,
+    "gcPauseMs": 24.095
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.2158712,
+     0.20814790000000002,
+     0.20708000000000001,
+     0.2142737,
+     0.21980570000000002,
+     0.21985790000000002,
+     0.2143191,
+     0.20993540000000002,
+     0.22965990000000003,
+     0.22424080000000002,
+     0.21984930000000003,
+     0.2186333,
+     0.2331899,
+     0.22597740000000002,
+     0.2185024,
+     0.21494580000000002,
+     0.2156925,
+     0.23147820000000002,
+     0.23626360000000002,
+     0.24444510000000003
+    ],
+    "median": 0.2192195,
+    "mad": 0.004983550000000003,
+    "madOverMedianPercent": 2.2733151019868227,
+    "mean": 0.22110845500000006,
+    "stddev": 0.009812290486746176,
+    "min": 0.20708000000000001,
+    "max": 0.24444510000000003,
+    "userMean": 1.5515625,
+    "systemMean": 1.3859375
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     545693696,
+     545038336,
+     544563200,
+     545177600,
+     545447936
+    ],
+    "peakCommitBytes": [
+     773214208,
+     780185600,
+     765509632,
+     779440128,
+     772849664
+    ],
+    "medianPeakWorkingSetBytes": 545177600,
+    "medianPeakCommitBytes": 773214208
+   },
+   "runtime": {
+    "allocatedBytes": 89671840,
+    "gen0": 5,
+    "gen1": 5,
+    "gen2": 3,
+    "pauseMs": 24.095
+   },
+   "hyperfineExport": "hyperfine-sentry-cs-o-aot-ws-bind.json",
+   "throughput": {
+    "filesPerSecond": 40744.55055321265,
+    "megabytesPerSecond": 209.56063671343102
+   }
+  },
+  {
+   "repo": "sentry",
+   "kind": "parse",
+   "config": "cs-o-aot-ws-bind-single",
+   "configLabel": "C# Track O, NativeAOT, Workstation GC, parse+bind, single-threaded",
+   "command": [
+    "artifacts/bin/cs/optimized-aot-ws/parse-cs-optimized-aot-ws.exe",
+    "--bind",
+    "--single",
+    "artifacts/bench/filelists/sentry.txt"
+   ],
+   "output": {
+    "driver": "cs-optimized-aot-ws-bind-single",
+    "files": 8932,
+    "chars": 45930262,
+    "nodes": 5516696,
+    "symbols": 978798,
+    "priority": "high",
+    "allocatedBytes": 24846080,
+    "gen0": 2,
+    "gen1": 1,
+    "gen2": 0,
+    "gcPauseMs": 9.641
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     1.8005706,
+     1.8044713,
+     1.8327137,
+     1.810768,
+     1.8246088,
+     1.8189905,
+     1.8356355,
+     1.8180346,
+     1.8082176,
+     1.8138338,
+     1.8268079,
+     1.810089,
+     1.7990053000000001,
+     1.8178092000000001,
+     1.841196,
+     1.8232057,
+     1.8207086000000001,
+     1.8138866,
+     1.8201016,
+     1.8099492000000001
+    ],
+    "median": 1.8179219,
+    "mad": 0.007493399999999983,
+    "madOverMedianPercent": 0.41219592546852446,
+    "mean": 1.817530175,
+    "stddev": 0.011191049543408617,
+    "min": 1.7990053000000001,
+    "max": 1.841196,
+    "userMean": 1.1140625,
+    "systemMean": 0.68984375
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     514560000,
+     514822144,
+     514494464,
+     514723840,
+     514686976
+    ],
+    "peakCommitBytes": [
+     524214272,
+     524214272,
+     524214272,
+     524226560,
+     524206080
+    ],
+    "medianPeakWorkingSetBytes": 514686976,
+    "medianPeakCommitBytes": 524214272
+   },
+   "runtime": {
+    "allocatedBytes": 24846080,
+    "gen0": 2,
+    "gen1": 1,
+    "gen2": 0,
+    "pauseMs": 9.641
+   },
+   "hyperfineExport": "hyperfine-sentry-cs-o-aot-ws-bind-single.json",
+   "throughput": {
+    "filesPerSecond": 4913.302381141896,
+    "megabytesPerSecond": 25.270490442961272
+   }
+  },
+  {
+   "repo": "sentry",
+   "kind": "parse",
+   "config": "cs-o-aot-srv-bind",
+   "configLabel": "C# Track O, NativeAOT, Server GC, parse+bind, parallel",
+   "command": [
+    "artifacts/bin/cs/optimized-aot-srv/parse-cs-optimized-aot-srv.exe",
+    "--bind",
+    "artifacts/bench/filelists/sentry.txt"
+   ],
+   "output": {
+    "driver": "cs-optimized-aot-srv-bind-parallel",
+    "files": 8932,
+    "chars": 45930262,
+    "nodes": 5516696,
+    "symbols": 978798,
+    "priority": "high",
+    "allocatedBytes": 66400952,
+    "gen0": 6,
+    "gen1": 5,
+    "gen2": 4,
+    "gcPauseMs": 7.84
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.2097272,
+     0.2078034,
+     0.21085340000000002,
+     0.21668520000000002,
+     0.22724100000000003,
+     0.20959960000000002,
+     0.2109862,
+     0.2086193,
+     0.2266224,
+     0.21119100000000002,
+     0.2045916,
+     0.217871,
+     0.23787390000000003,
+     0.20674340000000002,
+     0.21874700000000002,
+     0.20221630000000002,
+     0.20422330000000002,
+     0.20648840000000002,
+     0.2021368,
+     0.2067412
+    ],
+    "median": 0.2096634,
+    "mad": 0.004123399999999985,
+    "madOverMedianPercent": 1.9666761103750037,
+    "mean": 0.21234808000000002,
+    "stddev": 0.009324767572303008,
+    "min": 0.2021368,
+    "max": 0.23787390000000003,
+    "userMean": 1.56171875,
+    "systemMean": 1.3796875
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     550424576,
+     549896192,
+     549634048,
+     551690240,
+     549179392
+    ],
+    "peakCommitBytes": [
+     805294080,
+     787570688,
+     805171200,
+     818270208,
+     799748096
+    ],
+    "medianPeakWorkingSetBytes": 549896192,
+    "medianPeakCommitBytes": 805171200
+   },
+   "runtime": {
+    "allocatedBytes": 66400952,
+    "gen0": 6,
+    "gen1": 5,
+    "gen2": 4,
+    "pauseMs": 7.84
+   },
+   "hyperfineExport": "hyperfine-sentry-cs-o-aot-srv-bind.json",
+   "throughput": {
+    "filesPerSecond": 42601.61764046562,
+    "megabytesPerSecond": 219.11205293818566
+   }
+  },
+  {
+   "repo": "sentry",
+   "kind": "parse",
+   "config": "cs-o-aot-srv-bind-single",
+   "configLabel": "C# Track O, NativeAOT, Server GC, parse+bind, single-threaded",
+   "command": [
+    "artifacts/bin/cs/optimized-aot-srv/parse-cs-optimized-aot-srv.exe",
+    "--bind",
+    "--single",
+    "artifacts/bench/filelists/sentry.txt"
+   ],
+   "output": {
+    "driver": "cs-optimized-aot-srv-bind-single",
+    "files": 8932,
+    "chars": 45930262,
+    "nodes": 5516696,
+    "symbols": 978798,
+    "priority": "high",
+    "allocatedBytes": 24845408,
+    "gen0": 3,
+    "gen1": 1,
+    "gen2": 0,
+    "gcPauseMs": 7.152
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     1.8213995,
+     1.8195927,
+     1.8164213,
+     1.8062279,
+     1.8115301000000001,
+     1.8415962000000001,
+     1.8244385,
+     1.8191643000000002,
+     1.810304,
+     1.8395809,
+     1.8105958000000002,
+     1.7983236,
+     1.8131215,
+     1.8272377,
+     1.8133503000000002,
+     1.8143308,
+     1.8183839000000002,
+     1.8257162,
+     1.8189893000000001,
+     1.8117535
+    ],
+    "median": 1.8174026,
+    "mad": 0.00576080000000001,
+    "madOverMedianPercent": 0.31697984805348084,
+    "mean": 1.8181029000000002,
+    "stddev": 0.010278375487810371,
+    "min": 1.7983236,
+    "max": 1.8415962000000001,
+    "userMean": 1.10390625,
+    "systemMean": 0.70546875
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     517525504,
+     516509696,
+     516755456,
+     516599808,
+     516960256
+    ],
+    "peakCommitBytes": [
+     533786624,
+     533114880,
+     533377024,
+     533102592,
+     533643264
+    ],
+    "medianPeakWorkingSetBytes": 516755456,
+    "medianPeakCommitBytes": 533377024
+   },
+   "runtime": {
+    "allocatedBytes": 24845408,
+    "gen0": 3,
+    "gen1": 1,
+    "gen2": 0,
+    "pauseMs": 7.152
+   },
+   "hyperfineExport": "hyperfine-sentry-cs-o-aot-srv-bind-single.json",
+   "throughput": {
+    "filesPerSecond": 4914.706295677138,
+    "megabytesPerSecond": 25.277711168675555
+   }
+  },
+  {
+   "repo": "bluesky",
+   "kind": "parse",
+   "config": "tsgo7-bind",
+   "configLabel": "typescript-go 7.0.2, parse+bind, parallel (default)",
+   "command": [
+    "artifacts/bin/parse-go.exe",
+    "--bind",
+    "artifacts/bench/filelists/bluesky.txt"
+   ],
+   "output": {
+    "driver": "tsgo-7.0.2-bind-parallel",
+    "files": 1688,
+    "bytes": 7193919,
+    "nodes": 957323,
+    "symbols": 163216,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.131361,
+     0.1266661,
+     0.1299942,
+     0.1256383,
+     0.12231040000000001,
+     0.1264013,
+     0.1224728,
+     0.1277288,
+     0.1299394,
+     0.125667,
+     0.1307268,
+     0.1241513,
+     0.12421190000000001,
+     0.12292420000000001,
+     0.1350706,
+     0.1325977,
+     0.12967510000000002,
+     0.1333977,
+     0.127969,
+     0.12647650000000002
+    ],
+    "median": 0.12719745,
+    "mad": 0.002891149999999995,
+    "madOverMedianPercent": 2.2729622331265253,
+    "mean": 0.127769005,
+    "stddev": 0.0037280916721949683,
+    "min": 0.12231040000000001,
+    "max": 0.1350706,
+    "userMean": 0.83515625,
+    "systemMean": 0.68359375
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     215678976,
+     211804160,
+     218505216,
+     218804224,
+     211877888
+    ],
+    "peakCommitBytes": [
+     229285888,
+     223993856,
+     231297024,
+     232304640,
+     225648640
+    ],
+    "medianPeakWorkingSetBytes": 215678976,
+    "medianPeakCommitBytes": 229285888
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-bluesky-tsgo7-bind.json",
+   "throughput": {
+    "filesPerSecond": 13270.706291674873,
+    "megabytesPerSecond": 56.55710079093567
+   }
+  },
+  {
+   "repo": "bluesky",
+   "kind": "parse",
+   "config": "tsgo7-bind-single",
+   "configLabel": "typescript-go 7.0.2, parse+bind, single-threaded",
+   "command": [
+    "artifacts/bin/parse-go.exe",
+    "--bind",
+    "--single",
+    "artifacts/bench/filelists/bluesky.txt"
+   ],
+   "output": {
+    "driver": "tsgo-7.0.2-bind-single",
+    "files": 1688,
+    "bytes": 7193919,
+    "nodes": 957323,
+    "symbols": 163216,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.5397824,
+     0.5455736,
+     0.5331338,
+     0.5347161,
+     0.5286198000000001,
+     0.5265862,
+     0.5248112,
+     0.5324227,
+     0.5265234000000001,
+     0.5309943,
+     0.5333231,
+     0.539459,
+     0.5369757000000001,
+     0.5389924,
+     0.5442186,
+     0.5369077,
+     0.5350781,
+     0.5318495000000001,
+     0.5303956000000001,
+     0.5285448
+    ],
+    "median": 0.53322845,
+    "mad": 0.004177949999999986,
+    "madOverMedianPercent": 0.7835197090477798,
+    "mean": 0.5339454000000001,
+    "stddev": 0.005757396217041154,
+    "min": 0.5248112,
+    "max": 0.5455736,
+    "userMean": 0.496875,
+    "systemMean": 0.37109375
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     195489792,
+     198905856,
+     195284992,
+     195444736,
+     195620864
+    ],
+    "peakCommitBytes": [
+     206196736,
+     205512704,
+     203407360,
+     204689408,
+     206540800
+    ],
+    "medianPeakWorkingSetBytes": 195489792,
+    "medianPeakCommitBytes": 205512704
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-bluesky-tsgo7-bind-single.json",
+   "throughput": {
+    "filesPerSecond": 3165.6225394575254,
+    "megabytesPerSecond": 13.491251263881363
+   }
+  },
+  {
+   "repo": "bluesky",
+   "kind": "parse",
+   "config": "tsrs-bind",
+   "configLabel": "tsrs 0.18.0 (Rust), parse+bind, parallel (rayon)",
+   "command": [
+    "artifacts/bin/parse-rs.exe",
+    "--bind",
+    "artifacts/bench/filelists/bluesky.txt"
+   ],
+   "output": {
+    "driver": "tsrs-0.18.0-bind-parallel",
+    "files": 1688,
+    "bytes": 7193919,
+    "nodes": 958357,
+    "symbols": 163216,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.0559887,
+     0.055413000000000004,
+     0.0572466,
+     0.055265,
+     0.0552204,
+     0.055946100000000006,
+     0.0563832,
+     0.054069200000000005,
+     0.052029500000000006,
+     0.051946900000000004,
+     0.053869700000000006,
+     0.053594100000000006,
+     0.054122,
+     0.052434600000000005,
+     0.0531302,
+     0.052288900000000006,
+     0.052772000000000006,
+     0.0562604,
+     0.056087200000000004,
+     0.0570138
+    ],
+    "median": 0.0546712,
+    "mad": 0.0014785000000000006,
+    "madOverMedianPercent": 2.7043489076515614,
+    "mean": 0.054554075,
+    "stddev": 0.0017381122396908533,
+    "min": 0.051946900000000004,
+    "max": 0.0572466,
+    "userMean": 0.2484375,
+    "systemMean": 0.28359375
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     86827008,
+     86753280,
+     86999040,
+     86798336,
+     86712320
+    ],
+    "peakCommitBytes": [
+     241205248,
+     232009728,
+     233091072,
+     230453248,
+     236535808
+    ],
+    "medianPeakWorkingSetBytes": 86798336,
+    "medianPeakCommitBytes": 233091072
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-bluesky-tsrs-bind.json",
+   "throughput": {
+    "filesPerSecond": 30875.488374134828,
+    "megabytesPerSecond": 131.58516732758747
+   }
+  },
+  {
+   "repo": "bluesky",
+   "kind": "parse",
+   "config": "tsrs-bind-single",
+   "configLabel": "tsrs 0.18.0 (Rust), parse+bind, single-threaded",
+   "command": [
+    "artifacts/bin/parse-rs.exe",
+    "--bind",
+    "--single",
+    "artifacts/bench/filelists/bluesky.txt"
+   ],
+   "output": {
+    "driver": "tsrs-0.18.0-bind-single",
+    "files": 1688,
+    "bytes": 7193919,
+    "nodes": 958357,
+    "symbols": 163216,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.30596120000000004,
+     0.3072169,
+     0.3035352,
+     0.3002549,
+     0.2998081,
+     0.30217560000000004,
+     0.3031575,
+     0.30009820000000004,
+     0.3047568,
+     0.3087646,
+     0.3012846,
+     0.3028156,
+     0.3034308,
+     0.3064869,
+     0.3081144,
+     0.31122900000000003,
+     0.3121368,
+     0.3045494,
+     0.306866,
+     0.3020776
+    ],
+    "median": 0.3040423,
+    "mad": 0.0026011499999999965,
+    "madOverMedianPercent": 0.8555224059283845,
+    "mean": 0.304736005,
+    "stddev": 0.0035585441157386095,
+    "min": 0.2998081,
+    "max": 0.3121368,
+    "userMean": 0.1390625,
+    "systemMean": 0.15703125
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     79278080,
+     79282176,
+     79273984,
+     79278080,
+     79273984
+    ],
+    "peakCommitBytes": [
+     115580928,
+     115580928,
+     115585024,
+     115585024,
+     115585024
+    ],
+    "medianPeakWorkingSetBytes": 79278080,
+    "medianPeakCommitBytes": 115585024
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-bluesky-tsrs-bind-single.json",
+   "throughput": {
+    "filesPerSecond": 5551.85906697851,
+    "megabytesPerSecond": 23.660914945058632
+   }
+  },
+  {
+   "repo": "bluesky",
+   "kind": "parse",
+   "config": "cs-o-aot-ws-bind",
+   "configLabel": "C# Track O, NativeAOT, Workstation GC, parse+bind, parallel (parse+bind endpoint)",
+   "command": [
+    "artifacts/bin/cs/optimized-aot-ws/parse-cs-optimized-aot-ws.exe",
+    "--bind",
+    "artifacts/bench/filelists/bluesky.txt"
+   ],
+   "output": {
+    "driver": "cs-optimized-aot-ws-bind-parallel",
+    "files": 1688,
+    "chars": 7191714,
+    "nodes": 957981,
+    "symbols": 163216,
+    "priority": "high",
+    "allocatedBytes": 40319400,
+    "gen0": 2,
+    "gen1": 2,
+    "gen2": 2,
+    "gcPauseMs": 1.701
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.060902700000000004,
+     0.061469800000000005,
+     0.06052420000000001,
+     0.059477100000000005,
+     0.0606304,
+     0.0604034,
+     0.0607472,
+     0.0634397,
+     0.0726565,
+     0.062029900000000006,
+     0.0631043,
+     0.0637443,
+     0.0627955,
+     0.062340000000000007,
+     0.061397200000000006,
+     0.0640518,
+     0.0666593,
+     0.0645637,
+     0.0625411,
+     0.0632395
+    ],
+    "median": 0.062440550000000004,
+    "mad": 0.0014207999999999998,
+    "madOverMedianPercent": 2.275444402715863,
+    "mean": 0.06283588000000002,
+    "stddev": 0.002878028050702698,
+    "min": 0.059477100000000005,
+    "max": 0.0726565,
+    "userMean": 0.3375,
+    "systemMean": 0.321875
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     116686848,
+     116817920,
+     116109312,
+     117424128,
+     116846592
+    ],
+    "peakCommitBytes": [
+     166871040,
+     168706048,
+     164163584,
+     165081088,
+     168378368
+    ],
+    "medianPeakWorkingSetBytes": 116817920,
+    "medianPeakCommitBytes": 166871040
+   },
+   "runtime": {
+    "allocatedBytes": 40319400,
+    "gen0": 2,
+    "gen1": 2,
+    "gen2": 2,
+    "pauseMs": 1.701
+   },
+   "hyperfineExport": "hyperfine-bluesky-cs-o-aot-ws-bind.json",
+   "throughput": {
+    "filesPerSecond": 27033.714469203103,
+    "megabytesPerSecond": 115.21229393399001
+   }
+  },
+  {
+   "repo": "bluesky",
+   "kind": "parse",
+   "config": "cs-o-aot-ws-bind-single",
+   "configLabel": "C# Track O, NativeAOT, Workstation GC, parse+bind, single-threaded",
+   "command": [
+    "artifacts/bin/cs/optimized-aot-ws/parse-cs-optimized-aot-ws.exe",
+    "--bind",
+    "--single",
+    "artifacts/bench/filelists/bluesky.txt"
+   ],
+   "output": {
+    "driver": "cs-optimized-aot-ws-bind-single",
+    "files": 1688,
+    "chars": 7191714,
+    "nodes": 957981,
+    "symbols": 163216,
+    "priority": "high",
+    "allocatedBytes": 6210208,
+    "gen0": 0,
+    "gen1": 0,
+    "gen2": 0,
+    "gcPauseMs": 0
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.35284790000000005,
+     0.3506251,
+     0.3503276,
+     0.34953090000000003,
+     0.3477547,
+     0.3522191,
+     0.3502038,
+     0.34724900000000003,
+     0.3481494,
+     0.35252,
+     0.3477152,
+     0.34526650000000003,
+     0.34833240000000004,
+     0.3547093,
+     0.3470107,
+     0.3466595,
+     0.3555705,
+     0.3552189,
+     0.35342090000000004,
+     0.35769460000000003
+    ],
+    "median": 0.3502657,
+    "mad": 0.0025663500000000228,
+    "madOverMedianPercent": 0.73268664331107,
+    "mean": 0.35065130000000005,
+    "stddev": 0.003475869127207421,
+    "min": 0.34526650000000003,
+    "max": 0.35769460000000003,
+    "userMean": 0.20546875,
+    "systemMean": 0.13984375
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     98566144,
+     98574336,
+     98430976,
+     98533376,
+     98635776
+    ],
+    "peakCommitBytes": [
+     99115008,
+     99115008,
+     99110912,
+     99115008,
+     99098624
+    ],
+    "medianPeakWorkingSetBytes": 98566144,
+    "medianPeakCommitBytes": 99115008
+   },
+   "runtime": {
+    "allocatedBytes": 6210208,
+    "gen0": 0,
+    "gen1": 0,
+    "gen2": 0,
+    "pauseMs": 0
+   },
+   "hyperfineExport": "hyperfine-bluesky-cs-o-aot-ws-bind-single.json",
+   "throughput": {
+    "filesPerSecond": 4819.198682600095,
+    "megabytesPerSecond": 20.538462658490396
+   }
+  },
+  {
+   "repo": "bluesky",
+   "kind": "parse",
+   "config": "cs-o-aot-srv-bind",
+   "configLabel": "C# Track O, NativeAOT, Server GC, parse+bind, parallel",
+   "command": [
+    "artifacts/bin/cs/optimized-aot-srv/parse-cs-optimized-aot-srv.exe",
+    "--bind",
+    "artifacts/bench/filelists/bluesky.txt"
+   ],
+   "output": {
+    "driver": "cs-optimized-aot-srv-bind-parallel",
+    "files": 1688,
+    "chars": 7191714,
+    "nodes": 957981,
+    "symbols": 163216,
+    "priority": "high",
+    "allocatedBytes": 45607528,
+    "gen0": 7,
+    "gen1": 6,
+    "gen2": 5,
+    "gcPauseMs": 9.291
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.0818746,
+     0.07187790000000001,
+     0.0709014,
+     0.0738265,
+     0.0734895,
+     0.0789334,
+     0.0757323,
+     0.07533190000000001,
+     0.0807185,
+     0.071952,
+     0.0712981,
+     0.0725506,
+     0.07234130000000001,
+     0.0723575,
+     0.07208110000000001,
+     0.07289580000000001,
+     0.0721093,
+     0.07174720000000001,
+     0.0751092,
+     0.0788373
+    ],
+    "median": 0.07272320000000002,
+    "mad": 0.0010396499999999961,
+    "madOverMedianPercent": 1.4295988075332162,
+    "mean": 0.07429827,
+    "stddev": 0.0032935532875604107,
+    "min": 0.0709014,
+    "max": 0.0818746,
+    "userMean": 0.29296875,
+    "systemMean": 0.328125
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     121991168,
+     121081856,
+     122863616,
+     122384384,
+     122019840
+    ],
+    "peakCommitBytes": [
+     179109888,
+     172658688,
+     178823168,
+     176693248,
+     175452160
+    ],
+    "medianPeakWorkingSetBytes": 122019840,
+    "medianPeakCommitBytes": 176693248
+   },
+   "runtime": {
+    "allocatedBytes": 45607528,
+    "gen0": 7,
+    "gen1": 6,
+    "gen2": 5,
+    "pauseMs": 9.291
+   },
+   "hyperfineExport": "hyperfine-bluesky-cs-o-aot-srv-bind.json",
+   "throughput": {
+    "filesPerSecond": 23211.29983279063,
+    "megabytesPerSecond": 98.92192587784913
+   }
+  },
+  {
+   "repo": "bluesky",
+   "kind": "parse",
+   "config": "cs-o-aot-srv-bind-single",
+   "configLabel": "C# Track O, NativeAOT, Server GC, parse+bind, single-threaded",
+   "command": [
+    "artifacts/bin/cs/optimized-aot-srv/parse-cs-optimized-aot-srv.exe",
+    "--bind",
+    "--single",
+    "artifacts/bench/filelists/bluesky.txt"
+   ],
+   "output": {
+    "driver": "cs-optimized-aot-srv-bind-single",
+    "files": 1688,
+    "chars": 7191714,
+    "nodes": 957981,
+    "symbols": 163216,
+    "priority": "high",
+    "allocatedBytes": 6211264,
+    "gen0": 1,
+    "gen1": 0,
+    "gen2": 0,
+    "gcPauseMs": 1.997
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.3671763,
+     0.3600065,
+     0.38256140000000005,
+     0.36390480000000003,
+     0.35882630000000004,
+     0.35598810000000003,
+     0.3527692,
+     0.35901940000000004,
+     0.3750374,
+     0.35263750000000005,
+     0.3571647,
+     0.352267,
+     0.355316,
+     0.3531811,
+     0.3650702,
+     0.35464090000000004,
+     0.353107,
+     0.35481820000000003,
+     0.3535064,
+     0.35638800000000004
+    ],
+    "median": 0.35618805000000003,
+    "mad": 0.003044000000000019,
+    "madOverMedianPercent": 0.8546047516192693,
+    "mean": 0.35916932,
+    "stddev": 0.008056680684382702,
+    "min": 0.352267,
+    "max": 0.38256140000000005,
+    "userMean": 0.21171875,
+    "systemMean": 0.14765625
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     101650432,
+     101666816,
+     101703680,
+     101556224,
+     101646336
+    ],
+    "peakCommitBytes": [
+     111566848,
+     111456256,
+     111415296,
+     111423488,
+     111431680
+    ],
+    "medianPeakWorkingSetBytes": 101650432,
+    "medianPeakCommitBytes": 111431680
+   },
+   "runtime": {
+    "allocatedBytes": 6211264,
+    "gen0": 1,
+    "gen1": 0,
+    "gen2": 0,
+    "pauseMs": 1.997
+   },
+   "hyperfineExport": "hyperfine-bluesky-cs-o-aot-srv-bind-single.json",
+   "throughput": {
+    "filesPerSecond": 4739.069713315761,
+    "megabytesPerSecond": 20.196968988712563
+   }
+  },
+  {
+   "repo": "playwright",
+   "kind": "parse",
+   "config": "tsgo7-bind",
+   "configLabel": "typescript-go 7.0.2, parse+bind, parallel (default)",
+   "command": [
+    "artifacts/bin/parse-go.exe",
+    "--bind",
+    "artifacts/bench/filelists/playwright.txt"
+   ],
+   "output": {
+    "driver": "tsgo-7.0.2-bind-parallel",
+    "files": 1415,
+    "bytes": 17232419,
+    "nodes": 1908699,
+    "symbols": 273702,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.1836492,
+     0.18321110000000002,
+     0.1819008,
+     0.177923,
+     0.1752431,
+     0.1720173,
+     0.1673542,
+     0.19126990000000002,
+     0.17501560000000002,
+     0.17562850000000002,
+     0.18278170000000002,
+     0.1733899,
+     0.1917209,
+     0.18252130000000003,
+     0.1744148,
+     0.1840274,
+     0.1765688,
+     0.1676021,
+     0.1797207,
+     0.1873064
+    ],
+    "median": 0.17882185,
+    "mad": 0.0043981500000000034,
+    "madOverMedianPercent": 2.459514874720289,
+    "mean": 0.17916333499999998,
+    "stddev": 0.0068683563792890845,
+    "min": 0.1673542,
+    "max": 0.1917209,
+    "userMean": 1.334375,
+    "systemMean": 0.92421875
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     356417536,
+     361529344,
+     356556800,
+     360562688,
+     363053056
+    ],
+    "peakCommitBytes": [
+     375283712,
+     375840768,
+     375099392,
+     374317056,
+     376864768
+    ],
+    "medianPeakWorkingSetBytes": 360562688,
+    "medianPeakCommitBytes": 375283712
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-playwright-tsgo7-bind.json",
+   "throughput": {
+    "filesPerSecond": 7912.903260982927,
+    "megabytesPerSecond": 96.3664060068722
+   }
+  },
+  {
+   "repo": "playwright",
+   "kind": "parse",
+   "config": "tsgo7-bind-single",
+   "configLabel": "typescript-go 7.0.2, parse+bind, single-threaded",
+   "command": [
+    "artifacts/bin/parse-go.exe",
+    "--bind",
+    "--single",
+    "artifacts/bench/filelists/playwright.txt"
+   ],
+   "output": {
+    "driver": "tsgo-7.0.2-bind-single",
+    "files": 1415,
+    "bytes": 17232419,
+    "nodes": 1908699,
+    "symbols": 273702,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.7546802,
+     0.7671824,
+     0.7591256000000001,
+     0.7601626,
+     0.7676858000000001,
+     0.7651218000000001,
+     0.7595139000000001,
+     0.7552379,
+     0.7537826000000001,
+     0.7568641,
+     0.7583785000000001,
+     0.7558551,
+     0.7566962,
+     0.7710874000000001,
+     0.7659705,
+     0.7611447,
+     0.7560203000000001,
+     0.7559577000000001,
+     0.7555906,
+     0.7525820000000001
+    ],
+    "median": 0.7576213,
+    "mad": 0.002462350000000002,
+    "madOverMedianPercent": 0.32501066165906395,
+    "mean": 0.759431995,
+    "stddev": 0.005272538956605357,
+    "min": 0.7525820000000001,
+    "max": 0.7710874000000001,
+    "userMean": 0.69453125,
+    "systemMean": 0.43984375
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     340635648,
+     346746880,
+     339787776,
+     340205568,
+     340742144
+    ],
+    "peakCommitBytes": [
+     355332096,
+     354242560,
+     351899648,
+     352473088,
+     355762176
+    ],
+    "medianPeakWorkingSetBytes": 340635648,
+    "medianPeakCommitBytes": 354242560
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-playwright-tsgo7-bind-single.json",
+   "throughput": {
+    "filesPerSecond": 1867.687722084899,
+    "megabytesPerSecond": 22.745425715987658
+   }
+  },
+  {
+   "repo": "playwright",
+   "kind": "parse",
+   "config": "tsrs-bind",
+   "configLabel": "tsrs 0.18.0 (Rust), parse+bind, parallel (rayon)",
+   "command": [
+    "artifacts/bin/parse-rs.exe",
+    "--bind",
+    "artifacts/bench/filelists/playwright.txt"
+   ],
+   "output": {
+    "driver": "tsrs-0.18.0-bind-parallel",
+    "files": 1415,
+    "bytes": 17232419,
+    "nodes": 1894990,
+    "symbols": 273702,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.0672982,
+     0.06539070000000001,
+     0.0667146,
+     0.06794180000000001,
+     0.07058600000000001,
+     0.06731050000000001,
+     0.07210380000000001,
+     0.06560250000000001,
+     0.0700278,
+     0.0701556,
+     0.0684979,
+     0.06594040000000001,
+     0.07284500000000001,
+     0.0677726,
+     0.0690676,
+     0.06679750000000001,
+     0.06763480000000001,
+     0.0631097,
+     0.06540130000000001,
+     0.06617440000000001
+    ],
+    "median": 0.06747265000000001,
+    "mad": 0.0015635999999999983,
+    "madOverMedianPercent": 2.3173834138721365,
+    "mean": 0.067818635,
+    "stddev": 0.002422972799177207,
+    "min": 0.0631097,
+    "max": 0.07284500000000001,
+    "userMean": 0.3515625,
+    "systemMean": 0.3359375
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     154251264,
+     154341376,
+     154464256,
+     154488832,
+     154537984
+    ],
+    "peakCommitBytes": [
+     410013696,
+     402096128,
+     408281088,
+     405307392,
+     410484736
+    ],
+    "medianPeakWorkingSetBytes": 154464256,
+    "medianPeakCommitBytes": 408281088
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-playwright-tsrs-bind.json",
+   "throughput": {
+    "filesPerSecond": 20971.46028798335,
+    "megabytesPerSecond": 255.39858001723658
+   }
+  },
+  {
+   "repo": "playwright",
+   "kind": "parse",
+   "config": "tsrs-bind-single",
+   "configLabel": "tsrs 0.18.0 (Rust), parse+bind, single-threaded",
+   "command": [
+    "artifacts/bin/parse-rs.exe",
+    "--bind",
+    "--single",
+    "artifacts/bench/filelists/playwright.txt"
+   ],
+   "output": {
+    "driver": "tsrs-0.18.0-bind-single",
+    "files": 1415,
+    "bytes": 17232419,
+    "nodes": 1894990,
+    "symbols": 273702,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.3924946,
+     0.3901274,
+     0.3944437,
+     0.3985787,
+     0.39499720000000005,
+     0.3944808,
+     0.39600230000000003,
+     0.3908184,
+     0.3931255,
+     0.3916161,
+     0.3916135,
+     0.39123060000000004,
+     0.3895037,
+     0.3907514,
+     0.393759,
+     0.39463440000000005,
+     0.39034290000000005,
+     0.39325920000000003,
+     0.3890655,
+     0.3914728
+    ],
+    "median": 0.39205535,
+    "mad": 0.0017080499999999887,
+    "madOverMedianPercent": 0.4356655252887095,
+    "mean": 0.39261588500000005,
+    "stddev": 0.002418884477404063,
+    "min": 0.3890655,
+    "max": 0.3985787,
+    "userMean": 0.2234375,
+    "systemMean": 0.15859375
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     145186816,
+     145166336,
+     145186816,
+     145186816,
+     145186816
+    ],
+    "peakCommitBytes": [
+     214589440,
+     214495232,
+     214519808,
+     214577152,
+     214519808
+    ],
+    "medianPeakWorkingSetBytes": 145186816,
+    "medianPeakCommitBytes": 214519808
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-playwright-tsrs-bind-single.json",
+   "throughput": {
+    "filesPerSecond": 3609.184264415726,
+    "megabytesPerSecond": 43.9540462845361
+   }
+  },
+  {
+   "repo": "playwright",
+   "kind": "parse",
+   "config": "cs-o-aot-ws-bind",
+   "configLabel": "C# Track O, NativeAOT, Workstation GC, parse+bind, parallel (parse+bind endpoint)",
+   "command": [
+    "artifacts/bin/cs/optimized-aot-ws/parse-cs-optimized-aot-ws.exe",
+    "--bind",
+    "artifacts/bench/filelists/playwright.txt"
+   ],
+   "output": {
+    "driver": "cs-optimized-aot-ws-bind-parallel",
+    "files": 1415,
+    "chars": 17223262,
+    "nodes": 1909612,
+    "symbols": 273701,
+    "priority": "high",
+    "allocatedBytes": 43337616,
+    "gen0": 2,
+    "gen1": 2,
+    "gen2": 2,
+    "gcPauseMs": 1.522
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.083124,
+     0.07838840000000001,
+     0.0793513,
+     0.0788104,
+     0.07484020000000001,
+     0.07482130000000001,
+     0.07560990000000001,
+     0.07458100000000001,
+     0.07544970000000001,
+     0.0755403,
+     0.0759851,
+     0.0754182,
+     0.0763815,
+     0.0790545,
+     0.07791390000000001,
+     0.07709,
+     0.0778383,
+     0.08258360000000001,
+     0.0793934,
+     0.0780136
+    ],
+    "median": 0.07746415000000001,
+    "mad": 0.001870699999999996,
+    "madOverMedianPercent": 2.414923548505981,
+    "mean": 0.07750943000000002,
+    "stddev": 0.002432135710397236,
+    "min": 0.07458100000000001,
+    "max": 0.083124,
+    "userMean": 0.396875,
+    "systemMean": 0.39140625
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     213405696,
+     213049344,
+     214700032,
+     213958656,
+     214593536
+    ],
+    "peakCommitBytes": [
+     330330112,
+     330137600,
+     325746688,
+     335454208,
+     324997120
+    ],
+    "medianPeakWorkingSetBytes": 213958656,
+    "medianPeakCommitBytes": 330137600
+   },
+   "runtime": {
+    "allocatedBytes": 43337616,
+    "gen0": 2,
+    "gen1": 2,
+    "gen2": 2,
+    "pauseMs": 1.522
+   },
+   "hyperfineExport": "hyperfine-playwright-cs-o-aot-ws-bind.json",
+   "throughput": {
+    "filesPerSecond": 18266.514252076602,
+    "megabytesPerSecond": 222.45669771113475
+   }
+  },
+  {
+   "repo": "playwright",
+   "kind": "parse",
+   "config": "cs-o-aot-ws-bind-single",
+   "configLabel": "C# Track O, NativeAOT, Workstation GC, parse+bind, single-threaded",
+   "command": [
+    "artifacts/bin/cs/optimized-aot-ws/parse-cs-optimized-aot-ws.exe",
+    "--bind",
+    "--single",
+    "artifacts/bench/filelists/playwright.txt"
+   ],
+   "output": {
+    "driver": "cs-optimized-aot-ws-bind-single",
+    "files": 1415,
+    "chars": 17223262,
+    "nodes": 1909612,
+    "symbols": 273701,
+    "priority": "high",
+    "allocatedBytes": 6538376,
+    "gen0": 0,
+    "gen1": 0,
+    "gen2": 0,
+    "gcPauseMs": 0
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.49033780000000005,
+     0.48727170000000003,
+     0.48792050000000003,
+     0.48602270000000003,
+     0.48260820000000004,
+     0.4908984,
+     0.48271100000000006,
+     0.48221390000000003,
+     0.4832189,
+     0.48247100000000004,
+     0.48389990000000005,
+     0.4883546,
+     0.4850998,
+     0.4878871,
+     0.4869142,
+     0.4891032,
+     0.4916439,
+     0.4867986,
+     0.48126110000000005,
+     0.4849917
+    ],
+    "median": 0.48641065000000006,
+    "mad": 0.002601649999999983,
+    "madOverMedianPercent": 0.534866989446054,
+    "mean": 0.48608141000000005,
+    "stddev": 0.0031253291742251916,
+    "min": 0.48126110000000005,
+    "max": 0.4916439,
+    "userMean": 0.3328125,
+    "systemMean": 0.1421875
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     184803328,
+     184856576,
+     184606720,
+     184655872,
+     184676352
+    ],
+    "peakCommitBytes": [
+     196620288,
+     196620288,
+     196616192,
+     196345856,
+     196349952
+    ],
+    "medianPeakWorkingSetBytes": 184676352,
+    "medianPeakCommitBytes": 196616192
+   },
+   "runtime": {
+    "allocatedBytes": 6538376,
+    "gen0": 0,
+    "gen1": 0,
+    "gen2": 0,
+    "pauseMs": 0
+   },
+   "hyperfineExport": "hyperfine-playwright-cs-o-aot-ws-bind-single.json",
+   "throughput": {
+    "filesPerSecond": 2909.0645938776215,
+    "megabytesPerSecond": 35.42771730018658
+   }
+  },
+  {
+   "repo": "playwright",
+   "kind": "parse",
+   "config": "cs-o-aot-srv-bind",
+   "configLabel": "C# Track O, NativeAOT, Server GC, parse+bind, parallel",
+   "command": [
+    "artifacts/bin/cs/optimized-aot-srv/parse-cs-optimized-aot-srv.exe",
+    "--bind",
+    "artifacts/bench/filelists/playwright.txt"
+   ],
+   "output": {
+    "driver": "cs-optimized-aot-srv-bind-parallel",
+    "files": 1415,
+    "chars": 17223262,
+    "nodes": 1909612,
+    "symbols": 273701,
+    "priority": "high",
+    "allocatedBytes": 51212328,
+    "gen0": 7,
+    "gen1": 6,
+    "gen2": 5,
+    "gcPauseMs": 8.213
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.08628910000000001,
+     0.0877599,
+     0.09110700000000001,
+     0.08917950000000001,
+     0.0972003,
+     0.1026325,
+     0.10101470000000001,
+     0.0890003,
+     0.0950497,
+     0.12973500000000002,
+     0.09107620000000001,
+     0.092743,
+     0.0914423,
+     0.09541050000000001,
+     0.0952888,
+     0.0952949,
+     0.1030897,
+     0.09594180000000001,
+     0.09928000000000001,
+     0.0942357
+    ],
+    "median": 0.09516925000000001,
+    "mad": 0.004077650000000002,
+    "madOverMedianPercent": 4.284629751731785,
+    "mean": 0.09613854500000002,
+    "stddev": 0.009210743279880753,
+    "min": 0.08628910000000001,
+    "max": 0.12973500000000002,
+    "userMean": 0.45546875,
+    "systemMean": 0.36640625
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     218898432,
+     220221440,
+     220975104,
+     220004352,
+     221908992
+    ],
+    "peakCommitBytes": [
+     347144192,
+     339644416,
+     347525120,
+     343093248,
+     350806016
+    ],
+    "medianPeakWorkingSetBytes": 220221440,
+    "medianPeakCommitBytes": 347144192
+   },
+   "runtime": {
+    "allocatedBytes": 51212328,
+    "gen0": 7,
+    "gen1": 6,
+    "gen2": 5,
+    "pauseMs": 8.213
+   },
+   "hyperfineExport": "hyperfine-playwright-cs-o-aot-srv-bind.json",
+   "throughput": {
+    "filesPerSecond": 14868.247884689643,
+    "megabytesPerSecond": 181.0712914097778
+   }
+  },
+  {
+   "repo": "playwright",
+   "kind": "parse",
+   "config": "cs-o-aot-srv-bind-single",
+   "configLabel": "C# Track O, NativeAOT, Server GC, parse+bind, single-threaded",
+   "command": [
+    "artifacts/bin/cs/optimized-aot-srv/parse-cs-optimized-aot-srv.exe",
+    "--bind",
+    "--single",
+    "artifacts/bench/filelists/playwright.txt"
+   ],
+   "output": {
+    "driver": "cs-optimized-aot-srv-bind-single",
+    "files": 1415,
+    "chars": 17223262,
+    "nodes": 1909612,
+    "symbols": 273701,
+    "priority": "high",
+    "allocatedBytes": 6539432,
+    "gen0": 1,
+    "gen1": 0,
+    "gen2": 0,
+    "gcPauseMs": 1.705
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.49073910000000004,
+     0.48718310000000004,
+     0.4908601,
+     0.5030146,
+     0.4897691,
+     0.49160590000000004,
+     0.49591520000000006,
+     0.5093316,
+     0.5079429000000001,
+     0.5132733,
+     0.4999732,
+     0.6452112,
+     0.5513218000000001,
+     0.4910068,
+     0.4949368,
+     0.49568330000000005,
+     0.49563720000000006,
+     0.493794,
+     0.49308870000000005,
+     0.5601599
+    ],
+    "median": 0.49566025,
+    "mad": 0.004860649999999994,
+    "madOverMedianPercent": 0.9806414777057458,
+    "mean": 0.51002239,
+    "stddev": 0.03729100328899579,
+    "min": 0.48718310000000004,
+    "max": 0.6452112,
+    "userMean": 0.33984375,
+    "systemMean": 0.15
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     187420672,
+     187973632,
+     187592704,
+     187535360,
+     187420672
+    ],
+    "peakCommitBytes": [
+     208744448,
+     209125376,
+     208764928,
+     208613376,
+     208740352
+    ],
+    "medianPeakWorkingSetBytes": 187535360,
+    "medianPeakCommitBytes": 208744448
+   },
+   "runtime": {
+    "allocatedBytes": 6539432,
+    "gen0": 1,
+    "gen1": 0,
+    "gen2": 0,
+    "pauseMs": 1.705
+   },
+   "hyperfineExport": "hyperfine-playwright-cs-o-aot-srv-bind-single.json",
+   "throughput": {
+    "filesPerSecond": 2854.778046050697,
+    "megabytesPerSecond": 34.766594658337034
+   }
+  },
+  {
+   "repo": "tldraw",
+   "kind": "parse",
+   "config": "tsgo7-bind",
+   "configLabel": "typescript-go 7.0.2, parse+bind, parallel (default)",
+   "command": [
+    "artifacts/bin/parse-go.exe",
+    "--bind",
+    "artifacts/bench/filelists/tldraw.txt"
+   ],
+   "output": {
+    "driver": "tsgo-7.0.2-bind-parallel",
+    "files": 2508,
+    "bytes": 13626240,
+    "nodes": 1840542,
+    "symbols": 262537,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.19760350000000002,
+     0.2094783,
+     0.1934546,
+     0.195911,
+     0.19439130000000002,
+     0.1902297,
+     0.1826343,
+     0.1855898,
+     0.20933190000000002,
+     0.19551880000000002,
+     0.19034700000000002,
+     0.19168110000000002,
+     0.1983308,
+     0.19839050000000003,
+     0.18763100000000002,
+     0.18144770000000002,
+     0.18452890000000002,
+     0.19632870000000002,
+     0.2074282,
+     0.2068355
+    ],
+    "median": 0.19495505000000002,
+    "mad": 0.00466670000000001,
+    "madOverMedianPercent": 2.393731272926764,
+    "mean": 0.19485463,
+    "stddev": 0.008549013244696722,
+    "min": 0.18144770000000002,
+    "max": 0.2094783,
+    "userMean": 1.50703125,
+    "systemMean": 1.12890625
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     360128512,
+     367661056,
+     361951232,
+     365637632,
+     366878720
+    ],
+    "peakCommitBytes": [
+     376905728,
+     383385600,
+     380067840,
+     383901696,
+     383807488
+    ],
+    "medianPeakWorkingSetBytes": 365637632,
+    "medianPeakCommitBytes": 383385600
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-tldraw-tsgo7-bind.json",
+   "throughput": {
+    "filesPerSecond": 12864.503894615706,
+    "megabytesPerSecond": 69.89426537040204
+   }
+  },
+  {
+   "repo": "tldraw",
+   "kind": "parse",
+   "config": "tsgo7-bind-single",
+   "configLabel": "typescript-go 7.0.2, parse+bind, single-threaded",
+   "command": [
+    "artifacts/bin/parse-go.exe",
+    "--bind",
+    "--single",
+    "artifacts/bench/filelists/tldraw.txt"
+   ],
+   "output": {
+    "driver": "tsgo-7.0.2-bind-single",
+    "files": 2508,
+    "bytes": 13626240,
+    "nodes": 1840542,
+    "symbols": 262537,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.8928011,
+     0.8944245000000001,
+     0.8969195000000001,
+     0.9126485000000001,
+     0.9199695000000001,
+     0.8964956000000001,
+     0.8913505,
+     0.8989554000000001,
+     0.8904729,
+     0.9000157000000001,
+     0.8976219000000001,
+     0.9095150000000001,
+     0.8995342000000001,
+     0.9017985000000001,
+     0.9098501000000001,
+     0.8964297000000001,
+     0.8966754,
+     0.8972500000000001,
+     0.8972464000000001,
+     0.9015177000000001
+    ],
+    "median": 0.8974359500000001,
+    "mad": 0.002795600000000009,
+    "madOverMedianPercent": 0.3115096960401474,
+    "mean": 0.9000746050000001,
+    "stddev": 0.00749708927998588,
+    "min": 0.8904729,
+    "max": 0.9199695000000001,
+    "userMean": 0.8578125,
+    "systemMean": 0.50703125
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     347377664,
+     342192128,
+     343117824,
+     342384640,
+     342921216
+    ],
+    "peakCommitBytes": [
+     355233792,
+     358154240,
+     353869824,
+     358006784,
+     351920128
+    ],
+    "medianPeakWorkingSetBytes": 342921216,
+    "medianPeakCommitBytes": 355233792
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-tldraw-tsgo7-bind-single.json",
+   "throughput": {
+    "filesPerSecond": 2794.628407743193,
+    "megabytesPerSecond": 15.183523682107896
+   }
+  },
+  {
+   "repo": "tldraw",
+   "kind": "parse",
+   "config": "tsrs-bind",
+   "configLabel": "tsrs 0.18.0 (Rust), parse+bind, parallel (rayon)",
+   "command": [
+    "artifacts/bin/parse-rs.exe",
+    "--bind",
+    "artifacts/bench/filelists/tldraw.txt"
+   ],
+   "output": {
+    "driver": "tsrs-0.18.0-bind-parallel",
+    "files": 2508,
+    "bytes": 13626240,
+    "nodes": 1845072,
+    "symbols": 262537,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.07527450000000001,
+     0.0825363,
+     0.07957310000000001,
+     0.0833572,
+     0.07936610000000001,
+     0.0778366,
+     0.0758251,
+     0.0836615,
+     0.07981640000000001,
+     0.0828686,
+     0.0772864,
+     0.0797499,
+     0.07610180000000001,
+     0.0731171,
+     0.0806887,
+     0.0825821,
+     0.077796,
+     0.0823169,
+     0.0813354,
+     0.0784966
+    ],
+    "median": 0.0796615,
+    "mad": 0.0025152499999999967,
+    "madOverMedianPercent": 3.157422343290042,
+    "mean": 0.079479315,
+    "stddev": 0.0029945755081436294,
+    "min": 0.0731171,
+    "max": 0.0836615,
+    "userMean": 0.39921875,
+    "systemMean": 0.446875
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     149434368,
+     149786624,
+     149225472,
+     150327296,
+     149688320
+    ],
+    "peakCommitBytes": [
+     368857088,
+     377888768,
+     371830784,
+     374321152,
+     385462272
+    ],
+    "medianPeakWorkingSetBytes": 149688320,
+    "medianPeakCommitBytes": 374321152
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-tldraw-tsrs-bind.json",
+   "throughput": {
+    "filesPerSecond": 31483.21334647226,
+    "megabytesPerSecond": 171.05176277122575
+   }
+  },
+  {
+   "repo": "tldraw",
+   "kind": "parse",
+   "config": "tsrs-bind-single",
+   "configLabel": "tsrs 0.18.0 (Rust), parse+bind, single-threaded",
+   "command": [
+    "artifacts/bin/parse-rs.exe",
+    "--bind",
+    "--single",
+    "artifacts/bench/filelists/tldraw.txt"
+   ],
+   "output": {
+    "driver": "tsrs-0.18.0-bind-single",
+    "files": 2508,
+    "bytes": 13626240,
+    "nodes": 1845072,
+    "symbols": 262537,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.49625070000000004,
+     0.48894730000000003,
+     0.489665,
+     0.49758840000000004,
+     0.48741480000000004,
+     0.4906651,
+     0.4932694,
+     0.49563850000000004,
+     0.49594590000000005,
+     0.4985543,
+     0.4942513,
+     0.4914564,
+     0.4977184,
+     0.49253230000000003,
+     0.4937284,
+     0.5054549,
+     0.4875803,
+     0.5017544,
+     0.4896125,
+     0.4891496
+    ],
+    "median": 0.4934989,
+    "mad": 0.0038601500000000066,
+    "madOverMedianPercent": 0.782200325066582,
+    "mean": 0.49385889499999996,
+    "stddev": 0.004823304746144935,
+    "min": 0.48741480000000004,
+    "max": 0.5054549,
+    "userMean": 0.2578125,
+    "systemMean": 0.23125
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     141180928,
+     141180928,
+     141176832,
+     141185024,
+     141180928
+    ],
+    "peakCommitBytes": [
+     207265792,
+     207204352,
+     207204352,
+     207200256,
+     207269888
+    ],
+    "medianPeakWorkingSetBytes": 141180928,
+    "medianPeakCommitBytes": 207204352
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-tldraw-tsrs-bind-single.json",
+   "throughput": {
+    "filesPerSecond": 5082.078197134786,
+    "megabytesPerSecond": 27.61149011679661
+   }
+  },
+  {
+   "repo": "tldraw",
+   "kind": "parse",
+   "config": "cs-o-aot-ws-bind",
+   "configLabel": "C# Track O, NativeAOT, Workstation GC, parse+bind, parallel (parse+bind endpoint)",
+   "command": [
+    "artifacts/bin/cs/optimized-aot-ws/parse-cs-optimized-aot-ws.exe",
+    "--bind",
+    "artifacts/bench/filelists/tldraw.txt"
+   ],
+   "output": {
+    "driver": "cs-optimized-aot-ws-bind-parallel",
+    "files": 2508,
+    "chars": 13584009,
+    "nodes": 1842333,
+    "symbols": 262536,
+    "priority": "high",
+    "allocatedBytes": 45931328,
+    "gen0": 3,
+    "gen1": 3,
+    "gen2": 2,
+    "gcPauseMs": 5.342
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.08817420000000001,
+     0.08967370000000001,
+     0.09011540000000001,
+     0.09226730000000001,
+     0.0931116,
+     0.0950613,
+     0.09367120000000001,
+     0.09008680000000001,
+     0.0896736,
+     0.08855560000000001,
+     0.08846770000000001,
+     0.09007090000000001,
+     0.0927101,
+     0.0876686,
+     0.08985710000000001,
+     0.092063,
+     0.09101110000000001,
+     0.08910030000000001,
+     0.08947730000000001,
+     0.10231910000000001
+    ],
+    "median": 0.09007885000000002,
+    "mad": 0.0015672000000000047,
+    "madOverMedianPercent": 1.739809067278284,
+    "mean": 0.09115679499999998,
+    "stddev": 0.0032933907137070117,
+    "min": 0.0876686,
+    "max": 0.10231910000000001,
+    "userMean": 0.47421875,
+    "systemMean": 0.49453125
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     195399680,
+     195506176,
+     195059712,
+     195444736,
+     195989504
+    ],
+    "peakCommitBytes": [
+     293662720,
+     287870976,
+     290803712,
+     295133184,
+     294408192
+    ],
+    "medianPeakWorkingSetBytes": 195444736,
+    "medianPeakCommitBytes": 293662720
+   },
+   "runtime": {
+    "allocatedBytes": 45931328,
+    "gen0": 3,
+    "gen1": 3,
+    "gen2": 2,
+    "pauseMs": 5.342
+   },
+   "hyperfineExport": "hyperfine-tldraw-cs-o-aot-ws-bind.json",
+   "throughput": {
+    "filesPerSecond": 27842.273741283327,
+    "megabytesPerSecond": 151.27013721867004
+   }
+  },
+  {
+   "repo": "tldraw",
+   "kind": "parse",
+   "config": "cs-o-aot-ws-bind-single",
+   "configLabel": "C# Track O, NativeAOT, Workstation GC, parse+bind, single-threaded",
+   "command": [
+    "artifacts/bin/cs/optimized-aot-ws/parse-cs-optimized-aot-ws.exe",
+    "--bind",
+    "--single",
+    "artifacts/bench/filelists/tldraw.txt"
+   ],
+   "output": {
+    "driver": "cs-optimized-aot-ws-bind-single",
+    "files": 2508,
+    "chars": 13584009,
+    "nodes": 1842333,
+    "symbols": 262536,
+    "priority": "high",
+    "allocatedBytes": 9121040,
+    "gen0": 0,
+    "gen1": 0,
+    "gen2": 0,
+    "gcPauseMs": 0
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.5700929,
+     0.5700114000000001,
+     0.5715246,
+     0.5658802,
+     0.5658019000000001,
+     0.5653295,
+     0.5653506,
+     0.5639579,
+     0.563674,
+     0.5657902,
+     0.5692109000000001,
+     0.5671258,
+     0.5816708,
+     0.5709121,
+     0.5689399,
+     0.5689134,
+     0.572646,
+     0.5593358,
+     0.5660073,
+     0.5625996000000001
+    ],
+    "median": 0.56656655,
+    "mad": 0.0026265000000000316,
+    "madOverMedianPercent": 0.46358190401463545,
+    "mean": 0.56773874,
+    "stddev": 0.004656653116201759,
+    "min": 0.5593358,
+    "max": 0.5816708,
+    "userMean": 0.33671875,
+    "systemMean": 0.22109375
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     171761664,
+     171909120,
+     171868160,
+     171606016,
+     171589632
+    ],
+    "peakCommitBytes": [
+     177676288,
+     177668096,
+     177733632,
+     177438720,
+     177397760
+    ],
+    "medianPeakWorkingSetBytes": 171761664,
+    "medianPeakCommitBytes": 177668096
+   },
+   "runtime": {
+    "allocatedBytes": 9121040,
+    "gen0": 0,
+    "gen1": 0,
+    "gen2": 0,
+    "pauseMs": 0
+   },
+   "hyperfineExport": "hyperfine-tldraw-cs-o-aot-ws-bind-single.json",
+   "throughput": {
+    "filesPerSecond": 4426.664440390983,
+    "megabytesPerSecond": 24.05055504953478
+   }
+  },
+  {
+   "repo": "tldraw",
+   "kind": "parse",
+   "config": "cs-o-aot-srv-bind",
+   "configLabel": "C# Track O, NativeAOT, Server GC, parse+bind, parallel",
+   "command": [
+    "artifacts/bin/cs/optimized-aot-srv/parse-cs-optimized-aot-srv.exe",
+    "--bind",
+    "artifacts/bench/filelists/tldraw.txt"
+   ],
+   "output": {
+    "driver": "cs-optimized-aot-srv-bind-parallel",
+    "files": 2508,
+    "chars": 13584009,
+    "nodes": 1842333,
+    "symbols": 262536,
+    "priority": "high",
+    "allocatedBytes": 50751168,
+    "gen0": 8,
+    "gen1": 6,
+    "gen2": 5,
+    "gcPauseMs": 11.675
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.10485000000000001,
+     0.130948,
+     0.0985878,
+     0.10609370000000001,
+     0.10738270000000001,
+     0.10009480000000001,
+     0.1021655,
+     0.10240940000000001,
+     0.1009179,
+     0.1106092,
+     0.1097473,
+     0.11179190000000001,
+     0.10615290000000001,
+     0.09984920000000001,
+     0.1007358,
+     0.0962895,
+     0.09753200000000001,
+     0.09580860000000001,
+     0.0974639,
+     0.10756410000000001
+    ],
+    "median": 0.10228745,
+    "mad": 0.00431045,
+    "madOverMedianPercent": 4.214055585509268,
+    "mean": 0.10434971,
+    "stddev": 0.007927267481222147,
+    "min": 0.09580860000000001,
+    "max": 0.130948,
+    "userMean": 0.54296875,
+    "systemMean": 0.50234375
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     201539584,
+     200421376,
+     198774784,
+     198152192,
+     200818688
+    ],
+    "peakCommitBytes": [
+     309194752,
+     297938944,
+     295243776,
+     300294144,
+     293236736
+    ],
+    "medianPeakWorkingSetBytes": 200421376,
+    "medianPeakCommitBytes": 297938944
+   },
+   "runtime": {
+    "allocatedBytes": 50751168,
+    "gen0": 8,
+    "gen1": 6,
+    "gen2": 5,
+    "pauseMs": 11.675
+   },
+   "hyperfineExport": "hyperfine-tldraw-cs-o-aot-srv-bind.json",
+   "throughput": {
+    "filesPerSecond": 24519.13700067799,
+    "megabytesPerSecond": 133.21516960291805
+   }
+  },
+  {
+   "repo": "tldraw",
+   "kind": "parse",
+   "config": "cs-o-aot-srv-bind-single",
+   "configLabel": "C# Track O, NativeAOT, Server GC, parse+bind, single-threaded",
+   "command": [
+    "artifacts/bin/cs/optimized-aot-srv/parse-cs-optimized-aot-srv.exe",
+    "--bind",
+    "--single",
+    "artifacts/bench/filelists/tldraw.txt"
+   ],
+   "output": {
+    "driver": "cs-optimized-aot-srv-bind-single",
+    "files": 2508,
+    "chars": 13584009,
+    "nodes": 1842333,
+    "symbols": 262536,
+    "priority": "high",
+    "allocatedBytes": 9122768,
+    "gen0": 2,
+    "gen1": 1,
+    "gen2": 0,
+    "gcPauseMs": 4.848
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.5798329,
+     0.5832874,
+     0.5950177,
+     0.5767305,
+     0.5973216,
+     0.5895842,
+     0.5805671,
+     0.5713884,
+     0.5776462,
+     0.572489,
+     0.5700939,
+     0.5740526,
+     0.574806,
+     0.5897894,
+     0.5824349000000001,
+     0.5907881,
+     0.5852114,
+     0.5757322,
+     0.5724143,
+     0.5752979
+    ],
+    "median": 0.57873955,
+    "mad": 0.005468749999999967,
+    "madOverMedianPercent": 0.9449414680576033,
+    "mean": 0.5807242850000002,
+    "stddev": 0.008171017992835209,
+    "min": 0.5700939,
+    "max": 0.5973216,
+    "userMean": 0.353125,
+    "systemMean": 0.22265625
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     173731840,
+     173686784,
+     173498368,
+     173551616,
+     173563904
+    ],
+    "peakCommitBytes": [
+     188669952,
+     188743680,
+     188710912,
+     188678144,
+     188698624
+    ],
+    "medianPeakWorkingSetBytes": 173563904,
+    "medianPeakCommitBytes": 188698624
+   },
+   "runtime": {
+    "allocatedBytes": 9122768,
+    "gen0": 2,
+    "gen1": 1,
+    "gen2": 0,
+    "pauseMs": 4.848
+   },
+   "hyperfineExport": "hyperfine-tldraw-cs-o-aot-srv-bind-single.json",
+   "throughput": {
+    "filesPerSecond": 4333.555569167513,
+    "megabytesPerSecond": 23.54468430574686
+   }
+  }
+ ],
+ "fixedCost": [
+  {
+   "config": "tsgo7-bind",
+   "configLabel": "typescript-go 7.0.2, parse+bind, parallel (default)",
+   "command": [
+    "artifacts/bin/parse-go.exe",
+    "--bind",
+    "artifacts/bench/filelists/empty.txt"
+   ],
+   "output": {
+    "driver": "tsgo-7.0.2-bind-parallel",
+    "files": 0,
+    "bytes": 0,
+    "nodes": 0,
+    "symbols": 0,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.0224027,
+     0.0221825,
+     0.021102700000000002,
+     0.022425800000000003,
+     0.022474900000000003,
+     0.023070800000000002,
+     0.022090500000000002,
+     0.0222544,
+     0.022045600000000002,
+     0.022092800000000003,
+     0.0219342,
+     0.0216732,
+     0.021689,
+     0.021630200000000002,
+     0.021980000000000003,
+     0.0221412,
+     0.021953900000000002,
+     0.022114,
+     0.025603900000000002,
+     0.0221936
+    ],
+    "median": 0.022103400000000002,
+    "mad": 0.00016009999999999983,
+    "madOverMedianPercent": 0.7243229548395261,
+    "mean": 0.022252795000000006,
+    "stddev": 0.0008815416946732405,
+    "min": 0.021102700000000002,
+    "max": 0.025603900000000002,
+    "userMean": 0.0046875,
+    "systemMean": 0.00859375
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     9842688,
+     9797632,
+     10010624,
+     9838592,
+     9797632
+    ],
+    "peakCommitBytes": [
+     13082624,
+     13103104,
+     13520896,
+     13099008,
+     13103104
+    ],
+    "medianPeakWorkingSetBytes": 9838592,
+    "medianPeakCommitBytes": 13103104
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-fixed-cost-tsgo7-bind.json"
+  },
+  {
+   "config": "tsgo7-bind-single",
+   "configLabel": "typescript-go 7.0.2, parse+bind, single-threaded",
+   "command": [
+    "artifacts/bin/parse-go.exe",
+    "--bind",
+    "--single",
+    "artifacts/bench/filelists/empty.txt"
+   ],
+   "output": {
+    "driver": "tsgo-7.0.2-bind-single",
+    "files": 0,
+    "bytes": 0,
+    "nodes": 0,
+    "symbols": 0,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.0209436,
+     0.0215462,
+     0.021293000000000003,
+     0.020506,
+     0.0202732,
+     0.0212853,
+     0.0205322,
+     0.0210934,
+     0.020004,
+     0.0204942,
+     0.020235000000000003,
+     0.0212821,
+     0.020017800000000002,
+     0.021149,
+     0.020268,
+     0.020778300000000003,
+     0.020237500000000002,
+     0.0215936,
+     0.0212339,
+     0.0221556
+    ],
+    "median": 0.020860950000000003,
+    "mad": 0.0004281999999999984,
+    "madOverMedianPercent": 2.0526390217128094,
+    "mean": 0.020846095000000002,
+    "stddev": 0.0005983879972366106,
+    "min": 0.020004,
+    "max": 0.0221556,
+    "userMean": 0.00859375,
+    "systemMean": 0.0046875
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     9859072,
+     9789440,
+     9797632,
+     9805824,
+     9801728
+    ],
+    "peakCommitBytes": [
+     13094912,
+     13099008,
+     13099008,
+     13107200,
+     13111296
+    ],
+    "medianPeakWorkingSetBytes": 9801728,
+    "medianPeakCommitBytes": 13099008
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-fixed-cost-tsgo7-bind-single.json"
+  },
+  {
+   "config": "tsrs-bind",
+   "configLabel": "tsrs 0.18.0 (Rust), parse+bind, parallel (rayon)",
+   "command": [
+    "artifacts/bin/parse-rs.exe",
+    "--bind",
+    "artifacts/bench/filelists/empty.txt"
+   ],
+   "output": {
+    "driver": "tsrs-0.18.0-bind-parallel",
+    "files": 0,
+    "bytes": 0,
+    "nodes": 0,
+    "symbols": 0,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.0188308,
+     0.0196541,
+     0.0186949,
+     0.0192112,
+     0.018876800000000003,
+     0.019628,
+     0.0186372,
+     0.0192339,
+     0.0186918,
+     0.018616900000000002,
+     0.018689900000000002,
+     0.018733200000000002,
+     0.0187509,
+     0.0191428,
+     0.0196554,
+     0.019483300000000002,
+     0.0185487,
+     0.018840700000000002,
+     0.0188761,
+     0.019025900000000002
+    ],
+    "median": 0.0188584,
+    "mad": 0.00019484999999999988,
+    "madOverMedianPercent": 1.0332265727739356,
+    "mean": 0.018991125,
+    "stddev": 0.00036908313694028884,
+    "min": 0.0185487,
+    "max": 0.0196554,
+    "userMean": 0.01015625,
+    "systemMean": 0.0125
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     8007680,
+     8015872,
+     8007680,
+     7983104,
+     7962624
+    ],
+    "peakCommitBytes": [
+     24207360,
+     24293376,
+     24219648,
+     24080384,
+     24080384
+    ],
+    "medianPeakWorkingSetBytes": 8007680,
+    "medianPeakCommitBytes": 24207360
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-fixed-cost-tsrs-bind.json"
+  },
+  {
+   "config": "tsrs-bind-single",
+   "configLabel": "tsrs 0.18.0 (Rust), parse+bind, single-threaded",
+   "command": [
+    "artifacts/bin/parse-rs.exe",
+    "--bind",
+    "--single",
+    "artifacts/bench/filelists/empty.txt"
+   ],
+   "output": {
+    "driver": "tsrs-0.18.0-bind-single",
+    "files": 0,
+    "bytes": 0,
+    "nodes": 0,
+    "symbols": 0,
+    "priority": "high"
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.0172129,
+     0.017756,
+     0.0169142,
+     0.016672100000000002,
+     0.0170365,
+     0.016784200000000003,
+     0.017094,
+     0.0168694,
+     0.016427,
+     0.0169597,
+     0.0171643,
+     0.018005800000000002,
+     0.0171204,
+     0.0170299,
+     0.017175100000000002,
+     0.017567600000000003,
+     0.017162,
+     0.0175184,
+     0.016735700000000003,
+     0.0175393
+    ],
+    "median": 0.017107200000000003,
+    "mad": 0.00021540000000000274,
+    "madOverMedianPercent": 1.2591189674523167,
+    "mean": 0.017137225,
+    "stddev": 0.0003853505169596281,
+    "min": 0.016427,
+    "max": 0.018005800000000002,
+    "userMean": 0.0046875,
+    "systemMean": 0.00546875
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     6955008,
+     6955008,
+     6950912,
+     6955008,
+     6950912
+    ],
+    "peakCommitBytes": [
+     19968000,
+     19963904,
+     19963904,
+     19963904,
+     19959808
+    ],
+    "medianPeakWorkingSetBytes": 6955008,
+    "medianPeakCommitBytes": 19963904
+   },
+   "runtime": null,
+   "hyperfineExport": "hyperfine-fixed-cost-tsrs-bind-single.json"
+  },
+  {
+   "config": "cs-o-aot-ws-bind",
+   "configLabel": "C# Track O, NativeAOT, Workstation GC, parse+bind, parallel (parse+bind endpoint)",
+   "command": [
+    "artifacts/bin/cs/optimized-aot-ws/parse-cs-optimized-aot-ws.exe",
+    "--bind",
+    "artifacts/bench/filelists/empty.txt"
+   ],
+   "output": {
+    "driver": "cs-optimized-aot-ws-bind-parallel",
+    "files": 0,
+    "chars": 0,
+    "nodes": 0,
+    "symbols": 0,
+    "priority": "high",
+    "allocatedBytes": 60784,
+    "gen0": 0,
+    "gen1": 0,
+    "gen2": 0,
+    "gcPauseMs": 0
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.0244497,
+     0.0243727,
+     0.0241064,
+     0.023396800000000002,
+     0.023723300000000003,
+     0.025481,
+     0.023941300000000002,
+     0.0242973,
+     0.0231015,
+     0.023888200000000002,
+     0.024078000000000002,
+     0.0236366,
+     0.0243055,
+     0.024660300000000003,
+     0.024878800000000003,
+     0.0254435,
+     0.0243977,
+     0.0247986,
+     0.023809900000000002,
+     0.0237664
+    ],
+    "median": 0.02420185,
+    "mad": 0.0004136999999999995,
+    "madOverMedianPercent": 1.70937345698779,
+    "mean": 0.024226675000000003,
+    "stddev": 0.0006190110804849601,
+    "min": 0.0231015,
+    "max": 0.025481,
+    "userMean": 0.00859375,
+    "systemMean": 0.0109375
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     10919936,
+     10932224,
+     10924032,
+     10940416,
+     10924032
+    ],
+    "peakCommitBytes": [
+     4038656,
+     4034560,
+     4050944,
+     4055040,
+     4046848
+    ],
+    "medianPeakWorkingSetBytes": 10924032,
+    "medianPeakCommitBytes": 4046848
+   },
+   "runtime": {
+    "allocatedBytes": 60784,
+    "gen0": 0,
+    "gen1": 0,
+    "gen2": 0,
+    "pauseMs": 0
+   },
+   "hyperfineExport": "hyperfine-fixed-cost-cs-o-aot-ws-bind.json"
+  },
+  {
+   "config": "cs-o-aot-ws-bind-single",
+   "configLabel": "C# Track O, NativeAOT, Workstation GC, parse+bind, single-threaded",
+   "command": [
+    "artifacts/bin/cs/optimized-aot-ws/parse-cs-optimized-aot-ws.exe",
+    "--bind",
+    "--single",
+    "artifacts/bench/filelists/empty.txt"
+   ],
+   "output": {
+    "driver": "cs-optimized-aot-ws-bind-single",
+    "files": 0,
+    "chars": 0,
+    "nodes": 0,
+    "symbols": 0,
+    "priority": "high",
+    "allocatedBytes": 60816,
+    "gen0": 0,
+    "gen1": 0,
+    "gen2": 0,
+    "gcPauseMs": 0
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.0239047,
+     0.0256638,
+     0.0243737,
+     0.0242879,
+     0.0243979,
+     0.024592000000000003,
+     0.024117200000000002,
+     0.0247028,
+     0.0261698,
+     0.0270768,
+     0.0243786,
+     0.0250473,
+     0.024899400000000002,
+     0.025335800000000002,
+     0.0241817,
+     0.024319200000000003,
+     0.024558800000000002,
+     0.024503800000000003,
+     0.025077400000000003,
+     0.026491200000000003
+    ],
+    "median": 0.024575400000000004,
+    "mad": 0.00035885000000000083,
+    "madOverMedianPercent": 1.4602000374358128,
+    "mean": 0.024903990000000004,
+    "stddev": 0.0008506460534886349,
+    "min": 0.0239047,
+    "max": 0.0270768,
+    "userMean": 0.00703125,
+    "systemMean": 0.01171875
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     10649600,
+     10649600,
+     10661888,
+     10919936,
+     10919936
+    ],
+    "peakCommitBytes": [
+     3764224,
+     3772416,
+     3776512,
+     4022272,
+     4038656
+    ],
+    "medianPeakWorkingSetBytes": 10661888,
+    "medianPeakCommitBytes": 3776512
+   },
+   "runtime": {
+    "allocatedBytes": 60816,
+    "gen0": 0,
+    "gen1": 0,
+    "gen2": 0,
+    "pauseMs": 0
+   },
+   "hyperfineExport": "hyperfine-fixed-cost-cs-o-aot-ws-bind-single.json"
+  },
+  {
+   "config": "cs-o-aot-srv-bind",
+   "configLabel": "C# Track O, NativeAOT, Server GC, parse+bind, parallel",
+   "command": [
+    "artifacts/bin/cs/optimized-aot-srv/parse-cs-optimized-aot-srv.exe",
+    "--bind",
+    "artifacts/bench/filelists/empty.txt"
+   ],
+   "output": {
+    "driver": "cs-optimized-aot-srv-bind-parallel",
+    "files": 0,
+    "chars": 0,
+    "nodes": 0,
+    "symbols": 0,
+    "priority": "high",
+    "allocatedBytes": 60784,
+    "gen0": 0,
+    "gen1": 0,
+    "gen2": 0,
+    "gcPauseMs": 0
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.0422873,
+     0.0529197,
+     0.032909400000000005,
+     0.0283785,
+     0.027843100000000003,
+     0.0300481,
+     0.028172600000000003,
+     0.0516408,
+     0.049435,
+     0.028015500000000002,
+     0.0280421,
+     0.029541500000000002,
+     0.0314038,
+     0.0333498,
+     0.0332143,
+     0.044278000000000005,
+     0.0410338,
+     0.0477177,
+     0.028168400000000003,
+     0.034313800000000005
+    ],
+    "median": 0.033061850000000004,
+    "mad": 0.004956600000000002,
+    "madOverMedianPercent": 14.991901542109717,
+    "mean": 0.03613566,
+    "stddev": 0.008830232402937916,
+    "min": 0.027843100000000003,
+    "max": 0.0529197,
+    "userMean": 0.01953125,
+    "systemMean": 0.0125
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     12746752,
+     12722176,
+     12701696,
+     12685312,
+     12693504
+    ],
+    "peakCommitBytes": [
+     13664256,
+     13783040,
+     13656064,
+     13627392,
+     13594624
+    ],
+    "medianPeakWorkingSetBytes": 12701696,
+    "medianPeakCommitBytes": 13656064
+   },
+   "runtime": {
+    "allocatedBytes": 60784,
+    "gen0": 0,
+    "gen1": 0,
+    "gen2": 0,
+    "pauseMs": 0
+   },
+   "hyperfineExport": "hyperfine-fixed-cost-cs-o-aot-srv-bind.json"
+  },
+  {
+   "config": "cs-o-aot-srv-bind-single",
+   "configLabel": "C# Track O, NativeAOT, Server GC, parse+bind, single-threaded",
+   "command": [
+    "artifacts/bin/cs/optimized-aot-srv/parse-cs-optimized-aot-srv.exe",
+    "--bind",
+    "--single",
+    "artifacts/bench/filelists/empty.txt"
+   ],
+   "output": {
+    "driver": "cs-optimized-aot-srv-bind-single",
+    "files": 0,
+    "chars": 0,
+    "nodes": 0,
+    "symbols": 0,
+    "priority": "high",
+    "allocatedBytes": 60816,
+    "gen0": 0,
+    "gen1": 0,
+    "gen2": 0,
+    "gcPauseMs": 0
+   },
+   "timing": {
+    "unit": "s",
+    "times": [
+     0.028144100000000002,
+     0.0280724,
+     0.0507183,
+     0.027831500000000002,
+     0.0392529,
+     0.0284532,
+     0.039370600000000006,
+     0.035339100000000005,
+     0.027553400000000002,
+     0.0279712,
+     0.0275383,
+     0.027914500000000002,
+     0.0274929,
+     0.027088,
+     0.028317400000000003,
+     0.027815600000000003,
+     0.026943400000000003,
+     0.043840500000000004,
+     0.0283411,
+     0.027581400000000002
+    ],
+    "median": 0.0280218,
+    "mad": 0.00045439999999999717,
+    "madOverMedianPercent": 1.6215946156206853,
+    "mean": 0.03127899,
+    "stddev": 0.006747708947557488,
+    "min": 0.026943400000000003,
+    "max": 0.0507183,
+    "userMean": 0.00859375,
+    "systemMean": 0.015625
+   },
+   "memory": {
+    "runs": 5,
+    "peakWorkingSetBytes": [
+     12705792,
+     12701696,
+     12771328,
+     12713984,
+     12677120
+    ],
+    "peakCommitBytes": [
+     13737984,
+     13692928,
+     13778944,
+     13758464,
+     13631488
+    ],
+    "medianPeakWorkingSetBytes": 12705792,
+    "medianPeakCommitBytes": 13737984
+   },
+   "runtime": {
+    "allocatedBytes": 60816,
+    "gen0": 0,
+    "gen1": 0,
+    "gen2": 0,
+    "pauseMs": 0
+   },
+   "hyperfineExport": "hyperfine-fixed-cost-cs-o-aot-srv-bind-single.json"
+  }
+ ]
+}
