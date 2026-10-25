@@ -144,7 +144,7 @@ internal sealed partial class Checker
                         var flags = target.ElementFlags![j];
                         var t = elementTypes[j];
                         result.Add(CreateSyntheticArg(arg, (flags & ElementFlags.Rest) != 0 ? CreateArrayType(t) : t, (flags & ElementFlags.Variable) != 0,
-                            target.LabeledElementDeclarations is { } labels ? labels[j] : NodeRef.None));
+                            target.LabeledElementDeclarations is { } labels && j < labels.Length ? labels[j] : NodeRef.None));
                     }
                 }
                 else
@@ -335,6 +335,10 @@ internal sealed partial class Checker
         }
         SignatureFlags callChainFlags;
         var funcType = CheckExpression(expression);
+        if ((Types.Flags(funcType) & TypeFlags.AnyOrUnknown) != 0 && SuppressDerivedDiagnostics(expression, funcType))
+        {
+            uncertainExpressions.Add(node); // C1's "uncertain" mechanism: the callee's type is an approximation
+        }
         if (UtilitiesPublic.IsCallChain(store, n))
         {
             var nonOptionalType = GetOptionalExpressionType(funcType, expression);
@@ -460,6 +464,10 @@ internal sealed partial class Checker
         var n = node.Node;
         var expression = At(node, store.Expression(n));
         var expressionType = CheckNonNullExpression(expression);
+        if ((Types.Flags(expressionType) & TypeFlags.AnyOrUnknown) != 0 && SuppressDerivedDiagnostics(expression, expressionType))
+        {
+            uncertainExpressions.Add(node); // C1's "uncertain" mechanism: the callee's type is an approximation
+        }
         if (expressionType == silentNeverType)
         {
             return silentNeverSignature;
@@ -973,14 +981,14 @@ internal sealed partial class Checker
                 var spans = store.Nodes(store.TemplateSpans(template));
                 var lastSpan = spans[^1]; // we should always have at least one span.
                 var literal = store.Literal(lastSpan);
-                callIsIncomplete = Utilities.NodeIsMissing(store, literal) || (store.TemplateFlags(literal) & TokenFlags.Unterminated) != 0;
+                callIsIncomplete = Utilities.NodeIsMissing(store, literal) || store.IsUnterminated(literal);
             }
             else
             {
                 // If the template didn't end in a backtick, or its beginning occurred right prior to EOF,
                 // then this might actually turn out to be a TemplateHead in the future;
                 // so we consider the call to be incomplete.
-                callIsIncomplete = (store.TemplateFlags(template) & TokenFlags.Unterminated) != 0;
+                callIsIncomplete = store.IsUnterminated(template);
             }
         }
         else if (store.Kind(n) == SyntaxKind.Decorator)
@@ -1474,6 +1482,7 @@ internal sealed partial class Checker
         var candidateForTypeArgumentError = Signature.None;
         var result = Signature.None;
         var argCheckMode = CheckMode.Normal;
+        var inferenceUsed = false; // TODO(C6): a candidate's type arguments needed inference
         var typeArguments = NodeList.None;
         if (!isDecorator && !isInstanceof && !IsSuperCall(store, n))
         {
@@ -1566,6 +1575,11 @@ internal sealed partial class Checker
         // no arguments excluded from assignability checks.
         // If candidate is undefined, it means that no candidates had a suitable arity. In that case,
         // skip the checkApplicableSignature check.
+        if (inferenceUsed)
+        {
+            // TODO(C6): the candidates failed with the seam's inferences; the failure is not reported
+            MarkUncertainCall(node, args);
+        }
         if (reportErrors && !IsUncertainExpression(node))
         {
             // If the call expression is a synthetic call to a `[Symbol.hasInstance]` method then we will produce a head
@@ -1780,6 +1794,7 @@ internal sealed partial class Checker
                     else
                     {
                         inferenceContext = CreateInferenceContext(Types.Elements(candidateTypeParameters), candidate, Utilities.IsInJSFile(store, n) ? InferenceFlags.AnyDefault : InferenceFlags.None);
+                        inferenceUsed = true;
                         typeArgumentTypes = InferTypeArguments(node, candidate, args, argCheckMode | CheckMode.SkipGenericFunctions, inferenceContext);
                         argCheckMode |= (inferenceContext.Flags & InferenceFlags.SkippedGenericFunction) != 0 ? CheckMode.SkipGenericFunctions : CheckMode.Normal;
                     }

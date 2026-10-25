@@ -62,6 +62,39 @@ internal sealed partial class Checker
         {
             n = store.Expression(n);
         }
+        // the elements and property values that give an array or object literal its type (their types: any type narrowing
+        // can change)
+        switch (store.Kind(n))
+        {
+            case SyntaxKind.ArrayLiteralExpression:
+                foreach (var element in store.Nodes(store.Elements(n)))
+                {
+                    if (IsNarrowingPending(At(expr, element), unknownType))
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            case SyntaxKind.ObjectLiteralExpression:
+                foreach (var property in store.Nodes(store.Properties(n)))
+                {
+                    var value = store.Kind(property) switch
+                    {
+                        SyntaxKind.PropertyAssignment => store.Initializer(property),
+                        SyntaxKind.ShorthandPropertyAssignment => store.Name(property),
+                        SyntaxKind.SpreadAssignment => store.Expression(property),
+                        _ => Node.None,
+                    };
+                    if (!value.IsNone && IsNarrowingPending(At(expr, value), unknownType))
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            case SyntaxKind.SpreadElement:
+            case SyntaxKind.AwaitExpression:
+                return IsNarrowingPending(At(expr, store.Expression(n)), type);
+        }
         // the operands that give a conditional or logical expression its type
         if (store.Kind(n) == SyntaxKind.ConditionalExpression)
         {

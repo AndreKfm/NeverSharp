@@ -89,18 +89,59 @@ internal sealed partial class Checker
     }
 
     /// <summary>checker.ts cloneInferenceContext.</summary>
-    internal static InferenceContext? CloneInferenceContext(InferenceContext? context, InferenceFlags extraFlags = InferenceFlags.None) =>
+    internal InferenceContext? CloneInferenceContext(InferenceContext? context, InferenceFlags extraFlags = InferenceFlags.None) =>
         context is null ? null : CreateInferenceContextWorker(context.Inferences.ConvertAll(CloneInferenceInfo), context.Signature, context.Flags | extraFlags, context.CompareTypes);
 
-    // checker.ts createInferenceContextWorker (TODO(C6): the fixing and non-fixing mappers map each type parameter to
-    // its inferred type; the seam infers nothing and maps type parameters to themselves)
-    private static InferenceContext CreateInferenceContextWorker(List<InferenceInfo> inferences, Signature signature, InferenceFlags flags, Func<Type, Type, bool>? compareTypes)
+    // checker.ts createInferenceContextWorker (TODO(C6): the seam makes no inferences: the fixing and non-fixing mappers
+    // map each type parameter to the type getInferredType gives it without candidates)
+    private InferenceContext CreateInferenceContextWorker(List<InferenceInfo> inferences, Signature signature, InferenceFlags flags, Func<Type, Type, bool>? compareTypes)
     {
         var context = new InferenceContext { Inferences = inferences, Signature = signature, Flags = flags, CompareTypes = compareTypes };
         var sources = inferences.ConvertAll(i => i.TypeParameter).ToArray();
-        context.Mapper = CreateTypeMapper(sources, sources);
-        context.NonFixingMapper = CreateTypeMapper(sources, sources);
+        var targets = InferredTypesWithoutCandidates(context, sources);
+        context.Mapper = CreateTypeMapper(sources, targets);
+        context.NonFixingMapper = CreateTypeMapper(sources, targets);
         return context;
+    }
+
+    // checker.ts getInferredType for inferences without candidates: the instantiated default type, else unknown (any in
+    // JavaScript, silentNever with NoDefault); the instantiated constraint when the type is not assignable to it
+    private Type[] InferredTypesWithoutCandidates(InferenceContext context, Type[] typeParameters)
+    {
+        var inferred = new Type[typeParameters.Length];
+        if (typeParameters.Length == 0)
+        {
+            return inferred;
+        }
+        var fallback = (context.Flags & InferenceFlags.NoDefault) != 0 ? silentNeverType : (context.Flags & InferenceFlags.AnyDefault) != 0 ? anyType : unknownType;
+        var defaults = new Type[typeParameters.Length];
+        for (var i = 0; i < typeParameters.Length; i++)
+        {
+            defaults[i] = (context.Flags & InferenceFlags.NoDefault) != 0 ? Type.None : GetDefaultFromTypeParameter(typeParameters[i]);
+            inferred[i] = fallback;
+        }
+        var mapper = CreateTypeMapper(typeParameters, inferred);
+        for (var i = 0; i < typeParameters.Length; i++)
+        {
+            if (!defaults[i].IsNone)
+            {
+                inferred[i] = InstantiateType(defaults[i], mapper);
+            }
+        }
+        mapper = CreateTypeMapper(typeParameters, inferred);
+        for (var i = 0; i < typeParameters.Length; i++)
+        {
+            var constraint = GetConstraintOfTypeParameter(typeParameters[i]);
+            if (!constraint.IsNone)
+            {
+                var instantiatedConstraint = InstantiateType(constraint, mapper);
+                if (context.CompareTypes is not null && !context.CompareTypes(inferred[i], GetTypeWithThisArgument(instantiatedConstraint, inferred[i])))
+                {
+                    inferred[i] = instantiatedConstraint;
+                }
+            }
+        }
+        return inferred;
     }
 
     // checker.ts createInferenceInfo
@@ -120,7 +161,7 @@ internal sealed partial class Checker
     };
 
     /// <summary>checker.ts cloneInferredPartOfContext.</summary>
-    internal static InferenceContext? CloneInferredPartOfContext(InferenceContext context)
+    internal InferenceContext? CloneInferredPartOfContext(InferenceContext context)
     {
         var inferences = context.Inferences.FindAll(HasInferenceCandidates);
         return inferences.Count > 0 ? CreateInferenceContextWorker(inferences.ConvertAll(CloneInferenceInfo), context.Signature, context.Flags, context.CompareTypes) : null;
@@ -142,8 +183,8 @@ internal sealed partial class Checker
         _ = contravariant;
     }
 
-    /// <summary>checker.ts getInferredTypes. TODO(C6): the seam's inferred type of a type parameter is the type parameter.</summary>
-    internal static Type[] GetInferredTypes(InferenceContext context) => context.Inferences.ConvertAll(i => i.TypeParameter).ToArray();
+    /// <summary>checker.ts getInferredTypes. TODO(C6): the seam's inferred types are those without candidates.</summary>
+    internal Type[] GetInferredTypes(InferenceContext context) => Array.ConvertAll(context.Inferences.ConvertAll(i => i.TypeParameter).ToArray(), tp => InstantiateType(tp, context.Mapper));
 
     /// <summary>checker.ts addIntraExpressionInferenceSite.</summary>
     internal static void AddIntraExpressionInferenceSite(InferenceContext context, NodeRef node, Type type) =>

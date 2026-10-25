@@ -292,10 +292,16 @@ internal sealed partial class Checker
                     }
                     return anyType;
                 }
-                if (rightName.Length > 0 && !leftUncertain && !CheckAndReportErrorForExtendingInterface(node) &&
-                    !IsNarrowingPending(left, leftType))
+                if (rightName.Length > 0 && !leftUncertain && !CheckAndReportErrorForExtendingInterface(node))
                 {
-                    ReportNonexistentProperty(right, IsThisTypeParameter(leftType) ? apparentType : leftType);
+                    if (IsNarrowingPending(left, leftType))
+                    {
+                        uncertainExpressions.Add(node); // TODO(C7): the property may exist on the narrowed type
+                    }
+                    else
+                    {
+                        ReportNonexistentProperty(right, IsThisTypeParameter(leftType) ? apparentType : leftType);
+                    }
                 }
                 return errorType;
             }

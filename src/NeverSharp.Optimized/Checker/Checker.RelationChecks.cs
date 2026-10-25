@@ -123,8 +123,8 @@ internal sealed partial class Checker
         {
             return false;
         }
-        var declaration = Parent(initializer);
-        return !StoreOf(declaration).Type(declaration.Node).IsNone && IsContextFreeExpression(initializer);
+        // (module C5: expression types are exact except where they depend on inference (C6) or narrowing (C7))
+        return !SuppressDerivedDiagnostics(initializer, CheckExpressionCached(initializer));
     }
 
     // An expression whose type checkExpression computes without a contextual type: literals, null and undefined, signed
@@ -171,13 +171,20 @@ internal sealed partial class Checker
         {
             return true;
         }
-        if (store.Kind(declaration.Node) != SyntaxKind.VariableDeclaration ||
-            store.Kind(store.Parent(store.Parent(declaration.Node))) is SyntaxKind.ForInStatement or SyntaxKind.ForOfStatement)
+        if (store.Kind(declaration.Node) != SyntaxKind.VariableDeclaration)
         {
             return false;
         }
+        var statement = store.Parent(store.Parent(declaration.Node));
+        if (store.Kind(statement) is SyntaxKind.ForInStatement or SyntaxKind.ForOfStatement)
+        {
+            // (module C5: the iterated types are exact unless the expression's type depends on inference or narrowing)
+            var expression = At(declaration, store.Expression(statement));
+            return !SuppressDerivedDiagnostics(expression, CheckExpressionCached(expression));
+        }
         var initializer = store.Initializer(declaration.Node);
-        return initializer.IsNone || IsContextFreeExpression(At(declaration, initializer));
+        // (module C5: initializer types are exact unless they depend on inference (C6) or narrowing (C7))
+        return initializer.IsNone || !SuppressDerivedDiagnostics(At(declaration, initializer), CheckExpressionCached(At(declaration, initializer)));
     }
 
     /// <summary>
@@ -349,21 +356,26 @@ internal sealed partial class Checker
                 case SyntaxKind.MethodDeclaration:
                 case SyntaxKind.GetAccessor:
                     // (generic methods: their relation needs the inference of instantiateSignatureInContextOf, C6)
-                    if ((store.Type(member).IsNone && !store.Body(member).IsNone) || !store.TypeParameters(member).IsNone)
+                    if (!store.TypeParameters(member).IsNone)
                     {
                         return true;
+                    }
+                    if (store.Type(member).IsNone && !store.Body(member).IsNone)
+                    {
+                        // (module C5: return types inferred from bodies are exact unless they depend on inference (C6)
+                        // or narrowing (C7))
+                        GetReturnTypeOfSignature(GetSignatureFromDeclaration(At(node, member)));
+                        if (uncertainExpressions.Contains(At(node, member)))
+                        {
+                            return true;
+                        }
                     }
                     break;
                 case SyntaxKind.PropertyDeclaration:
-                    if (store.Type(member).IsNone && !store.Initializer(member).IsNone && !IsContextFreeExpression(At(node, store.Initializer(member))))
+                    if (store.Type(member).IsNone && !store.Initializer(member).IsNone)
                     {
-                        return true;
-                    }
-                    break;
-                case SyntaxKind.Constructor:
-                    foreach (var parameter in store.Nodes(store.Parameters(member)))
-                    {
-                        if (Utilities.IsParameterPropertyDeclaration(store, parameter, member) && store.Type(parameter).IsNone)
+                        var initializer = At(node, store.Initializer(member));
+                        if (SuppressDerivedDiagnostics(initializer, CheckExpressionCached(initializer)))
                         {
                             return true;
                         }

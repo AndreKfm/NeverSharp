@@ -1015,7 +1015,10 @@ internal sealed partial class Checker
         {
             return targetType;
         }
-        CheckTypeAssignableToAndOptionallyElaborate(exprType, targetType, node, expression, Diagnostics.Type_0_does_not_satisfy_the_expected_type_1);
+        if (!SuppressDerivedDiagnostics(expression, exprType))
+        {
+            CheckTypeAssignableToAndOptionallyElaborate(exprType, targetType, node, expression, Diagnostics.Type_0_does_not_satisfy_the_expected_type_1);
+        }
         return exprType;
     }
 
