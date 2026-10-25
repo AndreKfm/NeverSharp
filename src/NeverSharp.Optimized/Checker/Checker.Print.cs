@@ -537,8 +537,8 @@ internal sealed partial class Checker
 
     // The underlining printer writes spaces under nodes the node builder reused from the source (parameter names,
     // annotations); TypeToText brackets such text with these private-use markers while markReuse is set.
-    private const char ReuseStart = '';
-    private const char ReuseEnd = '';
+    private const char ReuseStart = (char)0xE000;
+    private const char ReuseEnd = (char)0xE001;
     private bool markReuse;
 
     private string Reused(string text) => markReuse ? ReuseStart + text + ReuseEnd : text;
@@ -558,8 +558,106 @@ internal sealed partial class Checker
             return null;
         }
         var store = StoreOf(annotation);
-        var text = Printer.CreatePrinter().PrintNode(EmitHint.Unspecified, store, annotation.Node, Utilities.RootOf(store, annotation.Node));
+        var text = PrintReusedTypeNode(store, Utilities.RootOf(store, annotation.Node), annotation.Node);
         return Reused(text);
+    }
+
+    // The printer's output for a reused type node of the shapes IsSimpleReusableTypeNode accepts; the node builder's
+    // visitor marks reused type literals single-line, so members are written on one line with "; " separators.
+    private static string PrintReusedTypeNode(NodeStore store, Node root, Node node)
+    {
+        string Source(Node n) => Utilities.GetSourceTextOfNodeFromSourceFile(store, root, n);
+        string List(NodeList list, string separator)
+        {
+            var parts = new List<string>();
+            foreach (var item in store.Nodes(list))
+            {
+                parts.Add(PrintReusedTypeNode(store, root, item));
+            }
+            return string.Join(separator, parts);
+        }
+        string Parameters(Node owner)
+        {
+            var parts = new List<string>();
+            foreach (var parameter in store.Nodes(store.Parameters(owner)))
+            {
+                parts.Add((store.DotDotDotToken(parameter).IsNone ? "" : "...") + Source(store.Name(parameter)) + (store.QuestionToken(parameter).IsNone ? "" : "?") +
+                    (store.Type(parameter).IsNone ? "" : ": " + PrintReusedTypeNode(store, root, store.Type(parameter))));
+            }
+            return string.Join(", ", parts);
+        }
+        switch (store.Kind(node))
+        {
+            case SyntaxKind.TypeReference:
+            {
+                var typeArguments = store.TypeArguments(node);
+                return Source(store.TypeName(node)) + (typeArguments.IsNone ? "" : "<" + List(typeArguments, ", ") + ">");
+            }
+            case SyntaxKind.ArrayType:
+                return PrintReusedTypeNode(store, root, store.ElementType(node)) + "[]";
+            case SyntaxKind.ParenthesizedType:
+                return "(" + PrintReusedTypeNode(store, root, store.Type(node)) + ")";
+            case SyntaxKind.TypePredicate:
+                return (store.AssertsModifier(node).IsNone ? "" : "asserts ") + Source(store.ParameterName(node)) +
+                    (store.Type(node).IsNone ? "" : " is " + PrintReusedTypeNode(store, root, store.Type(node)));
+            case SyntaxKind.TypeOperator:
+                return "readonly " + PrintReusedTypeNode(store, root, store.Type(node));
+            case SyntaxKind.UnionType:
+                return List(store.Types(node), " | ");
+            case SyntaxKind.FunctionType:
+            {
+                var typeParameters = store.TypeParameters(node);
+                var typeParameterText = "";
+                if (!typeParameters.IsNone && store.Length(typeParameters) > 0)
+                {
+                    var parts = new List<string>();
+                    foreach (var typeParameter in store.Nodes(typeParameters))
+                    {
+                        var constraint = store.Constraint(typeParameter);
+                        parts.Add(Source(store.Name(typeParameter)) + (constraint.IsNone ? "" : " extends " + PrintReusedTypeNode(store, root, constraint)));
+                    }
+                    typeParameterText = "<" + string.Join(", ", parts) + ">";
+                }
+                return typeParameterText + "(" + Parameters(node) + ") => " + PrintReusedTypeNode(store, root, store.Type(node));
+            }
+            case SyntaxKind.TypeLiteral:
+            {
+                var members = store.Nodes(store.Members(node));
+                if (members.Length == 0)
+                {
+                    return "{}";
+                }
+                var sb = new StringBuilder("{ ");
+                foreach (var member in members)
+                {
+                    if (store.Kind(member) == SyntaxKind.CallSignature)
+                    {
+                        sb.Append('(').Append(Parameters(member)).Append("): ").Append(PrintReusedTypeNode(store, root, store.Type(member))).Append("; ");
+                        continue;
+                    }
+                    if (store.Kind(member) == SyntaxKind.IndexSignature)
+                    {
+                        sb.Append(Utilities.HasSyntacticModifierUncached(store, member, ModifierFlags.Readonly) ? "readonly " : "")
+                            .Append('[').Append(Parameters(member)).Append("]: ").Append(PrintReusedTypeNode(store, root, store.Type(member))).Append("; ");
+                        continue;
+                    }
+                    var optional = store.QuestionToken(member).IsNone ? "" : "?";
+                    if (store.Kind(member) == SyntaxKind.PropertySignature)
+                    {
+                        sb.Append(Utilities.HasSyntacticModifierUncached(store, member, ModifierFlags.Readonly) ? "readonly " : "")
+                            .Append(Source(store.Name(member))).Append(optional).Append(": ").Append(PrintReusedTypeNode(store, root, store.Type(member))).Append("; ");
+                    }
+                    else
+                    {
+                        sb.Append(Source(store.Name(member))).Append(optional).Append('(').Append(Parameters(member)).Append("): ")
+                            .Append(PrintReusedTypeNode(store, root, store.Type(member))).Append("; ");
+                    }
+                }
+                return sb.Append('}').ToString();
+            }
+            default:
+                return Source(node);
+        }
     }
 
     private static bool IsSimpleReusableTypeNode(NodeStore store, Node node)
@@ -580,7 +678,12 @@ internal sealed partial class Checker
                 return true;
             case SyntaxKind.TypeReference:
                 var typeArguments = store.TypeArguments(node);
-                if (store.Kind(store.TypeName(node)) != SyntaxKind.Identifier)
+                var typeName = store.TypeName(node);
+                while (store.Kind(typeName) == SyntaxKind.QualifiedName)
+                {
+                    typeName = store.Left(typeName);
+                }
+                if (store.Kind(typeName) != SyntaxKind.Identifier)
                 {
                     return false;
                 }
@@ -598,6 +701,10 @@ internal sealed partial class Checker
                 return IsSimpleReusableTypeNode(store, store.Type(node));
             case SyntaxKind.TypePredicate:
                 return store.Type(node).IsNone || IsSimpleReusableTypeNode(store, store.Type(node));
+            case SyntaxKind.TypeOperator:
+                return store.Operator(node) == SyntaxKind.ReadonlyKeyword && IsSimpleReusableTypeNode(store, store.Type(node));
+            case SyntaxKind.LiteralType:
+                return store.Kind(store.Literal(node)) is SyntaxKind.StringLiteral or SyntaxKind.NumericLiteral or SyntaxKind.TrueKeyword or SyntaxKind.FalseKeyword or SyntaxKind.NullKeyword;
             case SyntaxKind.UnionType:
                 foreach (var member in store.Nodes(store.Types(node)))
                 {
@@ -608,22 +715,73 @@ internal sealed partial class Checker
                 }
                 return true;
             case SyntaxKind.FunctionType:
-                if (!store.TypeParameters(node).IsNone || !IsSimpleReusableTypeNode(store, store.Type(node)))
+                if (!IsSimpleReusableTypeNode(store, store.Type(node)))
                 {
                     return false;
                 }
-                foreach (var parameter in store.Nodes(store.Parameters(node)))
+                foreach (var typeParameter in store.Nodes(store.TypeParameters(node)))
                 {
-                    var parameterType = store.Type(parameter);
-                    if (store.Kind(store.Name(parameter)) != SyntaxKind.Identifier || parameterType.IsNone || !IsSimpleReusableTypeNode(store, parameterType))
+                    var constraint = store.Constraint(typeParameter);
+                    if (!store.Default(typeParameter).IsNone || !store.Modifiers(typeParameter).IsNone || (!constraint.IsNone && !IsSimpleReusableTypeNode(store, constraint)))
                     {
                         return false;
+                    }
+                }
+                return HasSimpleReusableParameters(store, node);
+            case SyntaxKind.TypeLiteral:
+                foreach (var member in store.Nodes(store.Members(node)))
+                {
+                    if (store.Kind(member) is SyntaxKind.CallSignature or SyntaxKind.IndexSignature)
+                    {
+                        if (!store.TypeParameters(member).IsNone || store.Type(member).IsNone || !IsSimpleReusableTypeNode(store, store.Type(member)) || !HasSimpleReusableParameters(store, member) ||
+                            (Utilities.GetSyntacticModifierFlagsNoCache(store, member) & ~ModifierFlags.Readonly) != 0)
+                        {
+                            return false;
+                        }
+                        continue;
+                    }
+                    var memberName = store.Name(member);
+                    if (memberName.IsNone || store.Kind(memberName) is not (SyntaxKind.Identifier or SyntaxKind.StringLiteral or SyntaxKind.NumericLiteral))
+                    {
+                        return false;
+                    }
+                    switch (store.Kind(member))
+                    {
+                        case SyntaxKind.PropertySignature:
+                            var memberType = store.Type(member);
+                            if (memberType.IsNone || !IsSimpleReusableTypeNode(store, memberType) || (Utilities.GetSyntacticModifierFlagsNoCache(store, member) & ~ModifierFlags.Readonly) != 0)
+                            {
+                                return false;
+                            }
+                            break;
+                        case SyntaxKind.MethodSignature:
+                            if (!store.TypeParameters(member).IsNone || store.Type(member).IsNone || !IsSimpleReusableTypeNode(store, store.Type(member)) || !HasSimpleReusableParameters(store, member))
+                            {
+                                return false;
+                            }
+                            break;
+                        default:
+                            return false;
                     }
                 }
                 return true;
             default:
                 return false;
         }
+    }
+
+    private static bool HasSimpleReusableParameters(NodeStore store, Node owner)
+    {
+        foreach (var parameter in store.Nodes(store.Parameters(owner)))
+        {
+            var parameterType = store.Type(parameter);
+            if (store.Kind(store.Name(parameter)) != SyntaxKind.Identifier || parameterType.IsNone || !IsSimpleReusableTypeNode(store, parameterType) ||
+                !store.Modifiers(parameter).IsNone || !store.Initializer(parameter).IsNone)
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
     private string TypeToText(Type type, NodeRef enclosingDeclaration, bool inTypeAlias, bool writeArrayAsGeneric, int depth)
@@ -1117,10 +1275,179 @@ internal sealed partial class Checker
         string? returnText = null;
         if (!signatureDeclaration.IsNone && Utilities.IsFunctionLike(StoreOf(signatureDeclaration), signatureDeclaration.Node))
         {
-            returnText = TryReuseAnnotation(At(signatureDeclaration, StoreOf(signatureDeclaration).Type(signatureDeclaration.Node)), returnType, false);
+            var annotation = At(signatureDeclaration, StoreOf(signatureDeclaration).Type(signatureDeclaration.Node));
+            returnText = annotation.IsNone
+                ? TypeFromSingleReturnExpressionText(signatureDeclaration, enclosingDeclaration, depth)
+                : TryReuseAnnotation(annotation, returnType, false);
         }
         sb.Append(arrow ? " => " : ": ").Append(returnText ?? TypeToText(returnType, enclosingDeclaration, false, false, depth + 1));
         return sb.ToString();
+    }
+
+    // expressionToTypeNode.ts typeFromSingleReturnExpression, for a single returned function or arrow expression
+    // (typeFromFunctionLikeExpression); other expressions fall back to the checker's type (TODO(C2): literals, object and
+    // array literals, assertions). Null when the syntactic builder does not apply.
+    private string? TypeFromSingleReturnExpressionText(NodeRef declaration, NodeRef enclosingDeclaration, int depth)
+    {
+        var store = StoreOf(declaration);
+        var n = declaration.Node;
+        if (depth > 6 || store.Kind(n) is not (SyntaxKind.FunctionDeclaration or SyntaxKind.MethodDeclaration or SyntaxKind.FunctionExpression or SyntaxKind.ArrowFunction))
+        {
+            return null;
+        }
+        var body = store.Body(n);
+        if (body.IsNone || (!store.AsteriskToken(n).IsNone && Utilities.HasSyntacticModifierUncached(store, n, ModifierFlags.Async)))
+        {
+            return null;
+        }
+        var candidate = Node.None;
+        if (store.Kind(body) == SyntaxKind.Block)
+        {
+            var failed = false;
+            var count = 0;
+            ForEachReturnStatementInBody(store, body, statement =>
+            {
+                if (store.Parent(statement) != body)
+                {
+                    failed = true;
+                }
+                count++;
+                candidate = count == 1 ? store.Expression(statement) : Node.None;
+            });
+            if (failed || count != 1)
+            {
+                return null;
+            }
+        }
+        else
+        {
+            candidate = body;
+        }
+        while (!candidate.IsNone && store.Kind(candidate) == SyntaxKind.ParenthesizedExpression)
+        {
+            candidate = store.Expression(candidate);
+        }
+        if (candidate.IsNone || store.Kind(candidate) is not (SyntaxKind.ArrowFunction or SyntaxKind.FunctionExpression) || IsContextuallyTypedForSyntacticBuilder(store, candidate))
+        {
+            return null;
+        }
+        // typeFromFunctionLikeExpression: a new function type node; the parameters and type parameters are updated from
+        // the existing ones (not synthesized), so only their uninferable types are underlined
+        var function = At(declaration, candidate);
+        var sb = new StringBuilder();
+        var typeParameters = store.TypeParameters(candidate);
+        if (!typeParameters.IsNone && store.Length(typeParameters) > 0)
+        {
+            var parts = new List<string>();
+            foreach (var typeParameter in store.Nodes(typeParameters))
+            {
+                var constraint = store.Constraint(typeParameter);
+                if (!store.Default(typeParameter).IsNone || !store.Modifiers(typeParameter).IsNone || (!constraint.IsNone && !IsSimpleReusableTypeNode(store, constraint)))
+                {
+                    return null;
+                }
+                parts.Add(Reused(Utilities.GetSourceTextOfNodeFromSourceFile(store, Utilities.RootOf(store, typeParameter), store.Name(typeParameter)) +
+                    (constraint.IsNone ? "" : " extends " + PrintReusedTypeNode(store, Utilities.RootOf(store, constraint), constraint))));
+            }
+            sb.Append('<').Append(string.Join(", ", parts)).Append('>');
+        }
+        sb.Append('(');
+        var firstParameter = true;
+        foreach (var parameterNode in store.Nodes(store.Parameters(candidate)))
+        {
+            if (!firstParameter)
+            {
+                sb.Append(", ");
+            }
+            firstParameter = false;
+            var parameterRef = At(declaration, parameterNode);
+            var nameNode = store.Name(parameterNode);
+            if (store.Kind(nameNode) != SyntaxKind.Identifier)
+            {
+                return null; // (serializeNameOfParameter of binding patterns: C2)
+            }
+            var parameterSymbol = GetSymbolOfDeclaration(parameterRef);
+            if (parameterSymbol.IsNone)
+            {
+                return null;
+            }
+            var parameterType = GetTypeOfSymbol(parameterSymbol);
+            var isOptional = !store.QuestionToken(parameterNode).IsNone || !store.Initializer(parameterNode).IsNone;
+            if (isOptional)
+            {
+                parameterType = RemoveUndefinedForOptional(parameterType);
+            }
+            var nameText = (store.DotDotDotToken(parameterNode).IsNone ? "" : "...") + Utilities.GetSourceTextOfNodeFromSourceFile(store, Utilities.RootOf(store, nameNode), nameNode);
+            var typeText = TryReuseAnnotation(At(declaration, store.Type(parameterNode)), parameterType, false) ?? TypeToText(parameterType, enclosingDeclaration, false, false, depth + 1);
+            sb.Append(Reused(nameText)).Append(isOptional ? "?" : "").Append(Reused(": ")).Append(typeText);
+        }
+        sb.Append(") => ");
+        // createReturnFromSignature for the function expression
+        var functionSymbol = GetSymbolOfDeclaration(function);
+        var functionSignature = functionSymbol.IsNone ? Signature.None : GetSignatureFromDeclaration(function);
+        var functionReturnType = functionSignature.IsNone ? anyType : GetReturnTypeOfSignature(functionSignature);
+        var returnAnnotation = At(declaration, store.Type(candidate));
+        var returnText = returnAnnotation.IsNone
+            ? TypeFromSingleReturnExpressionText(function, enclosingDeclaration, depth + 1)
+            : TryReuseAnnotation(returnAnnotation, functionReturnType, false);
+        sb.Append(returnText ?? TypeToText(functionReturnType, enclosingDeclaration, false, false, depth + 1));
+        return sb.ToString();
+    }
+
+    // expressionToTypeNode.ts isContextuallyTyped: a call, a type-annotated non-function ancestor or JSX
+    private static bool IsContextuallyTypedForSyntacticBuilder(NodeStore store, Node node)
+    {
+        for (var n = store.Parent(node); !n.IsNone; n = store.Parent(n))
+        {
+            var kind = store.Kind(n);
+            if (kind is SyntaxKind.CallExpression or SyntaxKind.JsxElement or SyntaxKind.JsxExpression or SyntaxKind.AsExpression or SyntaxKind.TypeAssertionExpression or SyntaxKind.SatisfiesExpression)
+            {
+                return true;
+            }
+            if (!Utilities.IsFunctionLikeDeclaration(store, n) && kind is SyntaxKind.VariableDeclaration or SyntaxKind.Parameter or SyntaxKind.PropertyDeclaration or SyntaxKind.PropertySignature or SyntaxKind.BindingElement
+                && !store.Type(n).IsNone)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // utilities.ts forEachReturnStatement (the body's return statements, not those of nested functions)
+    private static void ForEachReturnStatementInBody(NodeStore store, Node body, Action<Node> visitor)
+    {
+        Traverse(body);
+
+        void Traverse(Node node)
+        {
+            switch (store.Kind(node))
+            {
+                case SyntaxKind.ReturnStatement:
+                    visitor(node);
+                    return;
+                case SyntaxKind.CaseBlock:
+                case SyntaxKind.Block:
+                case SyntaxKind.IfStatement:
+                case SyntaxKind.DoStatement:
+                case SyntaxKind.WhileStatement:
+                case SyntaxKind.ForStatement:
+                case SyntaxKind.ForInStatement:
+                case SyntaxKind.ForOfStatement:
+                case SyntaxKind.WithStatement:
+                case SyntaxKind.SwitchStatement:
+                case SyntaxKind.CaseClause:
+                case SyntaxKind.DefaultClause:
+                case SyntaxKind.LabeledStatement:
+                case SyntaxKind.TryStatement:
+                case SyntaxKind.CatchClause:
+                    NodeVisitor.ForEachChild<object>(store, node, child =>
+                    {
+                        Traverse(child);
+                        return null;
+                    });
+                    return;
+            }
+        }
     }
 
     // The printer's double-quoted string literal with escapes (escapeString, no ASCII escaping)
