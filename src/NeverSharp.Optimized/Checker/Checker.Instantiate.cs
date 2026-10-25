@@ -1608,6 +1608,124 @@ internal sealed partial class Checker
         return instantiation;
     }
 
+    private readonly Dictionary<(NodeRef, Type), Type> instantiationExpressionTypes = [];
+
+    /// <summary>
+    /// checker.ts getInstantiationExpressionType: the type of `f&lt;T&gt;` (an expression or type query with type arguments).
+    /// TODO(C4): checkTypeArguments' constraint checks (the type arguments are taken as given).
+    /// </summary>
+    internal Type GetInstantiationExpressionType(Type exprType, NodeRef node)
+    {
+        var store = StoreOf(node);
+        var typeArgumentNodes = store.TypeArguments(node.Node);
+        if (exprType == silentNeverType || IsErrorType(exprType) || typeArgumentNodes.IsNone || store.Length(typeArgumentNodes) == 0)
+        {
+            return exprType;
+        }
+        if (instantiationExpressionTypes.TryGetValue((node, exprType), out var cached))
+        {
+            return cached;
+        }
+        var hasSomeApplicableSignature = false;
+        var nonApplicableType = Type.None;
+        var typeArgumentCount = store.Length(typeArgumentNodes);
+        var result = GetInstantiatedType(exprType);
+        instantiationExpressionTypes[(node, exprType)] = result;
+        var errorTypeOfList = hasSomeApplicableSignature ? nonApplicableType : exprType;
+        if (!errorTypeOfList.IsNone)
+        {
+            var file = FileAt(node.File);
+            var start = Scanner.SkipTrivia(store.SourceFileText(file.Root).Chars, store.Pos(typeArgumentNodes));
+            diagnostics.Add(ProgramDiagnostic.FromFile(file, Utilities.CreateFileDiagnostic(store, file.Root, start, store.End(typeArgumentNodes) - start,
+                Diagnostics.Type_0_has_no_signatures_for_which_the_type_argument_list_is_applicable, TypeToString(errorTypeOfList))));
+        }
+        return result;
+
+        Type GetInstantiatedType(Type type)
+        {
+            var hasSignatures = false;
+            var hasApplicableSignature = false;
+            var part = GetInstantiatedTypePart(type);
+            hasSomeApplicableSignature |= hasApplicableSignature;
+            if (hasSignatures && !hasApplicableSignature && nonApplicableType.IsNone)
+            {
+                nonApplicableType = type;
+            }
+            return part;
+
+            Type GetInstantiatedTypePart(Type t)
+            {
+                var flags = Types.Flags(t);
+                if ((flags & TypeFlags.Object) != 0)
+                {
+                    var resolved = ResolveStructuredTypeMembers(t);
+                    var callSignatures = GetInstantiatedSignatures(resolved.CallSignatures!);
+                    var constructSignatures = GetInstantiatedSignatures(resolved.ConstructSignatures!);
+                    hasSignatures |= resolved.CallSignatures!.Count != 0 || resolved.ConstructSignatures!.Count != 0;
+                    hasApplicableSignature |= callSignatures.Count != 0 || constructSignatures.Count != 0;
+                    if (!ReferenceEquals(callSignatures, resolved.CallSignatures) || !ReferenceEquals(constructSignatures, resolved.ConstructSignatures))
+                    {
+                        var instantiated = CreateAnonymousType(CreateSymbol(SymbolFlags.None, InternalSymbolName.InstantiationExpression), resolved.Members!, callSignatures, constructSignatures, resolved.IndexInfos);
+                        Types.Record(instantiated).ObjectFlags |= ObjectFlags.InstantiationExpressionType;
+                        Types.Object(instantiated).Node = node;
+                        return instantiated;
+                    }
+                }
+                else if ((flags & TypeFlags.InstantiableNonPrimitive) != 0)
+                {
+                    var constraint = GetBaseConstraintOfType(t);
+                    if (!constraint.IsNone)
+                    {
+                        var instantiated = GetInstantiatedTypePart(constraint);
+                        if (instantiated != constraint)
+                        {
+                            return instantiated;
+                        }
+                    }
+                }
+                else if ((flags & TypeFlags.Union) != 0)
+                {
+                    return MapType(t, GetInstantiatedType);
+                }
+                else if ((flags & TypeFlags.Intersection) != 0)
+                {
+                    var types = Types.Elements(Types.Union(t).Types).ToArray();
+                    var mapped = Array.ConvertAll(types, GetInstantiatedTypePart);
+                    return RangeEquals(mapped, types, types.Length) ? t : GetIntersectionType(mapped);
+                }
+                return t;
+            }
+        }
+
+        List<Signature> GetInstantiatedSignatures(List<Signature> signatures)
+        {
+            var applicable = signatures.FindAll(sig =>
+            {
+                var typeParameters = Types.Elements(Signatures.Record(sig).TypeParameters).ToArray();
+                return typeParameters.Length > 0 && typeArgumentCount >= GetMinTypeArgumentCount(typeParameters) && typeArgumentCount <= typeParameters.Length;
+            });
+            if (applicable.Count == signatures.Count && applicable.Count == 0)
+            {
+                return signatures;
+            }
+            var result = new List<Signature>(applicable.Count);
+            foreach (var sig in applicable)
+            {
+                var typeParameters = Types.Elements(Signatures.Record(sig).TypeParameters).ToArray();
+                var declaration = Signatures.Record(sig).Declaration;
+                var isJs = !declaration.IsNone && Utilities.IsInJSFile(StoreOf(declaration), declaration.Node);
+                var givenTypeArguments = new Type[typeArgumentCount];
+                for (var i = 0; i < typeArgumentCount; i++)
+                {
+                    givenTypeArguments[i] = GetTypeFromTypeNode(At(node, store.Element(typeArgumentNodes, i)));
+                }
+                var typeArgumentTypes = FillMissingTypeArguments(givenTypeArguments, typeParameters, GetMinTypeArgumentCount(typeParameters), isJs);
+                result.Add(GetSignatureInstantiation(sig, typeArgumentTypes, isJs));
+            }
+            return result;
+        }
+    }
+
     // checker.ts createSignatureInstantiation / createSignatureTypeMapper
     private Signature CreateSignatureInstantiation(Signature signature, Type[] typeArguments)
     {
