@@ -841,6 +841,37 @@ internal sealed partial class Checker
 
     // ---- type operator, indexed access and template type nodes ----
 
+    private SymbolRef deferredGlobalExtractSymbol;
+
+    // checker.ts getGlobalExtractSymbol (getGlobalTypeAliasSymbol("Extract", 2, true))
+    private SymbolRef GetGlobalExtractSymbol()
+    {
+        if (deferredGlobalExtractSymbol.IsNone)
+        {
+            var symbol = GetGlobalSymbol("Extract", SymbolFlags.TypeAlias, Diagnostics.Cannot_find_global_type_0);
+            if (!symbol.IsNone)
+            {
+                GetDeclaredTypeOfSymbol(symbol);
+                var typeParameters = GetTypeAliasTypeParameters(symbol);
+                if ((typeParameters?.Length ?? 0) != 2)
+                {
+                    var declaration = DeclarationsOf(symbol)?.Find(d => Kind(d) == SyntaxKind.TypeAliasDeclaration) ?? NodeRef.None;
+                    Error(declaration, Diagnostics.Global_type_0_must_have_1_type_parameter_s, SymbolName(symbol), 2);
+                    symbol = SymbolRef.None;
+                }
+            }
+            deferredGlobalExtractSymbol = symbol.IsNone ? unknownSymbol : symbol;
+        }
+        return deferredGlobalExtractSymbol == unknownSymbol ? SymbolRef.None : deferredGlobalExtractSymbol;
+    }
+
+    // checker.ts getExtractStringType
+    private Type GetExtractStringType(Type type)
+    {
+        var extractTypeAlias = GetGlobalExtractSymbol();
+        return !extractTypeAlias.IsNone ? GetTypeAliasInstantiation(extractTypeAlias, [type, stringType]) : stringType;
+    }
+
     // checker.ts getTypeFromTypeOperatorNode
     private Type GetTypeFromTypeOperatorNode(NodeRef node)
     {
