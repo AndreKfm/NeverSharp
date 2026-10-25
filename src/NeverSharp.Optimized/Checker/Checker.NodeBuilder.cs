@@ -68,7 +68,24 @@ internal sealed partial class Checker
     private int synthDepth;
     private readonly HashSet<Node> reusedNodes = [];
 
+    // NodeLinks.serializedTypes (visitAndTransformType's cache), for the current outermost print
+    private readonly Dictionary<(NodeRef, Type, NodeBuilderFlags, InternalNodeBuilderFlags), (Node Node, bool Truncating, int AddedLength)> serializedTypes = [];
+
     private NodeStore S => synthStore!;
+
+    // visitAndTransformType deepCloneOrReuseNode: a fresh copy of a cached node (a shallow copy sharing the children,
+    // with the emit node), so that changes to the result do not reach the cached node
+    private Node CloneSerializedTypeNode(Node node)
+    {
+        var clone = CopyWithChildrenFrom(S, node, child => child, list => list, markReused: reusedNodes.Contains(node));
+        if (S.EmitNode(node) is EmitNode emitNode)
+        {
+            var copy = SEmitNode(clone);
+            copy.Flags = emitNode.Flags;
+            copy.IdentifierTypeArguments = emitNode.IdentifierTypeArguments;
+        }
+        return clone;
+    }
 
     // Begins building nodes for one print (nested prints, e.g. symbolToString inside the builder, share the store).
     private void BeginSynth()
@@ -82,6 +99,7 @@ internal sealed partial class Checker
         {
             synthMark = synthStore.GetMark();
             reusedNodes.Clear();
+            serializedTypes.Clear();
         }
     }
 
@@ -91,6 +109,7 @@ internal sealed partial class Checker
         {
             synthStore!.Truncate(synthMark);
             reusedNodes.Clear();
+            serializedTypes.Clear();
         }
     }
 
@@ -1363,6 +1382,20 @@ internal sealed partial class Checker
         {
             context.SymbolDepth ??= [];
         }
+        // Don't rely on type cache if we're expand a type, because we need to compute `canIncreaseExpansionDepth`.
+        // (NodeLinks.serializedTypes of the enclosing declaration; the cached nodes live in the builder's store, which is
+        // reset after each outermost print, so here the cache lasts for one print.)
+        var useCache = context.MaxExpansionDepth < 0 && !context.EnclosingDeclaration.IsNone;
+        var cacheKey = useCache ? (context.EnclosingDeclaration, type, context.Flags, context.InternalFlags) : default;
+        if (useCache && serializedTypes.TryGetValue(cacheKey, out var cached))
+        {
+            if (cached.Truncating)
+            {
+                context.Truncating = true;
+            }
+            context.ApproximateLength += cached.AddedLength;
+            return CloneSerializedTypeNode(cached.Node);
+        }
         var depth = 0;
         if (id is not null)
         {
@@ -1374,7 +1407,12 @@ internal sealed partial class Checker
             context.SymbolDepth![id] = depth + 1;
         }
         context.VisitedTypes.Add(type);
+        var startLength = context.ApproximateLength;
         var result = transform(type);
+        if (useCache && !context.EncounteredError)
+        {
+            serializedTypes[cacheKey] = (result, context.Truncating, context.ApproximateLength - startLength);
+        }
         context.VisitedTypes.Remove(type);
         if (id is not null)
         {
