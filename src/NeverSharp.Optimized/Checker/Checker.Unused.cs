@@ -68,7 +68,8 @@ internal sealed partial class Checker
                 }
             }
         }
-        MarkReferenced(prop, SymbolFlags.All);
+        // (getCheckFlags(prop) & CheckFlags.Instantiated ? getSymbolLinks(prop).target : prop).isReferenced
+        MarkReferenced((GetCheckFlags(prop) & CheckFlags.Instantiated) != 0 ? ValueSymbolLinks.Get(prop).Target : prop, SymbolFlags.All);
     }
 
     /// <summary>checker.ts registerForUnusedIdentifiersCheck (lazy diagnostics run eagerly while a file is checked).</summary>

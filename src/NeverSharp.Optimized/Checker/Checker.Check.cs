@@ -92,7 +92,17 @@ internal sealed partial class Checker
         }
     }
 
+    // checkSourceElement's currentNode and instantiationCount (module C3)
     private void CheckNodeRecursive(NodeRef node)
+    {
+        var saveCurrentNode = currentNode;
+        currentNode = node;
+        instantiationCount = 0;
+        CheckNodeRecursiveWorker(node);
+        currentNode = saveCurrentNode;
+    }
+
+    private void CheckNodeRecursiveWorker(NodeRef node)
     {
         var store = StoreOf(node);
         var n = node.Node;
