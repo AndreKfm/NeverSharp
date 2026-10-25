@@ -138,6 +138,7 @@ internal sealed partial class Checker
             case SyntaxKind.ClassExpression:
                 // checkClassExpression: checkClassLikeDeclaration now, the members deferred
                 VisitChildren(node, except: store.Members(n));
+                CheckPropertyInitialization(node);
                 CheckNodeDeferred(node);
                 return;
         }
@@ -167,6 +168,9 @@ internal sealed partial class Checker
                 break;
             }
             case SyntaxKind.ClassDeclaration:
+                CheckPropertyInitialization(node);
+                RegisterForUnusedIdentifiersCheck(node);
+                break;
             case SyntaxKind.InterfaceDeclaration:
             case SyntaxKind.InferType:
                 RegisterForUnusedIdentifiersCheck(node);
@@ -183,6 +187,50 @@ internal sealed partial class Checker
                     RegisterForUnusedIdentifiersCheck(node);
                 }
                 break;
+        }
+    }
+
+    // checker.ts checkPropertyInitialization (C1: classes without a constructor; isPropertyInitializedInConstructor needs
+    // the flow analysis of C7, so properties of classes with a constructor are taken as initialized)
+    private void CheckPropertyInitialization(NodeRef node)
+    {
+        var store = StoreOf(node);
+        var n = node.Node;
+        if (!strictNullChecks || !compilerOptions.GetStrictOptionValue(compilerOptions.StrictPropertyInitialization) || (store.Flags(n) & NodeFlags.Ambient) != 0)
+        {
+            return;
+        }
+        var members = store.Nodes(store.Members(n));
+        foreach (var member in members)
+        {
+            if (store.Kind(member) == SyntaxKind.Constructor && !store.Body(member).IsNone)
+            {
+                return; // TODO(C7): isPropertyInitializedInConstructor
+            }
+        }
+        foreach (var member in members)
+        {
+            if (store.Kind(member) != SyntaxKind.PropertyDeclaration || Utilities.HasSyntacticModifierUncached(store, member, ModifierFlags.Ambient) ||
+                Utilities.IsStatic(store, member) || Utilities.HasSyntacticModifierUncached(store, member, ModifierFlags.Abstract) ||
+                !store.ExclamationToken(member).IsNone || !store.Initializer(member).IsNone)
+            {
+                continue;
+            }
+            var propName = store.Name(member);
+            if (store.Kind(propName) is not (SyntaxKind.Identifier or SyntaxKind.PrivateIdentifier))
+            {
+                continue; // TODO(C3): computed property names
+            }
+            var type = GetTypeOfSymbol(GetSymbolOfDeclaration(At(node, member)));
+            if ((Types.Flags(type) & (TypeFlags.AnyOrUnknown | TypeFlags.Undefined)) != 0 || IsUnsupportedType(type))
+            {
+                continue;
+            }
+            if ((Types.Flags(type) & TypeFlags.Union) != 0 && Array.Exists(Types.Elements(Types.Union(type).Types).ToArray(), t => (Types.Flags(t) & TypeFlags.Undefined) != 0))
+            {
+                continue;
+            }
+            Error(At(node, propName), Diagnostics.Property_0_has_no_initializer_and_is_not_definitely_assigned_in_the_constructor, Utilities.DeclarationNameToString(store, propName));
         }
     }
 
@@ -224,6 +272,38 @@ internal sealed partial class Checker
             if (child != body)
             {
                 CheckNodeRecursive(At(node, child));
+            }
+        }
+        // checkSignatureDeclaration / checkFunctionOrMethodDeclaration: implicit any return types of bodyless
+        // declarations (TODO(C8): the remaining signature declaration checks)
+        if (store.Type(n).IsNone)
+        {
+            switch (store.Kind(n))
+            {
+                case SyntaxKind.ConstructSignature:
+                    if (noImplicitAny)
+                    {
+                        Error(node, Diagnostics.Construct_signature_which_lacks_return_type_annotation_implicitly_has_an_any_return_type);
+                    }
+                    break;
+                case SyntaxKind.CallSignature:
+                    if (noImplicitAny)
+                    {
+                        Error(node, Diagnostics.Call_signature_which_lacks_return_type_annotation_implicitly_has_an_any_return_type);
+                    }
+                    break;
+                case SyntaxKind.FunctionDeclaration:
+                case SyntaxKind.MethodDeclaration:
+                case SyntaxKind.MethodSignature:
+                    var isPrivate = Utilities.HasSyntacticModifierUncached(store, n, ModifierFlags.Private) || (!store.Name(n).IsNone && store.Kind(store.Name(n)) == SyntaxKind.PrivateIdentifier);
+                    var privateWithinAmbient = isPrivate && ((store.Flags(n) & NodeFlags.Ambient) != 0 || Utilities.HasSyntacticModifierUncached(store, n, ModifierFlags.Ambient));
+                    // object literal methods are checked as expressions (checkObjectLiteralMethod)
+                    var isObjectLiteralMethod = store.Kind(store.Parent(n)) == SyntaxKind.ObjectLiteralExpression;
+                    if (body.IsNone && !privateWithinAmbient && !isObjectLiteralMethod)
+                    {
+                        ReportImplicitAny(node, anyType);
+                    }
+                    break;
             }
         }
         if (store.Kind(n) != SyntaxKind.IndexSignature)
@@ -335,9 +415,10 @@ internal sealed partial class Checker
             case SyntaxKind.JsxElement:
             case SyntaxKind.JsxSelfClosingElement:
             case SyntaxKind.JsxFragment:
+                CheckJsxNode(node);
+                return false;
             case SyntaxKind.JsxOpeningElement:
             case SyntaxKind.JsxClosingElement:
-                // TODO(C9): JSX
                 return false;
             case SyntaxKind.ModuleDeclaration:
                 // the name of an ambient module is a string; the body is checked

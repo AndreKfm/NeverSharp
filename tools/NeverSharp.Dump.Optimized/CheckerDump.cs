@@ -344,11 +344,9 @@ internal static class CheckerDump
         else
         {
             var enclosing = checker.Ref(file, parent);
+            // typeWriter.ts retries with InTypeAlias only when the type node is an Identifier; the node builder writes
+            // alias references as TypeReference nodes, so the retry never applies (the oracle prints "T : T")
             (typeString, underline) = checker.TypeToBaselineText(type, enclosing, inTypeAlias: false);
-            if (kind == SyntaxKind.Identifier && isTypeAliasName && typeString == store.Texts.GetString(store.EscapedText(node)))
-            {
-                (typeString, underline) = checker.TypeToBaselineText(type, enclosing, inTypeAlias: true);
-            }
         }
         var (prefix, lineText) = LinePrefix(file, node);
         sb.Append(prefix).Append(lineText).Append(" : ").Append(EscapeLine(typeString)).Append('\n');

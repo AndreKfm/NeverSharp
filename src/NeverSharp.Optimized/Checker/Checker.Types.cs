@@ -883,9 +883,9 @@ internal sealed partial class Checker
     // checker.ts getBaseTypeOfEnumLikeType: the enum type of an enum literal (its parent enum's declared type).
     private Type GetBaseTypeOfEnumLikeType(Type type)
     {
-        if ((Types.Flags(type) & TypeFlags.EnumLiteral) != 0 && (Types.Flags(type) & TypeFlags.Union) == 0)
+        var symbol = Types.Symbol(type);
+        if ((Types.Flags(type) & TypeFlags.EnumLike) != 0 && !symbol.IsNone && (SymbolFlagsOf(symbol) & SymbolFlags.EnumMember) != 0)
         {
-            var symbol = Types.Symbol(type);
             var parent = GetParentOfSymbol(symbol);
             return !parent.IsNone ? GetDeclaredTypeOfSymbol(parent) : type;
         }

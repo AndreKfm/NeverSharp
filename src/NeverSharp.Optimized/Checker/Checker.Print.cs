@@ -503,8 +503,127 @@ internal sealed partial class Checker
     /// </summary>
     internal (string Text, string Underline) TypeToBaselineText(Type type, NodeRef enclosingDeclaration, bool inTypeAlias)
     {
-        var text = TypeToText(type, enclosingDeclaration, inTypeAlias, writeArrayAsGeneric: false, depth: 0);
-        return (text, new string('^', text.Length));
+        string marked;
+        markReuse = true;
+        try
+        {
+            marked = TypeToText(type, enclosingDeclaration, inTypeAlias, writeArrayAsGeneric: false, depth: 0);
+        }
+        finally
+        {
+            markReuse = false;
+        }
+        var text = new StringBuilder(marked.Length);
+        var underline = new StringBuilder(marked.Length);
+        var reused = 0;
+        foreach (var c in marked)
+        {
+            if (c == ReuseStart)
+            {
+                reused++;
+            }
+            else if (c == ReuseEnd)
+            {
+                reused--;
+            }
+            else
+            {
+                text.Append(c);
+                underline.Append(reused > 0 ? ' ' : '^');
+            }
+        }
+        return (text.ToString(), underline.ToString());
+    }
+
+    // The underlining printer writes spaces under nodes the node builder reused from the source (parameter names,
+    // annotations); TypeToText brackets such text with these private-use markers while markReuse is set.
+    private const char ReuseStart = '';
+    private const char ReuseEnd = '';
+    private bool markReuse;
+
+    private string Reused(string text) => markReuse ? ReuseStart + text + ReuseEnd : text;
+
+    // syntacticNodeBuilder reuse of an existing annotation (C1: annotations of simple shapes whose type is the
+    // serialized type; TODO(C2): tryReuseExistingTypeNode in full)
+    private string? TryReuseAnnotation(NodeRef annotation, Type type, bool optional)
+    {
+        if (annotation.IsNone || !IsSimpleReusableTypeNode(StoreOf(annotation), annotation.Node))
+        {
+            return null;
+        }
+        var fromNode = GetTypeFromTypeNode(annotation);
+        // canReuseTypeNodeAnnotation: annotations resolving to error types are always reused
+        if (!IsErrorType(fromNode) && fromNode != type && !(optional && RemoveUndefinedForOptional(type) == fromNode))
+        {
+            return null;
+        }
+        var store = StoreOf(annotation);
+        var text = Printer.CreatePrinter().PrintNode(EmitHint.Unspecified, store, annotation.Node, Utilities.RootOf(store, annotation.Node));
+        return Reused(text);
+    }
+
+    private static bool IsSimpleReusableTypeNode(NodeStore store, Node node)
+    {
+        switch (store.Kind(node))
+        {
+            case SyntaxKind.AnyKeyword:
+            case SyntaxKind.UnknownKeyword:
+            case SyntaxKind.StringKeyword:
+            case SyntaxKind.NumberKeyword:
+            case SyntaxKind.BigIntKeyword:
+            case SyntaxKind.BooleanKeyword:
+            case SyntaxKind.SymbolKeyword:
+            case SyntaxKind.VoidKeyword:
+            case SyntaxKind.UndefinedKeyword:
+            case SyntaxKind.NeverKeyword:
+            case SyntaxKind.ObjectKeyword:
+                return true;
+            case SyntaxKind.TypeReference:
+                var typeArguments = store.TypeArguments(node);
+                if (store.Kind(store.TypeName(node)) != SyntaxKind.Identifier)
+                {
+                    return false;
+                }
+                foreach (var argument in store.Nodes(typeArguments))
+                {
+                    if (!IsSimpleReusableTypeNode(store, argument))
+                    {
+                        return false;
+                    }
+                }
+                return true;
+            case SyntaxKind.ArrayType:
+                return IsSimpleReusableTypeNode(store, store.ElementType(node));
+            case SyntaxKind.ParenthesizedType:
+                return IsSimpleReusableTypeNode(store, store.Type(node));
+            case SyntaxKind.TypePredicate:
+                return store.Type(node).IsNone || IsSimpleReusableTypeNode(store, store.Type(node));
+            case SyntaxKind.UnionType:
+                foreach (var member in store.Nodes(store.Types(node)))
+                {
+                    if (!IsSimpleReusableTypeNode(store, member))
+                    {
+                        return false;
+                    }
+                }
+                return true;
+            case SyntaxKind.FunctionType:
+                if (!store.TypeParameters(node).IsNone || !IsSimpleReusableTypeNode(store, store.Type(node)))
+                {
+                    return false;
+                }
+                foreach (var parameter in store.Nodes(store.Parameters(node)))
+                {
+                    var parameterType = store.Type(parameter);
+                    if (store.Kind(store.Name(parameter)) != SyntaxKind.Identifier || parameterType.IsNone || !IsSimpleReusableTypeNode(store, parameterType))
+                    {
+                        return false;
+                    }
+                }
+                return true;
+            default:
+                return false;
+        }
     }
 
     private string TypeToText(Type type, NodeRef enclosingDeclaration, bool inTypeAlias, bool writeArrayAsGeneric, int depth)
@@ -835,8 +954,14 @@ internal sealed partial class Checker
             {
                 propertyType = RemoveUndefinedForOptional(propertyType);
             }
+            var propertyDeclaration = ValueDeclarationOf(property);
+            string? reusedType = null;
+            if (!propertyDeclaration.IsNone && Kind(propertyDeclaration) is SyntaxKind.PropertySignature or SyntaxKind.PropertyDeclaration)
+            {
+                reusedType = TryReuseAnnotation(At(propertyDeclaration, StoreOf(propertyDeclaration).Type(propertyDeclaration.Node)), propertyType, false);
+            }
             sb.Append(IsReadonlySymbol(property) ? "readonly " : "").Append(name).Append(optional ? "?" : "").Append(": ")
-                .Append(TypeToText(propertyType, enclosingDeclaration, false, false, depth + 1)).Append("; ");
+                .Append(reusedType ?? TypeToText(propertyType, enclosingDeclaration, false, false, depth + 1)).Append("; ");
         }
         sb.Append('}');
         return sb.ToString();
@@ -914,6 +1039,29 @@ internal sealed partial class Checker
         return !declaration.IsNone && Utilities.HasSyntacticModifierUncached(StoreOf(declaration), declaration.Node, ModifierFlags.Readonly);
     }
 
+    // typeParameterToDeclaration: the name (reused from the declaration) and the constraint (TODO(C2): defaults)
+    private string TypeParameterDeclarationText(Type typeParameter, NodeRef enclosingDeclaration, int depth)
+    {
+        var symbol = Types.Symbol(typeParameter);
+        var name = SymbolName(symbol);
+        var declaration = symbol.IsNone ? NodeRef.None : GetDeclarationOfKind(symbol, SyntaxKind.TypeParameter);
+        if (declaration.IsNone)
+        {
+            return name;
+        }
+        var text = Reused(name);
+        var constraintNode = At(declaration, StoreOf(declaration).Constraint(declaration.Node));
+        if (!constraintNode.IsNone)
+        {
+            var constraint = GetConstraintOfTypeParameter(typeParameter);
+            if (!constraint.IsNone)
+            {
+                text += " extends " + (TryReuseAnnotation(constraintNode, constraint, false) ?? TypeToText(constraint, enclosingDeclaration, false, false, depth + 1));
+            }
+        }
+        return text;
+    }
+
     private string SignatureText(Signature signature, NodeRef enclosingDeclaration, int depth, bool arrow, bool construct)
     {
         ref var record = ref Signatures.Record(signature);
@@ -924,7 +1072,7 @@ internal sealed partial class Checker
         }
         if (record.TypeParameters.Count > 0)
         {
-            sb.Append('<').Append(string.Join(", ", Array.ConvertAll(Types.Elements(record.TypeParameters).ToArray(), t => SymbolName(Types.Symbol(t))))).Append('>');
+            sb.Append('<').Append(string.Join(", ", Array.ConvertAll(Types.Elements(record.TypeParameters).ToArray(), t => TypeParameterDeclarationText(t, enclosingDeclaration, depth)))).Append('>');
         }
         sb.Append('(');
         var parameters = record.Parameters ?? [];
@@ -932,7 +1080,12 @@ internal sealed partial class Checker
         var first = true;
         if (!thisParameter.IsNone)
         {
-            sb.Append("this: ").Append(TypeToText(GetTypeOfSymbol(thisParameter), enclosingDeclaration, false, false, depth + 1));
+            var thisDeclaration = ValueDeclarationOf(thisParameter);
+            var thisType = GetTypeOfSymbol(thisParameter);
+            var fromSource = !thisDeclaration.IsNone && Kind(thisDeclaration) == SyntaxKind.Parameter;
+            sb.Append(fromSource ? Reused("this") : "this").Append(": ")
+                .Append((fromSource ? TryReuseAnnotation(At(thisDeclaration, StoreOf(thisDeclaration).Type(thisDeclaration.Node)), thisType, false) : null)
+                    ?? TypeToText(thisType, enclosingDeclaration, false, false, depth + 1));
             first = false;
         }
         for (var i = 0; i < parameters.Length; i++)
@@ -951,12 +1104,22 @@ internal sealed partial class Checker
             {
                 parameterType = RemoveUndefinedForOptional(parameterType);
             }
-            sb.Append(isRest ? "..." : "").Append(SymbolName(parameter)).Append(isOptional ? "?" : "").Append(": ")
-                .Append(TypeToText(parameterType, enclosingDeclaration, false, false, depth + 1));
+            var isParameterDeclaration = !declaration.IsNone && Kind(declaration) == SyntaxKind.Parameter;
+            var nameFromSource = isParameterDeclaration && Kind(At(declaration, StoreOf(declaration).Name(declaration.Node))) == SyntaxKind.Identifier;
+            var parameterName = SymbolName(parameter);
+            sb.Append(isRest ? "..." : "").Append(nameFromSource ? Reused(parameterName) : parameterName).Append(isOptional ? "?" : "").Append(": ")
+                .Append((isParameterDeclaration ? TryReuseAnnotation(At(declaration, StoreOf(declaration).Type(declaration.Node)), parameterType, false) : null)
+                    ?? TypeToText(parameterType, enclosingDeclaration, false, false, depth + 1));
         }
         sb.Append(')');
         var returnType = GetReturnTypeOfSignature(signature);
-        sb.Append(arrow ? " => " : ": ").Append(TypeToText(returnType, enclosingDeclaration, false, false, depth + 1));
+        var signatureDeclaration = record.Declaration;
+        string? returnText = null;
+        if (!signatureDeclaration.IsNone && Utilities.IsFunctionLike(StoreOf(signatureDeclaration), signatureDeclaration.Node))
+        {
+            returnText = TryReuseAnnotation(At(signatureDeclaration, StoreOf(signatureDeclaration).Type(signatureDeclaration.Node)), returnType, false);
+        }
+        sb.Append(arrow ? " => " : ": ").Append(returnText ?? TypeToText(returnType, enclosingDeclaration, false, false, depth + 1));
         return sb.ToString();
     }
 
