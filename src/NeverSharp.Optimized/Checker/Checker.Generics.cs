@@ -719,12 +719,26 @@ internal sealed partial class Checker
     // checker.ts isKnownSymbol
     private bool IsKnownSymbol(SymbolRef symbol) => NameOf(symbol).StartsWith("__@", StringComparison.Ordinal);
 
-    // checker.ts getDeclarationModifierFlagsFromSymbol (declarations' modifiers; synthetic properties: C5)
-    private ModifierFlags GetDeclarationModifierFlagsFromSymbol(SymbolRef symbol)
+    // checker.ts getDeclarationModifierFlagsFromSymbol (the accessor declarations and synthetic properties: module C5)
+    private ModifierFlags GetDeclarationModifierFlagsFromSymbol(SymbolRef symbol, bool isWrite = false)
     {
         var declaration = ValueDeclarationOf(symbol);
         if (!declaration.IsNone)
         {
+            var declarations = DeclarationsOf(symbol);
+            var accessor = NodeRef.None;
+            if (isWrite && declarations is not null)
+            {
+                accessor = declarations.Find(d => Kind(d) == SyntaxKind.SetAccessor);
+            }
+            if (accessor.IsNone && (SymbolFlagsOf(symbol) & SymbolFlags.GetAccessor) != 0 && declarations is not null)
+            {
+                accessor = declarations.Find(d => Kind(d) == SyntaxKind.GetAccessor);
+            }
+            if (!accessor.IsNone)
+            {
+                declaration = accessor;
+            }
             var store = StoreOf(declaration);
             var flags = Utilities.GetCombinedModifierFlags(store, declaration.Node);
             var parent = ParentOf(symbol);
@@ -732,7 +746,12 @@ internal sealed partial class Checker
         }
         if ((GetCheckFlags(symbol) & CheckFlags.Synthetic) != 0)
         {
-            return ModifierFlags.None; // (checkFlags & ContainsPublic/Private/Protected: C5)
+            var checkFlags = GetCheckFlags(symbol);
+            var accessModifier = (checkFlags & CheckFlags.ContainsPrivate) != 0 ? ModifierFlags.Private
+                : (checkFlags & CheckFlags.ContainsPublic) != 0 ? ModifierFlags.Public
+                : ModifierFlags.Protected;
+            var staticModifier = (checkFlags & CheckFlags.ContainsStatic) != 0 ? ModifierFlags.Static : ModifierFlags.None;
+            return accessModifier | staticModifier;
         }
         if ((SymbolFlagsOf(symbol) & SymbolFlags.Prototype) != 0)
         {
@@ -752,7 +771,7 @@ internal sealed partial class Checker
             case SyntaxKind.NumericLiteral:
                 return GetRegularTypeOfLiteralType(CheckExpression(name));
             case SyntaxKind.ComputedPropertyName:
-                return GetRegularTypeOfLiteralType(CheckExpression(At(name, store.Expression(name.Node))));
+                return GetRegularTypeOfLiteralType(CheckComputedPropertyName(name));
             case SyntaxKind.Identifier:
             case SyntaxKind.StringLiteral:
             case SyntaxKind.NoSubstitutionTemplateLiteral:
@@ -1443,23 +1462,43 @@ internal sealed partial class Checker
         return GetPropertyTypeForIndexType(objectType, apparentObjectType, indexType, indexType, accessNode, accessFlags | AccessFlags.CacheSymbol | AccessFlags.ReportDeprecated);
     }
 
-    // checker.ts getPropertyTypeForIndexType (type positions and accesses without a node; element access expressions
-    // are checked by C1's approximation until C5)
+    // checker.ts getPropertyTypeForIndexType (the element access expression parts: module C5; deprecation suggestions: C8)
     private Type GetPropertyTypeForIndexType(Type originalObjectType, Type objectType, Type indexType, Type fullIndexType, NodeRef accessNode, AccessFlags accessFlags)
     {
         var accessExpression = !accessNode.IsNone && Kind(accessNode) == SyntaxKind.ElementAccessExpression ? accessNode : NodeRef.None;
         var propName = !accessNode.IsNone && Kind(accessNode) == SyntaxKind.PrivateIdentifier ? null : GetPropertyNameFromIndex(indexType, accessNode);
         if (propName is not null)
         {
+            if ((accessFlags & AccessFlags.Contextual) != 0)
+            {
+                var contextualPropertyType = GetTypeOfPropertyOfContextualType(objectType, propName);
+                return contextualPropertyType.IsNone ? anyType : contextualPropertyType;
+            }
             var prop = GetPropertyOfType(objectType, propName);
             if (!prop.IsNone)
             {
-                if (!accessExpression.IsNone && (accessFlags & AccessFlags.CacheSymbol) != 0)
+                if (!accessExpression.IsNone)
                 {
-                    SymbolNodeLinks.Get(accessNode).ResolvedSymbol = prop;
+                    var accessedExpression = At(accessExpression, StoreOf(accessExpression).Expression(accessExpression.Node));
+                    MarkPropertyAsReferenced(prop, accessExpression, IsSelfTypeAccess(accessedExpression, Types.Symbol(objectType)));
+                    if (IsAssignmentToReadonlyEntity(accessExpression, prop, GetAssignmentTargetKind(accessExpression)))
+                    {
+                        Error(At(accessExpression, StoreOf(accessExpression).ArgumentExpression(accessExpression.Node)), Diagnostics.Cannot_assign_to_0_because_it_is_a_read_only_property, SymbolToString(prop));
+                        return Type.None;
+                    }
+                    if ((accessFlags & AccessFlags.CacheSymbol) != 0)
+                    {
+                        SymbolNodeLinks.Get(accessNode).ResolvedSymbol = prop;
+                    }
+                    if (IsThisPropertyAccessInConstructor(accessExpression, prop))
+                    {
+                        return autoType;
+                    }
                 }
                 var propType = (accessFlags & AccessFlags.Writing) != 0 ? GetWriteTypeOfSymbol(prop) : GetTypeOfSymbol(prop);
-                return !accessNode.IsNone && Kind(accessNode) == SyntaxKind.IndexedAccessType && ContainsMissingType(propType) ? GetUnionType([propType, undefinedType]) : propType;
+                return !accessExpression.IsNone && GetAssignmentTargetKind(accessExpression) != AssignmentKind.Definite ? GetFlowTypeOfReference(accessExpression, propType)
+                    : !accessNode.IsNone && Kind(accessNode) == SyntaxKind.IndexedAccessType && ContainsMissingType(propType) ? GetUnionType([propType, undefinedType])
+                    : propType;
             }
             if (EveryType(objectType, IsTupleType) && IsNumericLiteralName(propName))
             {
@@ -1483,6 +1522,7 @@ internal sealed partial class Checker
                 }
                 if (index >= 0)
                 {
+                    ErrorIfWritingToReadonlyIndex(GetIndexInfoOfType(objectType, numberType), accessExpression, accessFlags, objectType);
                     return GetTupleElementTypeOutOfStartCount(objectType, index, (accessFlags & AccessFlags.IncludeUndefined) != 0 ? missingType : Type.None);
                 }
             }
@@ -1500,14 +1540,29 @@ internal sealed partial class Checker
             {
                 if ((accessFlags & AccessFlags.NoIndexSignatures) != 0 && indexInfo.KeyType != numberType)
                 {
+                    if (!accessExpression.IsNone)
+                    {
+                        if ((accessFlags & AccessFlags.Writing) != 0)
+                        {
+                            Error(accessExpression, Diagnostics.Type_0_is_generic_and_can_only_be_indexed_for_reading, TypeToString(originalObjectType));
+                        }
+                        else
+                        {
+                            Error(accessExpression, Diagnostics.Type_0_cannot_be_used_to_index_type_1, TypeToString(indexType), TypeToString(originalObjectType));
+                        }
+                    }
                     return Type.None;
                 }
                 if (!accessNode.IsNone && indexInfo.KeyType == stringType && !IsTypeAssignableToKind(indexType, TypeFlags.String | TypeFlags.Number))
                 {
                     var indexNode = GetIndexNodeForAccessExpression(accessNode);
-                    Error(indexNode, Diagnostics.Type_0_cannot_be_used_as_an_index_type, TypeToString(indexType));
+                    if (!IsAccessDiagnosticSuppressed(accessNode, objectType, indexType))
+                    {
+                        Error(indexNode, Diagnostics.Type_0_cannot_be_used_as_an_index_type, TypeToString(indexType));
+                    }
                     return (accessFlags & AccessFlags.IncludeUndefined) != 0 ? GetUnionType([indexInfo.Type, missingType]) : indexInfo.Type;
                 }
+                ErrorIfWritingToReadonlyIndex(indexInfo, accessExpression, accessFlags, objectType);
                 if ((accessFlags & AccessFlags.IncludeUndefined) != 0)
                 {
                     var objectSymbol = Types.Symbol(objectType);
@@ -1524,13 +1579,26 @@ internal sealed partial class Checker
             {
                 return neverType;
             }
-            if (!accessExpression.IsNone)
+            if (IsJSLiteralType(objectType))
             {
-                // (the property and index diagnostics of element access expressions: C5)
-                return Type.None;
+                return anyType;
+            }
+            if (!accessExpression.IsNone && !IsConstEnumObjectType(objectType))
+            {
+                // the property and index diagnostics of element access expressions (module C5)
+                ReportElementAccessIndexError(accessExpression, objectType, indexType, fullIndexType, propName, accessFlags, out var resultType);
+                return resultType;
             }
         }
-        if (!accessNode.IsNone)
+        if ((accessFlags & AccessFlags.AllowMissing) != 0 && IsObjectLiteralType(objectType))
+        {
+            return undefinedType;
+        }
+        if (IsJSLiteralType(objectType))
+        {
+            return anyType;
+        }
+        if (!accessNode.IsNone && !IsAccessDiagnosticSuppressed(accessNode, objectType, indexType))
         {
             var indexNode = GetIndexNodeForAccessExpression(accessNode);
             var indexFlags = Types.Flags(indexType);

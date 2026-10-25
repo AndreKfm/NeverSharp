@@ -923,10 +923,15 @@ internal sealed partial class Checker
             exports = varsOnly;
         }
         SetStructuredTypeMembers(type, exports, null, null, null);
+        IndexInfo? baseConstructorIndexInfo = null;
         if ((flags & SymbolFlags.Class) != 0)
         {
             var classType = GetDeclaredTypeOfClassOrInterface(symbol);
             var baseConstructorType = GetBaseConstructorTypeOfClass(classType);
+            if ((Types.Flags(baseConstructorType) & TypeFlags.Any) != 0)
+            {
+                baseConstructorIndexInfo = new IndexInfo { KeyType = stringType, Type = anyType, IsReadonly = false }; // (module C5)
+            }
             if ((Types.Flags(baseConstructorType) & (TypeFlags.Object | TypeFlags.Intersection | TypeFlags.TypeVariable)) != 0)
             {
                 var combined = new SymTable();
@@ -942,8 +947,13 @@ internal sealed partial class Checker
                 exports = combined;
             }
         }
-        // (index signatures of classes and enums: C8)
-        SetStructuredTypeMembers(type, exports, null, null, null);
+        // (static index signatures of classes: C8; module C5: the index signatures of any-based classes and enums)
+        var anonymousIndexInfos = baseConstructorIndexInfo is not null ? new List<IndexInfo> { baseConstructorIndexInfo } : null;
+        if ((flags & SymbolFlags.Enum) != 0 && ((Types.Flags(GetDeclaredTypeOfSymbol(symbol)) & TypeFlags.Enum) != 0 || HasNumberLikeProperty(exports)))
+        {
+            (anonymousIndexInfos ??= []).Add(enumNumberIndexInfo ??= new IndexInfo { KeyType = numberType, Type = stringType, IsReadonly = true });
+        }
+        SetStructuredTypeMembers(type, exports, null, null, anonymousIndexInfos);
         var data = Types.Object(type);
         // We resolve the members before computing the signatures because a signature may use
         // typeof with a qualified name expression that circularly references the type we are
@@ -964,6 +974,22 @@ internal sealed partial class Checker
             }
             data.ConstructSignatures = constructSignatures;
         }
+    }
+
+    // checker.ts enumNumberIndexInfo
+    private IndexInfo? enumNumberIndexInfo;
+
+    // some(type.properties, prop => getTypeOfSymbol(prop).flags & NumberLike)
+    private bool HasNumberLikeProperty(SymTable members)
+    {
+        for (var i = 0; i < members.Count; i++)
+        {
+            if ((Types.Flags(GetTypeOfSymbol(members.ValueAt(i))) & TypeFlags.NumberLike) != 0)
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     private const int ResolvedBaseConstructorTypeProperty = 6;
@@ -1228,7 +1254,12 @@ internal sealed partial class Checker
             var resolved = ResolveStructuredTypeMembers(type);
             return kind == SignatureKind.Call ? resolved.CallSignatures! : resolved.ConstructSignatures!;
         }
-        // (unions and intersections: resolveUnionTypeMembers, TODO(C5))
+        if ((Types.Flags(type) & TypeFlags.UnionOrIntersection) != 0)
+        {
+            // resolveUnionTypeMembers / resolveIntersectionTypeMembers (module C5)
+            var resolved = ResolveUnionOrIntersectionTypeMembers(type);
+            return kind == SignatureKind.Call ? resolved.CallSignatures! : resolved.ConstructSignatures!;
+        }
         return [];
     }
 
@@ -1236,7 +1267,9 @@ internal sealed partial class Checker
     internal List<IndexInfo> GetIndexInfosOfType(Type type)
     {
         type = GetApparentType(type);
-        return (Types.Flags(type) & TypeFlags.Object) != 0 ? ResolveStructuredTypeMembers(type).IndexInfos! : [];
+        return (Types.Flags(type) & TypeFlags.Object) != 0 ? ResolveStructuredTypeMembers(type).IndexInfos!
+            : (Types.Flags(type) & TypeFlags.UnionOrIntersection) != 0 ? ResolveUnionOrIntersectionTypeMembers(type).IndexInfos!
+            : [];
     }
 
     /// <summary>checker.ts getIndexInfosOfSymbol (getIndexInfosOfIndexSymbol for the symbol's __index member).</summary>
@@ -1408,7 +1441,9 @@ internal sealed partial class Checker
         }
         var declaration = Signatures.Record(signature).Declaration;
         var signatureTarget = Signatures.Record(signature).Target;
+        var compositeSignatures = Signatures.Record(signature).CompositeSignatures;
         var type = !signatureTarget.IsNone ? InstantiateType(GetReturnTypeOfSignature(signatureTarget), MapperAt(Signatures.Record(signature).Mapper))
+            : compositeSignatures is not null ? InstantiateType(GetUnionOrIntersectionTypeOfReturnTypes(compositeSignatures, Signatures.Record(signature).CompositeKind), MapperAt(Signatures.Record(signature).Mapper))
             : declaration.IsNone ? anyType : GetReturnTypeFromAnnotation(declaration);
         if (type.IsNone)
         {
@@ -1613,7 +1648,7 @@ internal sealed partial class Checker
         switch (kind)
         {
             case SyntaxKind.ExportAssignment:
-                type = CheckExpressionCached(At(declaration, store.Expression(declaration.Node)));
+                type = WidenTypeForVariableLikeDeclaration(CheckExpressionCached(At(declaration, store.Expression(declaration.Node))), declaration, reportErrors: false);
                 break;
             case SyntaxKind.PropertyAccessExpression:
             case SyntaxKind.ElementAccessExpression:
@@ -1635,14 +1670,14 @@ internal sealed partial class Checker
             case SyntaxKind.PropertyAssignment:
             {
                 var typeNode = store.Type(declaration.Node);
-                type = !typeNode.IsNone ? GetTypeFromTypeNode(At(declaration, typeNode)) : CheckExpressionForMutableLocation(At(declaration, store.Initializer(declaration.Node)));
+                type = !typeNode.IsNone ? GetTypeFromTypeNode(At(declaration, typeNode)) : CheckPropertyAssignment(declaration, CheckMode.Normal);
                 break;
             }
             case SyntaxKind.ShorthandPropertyAssignment:
-                type = CheckExpressionForMutableLocation(At(declaration, store.Name(declaration.Node)));
+                type = CheckExpressionForMutableLocation(At(declaration, store.Name(declaration.Node)), CheckMode.Normal);
                 break;
             case SyntaxKind.MethodDeclaration:
-                // object literal methods (checkObjectLiteralMethod, C5): the function type of the method symbol
+                // object literal methods: the function type of the method symbol
                 type = GetTypeOfFuncClassEnumModule(symbol);
                 break;
             case SyntaxKind.Parameter:
@@ -1852,80 +1887,7 @@ internal sealed partial class Checker
     private Type AddOptionality(Type type, bool isProperty = false, bool isOptional = true) =>
         strictNullChecks && isOptional ? GetOptionalType(type, isProperty) : type;
 
-    // checker.ts getWidenedTypeForVariableLikeDeclaration / widenTypeForVariableLikeDeclaration
-    private Type GetWidenedTypeForVariableLikeDeclaration(NodeRef declaration, bool reportErrors)
-    {
-        var type = GetTypeForVariableLikeDeclaration(declaration, includeOptionality: true);
-        if (!type.IsNone)
-        {
-            // (unique symbol types of `const x: unique symbol`: C3)
-            return GetWidenedType(type);
-        }
-        var store = StoreOf(declaration);
-        var declarationName = Utilities.GetNameOfDeclaration(store, declaration.Node);
-        if (store.Kind(declaration.Node) is SyntaxKind.Parameter or SyntaxKind.VariableDeclaration && !declarationName.IsNone && Utilities.IsBindingPattern(store, declarationName))
-        {
-            // getTypeFromBindingPattern(name, includePatternInType: false, reportErrors) (the pattern's type: C5)
-            if (reportErrors)
-            {
-                ReportImplicitAnyInBindingPattern(At(declaration, declarationName));
-            }
-            MarkUncertainDeclaration(declaration);
-            return anyType;
-        }
-        // Rest parameters default to type any[], other parameters default to type any
-        type = store.Kind(declaration.Node) == SyntaxKind.Parameter && !store.DotDotDotToken(declaration.Node).IsNone ? anyArrayType : anyType;
-        // Report implicit any errors unless this is a private property within an ambient declaration
-        if (reportErrors && !DeclarationBelongsToPrivateAmbientMember(declaration))
-        {
-            ReportImplicitAny(declaration, type);
-        }
-        return type;
-    }
-
-    // getTypeFromObjectBindingPattern / getTypeFromArrayBindingPattern / getTypeFromBindingElement with reportErrors: the
-    // implicit any errors of elements without initializers
-    private void ReportImplicitAnyInBindingPattern(NodeRef pattern)
-    {
-        var store = StoreOf(pattern);
-        var elements = store.Nodes(store.Elements(pattern.Node));
-        var isObjectPattern = store.Kind(pattern.Node) == SyntaxKind.ObjectBindingPattern;
-        if (!isObjectPattern)
-        {
-            var last = elements.Length > 0 ? elements[^1] : Node.None;
-            var hasRest = !last.IsNone && store.Kind(last) == SyntaxKind.BindingElement && !store.DotDotDotToken(last).IsNone;
-            if (elements.Length == 0 || (elements.Length == 1 && hasRest))
-            {
-                return;
-            }
-        }
-        foreach (var element in elements)
-        {
-            if (store.Kind(element) != SyntaxKind.BindingElement)
-            {
-                continue; // omitted expressions
-            }
-            if (isObjectPattern && !store.DotDotDotToken(element).IsNone)
-            {
-                continue;
-            }
-            if (!store.Initializer(element).IsNone)
-            {
-                continue;
-            }
-            var name = store.Name(element);
-            if (Utilities.IsBindingPattern(store, name))
-            {
-                ReportImplicitAnyInBindingPattern(At(pattern, name));
-                continue;
-            }
-            var elementRef = At(pattern, element);
-            if (!DeclarationBelongsToPrivateAmbientMember(elementRef))
-            {
-                ReportImplicitAny(elementRef, anyType);
-            }
-        }
-    }
+    // (getWidenedTypeForVariableLikeDeclaration, getTypeForVariableLikeDeclaration: Checker.Destructuring.cs, module C5)
 
     private bool DeclarationBelongsToPrivateAmbientMember(NodeRef declaration)
     {
@@ -1938,264 +1900,6 @@ internal sealed partial class Checker
     private static bool IsPrivateWithinAmbient(NodeStore store, Node node) =>
         (Utilities.HasSyntacticModifierUncached(store, node, ModifierFlags.Private) || (Utilities.GetNameOfDeclaration(store, node) is var name && !name.IsNone && store.Kind(name) == SyntaxKind.PrivateIdentifier))
         && (store.Flags(node) & NodeFlags.Ambient) != 0;
-
-    // The type of the declaration's symbol is a C1 approximation: no diagnostics are derived from its uses
-    private void MarkUncertainDeclaration(NodeRef declaration)
-    {
-        var symbol = GetSymbolOfDeclaration(declaration);
-        if (!symbol.IsNone)
-        {
-            uncertainSymbols.Add(symbol);
-        }
-    }
-
-    // TODO(C5): checkRightHandSideOfForOf / getIteratedTypeOrElementType. C1: any, arrays and strings; None otherwise.
-    private Type GetForOfElementTypeApproximation(NodeRef forOf)
-    {
-        var store = StoreOf(forOf);
-        if (!store.AwaitModifier(forOf.Node).IsNone)
-        {
-            return Type.None;
-        }
-        var expression = At(forOf, store.Expression(forOf.Node));
-        var type = CheckExpressionCached(expression);
-        if (IsUncertainExpression(expression) || IsUnsupportedType(type))
-        {
-            return Type.None;
-        }
-        if ((Types.Flags(type) & TypeFlags.Any) != 0)
-        {
-            return IsErrorType(type) ? errorType : anyType;
-        }
-        if ((Types.Flags(type) & TypeFlags.StringLike) != 0)
-        {
-            return stringType;
-        }
-        return GetArrayElementTypeOrNone(type);
-    }
-
-    private Type GetArrayElementTypeOrNone(Type type)
-    {
-        if ((Types.ObjectFlagsOf(type) & ObjectFlags.Reference) != 0 && Types.Object(type).Target is var target && (target == globalArrayType || target == globalReadonlyArrayType))
-        {
-            var typeArguments = GetTypeArguments(type);
-            return typeArguments.Length > 0 ? typeArguments[0] : Type.None;
-        }
-        return Type.None;
-    }
-
-    // TODO(C5): getTypeForBindingElement. C1: elements of any-typed parents, properties of non-generic object types
-    // without defaults and array elements; None otherwise.
-    private Type GetBindingElementTypeApproximation(NodeRef element)
-    {
-        var store = StoreOf(element);
-        var n = element.Node;
-        if (store.Kind(n) != SyntaxKind.BindingElement || !store.DotDotDotToken(n).IsNone)
-        {
-            return Type.None;
-        }
-        var pattern = store.Parent(n);
-        var container = At(element, store.Parent(pattern));
-        Type parentType;
-        switch (store.Kind(container.Node))
-        {
-            case SyntaxKind.VariableDeclaration:
-            {
-                var typeNode = store.Type(container.Node);
-                var initializer = store.Initializer(container.Node);
-                if (!typeNode.IsNone)
-                {
-                    parentType = GetTypeFromTypeNode(At(container, typeNode));
-                }
-                else if (store.Kind(store.Parent(store.Parent(container.Node))) == SyntaxKind.ForOfStatement)
-                {
-                    parentType = GetForOfElementTypeApproximation(At(container, store.Parent(store.Parent(container.Node))));
-                }
-                else if (!initializer.IsNone)
-                {
-                    var initializerRef = At(container, initializer);
-                    parentType = CheckExpressionCached(initializerRef);
-                    if (IsUncertainExpression(initializerRef))
-                    {
-                        return Type.None;
-                    }
-                }
-                else
-                {
-                    return Type.None;
-                }
-                break;
-            }
-            case SyntaxKind.Parameter:
-            {
-                var typeNode = store.Type(container.Node);
-                if (typeNode.IsNone)
-                {
-                    return Type.None;
-                }
-                parentType = GetTypeFromTypeNode(At(container, typeNode));
-                break;
-            }
-            case SyntaxKind.BindingElement:
-            {
-                var symbol = GetSymbolOfDeclaration(container);
-                if (symbol.IsNone || store.Kind(store.Name(container.Node)) == SyntaxKind.Identifier)
-                {
-                    return Type.None;
-                }
-                parentType = GetBindingElementTypeApproximation(container);
-                break;
-            }
-            default:
-                return Type.None;
-        }
-        if (parentType.IsNone || IsUnsupportedType(parentType))
-        {
-            return Type.None;
-        }
-        if ((Types.Flags(parentType) & TypeFlags.Any) != 0)
-        {
-            return IsErrorType(parentType) ? errorType : anyType;
-        }
-        if (!store.Initializer(n).IsNone)
-        {
-            return Type.None; // (defaults: C5)
-        }
-        if (store.Kind(pattern) == SyntaxKind.ArrayBindingPattern)
-        {
-            return GetArrayElementTypeOrNone(parentType);
-        }
-        var propertyNameNode = store.PropertyName(n);
-        var nameNode = propertyNameNode.IsNone ? store.Name(n) : propertyNameNode;
-        if (store.Kind(nameNode) is not (SyntaxKind.Identifier or SyntaxKind.StringLiteral))
-        {
-            return Type.None;
-        }
-        if ((Types.Flags(parentType) & TypeFlags.Object) == 0 || (Types.ObjectFlagsOf(parentType) & ObjectFlags.Reference) != 0 && GetTypeArguments(parentType).Length > 0)
-        {
-            return Type.None;
-        }
-        var name = store.Kind(nameNode) == SyntaxKind.Identifier ? store.Texts.GetString(store.EscapedText(nameNode))! : store.Texts.GetString(store.Text(nameNode))!;
-        var prop = GetPropertyOfType(GetApparentType(parentType), name);
-        if (prop.IsNone || (SymbolFlagsOf(prop) & SymbolFlags.Optional) != 0)
-        {
-            return Type.None;
-        }
-        return GetTypeOfSymbol(prop);
-    }
-
-    // checker.ts getTypeForVariableLikeDeclaration (destructuring: C5; contextual parameter types: C5/C6; for-in/of: C5)
-    private Type GetTypeForVariableLikeDeclaration(NodeRef declaration, bool includeOptionality)
-    {
-        var store = StoreOf(declaration);
-        var node = declaration.Node;
-        var kind = store.Kind(node);
-        var parent = store.Parent(node);
-        if (kind == SyntaxKind.VariableDeclaration && store.Kind(store.Parent(parent)) == SyntaxKind.ForInStatement)
-        {
-            var indexType = GetIndexType(GetNonNullableType(CheckExpressionCached(At(declaration, store.Expression(store.Parent(parent))))));
-            return (Types.Flags(indexType) & (TypeFlags.TypeParameter | TypeFlags.Index)) != 0 ? GetExtractStringType(indexType) : stringType;
-        }
-        if (kind == SyntaxKind.VariableDeclaration && store.Kind(store.Parent(parent)) == SyntaxKind.ForOfStatement)
-        {
-            var elementType = GetForOfElementTypeApproximation(At(declaration, store.Parent(parent)));
-            if (elementType.IsNone)
-            {
-                MarkUncertainDeclaration(declaration);
-                return anyType;
-            }
-            return elementType;
-        }
-        if (Utilities.IsBindingPattern(store, parent))
-        {
-            var bindingType = GetBindingElementTypeApproximation(declaration);
-            if (bindingType.IsNone)
-            {
-                MarkUncertainDeclaration(declaration);
-                return anyType;
-            }
-            return bindingType;
-        }
-        var isProperty = (kind == SyntaxKind.PropertyDeclaration && !Utilities.HasSyntacticModifierUncached(store, node, ModifierFlags.Accessor)) || kind == SyntaxKind.PropertySignature;
-        var isOptional = includeOptionality && kind is SyntaxKind.Parameter or SyntaxKind.PropertyDeclaration or SyntaxKind.PropertySignature && !store.QuestionToken(node).IsNone;
-
-        // Use type from type annotation if one is present
-        var typeNode = GetEffectiveTypeAnnotationNode(declaration);
-        var declaredType = typeNode.IsNone ? Type.None : GetTypeFromTypeNode(typeNode);
-        if (kind == SyntaxKind.VariableDeclaration && store.Kind(parent) == SyntaxKind.CatchClause)
-        {
-            if (!declaredType.IsNone)
-            {
-                // If the catch clause is explicitly annotated with any or unknown, accept it, otherwise error.
-                return (Types.Flags(declaredType) & TypeFlags.Any) != 0 || declaredType == unknownType ? declaredType : errorType;
-            }
-            // If the catch clause is not explicitly annotated, treat it as though it were explicitly
-            // annotated with unknown or any, depending on useUnknownInCatchVariables.
-            return compilerOptions.GetStrictOptionValue(compilerOptions.UseUnknownInCatchVariables) ? unknownType : anyType;
-        }
-        if (!declaredType.IsNone)
-        {
-            return AddOptionality(declaredType, isProperty, isOptional);
-        }
-        var initializer = kind is SyntaxKind.VariableDeclaration or SyntaxKind.Parameter or SyntaxKind.PropertyDeclaration or SyntaxKind.BindingElement
-            ? store.Initializer(node)
-            : Node.None;
-        if (noImplicitAny && kind == SyntaxKind.VariableDeclaration && !Utilities.IsBindingPattern(store, store.Name(node)) &&
-            (Utilities.GetCombinedModifierFlags(store, node) & ModifierFlags.Export) == 0 && (store.Flags(node) & NodeFlags.Ambient) == 0)
-        {
-            // If --noImplicitAny is on or the declaration is in a Javascript file,
-            // use control flow tracked 'any' type for non-ambient, non-exported var or let variables with no
-            // initializer or a 'null' or 'undefined' initializer.
-            if ((Utilities.GetCombinedNodeFlags(store, node) & NodeFlags.Constant) == 0 && (initializer.IsNone || IsNullOrUndefined(At(declaration, initializer))))
-            {
-                return autoType;
-            }
-            // Use control flow tracked 'any[]' type for non-ambient, non-exported variables with an empty array
-            // literal initializer.
-            if (!initializer.IsNone && IsEmptyArrayLiteral(store, initializer))
-            {
-                return autoArrayType;
-            }
-        }
-        if (kind == SyntaxKind.Parameter)
-        {
-            var func = parent;
-            // For a parameter of a set accessor, use the type of the get accessor if one is present
-            if (store.Kind(func) == SyntaxKind.SetAccessor && !Utilities.HasDynamicName(store, func))
-            {
-                var getter = GetDeclarationOfKind(GetSymbolOfDeclaration(At(declaration, func)), SyntaxKind.GetAccessor);
-                if (!getter.IsNone)
-                {
-                    return GetReturnTypeOfSignature(GetSignatureFromDeclaration(getter));
-                }
-            }
-            // Use contextual parameter type if one is available
-            var contextual = GetContextuallyTypedParameterType(declaration);
-            if (!contextual.IsNone)
-            {
-                return AddOptionality(contextual, isProperty: false, isOptional);
-            }
-        }
-        // Use the type of the initializer expression if one is present and the declaration is
-        // not a parameter of a contextually typed function
-        if (!initializer.IsNone)
-        {
-            var type = WidenTypeInferredFromInitializer(declaration, CheckExpressionCached(At(declaration, initializer)));
-            if (IsUncertainExpression(At(declaration, initializer)))
-            {
-                MarkUncertainDeclaration(declaration);
-            }
-            return AddOptionality(type, isProperty, isOptional);
-        }
-        if (kind == SyntaxKind.PropertyDeclaration && noImplicitAny)
-        {
-            // TODO(C7): the type of a property from this.x assignments in the constructor (control flow)
-            return Type.None;
-        }
-        // If the declaration specifies a binding pattern and is not a parameter of a contextually
-        // typed function, use the type implied by the binding pattern (C5)
-        return Type.None;
-    }
 
     private bool IsNullOrUndefined(NodeRef node)
     {
@@ -2210,52 +1914,17 @@ internal sealed partial class Checker
         return store.Kind(expr) == SyntaxKind.ArrayLiteralExpression && store.Length(store.Elements(expr)) == 0;
     }
 
-    // checker.ts widenTypeInferredFromInitializer
-    private Type WidenTypeInferredFromInitializer(NodeRef declaration, Type type)
-    {
-        var store = StoreOf(declaration);
-        var widened = (Utilities.GetCombinedNodeFlags(store, declaration.Node) & NodeFlags.Constant) != 0 || IsDeclarationReadonly(store, declaration.Node) ? type : GetWidenedLiteralType(type);
-        return widened;
-    }
-
     private static bool IsDeclarationReadonly(NodeStore store, Node declaration) =>
         (Utilities.GetCombinedModifierFlags(store, declaration) & ModifierFlags.Readonly) != 0 && !Utilities.IsParameterPropertyDeclaration(store, declaration, store.Parent(declaration));
 
-    /// <summary>
-    /// checker.ts getWidenedType (TODO(C5): object literal widening and implicit-any widening reports; C1 widens array
-    /// literal element types and nullable types without strictNullChecks).
-    /// </summary>
-    internal Type GetWidenedType(Type type)
-    {
-        var flags = Types.Flags(type);
-        if (!strictNullChecks && (flags & TypeFlags.Nullable) != 0)
-        {
-            return anyType;
-        }
-        if ((Types.ObjectFlagsOf(type) & ObjectFlags.ArrayLiteral) != 0 && (Types.ObjectFlagsOf(type) & ObjectFlags.Reference) != 0)
-        {
-            var args = GetTypeArguments(type).ToArray();
-            var widened = new Type[args.Length];
-            for (var i = 0; i < args.Length; i++)
-            {
-                widened[i] = GetWidenedType(args[i]);
-            }
-            // (the regular reference, not the array literal's fresh form)
-            return CreateTypeReference(Types.Object(type).Target, widened);
-        }
-        if ((flags & TypeFlags.Union) != 0)
-        {
-            return MapType(type, GetWidenedType);
-        }
-        return type;
-    }
+    // (getWidenedType: Checker.Literals.cs, module C5)
 
-    // checker.ts reportImplicitAny (the variable, parameter and property cases)
-    private void ReportImplicitAny(NodeRef declaration, Type type)
+    // checker.ts reportImplicitAny (the variable, parameter and property cases; the widening kinds: module C5)
+    private void ReportImplicitAny(NodeRef declaration, Type type, WideningKind wideningKind = WideningKind.Normal)
     {
         var store = StoreOf(declaration);
         var node = declaration.Node;
-        var typeAsString = type == anyArrayType ? "any[]" : "any";
+        var typeAsString = TypeToString(GetWidenedType(type));
         DiagnosticMessage diagnostic;
         switch (store.Kind(node))
         {
@@ -2304,13 +1973,16 @@ internal sealed partial class Checker
             case SyntaxKind.SetAccessor:
             case SyntaxKind.FunctionExpression:
             case SyntaxKind.ArrowFunction:
-                // TODO(C6): the generator yield widening kind
                 if (noImplicitAny && (store.Kind(node) == SyntaxKind.ArrowFunction || store.Name(node).IsNone))
                 {
-                    Error(declaration, Diagnostics.Function_expression_which_lacks_return_type_annotation_implicitly_has_an_0_return_type, typeAsString);
+                    Error(declaration, wideningKind == WideningKind.GeneratorYield
+                        ? Diagnostics.Generator_implicitly_has_yield_type_0_Consider_supplying_a_return_type_annotation
+                        : Diagnostics.Function_expression_which_lacks_return_type_annotation_implicitly_has_an_0_return_type, typeAsString);
                     return;
                 }
-                diagnostic = noImplicitAny ? Diagnostics._0_which_lacks_return_type_annotation_implicitly_has_an_1_return_type : Diagnostics._0_implicitly_has_an_1_return_type_but_a_better_type_may_be_inferred_from_usage;
+                diagnostic = !noImplicitAny ? Diagnostics._0_implicitly_has_an_1_return_type_but_a_better_type_may_be_inferred_from_usage
+                    : wideningKind == WideningKind.GeneratorYield ? Diagnostics._0_which_lacks_return_type_annotation_implicitly_has_an_1_yield_type
+                    : Diagnostics._0_which_lacks_return_type_annotation_implicitly_has_an_1_return_type;
                 break;
             case SyntaxKind.VariableDeclaration:
             default:

@@ -361,6 +361,8 @@ internal sealed class SignatureStore
         public Type ResolvedReturnType;
         public Signature Target;
         public int Mapper;              // type mapper handle (C3)
+        public Signature[]? CompositeSignatures; // union and intersection signatures (C5)
+        public TypeFlags CompositeKind;
     }
 
     private SignatureRecord[] signatures = new SignatureRecord[64];

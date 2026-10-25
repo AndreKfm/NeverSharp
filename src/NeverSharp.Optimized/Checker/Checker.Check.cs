@@ -54,32 +54,46 @@ internal sealed partial class Checker
     }
 
     // checker.ts checkDeferredNode: function expression and object literal method bodies, object literal accessors,
-    // class expression members
+    // class expression members, assertions, void expressions, call-like expressions whose overload resolution failed
+    // and JSX elements (module C5)
     private void CheckDeferredNode(NodeRef node)
     {
         var store = StoreOf(node);
         var n = node.Node;
+        var saveCurrentNode = currentNode;
+        currentNode = node;
+        instantiationCount = 0;
         switch (store.Kind(n))
         {
+            case SyntaxKind.CallExpression:
+            case SyntaxKind.NewExpression:
+            case SyntaxKind.TaggedTemplateExpression:
+            case SyntaxKind.Decorator:
+            case SyntaxKind.JsxOpeningElement:
+                // These node kinds are deferred checked when overload resolution fails
+                // To save on work, we ensure the arguments are checked just once, in
+                // a deferred way
+                ResolveUntypedCall(node);
+                break;
             case SyntaxKind.FunctionExpression:
             case SyntaxKind.ArrowFunction:
             case SyntaxKind.MethodDeclaration:
-            {
-                // checkFunctionExpressionOrObjectLiteralMethodDeferred
-                var body = store.Body(n);
-                if (!body.IsNone)
-                {
-                    if (store.Type(n).IsNone)
-                    {
-                        GetReturnTypeOfSignature(GetSignatureFromDeclaration(node));
-                    }
-                    CheckNodeRecursive(At(node, body));
-                }
+                CheckFunctionExpressionOrObjectLiteralMethodDeferred(node);
                 break;
-            }
             case SyntaxKind.GetAccessor:
             case SyntaxKind.SetAccessor:
                 CheckSignatureLikeDeclaration(node);
+                break;
+            case SyntaxKind.TypeAssertionExpression:
+            case SyntaxKind.AsExpression:
+                CheckAssertionDeferred(node);
+                break;
+            case SyntaxKind.VoidExpression:
+                CheckExpression(At(node, store.Expression(n)));
+                break;
+            case SyntaxKind.JsxElement:
+            case SyntaxKind.JsxSelfClosingElement:
+                CheckJsxNode(node);
                 break;
             case SyntaxKind.ClassExpression:
                 // checkClassExpressionDeferred
@@ -90,6 +104,7 @@ internal sealed partial class Checker
                 RegisterForUnusedIdentifiersCheck(node);
                 break;
         }
+        currentNode = saveCurrentNode;
     }
 
     // checkSourceElement's currentNode and instantiationCount (module C3)
@@ -140,19 +155,18 @@ internal sealed partial class Checker
                 CheckSignatureLikeDeclaration(node);
                 return;
             }
-            case SyntaxKind.FunctionExpression:
-            case SyntaxKind.ArrowFunction:
-                // checkFunctionExpressionOrObjectLiteralMethod: the signature now, the body deferred
-                CheckSignatureLikeDeclaration(node, deferBody: true);
+            case SyntaxKind.Decorator:
+                CheckDecorator(node);
                 return;
-            case SyntaxKind.ClassExpression:
-                // checkClassExpression: checkClassLikeDeclaration now, the members deferred
-                VisitChildren(node, except: store.Members(n));
-                CheckClassLikeDeclarationRelations(node); // module C4
-                CheckMembersForOverrideModifier(node);
-                CheckPropertyInitialization(node);
-                CheckNodeDeferred(node);
+            case SyntaxKind.ComputedPropertyName:
+                CheckComputedPropertyName(node);
                 return;
+        }
+        if (kind != SyntaxKind.Identifier && kind != SyntaxKind.ThisKeyword && IsExpressionRootKind(kind) && Utilities.IsExpressionNode(store, n) && !Utilities.IsPartOfTypeNode(store, n))
+        {
+            // an expression of a statement or declaration: checkExpression checks the whole expression (module C5)
+            CheckExpressionRoot(node);
+            return;
         }
         var descend = CheckNodeWorker(node);
         if (descend)
@@ -476,7 +490,11 @@ internal sealed partial class Checker
                 // resolved by the type reference or type query that contains it
                 return false;
             case SyntaxKind.ThisKeyword:
-                if (Utilities.IsExpressionNode(store, n) || Utilities.IsInTypeQuery(store, n))
+                if (Utilities.IsExpressionNode(store, n))
+                {
+                    CheckExpressionRoot(node);
+                }
+                else if (Utilities.IsInTypeQuery(store, n))
                 {
                     CheckThisExpression(node);
                 }
@@ -531,6 +549,7 @@ internal sealed partial class Checker
             case SyntaxKind.VariableDeclaration:
             case SyntaxKind.PropertyDeclaration:
             case SyntaxKind.PropertySignature:
+            case SyntaxKind.BindingElement:
                 CheckVariableLikeDeclarationType(node);
                 return true;
             case SyntaxKind.LabeledStatement:
@@ -602,7 +621,7 @@ internal sealed partial class Checker
             {
                 return; // TODO(C9)
             }
-            CheckIdentifier(node);
+            CheckExpressionRoot(node);
         }
     }
 
@@ -613,15 +632,31 @@ internal sealed partial class Checker
         var n = node.Node;
         if (Utilities.IsBindingPattern(store, store.Name(n)))
         {
-            // the implicit any errors of the pattern's elements (getTypeOfSymbol of a binding pattern parameter); TODO(C5):
-            // destructuring checks
-            if (store.Kind(n) == SyntaxKind.Parameter && store.Type(n).IsNone && store.Initializer(n).IsNone &&
-                !(IsContextSensitiveFunctionOrObjectLiteralMethod(store, store.Parent(n)) && HasContextualType(At(node, store.Parent(n)))))
+            // the type of a binding pattern parameter (implicit any errors of its elements), the widened type of a
+            // destructuring declaration (module C5; TODO(C8): the remaining checks of checkVariableLikeDeclaration)
+            if (store.Kind(n) == SyntaxKind.Parameter)
             {
                 var patternSymbol = GetSymbolOfDeclaration(node);
                 if (!patternSymbol.IsNone)
                 {
                     GetTypeOfSymbol(patternSymbol);
+                }
+            }
+            else if (store.Kind(n) == SyntaxKind.VariableDeclaration && (store.Flags(n) & NodeFlags.Ambient) == 0)
+            {
+                var needCheckInitializer = !store.Initializer(n).IsNone && store.Kind(store.Parent(store.Parent(n))) != SyntaxKind.ForInStatement;
+                var needCheckWidenedType = true;
+                foreach (var element in store.Nodes(store.Elements(store.Name(n))))
+                {
+                    if (store.Kind(element) != SyntaxKind.OmittedExpression)
+                    {
+                        needCheckWidenedType = false;
+                        break;
+                    }
+                }
+                if (needCheckInitializer || needCheckWidenedType)
+                {
+                    GetWidenedTypeForVariableLikeDeclaration(node, reportErrors: false);
                 }
             }
             return;
@@ -638,10 +673,6 @@ internal sealed partial class Checker
             if (store.Kind(parent) is SyntaxKind.IndexSignature)
             {
                 return;
-            }
-            if (IsContextSensitiveFunctionOrObjectLiteralMethod(store, parent) && HasContextualType(At(node, parent)) && store.Type(n).IsNone)
-            {
-                return; // contextually typed (C5)
             }
             var local = NodeSymbol(node);
             if (!local.IsNone && (SymbolFlagsOf(local) & SymbolFlags.Property) != 0)

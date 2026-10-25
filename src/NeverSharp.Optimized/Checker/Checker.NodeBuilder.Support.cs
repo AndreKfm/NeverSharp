@@ -275,8 +275,5 @@ internal sealed partial class Checker
 
     private Type GetReverseMappedMappedType(SymbolRef symbol) => throw C3Seam();
 
-    // checker.ts getOrCreateTypeFromSignature (C5)
-    private Type GetOrCreateTypeFromSignature(Signature signature) => throw new NotSupportedException("TODO(C5): types of abstract construct signatures.");
-
-    private Type GetResolvedTypeWithoutAbstractConstructSignatures(Type type, ObjectTypeData resolved) => throw new NotSupportedException("TODO(C5): types of abstract construct signatures.");
+    // (getOrCreateTypeFromSignature, getResolvedTypeWithoutAbstractConstructSignatures: Checker.Signatures.cs, module C5)
 }

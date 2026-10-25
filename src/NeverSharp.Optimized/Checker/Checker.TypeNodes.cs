@@ -520,34 +520,7 @@ internal sealed partial class Checker
         return SetCachedNodeType(node, GetRegularTypeOfLiteralType(GetWidenedType(type)));
     }
 
-    // checker.ts checkExpressionWithTypeArguments for a type query
-    private Type CheckExpressionWithTypeArguments(NodeRef node)
-    {
-        var store = StoreOf(node);
-        var exprName = At(node, store.ExprName(node.Node));
-        return GetInstantiationExpressionType(CheckEntityNameExpressionForTypeQuery(exprName), node);
-    }
-
-    // checkExpression of the entity name of a type query: identifiers, qualified names (properties of the left side)
-    private Type CheckEntityNameExpressionForTypeQuery(NodeRef name)
-    {
-        var store = StoreOf(name);
-        switch (store.Kind(name.Node))
-        {
-            case SyntaxKind.Identifier:
-                return CheckIdentifier(name);
-            case SyntaxKind.ThisKeyword:
-                return CheckThisExpression(name);
-            case SyntaxKind.QualifiedName:
-            {
-                var leftType = CheckEntityNameExpressionForTypeQuery(At(name, store.Left(name.Node)));
-                return CheckPropertyAccessOnType(name, leftType, At(name, store.Right(name.Node)));
-            }
-            default:
-                // (import types in type queries: C3)
-                return errorType;
-        }
-    }
+    // (checkExpressionWithTypeArguments: Checker.Expressions.cs, module C5)
 
     // checker.ts isDeferredTypeReferenceNode: directly aliased, or possibly in a circular chain of eagerly resolved types
     private bool IsDeferredTypeReferenceNode(NodeRef node, bool hasDefaultTypeArguments)

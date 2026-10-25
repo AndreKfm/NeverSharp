@@ -2,75 +2,282 @@
 // Portions Copyright (c) Microsoft Corporation.
 // SPDX-License-Identifier: Apache-2.0
 //
-// Ported from src/compiler/checker.ts (checkExpression for identifiers, literals, `this`, parenthesized and asserted
-// expressions and property access of resolved members: checkIdentifier, checkThisExpression, tryGetThisTypeAt,
-// checkPropertyAccessExpression, checkQualifiedName, checkExpressionCached, getTypeOfExpression)
+// Ported from src/compiler/checker.ts (checkExpression, checkExpressionWorker, checkExpressionCached,
+// getTypeOfExpression, getQuickTypeOfExpression, getContextFreeTypeOfExpression, checkExpressionWithContextualType,
+// checkExpressionForMutableLocation, isConstContext, instantiateTypeWithSingleGenericCallSignature, checkConstEnumAccess,
+// the literal, template, parenthesized, assertion, satisfies, non-null, typeof, void, delete, meta property, spread
+// and synthetic expressions, checkIdentifier, checkThisExpression, tryGetThisTypeAt, checkSuperExpression,
+// checkPrivateIdentifierExpression)
 //   https://github.com/microsoft/TypeScript at commit 050880ce59e30b356b686bd3144efe24f875ebc8
 // Port structure follows internal/checker/checker.go
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
-// Modified: translated from TypeScript to C#; module C1. TODO(C5): the rest of the checkExpression family (operators,
-// calls with overload resolution, object and array literals with contextual typing, element access, JSX in C9), the
-// diagnostics of property access (missing properties, accessibility), contextual typing. TODO(C7): narrowing (the
-// declared types of references are used). The few expression kinds C1 approximates for the walks are marked.
+// Modified: translated from TypeScript to C#; modules C1 (subset) and C5. TODO(C7): the flow types of references
+// (Checker.FlowSeam.cs). TODO(C9): JSX expressions (C1's walk checks them), JSDoc assertions.
 
 using NeverSharp.Generated;
 
 namespace NeverSharp.Optimized;
 
+/// <summary>The node links the expression checker keeps (checker.ts NodeLinks: resolvedType, contextFreeType, ...).</summary>
+internal struct ExpressionNodeLinks
+{
+    public Type ResolvedType;            // checkExpressionCached
+    public Type ContextFreeType;         // getContextFreeTypeOfExpression, context free function types
+    public Type AssertionExpressionType; // checkAssertionDeferred
+    public bool SpreadIndicesComputed;
+    public int FirstSpreadIndex;         // -1: none
+    public int LastSpreadIndex;
+    public HashSet<string>? NonExistentPropCheckCache;
+    public bool TypeChecked;             // NodeCheckFlags.TypeChecked of regular expression literals
+}
+
 internal sealed partial class Checker
 {
-    private readonly Dictionary<NodeRef, Type> expressionTypes = [];
+    private NodeLinkStore<ExpressionNodeLinks>? expressionLinks;
+
+    private NodeLinkStore<ExpressionNodeLinks> ExpressionLinks => expressionLinks ??= new NodeLinkStore<ExpressionNodeLinks>(program.SourceFiles.Count);
+
+    // checker.ts contextualTypeNodes / contextualTypes / contextualIsCache
+    private NodeRef[] contextualTypeNodes = new NodeRef[16];
+    private Type[] contextualTypes = new Type[16];
+    private bool[] contextualIsCache = new bool[16];
+    private int contextualTypeCount;
+
+    // checker.ts inferenceContextNodes / inferenceContexts
+    private NodeRef[] inferenceContextNodes = new NodeRef[16];
+    private InferenceContext?[] inferenceContexts = new InferenceContext?[16];
+    private int inferenceContextCount;
+
+    // checker.ts contextualBindingPatterns
+    private readonly List<NodeRef> contextualBindingPatterns = [];
 
     /// <summary>checker.ts checkExpressionCached.</summary>
-    internal Type CheckExpressionCached(NodeRef node)
+    internal Type CheckExpressionCached(NodeRef node, CheckMode checkMode = CheckMode.Normal)
     {
-        if (expressionTypes.TryGetValue(node, out var type))
+        if (checkMode != CheckMode.Normal)
         {
-            return type;
+            return CheckExpression(node, checkMode);
         }
-        type = CheckExpression(node);
-        expressionTypes[node] = type;
+        if (ExpressionLinks.Has(node) && !ExpressionLinks.Get(node).ResolvedType.IsNone)
+        {
+            return ExpressionLinks.Get(node).ResolvedType;
+        }
+        // (flowLoopStart and flowTypeCache: C7)
+        var type = CheckExpression(node, checkMode);
+        ref var links = ref ExpressionLinks.Get(node);
+        if (links.ResolvedType.IsNone)
+        {
+            links.ResolvedType = type;
+        }
+        return links.ResolvedType;
+    }
+
+    /// <summary>checker.ts getTypeOfExpression (the flow type cache: C7).</summary>
+    internal Type GetTypeOfExpression(NodeRef node)
+    {
+        // Don't bother caching types that require no flow analysis and are quick to compute.
+        var quickType = GetQuickTypeOfExpression(node);
+        if (!quickType.IsNone)
+        {
+            return quickType;
+        }
+        return CheckExpression(node, CheckMode.TypeOnly);
+    }
+
+    // checker.ts getQuickTypeOfExpression
+    private Type GetQuickTypeOfExpression(NodeRef node)
+    {
+        var store = StoreOf(node);
+        // (JSDoc type assertions: C9)
+        var expr = At(node, Utilities.SkipParentheses(store, node.Node));
+        var kind = store.Kind(expr.Node);
+        if (kind == SyntaxKind.AwaitExpression)
+        {
+            var type = GetQuickTypeOfExpression(At(node, store.Expression(expr.Node)));
+            return type.IsNone ? Type.None : GetAwaitedType(type);
+        }
+        // Optimize for the common case of a call to a function with a single non-generic call
+        // signature where we can just fetch the return type without checking the arguments.
+        if (kind == SyntaxKind.CallExpression && store.Kind(store.Expression(expr.Node)) != SyntaxKind.SuperKeyword && !IsRequireCall(expr, requireStringLiteralLikeArgument: true) &&
+            !IsSymbolOrSymbolForCall(expr) && !Utilities.IsImportCall(store, expr.Node))
+        {
+            return UtilitiesPublic.IsCallChain(store, expr.Node) ? GetReturnTypeOfSingleNonGenericSignatureOfCallChain(expr)
+                : GetReturnTypeOfSingleNonGenericCallSignature(CheckNonNullExpression(At(node, store.Expression(expr.Node))));
+        }
+        if (kind is SyntaxKind.AsExpression or SyntaxKind.TypeAssertionExpression && !IsConstTypeReference(store, store.Type(expr.Node)))
+        {
+            return GetTypeFromTypeNode(At(node, store.Type(expr.Node)));
+        }
+        var nodeKind = store.Kind(node.Node);
+        if (UtilitiesPublic.IsLiteralKind(nodeKind) || nodeKind is SyntaxKind.TrueKeyword or SyntaxKind.FalseKeyword)
+        {
+            return CheckExpression(node);
+        }
+        return Type.None;
+    }
+
+    // checker.ts getReturnTypeOfSingleNonGenericCallSignature
+    private Type GetReturnTypeOfSingleNonGenericCallSignature(Type funcType)
+    {
+        var signature = GetSingleCallSignature(funcType);
+        return !signature.IsNone && Signatures.Record(signature).TypeParameters.Count == 0 ? GetReturnTypeOfSignature(signature) : Type.None;
+    }
+
+    // checker.ts getReturnTypeOfSingleNonGenericSignatureOfCallChain
+    private Type GetReturnTypeOfSingleNonGenericSignatureOfCallChain(NodeRef expr)
+    {
+        var funcType = CheckExpression(At(expr, StoreOf(expr).Expression(expr.Node)));
+        var nonOptionalType = GetOptionalExpressionType(funcType, At(expr, StoreOf(expr).Expression(expr.Node)));
+        var returnType = GetReturnTypeOfSingleNonGenericCallSignature(funcType);
+        return returnType.IsNone ? Type.None : PropagateOptionalTypeMarker(returnType, expr, nonOptionalType != funcType);
+    }
+
+    /// <summary>checker.ts getContextFreeTypeOfExpression.</summary>
+    internal Type GetContextFreeTypeOfExpression(NodeRef node)
+    {
+        if (ExpressionLinks.Has(node) && !ExpressionLinks.Get(node).ContextFreeType.IsNone)
+        {
+            return ExpressionLinks.Get(node).ContextFreeType;
+        }
+        PushContextualType(node, anyType, isCache: false);
+        var type = CheckExpression(node, CheckMode.SkipContextSensitive);
+        ExpressionLinks.Get(node).ContextFreeType = type;
+        PopContextualType();
         return type;
     }
 
-    /// <summary>checker.ts getTypeOfExpression (C1: the cached checkExpression).</summary>
-    internal Type GetTypeOfExpression(NodeRef node) => CheckExpressionCached(node);
-
-    /// <summary>checker.ts checkExpression / checkExpressionWorker (the C1 subset, see the file header).</summary>
-    internal Type CheckExpression(NodeRef node)
+    /// <summary>checker.ts checkExpression.</summary>
+    internal Type CheckExpression(NodeRef node, CheckMode checkMode = CheckMode.Normal, bool forceTuple = false)
     {
-        if (expressionTypes.TryGetValue(node, out var cached))
-        {
-            return cached;
-        }
-        // (currentNode and instantiationCount: module C3)
         var saveCurrentNode = currentNode;
         currentNode = node;
         instantiationCount = 0;
-        var type = CheckExpressionWorker(node);
+        var uninstantiatedType = CheckExpressionWorker(node, checkMode, forceTuple);
+        var type = InstantiateTypeWithSingleGenericCallSignature(node, uninstantiatedType, checkMode);
+        if (IsConstEnumObjectType(type))
+        {
+            CheckConstEnumAccess(node, type);
+        }
+        PropagateUncertainty(node);
         currentNode = saveCurrentNode;
-        expressionTypes[node] = type;
         return type;
     }
 
-    private Type CheckExpressionWorker(NodeRef node)
+    // C1's "uncertain" mechanism: an expression whose type is computed from the type of an uncertain operand is
+    // uncertain (TODO(C6): removed with the mechanism)
+    private void PropagateUncertainty(NodeRef node)
+    {
+        var store = StoreOf(node);
+        var n = node.Node;
+        bool uncertain;
+        switch (store.Kind(n))
+        {
+            case SyntaxKind.AwaitExpression:
+            case SyntaxKind.SatisfiesExpression:
+            case SyntaxKind.SpreadElement:
+                uncertain = IsUncertainExpression(At(node, store.Expression(n)));
+                break;
+            case SyntaxKind.ConditionalExpression:
+                uncertain = IsUncertainExpression(At(node, store.WhenTrue(n))) || IsUncertainExpression(At(node, store.WhenFalse(n)));
+                break;
+            case SyntaxKind.BinaryExpression:
+                uncertain = store.Kind(store.OperatorToken(n)) switch
+                {
+                    SyntaxKind.BarBarToken or SyntaxKind.AmpersandAmpersandToken or SyntaxKind.QuestionQuestionToken =>
+                        IsUncertainExpression(At(node, store.Left(n))) || IsUncertainExpression(At(node, store.Right(n))),
+                    SyntaxKind.CommaToken or SyntaxKind.EqualsToken => IsUncertainExpression(At(node, store.Right(n))),
+                    _ => false,
+                };
+                break;
+            case SyntaxKind.ArrayLiteralExpression:
+            {
+                uncertain = false;
+                foreach (var element in store.Nodes(store.Elements(n)))
+                {
+                    if (IsUncertainExpression(At(node, element)))
+                    {
+                        uncertain = true;
+                        break;
+                    }
+                }
+                break;
+            }
+            case SyntaxKind.ObjectLiteralExpression:
+            {
+                uncertain = false;
+                foreach (var property in store.Nodes(store.Properties(n)))
+                {
+                    var value = store.Kind(property) switch
+                    {
+                        SyntaxKind.PropertyAssignment => store.Initializer(property),
+                        SyntaxKind.ShorthandPropertyAssignment => store.Name(property),
+                        SyntaxKind.SpreadAssignment => store.Expression(property),
+                        _ => Node.None,
+                    };
+                    if (!value.IsNone && IsUncertainExpression(At(node, value)))
+                    {
+                        uncertain = true;
+                        break;
+                    }
+                }
+                break;
+            }
+            default:
+                return;
+        }
+        if (uncertain)
+        {
+            uncertainExpressions.Add(node);
+        }
+    }
+
+    // checker.ts checkConstEnumAccess (isolatedModules and verbatimModuleSyntax are not set in Gate C)
+    private void CheckConstEnumAccess(NodeRef node, Type type)
+    {
+        _ = type;
+        // enum object type for const enums are only permitted in:
+        // - 'left' in property access
+        // - 'object' in indexed access
+        // - target in rhs of import statement
+        var store = StoreOf(node);
+        var parent = store.Parent(node.Node);
+        var ok = (store.Kind(parent) == SyntaxKind.PropertyAccessExpression && store.Expression(parent) == node.Node) ||
+            (store.Kind(parent) == SyntaxKind.ElementAccessExpression && store.Expression(parent) == node.Node) ||
+            (store.Kind(node.Node) is SyntaxKind.Identifier or SyntaxKind.QualifiedName && IsInRightSideOfImportOrExportAssignment(store, node.Node)) ||
+            (store.Kind(parent) == SyntaxKind.TypeQuery && store.ExprName(parent) == node.Node) ||
+            store.Kind(parent) == SyntaxKind.ExportSpecifier; // We allow reexporting const enums
+        if (!ok)
+        {
+            Error(node, Diagnostics.const_enums_can_only_be_used_in_property_or_index_access_expressions_or_the_right_hand_side_of_an_import_declaration_or_export_assignment_or_type_query);
+        }
+    }
+
+    // checker.ts isConstEnumObjectType
+    private bool IsConstEnumObjectType(Type type) =>
+        (Types.ObjectFlagsOf(type) & ObjectFlags.Anonymous) != 0 && !Types.Symbol(type).IsNone && (SymbolFlagsOf(Types.Symbol(type)) & SymbolFlags.ConstEnum) != 0;
+
+    private Type CheckExpressionWorker(NodeRef node, CheckMode checkMode, bool forceTuple)
     {
         var store = StoreOf(node);
         var n = node.Node;
         switch (store.Kind(n))
         {
             case SyntaxKind.Identifier:
-                return CheckIdentifier(node);
+                return CheckIdentifier(node, checkMode);
+            case SyntaxKind.PrivateIdentifier:
+                return CheckPrivateIdentifierExpression(node);
             case SyntaxKind.ThisKeyword:
                 return CheckThisExpression(node);
             case SyntaxKind.SuperKeyword:
-                return CheckSuperExpressionForMembers(node);
+                return CheckSuperExpression(node);
             case SyntaxKind.NullKeyword:
                 return nullWideningType;
             case SyntaxKind.NoSubstitutionTemplateLiteral:
             case SyntaxKind.StringLiteral:
+                // (hasSkipDirectInferenceFlag: the inference of C6 sets it)
                 return GetFreshTypeOfLiteralType(GetStringLiteralType(store.Texts.GetString(store.Text(n))!));
             case SyntaxKind.NumericLiteral:
+                // (checkGrammarNumericLiteral: TODO(C8))
                 return GetFreshTypeOfLiteralType(GetNumberLiteralType(JsNumber.FromString(store.Texts.GetString(store.Text(n))!)));
             case SyntaxKind.BigIntLiteral:
                 return GetFreshTypeOfLiteralType(GetBigIntLiteralType(Utilities.ParsePseudoBigInt(store.Texts.GetString(store.Text(n))!)));
@@ -79,273 +286,891 @@ internal sealed partial class Checker
             case SyntaxKind.FalseKeyword:
                 return falseType;
             case SyntaxKind.TemplateExpression:
-                // (template literal types in const contexts: C5)
-                foreach (var span in store.Nodes(store.TemplateSpans(n)))
-                {
-                    CheckExpression(At(node, store.Expression(span)));
-                }
-                return stringType;
+                return CheckTemplateExpression(node);
             case SyntaxKind.RegularExpressionLiteral:
                 return globalRegExpType;
-            case SyntaxKind.ParenthesizedExpression:
-                return CheckExpression(At(node, store.Expression(n)));
-            case SyntaxKind.AsExpression:
-            case SyntaxKind.TypeAssertionExpression:
-            {
-                var exprType = CheckExpression(At(node, store.Expression(n)));
-                var typeNode = store.Type(n);
-                if (store.Kind(typeNode) == SyntaxKind.TypeReference && store.Kind(store.TypeName(typeNode)) == SyntaxKind.Identifier &&
-                    store.Texts.Equals(store.EscapedText(store.TypeName(typeNode)), "const") && store.TypeArguments(typeNode).IsNone)
-                {
-                    return GetRegularTypeOfLiteralType(exprType);
-                }
-                return GetTypeFromTypeNode(At(node, typeNode));
-            }
-            case SyntaxKind.SatisfiesExpression:
-                GetTypeFromTypeNode(At(node, store.Type(n)));
-                return CheckExpression(At(node, store.Expression(n)));
-            case SyntaxKind.NonNullExpression:
-                return GetNonNullableType(CheckExpression(At(node, store.Expression(n))));
+            case SyntaxKind.ArrayLiteralExpression:
+                return CheckArrayLiteral(node, checkMode, forceTuple);
+            case SyntaxKind.ObjectLiteralExpression:
+                return CheckObjectLiteral(node, checkMode);
             case SyntaxKind.PropertyAccessExpression:
-                return CheckPropertyAccessExpression(node);
+                return CheckPropertyAccessExpression(node, checkMode);
             case SyntaxKind.QualifiedName:
-                return CheckQualifiedName(node);
+                return CheckQualifiedName(node, checkMode);
+            case SyntaxKind.ElementAccessExpression:
+                return CheckIndexedAccess(node, checkMode);
+            case SyntaxKind.CallExpression:
+                if (Utilities.IsImportCall(store, n))
+                {
+                    return CheckImportCallExpression(node);
+                }
+                return CheckCallExpression(node, checkMode);
+            case SyntaxKind.NewExpression:
+                return CheckCallExpression(node, checkMode);
+            case SyntaxKind.TaggedTemplateExpression:
+                return CheckTaggedTemplateExpression(node);
+            case SyntaxKind.ParenthesizedExpression:
+                return CheckExpression(At(node, store.Expression(n)), checkMode);
+            case SyntaxKind.ClassExpression:
+                return CheckClassExpression(node);
             case SyntaxKind.FunctionExpression:
             case SyntaxKind.ArrowFunction:
-            case SyntaxKind.ClassExpression:
-            {
-                var symbol = GetSymbolOfDeclaration(node);
-                return symbol.IsNone ? anyFunctionType : GetTypeOfSymbol(symbol);
-            }
-            case SyntaxKind.ObjectLiteralExpression:
-            {
-                // TODO(C5): checkObjectLiteral (property types, spreads, contextual types, freshness)
-                var symbol = NodeSymbol(node);
-                foreach (var property in store.Nodes(store.Properties(n)))
-                {
-                    if (store.Kind(property) == SyntaxKind.SpreadAssignment)
-                    {
-                        // (getSpreadType: C5) a spread of any makes the literal any; other spreads are not merged yet
-                        var spreadExpression = At(node, store.Expression(property));
-                        var spreadType = CheckExpressionCached(spreadExpression);
-                        if ((Types.Flags(spreadType) & TypeFlags.Any) != 0 && !IsUncertainExpression(spreadExpression))
-                        {
-                            return anyType;
-                        }
-                        uncertainExpressions.Add(node);
-                    }
-                    else if (store.Kind(property) is SyntaxKind.PropertyAssignment or SyntaxKind.MethodDeclaration && store.Kind(store.Name(property)) == SyntaxKind.ComputedPropertyName)
-                    {
-                        uncertainExpressions.Add(node);
-                    }
-                }
-                var type = CreateObjectType(ObjectFlags.Anonymous | ObjectFlags.ObjectLiteral | ObjectFlags.ContainsObjectOrArrayLiteral, symbol);
-                return type;
-            }
-            case SyntaxKind.ArrayLiteralExpression:
-                return CheckArrayLiteral(node);
-            case SyntaxKind.CallExpression:
-            case SyntaxKind.NewExpression:
-                return CheckCallExpression(node);
-            case SyntaxKind.VoidExpression:
-                CheckExpression(At(node, store.Expression(n)));
-                return undefinedWideningType;
-            case SyntaxKind.DeleteExpression:
-                CheckExpression(At(node, store.Expression(n)));
-                return booleanType;
-            case SyntaxKind.PrefixUnaryExpression:
-            {
-                var operand = At(node, store.Operand(n));
-                var operandType = CheckExpression(operand);
-                switch (store.Operator(n))
-                {
-                    case SyntaxKind.MinusToken:
-                        if (store.Kind(operand.Node) == SyntaxKind.NumericLiteral)
-                        {
-                            return GetFreshTypeOfLiteralType(GetNumberLiteralType(-JsNumber.FromString(store.Texts.GetString(store.Text(operand.Node))!)));
-                        }
-                        if (store.Kind(operand.Node) == SyntaxKind.BigIntLiteral)
-                        {
-                            var value = Utilities.ParsePseudoBigInt(store.Texts.GetString(store.Text(operand.Node))!);
-                            return GetFreshTypeOfLiteralType(GetBigIntLiteralType(value == "0" ? value : "-" + value));
-                        }
-                        return (Types.Flags(operandType) & TypeFlags.BigIntLike) != 0 ? bigintType : numberType;
-                    case SyntaxKind.PlusToken:
-                        if (store.Kind(operand.Node) == SyntaxKind.NumericLiteral)
-                        {
-                            return GetFreshTypeOfLiteralType(GetNumberLiteralType(JsNumber.FromString(store.Texts.GetString(store.Text(operand.Node))!)));
-                        }
-                        return numberType;
-                    case SyntaxKind.ExclamationToken:
-                        return booleanType;
-                    default:
-                        return (Types.Flags(operandType) & TypeFlags.BigIntLike) != 0 ? bigintType : numberType;
-                }
-            }
-            case SyntaxKind.PostfixUnaryExpression:
-            {
-                var operandType = CheckExpression(At(node, store.Operand(n)));
-                return (Types.Flags(operandType) & TypeFlags.BigIntLike) != 0 ? bigintType : numberType;
-            }
-            case SyntaxKind.BinaryExpression:
-                return CheckBinaryExpression(node);
-            case SyntaxKind.ConditionalExpression:
-            {
-                CheckExpression(At(node, store.Condition(n)));
-                var t1 = CheckExpression(At(node, store.WhenTrue(n)));
-                var t2 = CheckExpression(At(node, store.WhenFalse(n)));
-                return GetUnionType([t1, t2], UnionReduction.Subtype);
-            }
+                return CheckFunctionExpressionOrObjectLiteralMethod(node, checkMode);
             case SyntaxKind.TypeOfExpression:
-                // checkTypeOfExpression: the union of the typeof result literals (created at initialization, module C3)
                 CheckExpression(At(node, store.Expression(n)));
                 return typeofType;
+            case SyntaxKind.TypeAssertionExpression:
+            case SyntaxKind.AsExpression:
+                return CheckAssertion(node, checkMode);
+            case SyntaxKind.NonNullExpression:
+                return CheckNonNullAssertion(node);
+            case SyntaxKind.ExpressionWithTypeArguments:
+                return CheckExpressionWithTypeArguments(node);
+            case SyntaxKind.SatisfiesExpression:
+                return CheckSatisfiesExpression(node);
+            case SyntaxKind.MetaProperty:
+                return CheckMetaProperty(node);
+            case SyntaxKind.DeleteExpression:
+                return CheckDeleteExpression(node);
+            case SyntaxKind.VoidExpression:
+                // checkVoidExpression: checkNodeDeferred(node) checks the operand
+                CheckNodeDeferred(node);
+                return undefinedWideningType;
             case SyntaxKind.AwaitExpression:
-            {
-                // TODO(C5): checkAwaitExpression / getAwaitedType. C1: any, primitives and Promise<T> references.
-                var operand = At(node, store.Expression(n));
-                var operandType = CheckExpression(operand);
-                if (IsUncertainExpression(operand) || IsUnsupportedType(operandType))
-                {
-                    uncertainExpressions.Add(node);
-                    return anyType;
-                }
-                if ((Types.Flags(operandType) & TypeFlags.Any) != 0)
-                {
-                    return IsErrorType(operandType) ? errorType : anyType;
-                }
-                if ((Types.Flags(operandType) & (TypeFlags.Object | TypeFlags.UnionOrIntersection | TypeFlags.Instantiable | TypeFlags.Unknown)) == 0)
-                {
-                    return operandType;
-                }
-                CreatePromiseType(unknownType); // resolves the global Promise type
-                var promised = GetPromisedTypeOfPromise(operandType);
-                if (!promised.IsNone && GetPromisedTypeOfPromise(promised).IsNone && (Types.Flags(promised) & (TypeFlags.Instantiable | TypeFlags.UnionOrIntersection)) == 0)
-                {
-                    return promised;
-                }
-                uncertainExpressions.Add(node);
-                return anyType;
-            }
+                return CheckAwaitExpression(node);
+            case SyntaxKind.PrefixUnaryExpression:
+                return CheckPrefixUnaryExpression(node);
+            case SyntaxKind.PostfixUnaryExpression:
+                return CheckPostfixUnaryExpression(node);
+            case SyntaxKind.BinaryExpression:
+                return CheckBinaryExpression(node, checkMode);
+            case SyntaxKind.ConditionalExpression:
+                return CheckConditionalExpression(node, checkMode);
             case SyntaxKind.SpreadElement:
-                return CheckExpression(At(node, store.Expression(n)));
-            case SyntaxKind.ElementAccessExpression:
-                return CheckElementAccessExpression(node);
+                return CheckSpreadExpression(node, checkMode);
             case SyntaxKind.OmittedExpression:
                 return undefinedWideningType;
             case SyntaxKind.YieldExpression:
                 return CheckYieldExpression(node);
-            case SyntaxKind.MetaProperty:
-                // checkMetaProperty: import.meta is the global ImportMeta type (TODO(C5): the module kind checks 1343/1470,
-                // new.target)
-                if (store.KeywordToken(n) == SyntaxKind.ImportKeyword && store.Texts.Equals(store.EscapedText(store.Name(n)), "meta"))
-                {
-                    var importMeta = GetGlobalType("ImportMeta", 0, reportErrors: true);
-                    return importMeta.IsNone ? errorType : importMeta;
-                }
-                uncertainExpressions.Add(node);
-                return anyType;
+            case SyntaxKind.JsxElement:
+            case SyntaxKind.JsxSelfClosingElement:
+                // checkJsxElement / checkJsxSelfClosingElement: the element is checked deferred (TODO(C9): the JSX element type)
+                CheckNodeDeferred(node);
+                return errorType;
+            case SyntaxKind.JsxFragment:
+                // checkJsxFragment (TODO(C9): the JSX element type)
+                CheckJsxNode(node);
+                return errorType;
             default:
-                // TODO(C5): super, yield, tagged templates, meta properties, JSX (C9), synthetic expressions
+                // (JsxExpression, JsxAttributes, synthetic expressions: C9)
                 return errorType;
         }
     }
 
-    /// <summary>checker.ts getNonNullableType (strictNullChecks: removes null and undefined).</summary>
-    internal Type GetNonNullableType(Type type)
+    /// <summary>checker.ts checkExpressionWithContextualType.</summary>
+    internal Type CheckExpressionWithContextualType(NodeRef node, Type contextualType, InferenceContext? inferenceContext, CheckMode checkMode)
     {
-        if (!strictNullChecks)
+        var contextNode = GetContextNode(node);
+        PushContextualType(contextNode, contextualType, isCache: false);
+        PushInferenceContext(contextNode, inferenceContext);
+        var type = CheckExpression(node, checkMode | CheckMode.Contextual | (inferenceContext is not null ? CheckMode.Inferential : CheckMode.Normal));
+        // In CheckMode.Inferential we collect intra-expression inference sites to process before fixing any type
+        // parameters. This information is no longer needed after the call to checkExpression.
+        if (inferenceContext is not null && inferenceContext.IntraExpressionInferenceSites is not null)
         {
-            return type;
+            inferenceContext.IntraExpressionInferenceSites = null;
         }
-        if ((Types.Flags(type) & TypeFlags.Union) != 0)
-        {
-            return MapType(type, t => (Types.Flags(t) & TypeFlags.Nullable) != 0 ? Type.None : t);
-        }
-        return (Types.Flags(type) & TypeFlags.Nullable) != 0 ? neverType : type;
+        // We strip literal freshness when an appropriate contextual type is present such that contextually typed
+        // literals always preserve their literal types (otherwise they might widen during type inference). An alternative
+        // here would be to not mark contextually typed literals as fresh in the first place.
+        var result = MaybeTypeOfKind(type, TypeFlags.Literal) && IsLiteralOfContextualType(type, InstantiateContextualType(contextualType, node, ContextFlags.None))
+            ? GetRegularTypeOfLiteralType(type)
+            : type;
+        PopInferenceContext();
+        PopContextualType();
+        return result;
     }
 
-    // checker.ts checkArrayLiteral (TODO(C5): contextual tuple types, spreads, const contexts)
-    private Type CheckArrayLiteral(NodeRef node)
+    // checker.ts getContextNode (JSX attributes: C9)
+    private NodeRef GetContextNode(NodeRef node)
     {
         var store = StoreOf(node);
-        var elementTypes = new List<Type>();
-        foreach (var e in store.Nodes(store.Elements(node.Node)))
+        if (store.Kind(node.Node) == SyntaxKind.JsxAttributes && store.Kind(store.Parent(node.Node)) != SyntaxKind.JsxSelfClosingElement)
         {
-            var t = CheckExpressionForMutableLocation(At(node, e));
-            if (store.Kind(e) == SyntaxKind.SpreadElement && (IsArrayType(t) || IsTupleType(t)))
-            {
-                // checkArrayLiteral: a variadic element of an array-like spread contributes T[number] (module C3; the
-                // iterated types of other spreads: C5)
-                var indexed = GetIndexedAccessTypeOrUndefined(t, numberType);
-                t = indexed.IsNone ? anyType : indexed;
-            }
-            elementTypes.Add(t);
+            return At(node, store.Parent(store.Parent(node.Node))); // Needs to be the root JsxElement, so it encompasses the attributes _and_ the children (which are essentially part of the attributes)
         }
-        var elementType = elementTypes.Count > 0 ? GetUnionType(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(elementTypes), UnionReduction.Subtype) : neverType;
-        var arrayType = CreateArrayType(elementTypes.Count > 0 ? elementType : strictNullChecks ? implicitNeverType : undefinedWideningType);
-        return CreateArrayLiteralType(arrayType);
+        return node;
     }
 
-    // checker.ts createArrayLiteralType: a reference with the ArrayLiteral flags (cached per reference)
-    private readonly Dictionary<Type, Type> arrayLiteralTypes = [];
-
-    private Type CreateArrayLiteralType(Type type)
+    // checker.ts isTypeAssertion (JSDoc type assertions: C9)
+    private static bool IsTypeAssertion(NodeStore store, Node node)
     {
-        if ((Types.ObjectFlagsOf(type) & ObjectFlags.Reference) == 0)
+        node = Utilities.SkipParentheses(store, node, true);
+        return store.Kind(node) is SyntaxKind.TypeAssertionExpression or SyntaxKind.AsExpression;
+    }
+
+    /// <summary>checker.ts checkDeclarationInitializer (JSDoc satisfies: C9).</summary>
+    internal Type CheckDeclarationInitializer(NodeRef declaration, CheckMode checkMode, Type contextualType = default)
+    {
+        var store = StoreOf(declaration);
+        var initializer = At(declaration, store.Initializer(declaration.Node));
+        var quick = GetQuickTypeOfExpression(initializer);
+        var type = !quick.IsNone ? quick
+            : !contextualType.IsNone ? CheckExpressionWithContextualType(initializer, contextualType, null, checkMode)
+            : CheckExpressionCached(initializer, checkMode);
+        var root = store.Kind(declaration.Node) == SyntaxKind.BindingElement ? WalkUpBindingElementsAndPatterns(declaration) : declaration;
+        if (Kind(root) == SyntaxKind.Parameter)
+        {
+            var name = store.Name(declaration.Node);
+            if (store.Kind(name) == SyntaxKind.ObjectBindingPattern && IsObjectLiteralType(type))
+            {
+                return PadObjectLiteralType(type, At(declaration, name));
+            }
+            if (store.Kind(name) == SyntaxKind.ArrayBindingPattern && IsTupleType(type))
+            {
+                return PadTupleType(type, At(declaration, name));
+            }
+        }
+        return type;
+    }
+
+    // utilities.ts walkUpBindingElementsAndPatterns
+    private NodeRef WalkUpBindingElementsAndPatterns(NodeRef binding)
+    {
+        var store = StoreOf(binding);
+        var node = store.Parent(binding.Node);
+        while (store.Kind(store.Parent(node)) == SyntaxKind.BindingElement)
+        {
+            node = store.Parent(store.Parent(node));
+        }
+        return At(binding, store.Parent(node));
+    }
+
+    // checker.ts padObjectLiteralType
+    private Type PadObjectLiteralType(Type type, NodeRef pattern)
+    {
+        var store = StoreOf(pattern);
+        List<Node>? missingElements = null;
+        foreach (var e in store.Nodes(store.Elements(pattern.Node)))
+        {
+            if (!store.Initializer(e).IsNone)
+            {
+                var name = GetPropertyNameFromBindingElement(At(pattern, e));
+                if (name is not null && GetPropertyOfType(type, name).IsNone)
+                {
+                    (missingElements ??= []).Add(e);
+                }
+            }
+        }
+        if (missingElements is null)
         {
             return type;
         }
-        if (!arrayLiteralTypes.TryGetValue(type, out var literalType))
+        var members = new SymTable();
+        foreach (var prop in GetPropertiesOfObjectType(type))
         {
-            literalType = CreateObjectType(ObjectFlags.Reference | ObjectFlags.ArrayLiteral | ObjectFlags.ContainsObjectOrArrayLiteral, Types.Symbol(type));
-            var data = Types.Object(literalType);
-            data.Target = Types.Object(type).Target;
-            data.ResolvedTypeArguments = Types.CreateList(GetTypeArguments(type));
-            data.HasResolvedTypeArguments = true;
-            arrayLiteralTypes[type] = literalType;
+            members.Set(NameOf(prop), prop);
         }
-        return literalType;
+        foreach (var e in missingElements)
+        {
+            var symbol = CreateSymbol(SymbolFlags.Property | SymbolFlags.Optional, GetPropertyNameFromBindingElement(At(pattern, e))!);
+            ValueSymbolLinks.Get(symbol).ResolvedType = GetTypeFromBindingElement(At(pattern, e), includePatternInType: false, reportErrors: false);
+            members.Set(NameOf(symbol), symbol);
+        }
+        var result = CreateAnonymousType(Types.Symbol(type), members, [], [], GetIndexInfosOfType(type));
+        Types.Record(result).ObjectFlags = Types.ObjectFlagsOf(type);
+        return result;
     }
 
-    /// <summary>checker.ts checkExpressionForMutableLocation (literal widening without a contextual literal type).</summary>
-    internal Type CheckExpressionForMutableLocation(NodeRef node)
+    // checker.ts getPropertyNameFromBindingElement
+    private string? GetPropertyNameFromBindingElement(NodeRef e)
     {
-        var type = CheckExpression(node);
-        return IsConstContext(node) ? GetRegularTypeOfLiteralType(type) : GetWidenedLiteralType(type);
+        var store = StoreOf(e);
+        var propertyName = store.PropertyName(e.Node);
+        var exprType = GetLiteralTypeFromPropertyName(At(e, propertyName.IsNone ? store.Name(e.Node) : propertyName));
+        return IsTypeUsableAsPropertyName(exprType) ? GetPropertyNameFromType(exprType) : null;
     }
 
-    // checker.ts isConstContext (the `as const` part; const type parameters: C6)
-    private bool IsConstContext(NodeRef node)
+    // checker.ts padTupleType
+    private Type PadTupleType(Type type, NodeRef pattern)
+    {
+        var target = TupleTarget(type);
+        if ((target.CombinedFlags & ElementFlags.Variable) != 0 || GetTypeReferenceArity(type) >= StoreOf(pattern).Length(StoreOf(pattern).Elements(pattern.Node)))
+        {
+            return type;
+        }
+        var store = StoreOf(pattern);
+        var patternElements = store.Nodes(store.Elements(pattern.Node));
+        var elementTypes = new List<Type>(GetElementTypes(type));
+        var elementFlags = new List<ElementFlags>(target.ElementFlags ?? []);
+        for (var i = GetTypeReferenceArity(type); i < patternElements.Length; i++)
+        {
+            var e = patternElements[i];
+            if (i < patternElements.Length - 1 || !(store.Kind(e) == SyntaxKind.BindingElement && !store.DotDotDotToken(e).IsNone))
+            {
+                var hasDefault = store.Kind(e) != SyntaxKind.OmittedExpression && HasDefaultValue(store, e);
+                elementTypes.Add(hasDefault ? GetTypeFromBindingElement(At(pattern, e), includePatternInType: false, reportErrors: false) : anyType);
+                elementFlags.Add(ElementFlags.Optional);
+                if (store.Kind(e) != SyntaxKind.OmittedExpression && !hasDefault)
+                {
+                    ReportImplicitAny(At(pattern, e), anyType);
+                }
+            }
+        }
+        return CreateTupleType([.. elementTypes], [.. elementFlags], target.Readonly);
+    }
+
+    // checker.ts getWidenedLiteralTypeForInitializer
+    private Type GetWidenedLiteralTypeForInitializer(NodeRef declaration, Type type)
+    {
+        var store = StoreOf(declaration);
+        return (Utilities.GetCombinedNodeFlags(store, declaration.Node) & NodeFlags.Constant) != 0 || IsDeclarationReadonly(store, declaration.Node) ? type : GetWidenedLiteralType(type);
+    }
+
+    /// <summary>checker.ts isLiteralOfContextualType.</summary>
+    internal bool IsLiteralOfContextualType(Type candidateType, Type contextualType)
+    {
+        if (contextualType.IsNone)
+        {
+            return false;
+        }
+        var flags = Types.Flags(contextualType);
+        if ((flags & TypeFlags.UnionOrIntersection) != 0)
+        {
+            foreach (var t in Types.Elements(Types.Union(contextualType).Types).ToArray())
+            {
+                if (IsLiteralOfContextualType(candidateType, t))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+        if ((flags & TypeFlags.InstantiableNonPrimitive) != 0)
+        {
+            // If the contextual type is a type variable constrained to a primitive type, consider
+            // this a literal context for literals of that primitive type. For example, given a
+            // type parameter 'T extends string', infer string literal types for T.
+            var c = GetBaseConstraintOfType(contextualType);
+            var constraint = c.IsNone ? unknownType : c;
+            return (MaybeTypeOfKind(constraint, TypeFlags.String) && MaybeTypeOfKind(candidateType, TypeFlags.StringLiteral)) ||
+                (MaybeTypeOfKind(constraint, TypeFlags.Number) && MaybeTypeOfKind(candidateType, TypeFlags.NumberLiteral)) ||
+                (MaybeTypeOfKind(constraint, TypeFlags.BigInt) && MaybeTypeOfKind(candidateType, TypeFlags.BigIntLiteral)) ||
+                (MaybeTypeOfKind(constraint, TypeFlags.ESSymbol) && MaybeTypeOfKind(candidateType, TypeFlags.UniqueESSymbol)) ||
+                IsLiteralOfContextualType(candidateType, constraint);
+        }
+        // If the contextual type is a literal of a particular primitive type, we consider this a
+        // literal context for all literals of that primitive type.
+        return ((flags & (TypeFlags.StringLiteral | TypeFlags.Index | TypeFlags.TemplateLiteral | TypeFlags.StringMapping)) != 0 && MaybeTypeOfKind(candidateType, TypeFlags.StringLiteral)) ||
+            ((flags & TypeFlags.NumberLiteral) != 0 && MaybeTypeOfKind(candidateType, TypeFlags.NumberLiteral)) ||
+            ((flags & TypeFlags.BigIntLiteral) != 0 && MaybeTypeOfKind(candidateType, TypeFlags.BigIntLiteral)) ||
+            ((flags & TypeFlags.BooleanLiteral) != 0 && MaybeTypeOfKind(candidateType, TypeFlags.BooleanLiteral)) ||
+            ((flags & TypeFlags.UniqueESSymbol) != 0 && MaybeTypeOfKind(candidateType, TypeFlags.UniqueESSymbol));
+    }
+
+    /// <summary>checker.ts isConstContext.</summary>
+    internal bool IsConstContext(NodeRef node)
     {
         var store = StoreOf(node);
         var parent = store.Parent(node.Node);
-        while (true)
+        var parentKind = store.Kind(parent);
+        return (parentKind is SyntaxKind.AsExpression or SyntaxKind.TypeAssertionExpression && IsConstTypeReference(store, store.Type(parent))) ||
+            (IsValidConstAssertionArgument(node) && IsConstTypeVariable(GetContextualType(node, ContextFlags.None))) ||
+            (parentKind is SyntaxKind.ParenthesizedExpression or SyntaxKind.ArrayLiteralExpression or SyntaxKind.SpreadElement && IsConstContext(At(node, parent))) ||
+            (parentKind is SyntaxKind.PropertyAssignment or SyntaxKind.ShorthandPropertyAssignment or SyntaxKind.TemplateSpan && IsConstContext(At(node, store.Parent(parent))));
+    }
+
+    // checker.ts isConstTypeVariable
+    private bool IsConstTypeVariable(Type type, int depth = 0)
+    {
+        if (type.IsNone || depth >= 5)
         {
-            switch (store.Kind(parent))
+            return false;
+        }
+        var flags = Types.Flags(type);
+        if ((flags & TypeFlags.TypeParameter) != 0)
+        {
+            var symbol = Types.Symbol(type);
+            if (!symbol.IsNone)
             {
-                case SyntaxKind.AsExpression:
-                case SyntaxKind.TypeAssertionExpression:
-                    return Utilities.IsConstAssertion(store, parent);
-                case SyntaxKind.ParenthesizedExpression:
-                case SyntaxKind.ArrayLiteralExpression:
-                case SyntaxKind.SpreadElement:
-                case SyntaxKind.PropertyAssignment:
-                case SyntaxKind.ShorthandPropertyAssignment:
-                case SyntaxKind.ObjectLiteralExpression:
-                    parent = store.Parent(parent);
-                    continue;
-                case SyntaxKind.TemplateSpan:
-                    parent = store.Parent(store.Parent(parent));
-                    continue;
-                default:
-                    return false;
+                foreach (var d in DeclarationsOf(symbol) ?? [])
+                {
+                    if ((Utilities.GetCombinedModifierFlags(StoreOf(d), d.Node) & ModifierFlags.Const) != 0)
+                    {
+                        return true;
+                    }
+                }
             }
+            return false;
+        }
+        if ((flags & TypeFlags.UnionOrIntersection) != 0)
+        {
+            foreach (var t in Types.Elements(Types.Union(type).Types).ToArray())
+            {
+                if (IsConstTypeVariable(t, depth))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+        if ((flags & TypeFlags.IndexedAccess) != 0)
+        {
+            return IsConstTypeVariable(Types.Data<IndexedAccessData>(type).ObjectType, depth + 1);
+        }
+        if ((flags & TypeFlags.Conditional) != 0)
+        {
+            return IsConstTypeVariable(GetConstraintOfConditionalType(type), depth + 1);
+        }
+        if ((flags & TypeFlags.Substitution) != 0)
+        {
+            return IsConstTypeVariable(Types.Data<SubstitutionData>(type).BaseType, depth);
+        }
+        if ((Types.ObjectFlagsOf(type) & ObjectFlags.Mapped) != 0)
+        {
+            return IsConstMappedType(type, depth);
+        }
+        if (IsGenericTupleType(type))
+        {
+            var elementTypes = GetElementTypes(type);
+            var elementFlags = TupleTarget(type).ElementFlags ?? [];
+            for (var i = 0; i < elementTypes.Length; i++)
+            {
+                if ((elementFlags[i] & ElementFlags.Variadic) != 0 && IsConstTypeVariable(elementTypes[i], depth))
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    // checker.ts isConstMappedType
+    private bool IsConstMappedType(Type type, int depth)
+    {
+        var typeVariable = GetHomomorphicTypeVariable(type);
+        return !typeVariable.IsNone && IsConstTypeVariable(typeVariable, depth);
+    }
+
+    // checker.ts isValidConstAssertionArgument
+    private bool IsValidConstAssertionArgument(NodeRef node)
+    {
+        var store = StoreOf(node);
+        switch (store.Kind(node.Node))
+        {
+            case SyntaxKind.StringLiteral:
+            case SyntaxKind.NoSubstitutionTemplateLiteral:
+            case SyntaxKind.NumericLiteral:
+            case SyntaxKind.BigIntLiteral:
+            case SyntaxKind.TrueKeyword:
+            case SyntaxKind.FalseKeyword:
+            case SyntaxKind.ArrayLiteralExpression:
+            case SyntaxKind.ObjectLiteralExpression:
+            case SyntaxKind.TemplateExpression:
+                return true;
+            case SyntaxKind.ParenthesizedExpression:
+                return IsValidConstAssertionArgument(At(node, store.Expression(node.Node)));
+            case SyntaxKind.PrefixUnaryExpression:
+            {
+                var op = store.Operator(node.Node);
+                var arg = store.Kind(store.Operand(node.Node));
+                return (op == SyntaxKind.MinusToken && arg is SyntaxKind.NumericLiteral or SyntaxKind.BigIntLiteral) ||
+                    (op == SyntaxKind.PlusToken && arg == SyntaxKind.NumericLiteral);
+            }
+            case SyntaxKind.PropertyAccessExpression:
+            case SyntaxKind.ElementAccessExpression:
+            {
+                var expr = Utilities.SkipParentheses(store, store.Expression(node.Node));
+                var symbol = Utilities.IsEntityNameExpression(store, expr) ? ResolveEntityName(At(node, expr), SymbolFlags.Value, ignoreErrors: true) : SymbolRef.None;
+                return !symbol.IsNone && (SymbolFlagsOf(symbol) & SymbolFlags.Enum) != 0;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>checker.ts checkExpressionForMutableLocation.</summary>
+    internal Type CheckExpressionForMutableLocation(NodeRef node, CheckMode checkMode = CheckMode.Normal, bool forceTuple = false)
+    {
+        var type = CheckExpression(node, checkMode, forceTuple);
+        return IsConstContext(node) ? GetRegularTypeOfLiteralType(type)
+            : IsTypeAssertion(StoreOf(node), node.Node) ? type
+            : GetWidenedLiteralLikeTypeForContextualType(type, InstantiateContextualType(GetContextualType(node, ContextFlags.None), node, ContextFlags.None));
+    }
+
+    // checker.ts instantiateTypeWithSingleGenericCallSignature
+    private Type InstantiateTypeWithSingleGenericCallSignature(NodeRef node, Type type, CheckMode checkMode)
+    {
+        if ((checkMode & (CheckMode.Inferential | CheckMode.SkipGenericFunctions)) != 0)
+        {
+            var callSignature = GetSingleSignature(type, SignatureKind.Call, allowMembers: true);
+            var constructSignature = GetSingleSignature(type, SignatureKind.Construct, allowMembers: true);
+            var signature = !callSignature.IsNone ? callSignature : constructSignature;
+            if (!signature.IsNone && Signatures.Record(signature).TypeParameters.Count > 0)
+            {
+                var contextualType = GetApparentTypeOfContextualType(node, ContextFlags.NoConstraints);
+                if (!contextualType.IsNone)
+                {
+                    var contextualSignature = GetSingleSignature(GetNonNullableType(contextualType), !callSignature.IsNone ? SignatureKind.Call : SignatureKind.Construct, allowMembers: false);
+                    if (!contextualSignature.IsNone && Signatures.Record(contextualSignature).TypeParameters.Count == 0)
+                    {
+                        if ((checkMode & CheckMode.SkipGenericFunctions) != 0)
+                        {
+                            SkippedGenericFunction(node, checkMode);
+                            return anyFunctionType;
+                        }
+                        var context = GetInferenceContext(node)!;
+                        // (the inference of the type parameters of the outer function's return type: C6)
+                        return GetOrCreateTypeFromSignature(InstantiateSignatureInContextOf(signature, contextualSignature, context));
+                    }
+                }
+            }
+        }
+        return type;
+    }
+
+    // checker.ts skippedGenericFunction
+    private void SkippedGenericFunction(NodeRef node, CheckMode checkMode)
+    {
+        if ((checkMode & CheckMode.Inferential) != 0)
+        {
+            // We have skipped a generic function during inferential typing. Obtain the inference context and
+            // indicate this has occurred such that we know a second pass of inference is be needed.
+            var context = GetInferenceContext(node)!;
+            context.Flags |= InferenceFlags.SkippedGenericFunction;
         }
     }
 
-    /// <summary>checker.ts checkIdentifier (narrowing and the assignment checks: C7 / C5).</summary>
-    internal Type CheckIdentifier(NodeRef node)
+    // ---- the contextual type and inference context stacks ----
+
+    private void PushCachedContextualType(NodeRef node) => PushContextualType(node, GetContextualType(node, ContextFlags.None), isCache: true);
+
+    private void PushContextualType(NodeRef node, Type type, bool isCache)
+    {
+        if (contextualTypeCount == contextualTypeNodes.Length)
+        {
+            Array.Resize(ref contextualTypeNodes, contextualTypeCount * 2);
+            Array.Resize(ref contextualTypes, contextualTypeCount * 2);
+            Array.Resize(ref contextualIsCache, contextualTypeCount * 2);
+        }
+        contextualTypeNodes[contextualTypeCount] = node;
+        contextualTypes[contextualTypeCount] = type;
+        contextualIsCache[contextualTypeCount] = isCache;
+        contextualTypeCount++;
+    }
+
+    private void PopContextualType()
+    {
+        contextualTypeCount--;
+        contextualTypeNodes[contextualTypeCount] = NodeRef.None;
+        contextualTypes[contextualTypeCount] = Type.None;
+        contextualIsCache[contextualTypeCount] = false;
+    }
+
+    private int FindContextualNode(NodeRef node, bool includeCaches)
+    {
+        for (var i = contextualTypeCount - 1; i >= 0; i--)
+        {
+            if (node == contextualTypeNodes[i] && (includeCaches || !contextualIsCache[i]))
+            {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private void PushInferenceContext(NodeRef node, InferenceContext? inferenceContext)
+    {
+        if (inferenceContextCount == inferenceContextNodes.Length)
+        {
+            Array.Resize(ref inferenceContextNodes, inferenceContextCount * 2);
+            Array.Resize(ref inferenceContexts, inferenceContextCount * 2);
+        }
+        inferenceContextNodes[inferenceContextCount] = node;
+        inferenceContexts[inferenceContextCount] = inferenceContext;
+        inferenceContextCount++;
+    }
+
+    private void PopInferenceContext()
+    {
+        inferenceContextCount--;
+        inferenceContextNodes[inferenceContextCount] = NodeRef.None;
+        inferenceContexts[inferenceContextCount] = null;
+    }
+
+    /// <summary>checker.ts getInferenceContext.</summary>
+    internal InferenceContext? GetInferenceContext(NodeRef node)
+    {
+        for (var i = inferenceContextCount - 1; i >= 0; i--)
+        {
+            if (IsNodeDescendantOf(node, inferenceContextNodes[i]))
+            {
+                return inferenceContexts[i];
+            }
+        }
+        return null;
+    }
+
+    // utilities.ts isNodeDescendantOf
+    private bool IsNodeDescendantOf(NodeRef node, NodeRef ancestor)
+    {
+        if (node.File != ancestor.File || ancestor.IsNone)
+        {
+            return false;
+        }
+        var store = StoreOf(node);
+        var n = node.Node;
+        while (!n.IsNone)
+        {
+            if (n == ancestor.Node)
+            {
+                return true;
+            }
+            n = store.Parent(n);
+        }
+        return false;
+    }
+
+    // ---- simple expressions ----
+
+    // checker.ts checkTemplateExpression
+    private Type CheckTemplateExpression(NodeRef node)
+    {
+        var store = StoreOf(node);
+        var n = node.Node;
+        var texts = new List<string> { store.Texts.GetString(store.Text(store.Head(n)))! };
+        var types = new List<Type>();
+        foreach (var span in store.Nodes(store.TemplateSpans(n)))
+        {
+            var expression = At(node, store.Expression(span));
+            var type = CheckExpression(expression);
+            if (MaybeTypeOfKindConsideringBaseConstraint(type, TypeFlags.ESSymbolLike))
+            {
+                Error(expression, Diagnostics.Implicit_conversion_of_a_symbol_to_a_string_will_fail_at_runtime_Consider_wrapping_this_expression_in_String);
+            }
+            texts.Add(store.Texts.GetString(store.Text(store.Literal(span)))!);
+            types.Add(IsTypeAssignableTo(type, templateConstraintType) ? type : stringType);
+        }
+        var evaluated = store.Kind(store.Parent(n)) != SyntaxKind.TaggedTemplateExpression ? EvaluateTemplateExpression(node) : null;
+        if (evaluated is not null)
+        {
+            return GetFreshTypeOfLiteralType(GetStringLiteralType(evaluated));
+        }
+        var contextual = GetContextualType(node, ContextFlags.None);
+        if (IsConstContext(node) || IsTemplateLiteralContext(node) || SomeType(contextual.IsNone ? unknownType : contextual, IsTemplateLiteralContextualType))
+        {
+            return GetTemplateLiteralType([.. texts], [.. types]);
+        }
+        return stringType;
+    }
+
+    // evaluate(node).value for a template expression: the string of the evaluated spans when all are constant
+    private string? EvaluateTemplateExpression(NodeRef node)
+    {
+        var store = StoreOf(node);
+        var n = node.Node;
+        var result = new System.Text.StringBuilder(store.Texts.GetString(store.Text(store.Head(n))));
+        foreach (var span in store.Nodes(store.TemplateSpans(n)))
+        {
+            var value = EvaluateConstantExpression(At(node, store.Expression(span)));
+            if (value is null)
+            {
+                return null;
+            }
+            result.Append(value is double d ? JsNumber.ToString(d) : (string)value);
+            result.Append(store.Texts.GetString(store.Text(store.Literal(span))));
+        }
+        return result.ToString();
+    }
+
+    // checker.ts isTemplateLiteralContext
+    private bool IsTemplateLiteralContext(NodeRef node)
+    {
+        var store = StoreOf(node);
+        var parent = store.Parent(node.Node);
+        return (store.Kind(parent) == SyntaxKind.ParenthesizedExpression && IsTemplateLiteralContext(At(node, parent))) ||
+            (store.Kind(parent) == SyntaxKind.ElementAccessExpression && store.ArgumentExpression(parent) == node.Node);
+    }
+
+    // checker.ts isTemplateLiteralContextualType
+    private bool IsTemplateLiteralContextualType(Type type)
+    {
+        var flags = Types.Flags(type);
+        if ((flags & (TypeFlags.StringLiteral | TypeFlags.TemplateLiteral)) != 0)
+        {
+            return true;
+        }
+        if ((flags & TypeFlags.InstantiableNonPrimitive) != 0)
+        {
+            var constraint = GetBaseConstraintOfType(type);
+            return MaybeTypeOfKind(constraint.IsNone ? unknownType : constraint, TypeFlags.StringLike);
+        }
+        return false;
+    }
+
+    // checker.ts maybeTypeOfKindConsideringBaseConstraint
+    internal bool MaybeTypeOfKindConsideringBaseConstraint(Type type, TypeFlags kind)
+    {
+        if (MaybeTypeOfKind(type, kind))
+        {
+            return true;
+        }
+        var baseConstraint = GetBaseConstraintOrType(type);
+        return !baseConstraint.IsNone && MaybeTypeOfKind(baseConstraint, kind);
+    }
+
+    // checker.ts checkAssertion / checkAssertionWorker (the .mts/.cts and erasableSyntaxOnly checks are not reached in
+    // Gate C)
+    private Type CheckAssertion(NodeRef node, CheckMode checkMode)
+    {
+        var store = StoreOf(node);
+        var typeNode = At(node, store.Type(node.Node));
+        var expression = At(node, store.Expression(node.Node));
+        var exprType = CheckExpression(expression, checkMode);
+        if (IsConstTypeReference(store, typeNode.Node))
+        {
+            if (!IsValidConstAssertionArgument(expression))
+            {
+                Error(expression, Diagnostics.A_const_assertion_can_only_be_applied_to_references_to_enum_members_or_string_number_boolean_array_or_object_literals);
+            }
+            return GetRegularTypeOfLiteralType(exprType);
+        }
+        ExpressionLinks.Get(node).AssertionExpressionType = exprType;
+        CheckNodeRecursive(typeNode);
+        CheckNodeDeferred(node);
+        return GetTypeFromTypeNode(typeNode);
+    }
+
+    // checker.ts checkAssertionDeferred
+    private void CheckAssertionDeferred(NodeRef node)
+    {
+        var store = StoreOf(node);
+        var typeNode = At(node, store.Type(node.Node));
+        if (!ExpressionLinks.Has(node) || ExpressionLinks.Get(node).AssertionExpressionType.IsNone)
+        {
+            return;
+        }
+        var exprType = GetRegularTypeOfObjectLiteral(GetBaseTypeOfLiteralType(ExpressionLinks.Get(node).AssertionExpressionType));
+        var targetType = GetTypeFromTypeNode(typeNode);
+        if (!IsErrorType(targetType))
+        {
+            AddLazyDiagnostic(() =>
+            {
+                var widenedType = GetWidenedType(exprType);
+                if (!IsTypeComparableTo(targetType, widenedType))
+                {
+                    CheckTypeComparableTo(exprType, targetType, node, Diagnostics.Conversion_of_type_0_to_type_1_may_be_a_mistake_because_neither_type_sufficiently_overlaps_with_the_other_If_this_was_intentional_convert_the_expression_to_unknown_first);
+                }
+            });
+        }
+    }
+
+    // checker.ts checkNonNullAssertion / checkNonNullChain
+    private Type CheckNonNullAssertion(NodeRef node)
+    {
+        var store = StoreOf(node);
+        var expression = At(node, store.Expression(node.Node));
+        if ((store.Flags(node.Node) & NodeFlags.OptionalChain) != 0)
+        {
+            var leftType = CheckExpression(expression);
+            var nonOptionalType = GetOptionalExpressionType(leftType, expression);
+            return PropagateOptionalTypeMarker(GetNonNullableType(nonOptionalType), node, nonOptionalType != leftType);
+        }
+        return GetNonNullableType(CheckExpression(expression));
+    }
+
+    // checker.ts checkExpressionWithTypeArguments (expressions with type arguments and type queries)
+    private Type CheckExpressionWithTypeArguments(NodeRef node)
+    {
+        var store = StoreOf(node);
+        // (checkGrammarExpressionWithTypeArguments: C8)
+        VisitList(node, store.TypeArguments(node.Node));
+        Type exprType;
+        if (store.Kind(node.Node) == SyntaxKind.ExpressionWithTypeArguments)
+        {
+            var parent = WalkUpParenthesizedExpressions(store, store.Parent(node.Node));
+            if (store.Kind(parent) == SyntaxKind.BinaryExpression && store.Kind(store.OperatorToken(parent)) == SyntaxKind.InstanceOfKeyword && IsNodeDescendantOf(node, At(node, store.Right(parent))))
+            {
+                Error(node, Diagnostics.The_right_hand_side_of_an_instanceof_expression_must_not_be_an_instantiation_expression);
+            }
+            exprType = CheckExpression(At(node, store.Expression(node.Node)));
+        }
+        else
+        {
+            var exprName = At(node, store.ExprName(node.Node));
+            exprType = Utilities.IsThisIdentifier(store, exprName.Node) ? CheckThisExpression(exprName) : CheckExpression(exprName);
+        }
+        return GetInstantiationExpressionType(exprType, node);
+    }
+
+    // checker.ts checkSatisfiesExpression / checkSatisfiesExpressionWorker
+    private Type CheckSatisfiesExpression(NodeRef node)
+    {
+        var store = StoreOf(node);
+        var typeNode = At(node, store.Type(node.Node));
+        CheckNodeRecursive(typeNode);
+        var expression = At(node, store.Expression(node.Node));
+        var exprType = CheckExpression(expression);
+        var targetType = GetTypeFromTypeNode(typeNode);
+        if (IsErrorType(targetType))
+        {
+            return targetType;
+        }
+        CheckTypeAssignableToAndOptionallyElaborate(exprType, targetType, node, expression, Diagnostics.Type_0_does_not_satisfy_the_expected_type_1);
+        return exprType;
+    }
+
+    // checker.ts checkMetaProperty / checkNewTargetMetaProperty / checkImportMetaProperty
+    private Type CheckMetaProperty(NodeRef node)
+    {
+        var store = StoreOf(node);
+        var n = node.Node;
+        CheckGrammarMetaProperty(node);
+        if (store.KeywordToken(n) == SyntaxKind.NewKeyword)
+        {
+            return CheckNewTargetMetaProperty(node);
+        }
+        if (store.Texts.Equals(store.EscapedText(store.Name(n)), "defer"))
+        {
+            return errorType;
+        }
+        // checkImportMetaProperty (the module kind is ES2022 in Gate C, so 1343/1470 are not reported)
+        if (moduleKind is >= ModuleKind.Node16 and <= ModuleKind.NodeNext)
+        {
+            // (impliedNodeFormat of the file: ESNext under the bundler resolution of Gate C)
+        }
+        else if (moduleKind < ModuleKind.ES2020 && moduleKind != ModuleKind.System)
+        {
+            Error(node, Diagnostics.The_import_meta_meta_property_is_only_allowed_when_the_module_option_is_es2020_es2022_esnext_system_node16_node18_node20_or_nodenext);
+        }
+        if (store.Texts.Equals(store.EscapedText(store.Name(n)), "meta"))
+        {
+            var importMeta = GetGlobalType("ImportMeta", 0, reportErrors: true);
+            return importMeta.IsNone ? errorType : importMeta;
+        }
+        return errorType;
+    }
+
+    // checker.ts checkGrammarMetaProperty
+    private void CheckGrammarMetaProperty(NodeRef node)
+    {
+        var store = StoreOf(node);
+        var n = node.Node;
+        var nameText = store.Texts.GetString(store.EscapedText(store.Name(n)))!;
+        switch (store.KeywordToken(n))
+        {
+            case SyntaxKind.NewKeyword:
+                if (nameText != "target")
+                {
+                    GrammarErrorOnNode(At(node, store.Name(n)), Diagnostics._0_is_not_a_valid_meta_property_for_keyword_1_Did_you_mean_2, nameText, TokenText(store.KeywordToken(n)), "target");
+                }
+                break;
+            case SyntaxKind.ImportKeyword:
+                if (nameText is not ("meta" or "defer"))
+                {
+                    var isCallee = store.Kind(store.Parent(n)) == SyntaxKind.CallExpression && store.Expression(store.Parent(n)) == n;
+                    if (nameText == "defer")
+                    {
+                        if (!isCallee)
+                        {
+                            GrammarErrorOnNode(node, Diagnostics._0_is_not_a_valid_meta_property_for_keyword_1_Did_you_mean_2, nameText, TokenText(store.KeywordToken(n)), "meta");
+                        }
+                    }
+                    else
+                    {
+                        GrammarErrorOnNode(At(node, store.Name(n)), Diagnostics._0_is_not_a_valid_meta_property_for_keyword_1_Did_you_mean_2, nameText, TokenText(store.KeywordToken(n)), "meta");
+                    }
+                }
+                break;
+        }
+    }
+
+    private Type CheckNewTargetMetaProperty(NodeRef node)
+    {
+        var container = GetNewTargetContainer(node);
+        if (container.IsNone)
+        {
+            Error(node, Diagnostics.Meta_property_0_is_only_allowed_in_the_body_of_a_function_declaration_function_expression_or_constructor, "new.target");
+            return errorType;
+        }
+        if (Kind(container) == SyntaxKind.Constructor)
+        {
+            return GetTypeOfSymbol(GetSymbolOfDeclaration(Parent(container)));
+        }
+        return GetTypeOfSymbol(GetSymbolOfDeclaration(container));
+    }
+
+    // utilities.ts getNewTargetContainer
+    private NodeRef GetNewTargetContainer(NodeRef node)
+    {
+        var store = StoreOf(node);
+        var container = Utilities.GetThisContainer(store, node.Node, includeArrowFunctions: false, includeClassComputedPropertyName: false);
+        if (!container.IsNone)
+        {
+            switch (store.Kind(container))
+            {
+                case SyntaxKind.Constructor:
+                case SyntaxKind.FunctionDeclaration:
+                case SyntaxKind.FunctionExpression:
+                    return At(node, container);
+            }
+        }
+        return NodeRef.None;
+    }
+
+    // checker.ts checkDeleteExpression
+    private Type CheckDeleteExpression(NodeRef node)
+    {
+        var store = StoreOf(node);
+        CheckExpression(At(node, store.Expression(node.Node)));
+        var expr = At(node, Utilities.SkipParentheses(store, store.Expression(node.Node)));
+        if (!Utilities.IsAccessExpression(store, expr.Node))
+        {
+            Error(expr, Diagnostics.The_operand_of_a_delete_operator_must_be_a_property_reference);
+            return booleanType;
+        }
+        if (store.Kind(expr.Node) == SyntaxKind.PropertyAccessExpression && store.Kind(store.Name(expr.Node)) == SyntaxKind.PrivateIdentifier)
+        {
+            Error(expr, Diagnostics.The_operand_of_a_delete_operator_cannot_be_a_private_identifier);
+        }
+        var resolved = SymbolNodeLinks.Has(expr) ? SymbolNodeLinks.Get(expr).ResolvedSymbol : SymbolRef.None;
+        var symbol = resolved.IsNone ? SymbolRef.None : GetExportSymbolOfValueSymbolIfExported(resolved);
+        if (!symbol.IsNone)
+        {
+            if (IsReadonlySymbol(symbol))
+            {
+                Error(expr, Diagnostics.The_operand_of_a_delete_operator_cannot_be_a_read_only_property);
+            }
+            else
+            {
+                CheckDeleteExpressionMustBeOptional(expr, symbol);
+            }
+        }
+        return booleanType;
+    }
+
+    // checker.ts checkDeleteExpressionMustBeOptional
+    private void CheckDeleteExpressionMustBeOptional(NodeRef expr, SymbolRef symbol)
+    {
+        var type = GetTypeOfSymbol(symbol);
+        if (strictNullChecks && (Types.Flags(type) & (TypeFlags.AnyOrUnknown | TypeFlags.Never)) == 0 &&
+            !(exactOptionalPropertyTypes ? (SymbolFlagsOf(symbol) & SymbolFlags.Optional) != 0 : HasTypeFacts(type, TypeFacts.IsUndefined)))
+        {
+            Error(expr, Diagnostics.The_operand_of_a_delete_operator_must_be_optional);
+        }
+    }
+
+    // checker.ts checkSpreadExpression
+    private Type CheckSpreadExpression(NodeRef node, CheckMode checkMode)
+    {
+        var expression = At(node, StoreOf(node).Expression(node.Node));
+        var arrayOrIterableType = CheckExpression(expression, checkMode);
+        return CheckIteratedTypeOrElementType(IterationUse.Spread, arrayOrIterableType, undefinedType, expression);
+    }
+
+    // ---- identifiers ----
+
+    /// <summary>checker.ts checkIdentifier (TODO(C7): getNarrowedTypeOfSymbol, the flow container and the definite assignment checks).</summary>
+    internal Type CheckIdentifier(NodeRef node, CheckMode checkMode = CheckMode.Normal)
     {
         var store = StoreOf(node);
         if (IsThisInTypeQuery(store, node.Node))
@@ -357,34 +1182,194 @@ internal sealed partial class Checker
         {
             return errorType;
         }
-        var localOrExportSymbol = GetExportSymbolOfValueSymbolIfExported(symbol);
-        if (localOrExportSymbol == argumentsSymbol)
+        CheckIdentifierCalculateNodeCheckFlags(node, symbol);
+        if (symbol == argumentsSymbol)
         {
-            return GetTypeOfSymbol(argumentsSymbol);
+            if (IsInPropertyInitializerOrClassStaticBlock(node, ignoreArrowFunctions: true))
+            {
+                return errorType;
+            }
+            return GetTypeOfSymbol(symbol);
+        }
+        var localOrExportSymbol = GetExportSymbolOfValueSymbolIfExported(symbol);
+        var declaration = ValueDeclarationOf(localOrExportSymbol);
+        // If the identifier is declared in a binding pattern for which we're currently computing the implied type and the
+        // reference occurs with the same binding pattern, return the non-inferrable any type. This for example occurs in
+        // 'const [a, b = a + 1] = [2]' when we're computing the contextual type for the array literal '[2]'.
+        if (!declaration.IsNone && Kind(declaration) == SyntaxKind.BindingElement && contextualBindingPatterns.Contains(Parent(declaration)) &&
+            IsNodeDescendantOf(node, Parent(declaration)))
+        {
+            return nonInferrableAnyType;
         }
         var type = GetTypeOfSymbol(localOrExportSymbol);
         if (uncertainSymbols.Contains(localOrExportSymbol))
         {
             uncertainExpressions.Add(node);
         }
-        // TODO(C7): getFlowTypeOfReference (autoType and autoArrayType are evolved by control flow analysis)
-        if (type == autoType || type == autoArrayType)
+        var assignmentKind = GetAssignmentTargetKind(node);
+        var flags = SymbolFlagsOf(localOrExportSymbol);
+        if (assignmentKind != AssignmentKind.None)
         {
-            return type == autoType ? anyType : anyArrayType;
+            if ((flags & SymbolFlags.Variable) == 0 && !(Utilities.IsInJSFile(store, node.Node) && (flags & SymbolFlags.ValueModule) != 0))
+            {
+                var assignmentError = (flags & SymbolFlags.Enum) != 0 ? Diagnostics.Cannot_assign_to_0_because_it_is_an_enum
+                    : (flags & SymbolFlags.Class) != 0 ? Diagnostics.Cannot_assign_to_0_because_it_is_a_class
+                    : (flags & SymbolFlags.Module) != 0 ? Diagnostics.Cannot_assign_to_0_because_it_is_a_namespace
+                    : (flags & SymbolFlags.Function) != 0 ? Diagnostics.Cannot_assign_to_0_because_it_is_a_function
+                    : (flags & SymbolFlags.Alias) != 0 ? Diagnostics.Cannot_assign_to_0_because_it_is_an_import
+                    : Diagnostics.Cannot_assign_to_0_because_it_is_not_a_variable;
+                Error(node, assignmentError, SymbolToString(symbol));
+                return errorType;
+            }
+            if (IsReadonlySymbol(localOrExportSymbol))
+            {
+                Error(node, (flags & SymbolFlags.Variable) != 0 ? Diagnostics.Cannot_assign_to_0_because_it_is_a_constant : Diagnostics.Cannot_assign_to_0_because_it_is_a_read_only_property, SymbolToString(symbol));
+                return errorType;
+            }
         }
-        return type;
+        var isAlias = (flags & SymbolFlags.Alias) != 0;
+        // We only narrow variables and parameters occurring in a non-assignment position. For all other
+        // entities we simply return the declared type.
+        if ((flags & SymbolFlags.Variable) != 0)
+        {
+            if (assignmentKind == AssignmentKind.Definite)
+            {
+                return IsInCompoundLikeAssignment(store, node.Node) ? GetBaseTypeOfLiteralType(type) : type;
+            }
+        }
+        else if (isAlias)
+        {
+            declaration = GetDeclarationOfAliasSymbol(symbol);
+        }
+        else
+        {
+            return type;
+        }
+        if (declaration.IsNone)
+        {
+            return type;
+        }
+        type = GetNarrowableTypeForReference(type, node, checkMode);
+        // TODO(C7): the declaration and flow containers, assumeInitialized and the initial type
+        var flowType = GetFlowTypeOfReference(node, type);
+        return assignmentKind != AssignmentKind.None ? GetBaseTypeOfLiteralType(flowType) : flowType;
     }
+
+    // checker.ts checkIdentifierCalculateNodeCheckFlags (the downlevel captures do not apply to the ES2025 target)
+    private void CheckIdentifierCalculateNodeCheckFlags(NodeRef node, SymbolRef symbol)
+    {
+        if (IsThisInTypeQuery(StoreOf(node), node.Node))
+        {
+            return;
+        }
+        // As noted in ECMAScript 6 language spec, arrow functions never have an arguments objects.
+        // To avoid that we will give an error to users if they use arguments objects in arrow function so that they
+        // can explicitly bound arguments objects
+        if (symbol == argumentsSymbol)
+        {
+            if (IsInPropertyInitializerOrClassStaticBlock(node, ignoreArrowFunctions: true))
+            {
+                Error(node, Diagnostics.arguments_cannot_be_referenced_in_property_initializers_or_class_static_initialization_blocks);
+            }
+        }
+        // (deprecation suggestions: C8; the class reference and block-scoped binding flags are emit details)
+    }
+
+    // checker.ts isInPropertyInitializerOrClassStaticBlock
+    private bool IsInPropertyInitializerOrClassStaticBlock(NodeRef node, bool ignoreArrowFunctions = false)
+    {
+        var store = StoreOf(node);
+        for (var n = node.Node; !n.IsNone; n = store.Parent(n))
+        {
+            switch (store.Kind(n))
+            {
+                case SyntaxKind.PropertyDeclaration:
+                case SyntaxKind.ClassStaticBlockDeclaration:
+                    return true;
+                case SyntaxKind.TypeQuery:
+                case SyntaxKind.JsxClosingElement:
+                    return false;
+                case SyntaxKind.ArrowFunction:
+                    if (!ignoreArrowFunctions)
+                    {
+                        return false;
+                    }
+                    break;
+                case SyntaxKind.Block:
+                    if (Utilities.IsFunctionLikeDeclaration(store, store.Parent(n)) && store.Kind(store.Parent(n)) != SyntaxKind.ArrowFunction)
+                    {
+                        return false;
+                    }
+                    break;
+            }
+        }
+        return false;
+    }
+
+    // checker.ts checkPrivateIdentifierExpression / checkGrammarPrivateIdentifierExpression
+    private Type CheckPrivateIdentifierExpression(NodeRef node)
+    {
+        var store = StoreOf(node);
+        var n = node.Node;
+        if (Utilities.GetContainingClass(store, n).IsNone)
+        {
+            GrammarErrorOnNode(node, Diagnostics.Private_identifiers_are_not_allowed_outside_class_bodies);
+        }
+        else if (store.Kind(store.Parent(n)) != SyntaxKind.ForInStatement)
+        {
+            if (!Utilities.IsExpressionNode(store, n))
+            {
+                GrammarErrorOnNode(node, Diagnostics.Private_identifiers_are_only_allowed_in_class_bodies_and_may_only_be_used_as_part_of_a_class_member_declaration_property_access_or_on_the_left_hand_side_of_an_in_expression);
+            }
+            else
+            {
+                var isInOperation = store.Kind(store.Parent(n)) == SyntaxKind.BinaryExpression && store.Kind(store.OperatorToken(store.Parent(n))) == SyntaxKind.InKeyword;
+                if (GetSymbolForPrivateIdentifierExpression(node).IsNone && !isInOperation)
+                {
+                    GrammarErrorOnNode(node, Diagnostics.Cannot_find_name_0, store.Texts.GetString(store.EscapedText(n)));
+                }
+            }
+        }
+        var symbol = GetSymbolForPrivateIdentifierExpression(node);
+        if (!symbol.IsNone)
+        {
+            MarkPropertyAsReferenced(symbol, NodeRef.None, isSelfTypeAccess: false);
+        }
+        return anyType;
+    }
+
+    // checker.ts getSymbolForPrivateIdentifierExpression
+    private SymbolRef GetSymbolForPrivateIdentifierExpression(NodeRef privId)
+    {
+        if (!Utilities.IsExpressionNode(StoreOf(privId), privId.Node))
+        {
+            return SymbolRef.None;
+        }
+        ref var links = ref SymbolNodeLinks.Get(privId);
+        if (links.ResolvedSymbol.IsNone)
+        {
+            var symbol = LookupSymbolForPrivateIdentifierDeclaration(privId);
+            SymbolNodeLinks.Get(privId).ResolvedSymbol = symbol;
+            return symbol;
+        }
+        return links.ResolvedSymbol;
+    }
+
+    // ---- this and super ----
 
     /// <summary>checker.ts checkThisExpression.</summary>
     internal Type CheckThisExpression(NodeRef node)
     {
         var store = StoreOf(node);
-        var isNodeInTypeQuery = Utilities.IsInTypeQuery(store, node.Node);
         // Stop at the first arrow function so that we can
         // tell whether 'this' needs to be captured.
         var container = Utilities.GetThisContainer(store, node.Node, includeArrowFunctions: true, includeClassComputedPropertyName: true);
         var capturedByArrowFunction = false;
         var thisInComputedPropertyName = false;
+        if (store.Kind(container) == SyntaxKind.Constructor)
+        {
+            CheckThisBeforeSuper(node, At(node, container), Diagnostics.super_must_be_called_before_accessing_this_in_the_constructor_of_a_derived_class);
+        }
         while (true)
         {
             // Now skip arrow functions to get the "real" owner of 'this'.
@@ -401,6 +1386,7 @@ internal sealed partial class Checker
             }
             break;
         }
+        // (checkThisInStaticClassFieldInitializerInDecoratedClass: experimentalDecorators is not set in Gate C)
         if (thisInComputedPropertyName)
         {
             Error(node, Diagnostics.this_cannot_be_referenced_in_a_computed_property_name);
@@ -417,7 +1403,6 @@ internal sealed partial class Checker
                     break;
             }
         }
-        _ = isNodeInTypeQuery;
         var type = TryGetThisTypeAt(node, includeGlobalThis: true, At(node, container));
         if (compilerOptions.GetStrictOptionValue(compilerOptions.NoImplicitThis))
         {
@@ -443,29 +1428,127 @@ internal sealed partial class Checker
         return type.IsNone ? anyType : type;
     }
 
-    // checker.ts tryGetThisTypeAt (contextual this types of object literal methods: C5)
+    // checker.ts checkThisBeforeSuper
+    private void CheckThisBeforeSuper(NodeRef node, NodeRef container, DiagnosticMessage diagnosticMessage)
+    {
+        var containingClassDecl = Parent(container);
+        var baseTypeNode = GetBaseTypeNodeOfClass(containingClassDecl);
+        // If a containing class does not have extends clause or the class extends null
+        // skip checking whether super statement is called before "this" accessing.
+        if (!baseTypeNode.IsNone && !ClassDeclarationExtendsNull(containingClassDecl))
+        {
+            var flow = BindingOf(node.File).FlowNodeOf(node.Node);
+            if (!flow.IsNone && !IsPostSuperFlowNode(node.File, flow, null))
+            {
+                Error(node, diagnosticMessage);
+            }
+        }
+    }
+
+    // checker.ts classDeclarationExtendsNull
+    private bool ClassDeclarationExtendsNull(NodeRef classDecl)
+    {
+        var classSymbol = GetSymbolOfDeclaration(classDecl);
+        var classInstanceType = GetDeclaredTypeOfSymbol(classSymbol);
+        return GetBaseConstructorTypeOfClass(classInstanceType) == nullWideningType;
+    }
+
+    // checker.ts isPostSuperFlowNode (the antecedents of reduce labels are substituted through a map instead of being
+    // written into the flow graph)
+    private bool IsPostSuperFlowNode(int file, FlowNode flow, Dictionary<int, BinderStore.FlowChain>? reduced)
+    {
+        var binding = BindingOf(file);
+        var store = StoreOf(file);
+        while (true)
+        {
+            var flags = binding.Flags(flow);
+            if ((flags & (FlowFlags.Assignment | FlowFlags.Condition | FlowFlags.ArrayMutation | FlowFlags.SwitchClause)) != 0)
+            {
+                flow = binding.Antecedent(flow);
+            }
+            else if ((flags & FlowFlags.Call) != 0)
+            {
+                if (store.Kind(store.Expression(binding.NodeOf(flow))) == SyntaxKind.SuperKeyword)
+                {
+                    return true;
+                }
+                flow = binding.Antecedent(flow);
+            }
+            else if ((flags & FlowFlags.BranchLabel) != 0)
+            {
+                // A branching point is post-super if every branch is post-super.
+                var antecedents = reduced is not null && reduced.TryGetValue(flow.Index, out var replacement) ? replacement : binding.Antecedents(flow);
+                foreach (var f in antecedents)
+                {
+                    if (!IsPostSuperFlowNode(file, f, reduced))
+                    {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            else if ((flags & FlowFlags.LoopLabel) != 0)
+            {
+                // A loop is post-super if the control flow path that leads to the top is post-super.
+                var first = FlowNode.None;
+                foreach (var f in binding.Antecedents(flow))
+                {
+                    first = f;
+                    break;
+                }
+                flow = first;
+                if (flow.IsNone)
+                {
+                    return false;
+                }
+            }
+            else if ((flags & FlowFlags.ReduceLabel) != 0)
+            {
+                // the reduce label's target sees only the given antecedents while its antecedent is evaluated
+                var map = reduced is null ? new Dictionary<int, BinderStore.FlowChain>() : new Dictionary<int, BinderStore.FlowChain>(reduced);
+                map[binding.ReduceTarget(flow).Index] = binding.ReduceAntecedents(flow);
+                return IsPostSuperFlowNode(file, binding.Antecedent(flow), map);
+            }
+            else
+            {
+                // Unreachable nodes are considered post-super to silence errors
+                return (flags & FlowFlags.Unreachable) != 0;
+            }
+        }
+    }
+
+    // checker.ts tryGetThisTypeAt (JavaScript prototype methods and JSDoc this tags: C9)
     private Type TryGetThisTypeAt(NodeRef node, bool includeGlobalThis, NodeRef container)
     {
         var store = StoreOf(node);
         var c = container.Node;
-        if (!c.IsNone && Utilities.IsFunctionLike(store, c))
+        if (!c.IsNone && Utilities.IsFunctionLike(store, c) && (!IsInParameterInitializerBeforeContainingFunction(node) || !GetThisParameter(store, c).IsNone))
         {
-            var thisParameter = Signatures.Record(GetSignatureFromDeclaration(container)).ThisParameter;
-            if (!thisParameter.IsNone)
+            var thisType = GetThisTypeOfDeclaration(container);
+            // Note: a parameter initializer should refer to class-this unless function-this is explicitly annotated.
+            // If this is a function in a JS file, it might be a class method.
+            if (thisType.IsNone)
             {
-                return GetTypeOfSymbol(thisParameter);
+                if (IsJSConstructor(container))
+                {
+                    thisType = ThisTypeOfClassOrInterface(GetDeclaredTypeOfSymbol(GetMergedSymbol(NodeSymbol(container))));
+                }
+                if (thisType.IsNone)
+                {
+                    thisType = GetContextualThisParameterType(container);
+                }
             }
-            var contextual = GetContextualThisParameterType(container);
-            if (!contextual.IsNone)
+            if (!thisType.IsNone)
             {
-                return contextual;
+                return GetFlowTypeOfReference(node, thisType);
             }
         }
         var parent = c.IsNone ? Node.None : store.Parent(c);
         if (!parent.IsNone && Utilities.IsClassLike(store, parent))
         {
             var symbol = GetSymbolOfDeclaration(At(node, parent));
-            return Utilities.IsStatic(store, c) ? GetTypeOfSymbol(symbol) : ThisTypeOfClassOrInterface(GetDeclaredTypeOfSymbol(symbol));
+            var type = Utilities.IsStatic(store, c) ? GetTypeOfSymbol(symbol) : ThisTypeOfClassOrInterface(GetDeclaredTypeOfSymbol(symbol));
+            return GetFlowTypeOfReference(node, type);
         }
         if (!c.IsNone && store.Kind(c) == SyntaxKind.SourceFile)
         {
@@ -477,6 +1560,7 @@ internal sealed partial class Checker
             }
             if (Utilities.IsExternalModule(store, c))
             {
+                // TODO: Maybe issue a better error than 'object is possibly undefined'
                 return undefinedType;
             }
             if (includeGlobalThis)
@@ -487,9 +1571,84 @@ internal sealed partial class Checker
         return Type.None;
     }
 
-    // checker.ts getContextualThisParameterType (TODO(C5): object literal methods with a contextual type; C1: the
-    // methods of an object literal see the literal's type)
-    private Type GetContextualThisParameterType(NodeRef func)
+    // checker.ts getThisTypeOfDeclaration
+    private Type GetThisTypeOfDeclaration(NodeRef declaration) => GetThisTypeOfSignature(GetSignatureFromDeclaration(declaration));
+
+    // checker.ts isInParameterInitializerBeforeContainingFunction
+    private bool IsInParameterInitializerBeforeContainingFunction(NodeRef node)
+    {
+        var store = StoreOf(node);
+        var inBindingInitializer = false;
+        var n = node.Node;
+        while (!store.Parent(n).IsNone && !Utilities.IsFunctionLike(store, store.Parent(n)))
+        {
+            var parent = store.Parent(n);
+            if (store.Kind(parent) == SyntaxKind.Parameter && (inBindingInitializer || store.Initializer(parent) == n))
+            {
+                return true;
+            }
+            if (store.Kind(parent) == SyntaxKind.BindingElement && store.Initializer(parent) == n)
+            {
+                inBindingInitializer = true;
+            }
+            n = parent;
+        }
+        return false;
+    }
+
+    // checker.ts getContainingObjectLiteral
+    private static Node GetContainingObjectLiteral(NodeStore store, Node func) =>
+        store.Kind(func) is SyntaxKind.MethodDeclaration or SyntaxKind.GetAccessor or SyntaxKind.SetAccessor && store.Kind(store.Parent(func)) == SyntaxKind.ObjectLiteralExpression ? store.Parent(func)
+        : store.Kind(func) == SyntaxKind.FunctionExpression && store.Kind(store.Parent(func)) == SyntaxKind.PropertyAssignment ? store.Parent(store.Parent(func))
+        : Node.None;
+
+    // checker.ts getThisTypeArgument
+    private Type GetThisTypeArgument(Type type) =>
+        (Types.ObjectFlagsOf(type) & ObjectFlags.Reference) != 0 && !globalThisType.IsNone && Types.Object(type).Target == globalThisType ? GetTypeArguments(type)[0] : Type.None;
+
+    // checker.ts getThisTypeFromContextualType
+    private Type GetThisTypeFromContextualType(Type type) => MapType(type, t =>
+    {
+        if ((Types.Flags(t) & TypeFlags.Intersection) != 0)
+        {
+            foreach (var member in Types.Elements(Types.Union(t).Types).ToArray())
+            {
+                var argument = GetThisTypeArgument(member);
+                if (!argument.IsNone)
+                {
+                    return argument;
+                }
+            }
+            return Type.None;
+        }
+        return GetThisTypeArgument(t);
+    });
+
+    // checker.ts getThisTypeOfObjectLiteralFromContextualType
+    private Type GetThisTypeOfObjectLiteralFromContextualType(NodeRef containingLiteral, Type contextualType)
+    {
+        var literal = containingLiteral;
+        var type = contextualType;
+        var store = StoreOf(containingLiteral);
+        while (!type.IsNone)
+        {
+            var thisType = GetThisTypeFromContextualType(type);
+            if (!thisType.IsNone)
+            {
+                return thisType;
+            }
+            if (store.Kind(store.Parent(literal.Node)) != SyntaxKind.PropertyAssignment)
+            {
+                break;
+            }
+            literal = At(literal, store.Parent(store.Parent(literal.Node)));
+            type = GetApparentTypeOfContextualType(literal, ContextFlags.None);
+        }
+        return Type.None;
+    }
+
+    /// <summary>checker.ts getContextualThisParameterType.</summary>
+    internal Type GetContextualThisParameterType(NodeRef func)
     {
         var store = StoreOf(func);
         if (store.Kind(func.Node) == SyntaxKind.ArrowFunction)
@@ -498,508 +1657,366 @@ internal sealed partial class Checker
         }
         if (IsContextSensitiveFunctionOrObjectLiteralMethod(store, func.Node))
         {
-            var parent = store.Parent(func.Node);
-            var literal = store.Kind(func.Node) == SyntaxKind.MethodDeclaration ? parent
-                : store.Kind(parent) == SyntaxKind.PropertyAssignment ? store.Parent(parent) : Node.None;
-            if (!literal.IsNone && store.Kind(literal) == SyntaxKind.ObjectLiteralExpression)
+            var contextualSignature = GetContextualSignature(func);
+            if (!contextualSignature.IsNone)
             {
-                return CheckExpressionCached(At(func, literal));
-            }
-            if (HasContextualType(At(func, func.Node)))
-            {
-                return anyType; // TODO(C5): the this parameter type of the contextual signature
-            }
-        }
-        return Type.None;
-    }
-
-    private static bool IsContextSensitiveFunctionOrObjectLiteralMethod(NodeStore store, Node func) =>
-        store.Kind(func) is SyntaxKind.FunctionExpression or SyntaxKind.ArrowFunction
-        || (store.Kind(func) == SyntaxKind.MethodDeclaration && store.Kind(store.Parent(func)) == SyntaxKind.ObjectLiteralExpression);
-
-    /// <summary>
-    /// checker.ts getContextuallyTypedParameterType. TODO(C5/C6): the parameter type of the contextual signature;
-    /// C1 returns <c>any</c> for parameters of function expressions that have a contextual signature (so they are not
-    /// reported as implicitly any) and None otherwise.
-    /// </summary>
-    private Type GetContextuallyTypedParameterType(NodeRef parameter)
-    {
-        var func = Parent(parameter);
-        var store = StoreOf(func);
-        if (!IsContextSensitiveFunctionOrObjectLiteralMethod(store, func.Node))
-        {
-            return Type.None;
-        }
-        var iife = Utilities.GetImmediatelyInvokedFunctionExpression(store, func.Node);
-        if (!iife.IsNone && !store.Arguments(iife).IsNone)
-        {
-            // the parameters of an immediately invoked function have the types of the arguments (spread arguments: C5)
-            var args = store.Nodes(store.Arguments(iife));
-            var indexOfParameter = store.Nodes(store.Parameters(func.Node)).IndexOf(parameter.Node);
-            if (!store.DotDotDotToken(parameter.Node).IsNone)
-            {
-                return anyArrayType;
-            }
-            return indexOfParameter < args.Length ? GetWidenedLiteralType(CheckExpressionCached(At(func, args[indexOfParameter])))
-                : !store.Initializer(parameter.Node).IsNone ? Type.None : undefinedWideningType;
-        }
-        if (HasContextualType(func))
-        {
-            // the contextual parameter type is not computed before C5/C6: an approximation
-            MarkUncertainDeclaration(parameter);
-            return anyType;
-        }
-        return Type.None;
-    }
-
-    // Whether a function expression or object literal method has a contextual signature (C1 approximation of
-    // getContextualSignature, TODO(C5)): its contextual type is unknown but present, or has call signatures.
-    private bool HasContextualType(NodeRef func)
-    {
-        var contextualType = GetApproximateContextualType(func, 0);
-        return contextualType == unknownContextualType || (!contextualType.IsNone && MayHaveContextualSignature(contextualType));
-    }
-
-    // getContextualSignature, approximated: a contextual type with call signatures, or one C1 cannot see into
-    // (unsupported types, type parameters and unions or intersections with such members)
-    private bool MayHaveContextualSignature(Type type)
-    {
-        if (HasSignatures(type) || IsUnsupportedType(type) || (Types.Flags(type) & TypeFlags.Instantiable) != 0)
-        {
-            return true;
-        }
-        if ((Types.Flags(type) & TypeFlags.UnionOrIntersection) != 0)
-        {
-            foreach (var member in Types.Elements(Types.Union(type).Types))
-            {
-                if (MayHaveContextualSignature(member))
+                var thisParameter = Signatures.Record(contextualSignature).ThisParameter;
+                if (!thisParameter.IsNone)
                 {
-                    return true;
+                    return GetTypeOfSymbol(thisParameter);
                 }
+            }
+        }
+        var inJs = Utilities.IsInJSFile(store, func.Node);
+        if (compilerOptions.GetStrictOptionValue(compilerOptions.NoImplicitThis) || inJs)
+        {
+            var containingLiteral = GetContainingObjectLiteral(store, func.Node);
+            if (!containingLiteral.IsNone)
+            {
+                // We have an object literal method. Check if the containing object literal has a contextual type
+                // that includes a ThisType<T>. If so, T is the contextual type for 'this'. We continue looking in
+                // any directly enclosing object literals.
+                var literal = At(func, containingLiteral);
+                var contextualType = GetApparentTypeOfContextualType(literal, ContextFlags.None);
+                var thisType = GetThisTypeOfObjectLiteralFromContextualType(literal, contextualType);
+                if (!thisType.IsNone)
+                {
+                    return InstantiateType(thisType, GetMapperFromContext(GetInferenceContext(literal)));
+                }
+                // There was no contextual ThisType<T> for the containing object literal, so the contextual type
+                // for 'this' is the non-null form of the contextual type for the containing object literal or
+                // the type of the object literal itself.
+                return GetWidenedType(!contextualType.IsNone ? GetNonNullableType(contextualType) : CheckExpressionCached(literal));
+            }
+            // In an assignment of the form 'obj.xxx = function(...)' or 'obj[xxx] = function(...)', the
+            // contextual type for 'this' is 'obj'.
+            var parent = WalkUpParenthesizedExpressions(store, store.Parent(func.Node));
+            if (Utilities.IsAssignmentExpression(store, parent))
+            {
+                var target = store.Left(parent);
+                if (Utilities.IsAccessExpression(store, target))
+                {
+                    var expression = store.Expression(target);
+                    // Don't contextually type `this` as `exports` in `exports.Point = function(x, y) { this.x = x; this.y = y; }`
+                    if (inJs && store.Kind(expression) == SyntaxKind.Identifier)
+                    {
+                        var binding = BindingOf(func.File);
+                        if (!binding.CommonJsModuleIndicator.IsNone && GetResolvedSymbol(At(func, expression)) == GetSymbolOfDeclaration(At(func, Utilities.RootOf(store, func.Node))))
+                        {
+                            return Type.None;
+                        }
+                    }
+                    return GetWidenedType(CheckExpressionCached(At(func, expression)));
+                }
+            }
+        }
+        return Type.None;
+    }
+
+    /// <summary>checker.ts isContextSensitiveFunctionOrObjectLiteralMethod.</summary>
+    internal static bool IsContextSensitiveFunctionOrObjectLiteralMethod(NodeStore store, Node func) =>
+        (IsFunctionExpressionOrArrowFunction(store, func) || Utilities.IsObjectLiteralMethod(store, func)) && IsContextSensitiveFunctionLikeDeclaration(store, func);
+
+    // checker.ts isContextSensitiveFunctionLikeDeclaration
+    private static bool IsContextSensitiveFunctionLikeDeclaration(NodeStore store, Node node) =>
+        HasContextSensitiveParameters(store, node) || HasContextSensitiveReturnExpression(store, node) || HasContextSensitiveYieldExpression(store, node);
+
+    // (hasContextSensitiveParameters: Checker.RelationHelpers.cs, C4)
+
+    // checker.ts hasContextSensitiveReturnExpression
+    private static bool HasContextSensitiveReturnExpression(NodeStore store, Node node)
+    {
+        if (!store.TypeParameters(node).IsNone || !GetEffectiveReturnTypeNode(store, node).IsNone || store.Body(node).IsNone)
+        {
+            return false;
+        }
+        var body = store.Body(node);
+        if (store.Kind(body) != SyntaxKind.Block)
+        {
+            return IsContextSensitive(store, body);
+        }
+        return ForEachReturnStatementAny(store, body, statement => !store.Expression(statement).IsNone && IsContextSensitive(store, store.Expression(statement)));
+    }
+
+    // checker.ts hasContextSensitiveYieldExpression
+    private static bool HasContextSensitiveYieldExpression(NodeStore store, Node node)
+    {
+        if ((GetFunctionFlagsOf(store, node) & FunctionFlags.Generator) == 0 || store.Body(node).IsNone)
+        {
+            return false;
+        }
+        var found = false;
+        ForEachYieldExpression(store, store.Body(node), y =>
+        {
+            if (!found && IsContextSensitive(store, y))
+            {
+                found = true;
+            }
+        });
+        return found;
+    }
+
+    /// <summary>checker.ts isContextSensitive.</summary>
+    internal static bool IsContextSensitive(NodeStore store, Node node)
+    {
+        switch (store.Kind(node))
+        {
+            case SyntaxKind.FunctionExpression:
+            case SyntaxKind.ArrowFunction:
+            case SyntaxKind.MethodDeclaration:
+            case SyntaxKind.FunctionDeclaration: // Function declarations can have context when annotated with a jsdoc @type
+                return IsContextSensitiveFunctionLikeDeclaration(store, node);
+            case SyntaxKind.ObjectLiteralExpression:
+                foreach (var p in store.Nodes(store.Properties(node)))
+                {
+                    if (IsContextSensitive(store, p))
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            case SyntaxKind.ArrayLiteralExpression:
+                foreach (var e in store.Nodes(store.Elements(node)))
+                {
+                    if (IsContextSensitive(store, e))
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            case SyntaxKind.ConditionalExpression:
+                return IsContextSensitive(store, store.WhenTrue(node)) || IsContextSensitive(store, store.WhenFalse(node));
+            case SyntaxKind.BinaryExpression:
+                return store.Kind(store.OperatorToken(node)) is SyntaxKind.BarBarToken or SyntaxKind.QuestionQuestionToken &&
+                    (IsContextSensitive(store, store.Left(node)) || IsContextSensitive(store, store.Right(node)));
+            case SyntaxKind.PropertyAssignment:
+                return IsContextSensitive(store, store.Initializer(node));
+            case SyntaxKind.ParenthesizedExpression:
+                return IsContextSensitive(store, store.Expression(node));
+            case SyntaxKind.JsxAttributes:
+            {
+                foreach (var p in store.Nodes(store.Properties(node)))
+                {
+                    if (IsContextSensitive(store, p))
+                    {
+                        return true;
+                    }
+                }
+                if (store.Kind(store.Parent(node)) == SyntaxKind.JsxOpeningElement)
+                {
+                    foreach (var child in store.Nodes(store.Children(store.Parent(store.Parent(node)))))
+                    {
+                        if (IsContextSensitive(store, child))
+                        {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }
+            case SyntaxKind.JsxAttribute:
+            {
+                // If there is no initializer, JSX attribute has a boolean value of true which is not context sensitive.
+                var initializer = store.Initializer(node);
+                return !initializer.IsNone && IsContextSensitive(store, initializer);
+            }
+            case SyntaxKind.JsxExpression:
+            case SyntaxKind.YieldExpression:
+            {
+                // It is possible to that node.expression is undefined (e.g <div x={} />)
+                var expression = store.Expression(node);
+                return !expression.IsNone && IsContextSensitive(store, expression);
             }
         }
         return false;
     }
 
-    // A marker for a contextual type that exists but C1 does not compute (contextual signatures' return types, generic
-    // parameters, tuples).
-    private Type unknownContextualType => anyFunctionType;
-
-    // checker.ts getContextualType, approximated (None: no contextual type)
-    private Type GetApproximateContextualType(NodeRef node, int depth)
+    /// <summary>checker.ts checkSuperExpression.</summary>
+    private Type CheckSuperExpression(NodeRef node)
     {
-        if (depth > 16)
-        {
-            return unknownContextualType;
-        }
         var store = StoreOf(node);
         var n = node.Node;
-        var parent = store.Parent(n);
-        switch (store.Kind(parent))
+        var isCallExpression = store.Kind(store.Parent(n)) == SyntaxKind.CallExpression && store.Expression(store.Parent(n)) == n;
+        var immediateContainer = GetSuperContainer(store, n, stopOnFunctions: true);
+        var container = immediateContainer;
+        // adjust the container reference in case if super is used inside arrow functions with arbitrarily deep nesting
+        if (!isCallExpression)
         {
-            case SyntaxKind.VariableDeclaration:
-            case SyntaxKind.Parameter:
-            case SyntaxKind.PropertyDeclaration:
-            case SyntaxKind.PropertySignature:
+            while (!container.IsNone && store.Kind(container) == SyntaxKind.ArrowFunction)
             {
-                var typeNode = store.Type(parent);
-                return store.Initializer(parent) == n && !typeNode.IsNone ? GetTypeFromTypeNode(At(node, typeNode)) : Type.None;
-            }
-            case SyntaxKind.ReturnStatement:
-            case SyntaxKind.YieldExpression:
-            {
-                var func = Utilities.GetContainingFunctionOrNone(store, parent);
-                return ContextualReturnType(At(node, func), depth);
-            }
-            case SyntaxKind.ArrowFunction:
-                return store.Body(parent) == n ? ContextualReturnType(At(node, parent), depth) : Type.None;
-            case SyntaxKind.ObjectLiteralExpression:
-            {
-                // a method or accessor of an object literal
-                var objectContextualType = GetApproximateContextualType(At(node, parent), depth + 1);
-                return ContextualPropertyType(objectContextualType, At(node, store.Name(n)));
-            }
-            case SyntaxKind.ParenthesizedExpression:
-                return GetApproximateContextualType(At(node, parent), depth + 1);
-            case SyntaxKind.ConditionalExpression:
-                return store.Condition(parent) != n ? GetApproximateContextualType(At(node, parent), depth + 1) : Type.None;
-            case SyntaxKind.BinaryExpression:
-            {
-                var op = store.Kind(store.OperatorToken(parent));
-                if (op == SyntaxKind.EqualsToken)
-                {
-                    return store.Right(parent) == n ? CheckExpressionCached(At(node, store.Left(parent))) : Type.None;
-                }
-                if (op is SyntaxKind.BarBarToken or SyntaxKind.QuestionQuestionToken or SyntaxKind.AmpersandAmpersandToken)
-                {
-                    return GetApproximateContextualType(At(node, parent), depth + 1);
-                }
-                if (op == SyntaxKind.CommaToken)
-                {
-                    return store.Right(parent) == n ? GetApproximateContextualType(At(node, parent), depth + 1) : Type.None;
-                }
-                return Type.None;
-            }
-            case SyntaxKind.PropertyAssignment:
-            {
-                if (store.Initializer(parent) != n)
-                {
-                    return Type.None;
-                }
-                var objectContextualType = GetApproximateContextualType(At(node, store.Parent(parent)), depth + 1);
-                return ContextualPropertyType(objectContextualType, At(node, store.Name(parent)));
-            }
-            case SyntaxKind.ArrayLiteralExpression:
-            {
-                var arrayContextualType = GetApproximateContextualType(At(node, parent), depth + 1);
-                if (arrayContextualType.IsNone || arrayContextualType == unknownContextualType)
-                {
-                    return arrayContextualType;
-                }
-                if (IsUnsupportedType(arrayContextualType))
-                {
-                    return unknownContextualType; // (tuples: C3)
-                }
-                if ((Types.ObjectFlagsOf(arrayContextualType) & ObjectFlags.Reference) != 0 &&
-                    Types.Object(arrayContextualType).Target is var target && (target == globalArrayType || target == globalReadonlyArrayType))
-                {
-                    return GetTypeArguments(arrayContextualType)[0];
-                }
-                return (Types.Flags(arrayContextualType) & TypeFlags.Any) != 0 ? Type.None : unknownContextualType;
-            }
-            case SyntaxKind.SpreadElement:
-                return GetApproximateContextualType(At(node, parent), depth + 1) is var spread && !spread.IsNone ? unknownContextualType : Type.None;
-            case SyntaxKind.AsExpression:
-            case SyntaxKind.TypeAssertionExpression:
-            case SyntaxKind.SatisfiesExpression:
-                return Utilities.IsConstAssertion(store, parent) ? Type.None : GetTypeFromTypeNode(At(node, store.Type(parent)));
-            case SyntaxKind.CallExpression:
-            case SyntaxKind.NewExpression:
-            {
-                var arguments = store.Arguments(parent);
-                var argIndex = arguments.IsNone ? -1 : store.Nodes(arguments).IndexOf(n);
-                if (argIndex < 0)
-                {
-                    return Type.None;
-                }
-                var calleeType = CheckExpressionCached(At(node, store.Expression(parent)));
-                if (IsUncertainExpression(At(node, store.Expression(parent))))
-                {
-                    return unknownContextualType;
-                }
-                if ((Types.Flags(calleeType) & TypeFlags.Any) != 0)
-                {
-                    return Type.None;
-                }
-                var signatures = GetSignaturesOfType(calleeType, store.Kind(parent) == SyntaxKind.NewExpression ? SignatureKind.Construct : SignatureKind.Call);
-                if (signatures.Count == 0)
-                {
-                    // (signatures of unions, intersections and type variables: C3/C5)
-                    return (Types.Flags(calleeType) & (TypeFlags.UnionOrIntersection | TypeFlags.Instantiable)) != 0 || IsUnsupportedType(calleeType) ? unknownContextualType : Type.None;
-                }
-                if (signatures.Count > 1 || Signatures.Record(signatures[0]).TypeParameters.Count > 0)
-                {
-                    return unknownContextualType; // (overloads and inference: C5/C6)
-                }
-                var parameters = Signatures.Record(signatures[0]).Parameters ?? [];
-                if (argIndex < parameters.Length)
-                {
-                    var parameterDeclaration = ValueDeclarationOf(parameters[argIndex]);
-                    if (!parameterDeclaration.IsNone && Kind(parameterDeclaration) == SyntaxKind.Parameter && !StoreOf(parameterDeclaration).DotDotDotToken(parameterDeclaration.Node).IsNone)
-                    {
-                        return unknownContextualType;
-                    }
-                    return GetTypeOfSymbol(parameters[argIndex]);
-                }
-                if (parameters.Length > 0 && (Signatures.Record(signatures[0]).Flags & SignatureFlags.HasRestParameter) != 0)
-                {
-                    return unknownContextualType;
-                }
-                return Type.None;
-            }
-            case SyntaxKind.Decorator:
-                return unknownContextualType;
-            case SyntaxKind.JsxExpression:
-            case SyntaxKind.JsxAttribute:
-                return HasJsxContext(node) ? unknownContextualType : Type.None;
-            default:
-                return Type.None;
-        }
-    }
-
-    // the contextual return type of a function: its annotation, or (unknown) when the function is contextually typed
-    private Type ContextualReturnType(NodeRef func, int depth)
-    {
-        if (func.IsNone)
-        {
-            return Type.None;
-        }
-        var store = StoreOf(func);
-        var typeNode = store.Type(func.Node);
-        if (!typeNode.IsNone)
-        {
-            if (!store.AsteriskToken(func.Node).IsNone || Utilities.HasSyntacticModifierUncached(store, func.Node, ModifierFlags.Async))
-            {
-                return unknownContextualType; // (the awaited or iterated return type: C5)
-            }
-            var annotated = GetTypeFromTypeNode(At(func, typeNode));
-            return (Types.Flags(annotated) & TypeFlags.Any) != 0 ? Type.None : annotated;
-        }
-        if (IsContextSensitiveFunctionOrObjectLiteralMethod(store, func.Node))
-        {
-            var contextualType = GetApproximateContextualType(func, depth + 1);
-            if (contextualType == unknownContextualType || (!contextualType.IsNone && MayHaveContextualSignature(contextualType)))
-            {
-                return unknownContextualType;
+                container = GetSuperContainer(store, container, stopOnFunctions: true);
             }
         }
-        // getContextualReturnType: the contextual type of an immediately invoked function's call
-        var iife = Utilities.GetImmediatelyInvokedFunctionExpression(store, func.Node);
-        if (!iife.IsNone)
+        if (container.IsNone || !IsLegalUsageOfSuperExpression(store, container, isCallExpression))
         {
-            var iifeContextualType = GetApproximateContextualType(At(func, iife), depth + 1);
-            return iifeContextualType.IsNone ? Type.None : unknownContextualType;
-        }
-        return Type.None;
-    }
-
-    // getTypeOfPropertyOfContextualType: the property's type (or a string index signature's)
-    private Type ContextualPropertyType(Type objectContextualType, NodeRef name)
-    {
-        if (objectContextualType.IsNone || objectContextualType == unknownContextualType)
-        {
-            return objectContextualType;
-        }
-        if ((Types.Flags(objectContextualType) & TypeFlags.Any) != 0)
-        {
-            return Type.None;
-        }
-        if ((Types.Flags(objectContextualType) & (TypeFlags.Union | TypeFlags.Intersection | TypeFlags.Instantiable)) != 0 || IsUnsupportedType(objectContextualType))
-        {
-            return unknownContextualType;
-        }
-        if (name.IsNone)
-        {
-            return Type.None;
-        }
-        var store = StoreOf(name);
-        if (store.Kind(name.Node) is not (SyntaxKind.Identifier or SyntaxKind.StringLiteral or SyntaxKind.NumericLiteral or SyntaxKind.PrivateIdentifier))
-        {
-            return unknownContextualType;
-        }
-        var text = store.Kind(name.Node) == SyntaxKind.Identifier || store.Kind(name.Node) == SyntaxKind.PrivateIdentifier
-            ? store.Texts.GetString(store.EscapedText(name.Node))!
-            : Utilities.EscapeLeadingUnderscores(store.Texts.GetString(store.Text(name.Node))!);
-        var prop = GetPropertyOfType(objectContextualType, text);
-        if (!prop.IsNone)
-        {
-            return GetTypeOfSymbol(prop);
-        }
-        foreach (var info in GetIndexInfosOfType(objectContextualType))
-        {
-            if ((Types.Flags(info.KeyType) & TypeFlags.String) != 0)
+            // issue more specific error if super is used in computed property name
+            // class A { foo() { return "1" }}
+            // class B {
+            //     [super.foo()]() {}
+            // }
+            var current = Node.None;
+            for (var a = n; !a.IsNone; a = store.Parent(a))
             {
-                return info.Type;
-            }
-        }
-        return Type.None;
-    }
-
-    private bool HasSignatures(Type type, SignatureKind kind = SignatureKind.Call)
-    {
-        if ((Types.Flags(type) & TypeFlags.Any) != 0)
-        {
-            return false;
-        }
-        if ((Types.Flags(type) & TypeFlags.Union) != 0)
-        {
-            foreach (var t in Types.Elements(Types.Union(type).Types).ToArray())
-            {
-                if (HasSignatures(t, kind))
+                if (a == container)
                 {
-                    return true;
+                    break;
+                }
+                if (store.Kind(a) == SyntaxKind.ComputedPropertyName)
+                {
+                    current = a;
+                    break;
                 }
             }
-            return false;
-        }
-        return (Types.Flags(type) & (TypeFlags.Object | TypeFlags.Intersection | TypeFlags.TypeParameter)) != 0 && GetSignaturesOfType(type, kind).Count > 0;
-    }
-
-    /// <summary>checker.ts checkPropertyAccessExpression (the resolved-member part; errors: TODO(C5)).</summary>
-    internal Type CheckPropertyAccessExpression(NodeRef node)
-    {
-        var store = StoreOf(node);
-        var left = At(node, store.Expression(node.Node));
-        var leftType = store.Kind(left.Node) == SyntaxKind.SuperKeyword ? CheckSuperExpressionForMembers(left) : CheckExpressionCached(left);
-        return CheckPropertyAccessOnType(node, leftType, At(node, store.Name(node.Node)));
-    }
-
-    // checker.ts checkPropertyAccessExpressionOrQualifiedName (TODO(C5): diagnostics, private names, index signatures,
-    // optional chains, flow types)
-    private Type CheckPropertyAccessOnType(NodeRef node, Type leftType, NodeRef right)
-    {
-        var store = StoreOf(right);
-        string name;
-        if (store.Kind(right.Node) == SyntaxKind.PrivateIdentifier)
-        {
-            // lookupSymbolForPrivateIdentifierDeclaration: the member of a containing class declared with this name
-            var lexicallyScopedSymbol = LookupSymbolForPrivateIdentifierDeclaration(right);
-            if (lexicallyScopedSymbol.IsNone)
+            if (!current.IsNone)
             {
+                Error(node, Diagnostics.super_cannot_be_referenced_in_a_computed_property_name);
+            }
+            else if (isCallExpression)
+            {
+                Error(node, Diagnostics.Super_calls_are_not_permitted_outside_constructors_or_in_nested_functions_inside_constructors);
+            }
+            else if (container.IsNone || store.Parent(container).IsNone || !(Utilities.IsClassLike(store, store.Parent(container)) || store.Kind(store.Parent(container)) == SyntaxKind.ObjectLiteralExpression))
+            {
+                Error(node, Diagnostics.super_can_only_be_referenced_in_members_of_derived_classes_or_object_literal_expressions);
+            }
+            else
+            {
+                Error(node, Diagnostics.super_property_access_is_permitted_only_in_a_constructor_member_function_or_member_accessor_of_a_derived_class);
+            }
+            return errorType;
+        }
+        if (!isCallExpression && store.Kind(immediateContainer) == SyntaxKind.Constructor)
+        {
+            CheckThisBeforeSuper(node, At(node, container), Diagnostics.super_must_be_called_before_accessing_a_property_of_super_in_the_constructor_of_a_derived_class);
+        }
+        var isSuperStatic = Utilities.IsStatic(store, container) || isCallExpression;
+        NodeLinks.Get(node).Flags |= isSuperStatic ? NodeCheckFlags.SuperStatic : NodeCheckFlags.SuperInstance;
+        if (store.Kind(store.Parent(container)) == SyntaxKind.ObjectLiteralExpression)
+        {
+            if (languageVersion < ScriptTarget.ES2015)
+            {
+                Error(node, Diagnostics.super_is_only_allowed_in_members_of_object_literal_expressions_when_option_target_is_ES2015_or_higher);
                 return errorType;
             }
-            name = NameOf(lexicallyScopedSymbol);
-        }
-        else if (store.Kind(right.Node) == SyntaxKind.Identifier)
-        {
-            name = store.Texts.GetString(store.EscapedText(right.Node))!;
-        }
-        else
-        {
-            return errorType;
-        }
-        if (IsErrorType(leftType))
-        {
-            // isAnyLike: the error type itself, not the unresolved alias the left side was printed with
-            return errorType;
-        }
-        var leftNode = StoreOf(node).Kind(node.Node) == SyntaxKind.PropertyAccessExpression ? StoreOf(node).Expression(node.Node) : StoreOf(node).Left(node.Node);
-        var leftUncertain = IsUncertainExpression(At(node, leftNode));
-        if (leftUncertain)
-        {
-            uncertainExpressions.Add(node);
-        }
-        if ((Types.Flags(leftType) & TypeFlags.Any) != 0)
-        {
-            return leftType;
-        }
-        if ((Types.Flags(leftType) & TypeFlags.Unknown) != 0)
-        {
-            // checkNonNullExpression reports 18046 unless the reference is narrowed (TODO(C7)); no diagnostics in C1
-            uncertainExpressions.Add(node);
-            return errorType;
-        }
-        var apparentType = GetApparentType(GetNonNullableType(leftType));
-        var prop = GetPropertyOfType(apparentType, name);
-        if (prop.IsNone)
-        {
-            if (Types.Symbol(leftType) == globalThisSymbol && store.Kind(right.Node) == SyntaxKind.Identifier && !HasApplicableIndexInfoForName(apparentType, name))
-            {
-                var globalThisMember = globals.Get(name);
-                if (!globalThisMember.IsNone && (SymbolFlagsOf(globalThisMember) & SymbolFlags.BlockScoped) != 0)
-                {
-                    Error(right, Diagnostics.Property_0_does_not_exist_on_type_1, name, TypeToString(leftType));
-                }
-                else if (noImplicitAny)
-                {
-                    Error(right, Diagnostics.Element_implicitly_has_an_any_type_because_type_0_has_no_index_signature, TypeToString(leftType));
-                }
-                return anyType;
-            }
-            if (!leftUncertain && store.Kind(right.Node) == SyntaxKind.Identifier && name.Length > 0 && !IsUnsupportedType(apparentType) && !HasApplicableIndexInfoForName(apparentType, name) && !CheckAndReportErrorForExtendingInterface(node))
-            {
-                var isThisTypeParameter = (Types.Flags(leftType) & TypeFlags.TypeParameter) != 0 && Types.TypeParameter(leftType).IsThisType;
-                ReportNonexistentProperty(right, isThisTypeParameter ? apparentType : leftType);
-            }
-            return errorType;
-        }
-        SymbolNodeLinks.Get(node).ResolvedSymbol = prop;
-        if (store.Kind(node.Node) == SyntaxKind.PropertyAccessExpression || store.Kind(node.Node) == SyntaxKind.QualifiedName)
-        {
-            SymbolNodeLinks.Get(right).ResolvedSymbol = prop;
-        }
-        // markPropertyAsReferenced(prop, node, isSelfTypeAccess(left, parentSymbol))
-        var left = store.Kind(node.Node) == SyntaxKind.PropertyAccessExpression ? store.Expression(node.Node) : store.Left(node.Node);
-        var isSelfTypeAccess = store.Kind(left) == SyntaxKind.ThisKeyword ||
-            (store.Kind(left) == SyntaxKind.Identifier && SymbolNodeLinks.Has(At(node, left)) && SymbolNodeLinks.Get(At(node, left)).ResolvedSymbol == GetParentOfSymbol(prop));
-        MarkPropertyAsReferenced(prop, node, isSelfTypeAccess);
-        if ((TransientCheckFlags(prop) & CheckFlags.SyntheticProperty) != 0)
-        {
-            // the type of a synthetic union or intersection property is exact since C4, but calls and other uses of it
-            // need the signatures of union and intersection types (resolveUnionTypeMembers: C5)
-            uncertainExpressions.Add(node);
-        }
-        return GetTypeOfSymbol(prop);
-    }
-
-    // TODO(C5): checkElementAccessExpression / getIndexedAccessType. C1: literal property names (the property's type),
-    // array element types and index signatures of non-generic types; anything else is any and marked uncertain. No
-    // diagnostics are reported.
-    private Type CheckElementAccessExpression(NodeRef node)
-    {
-        var store = StoreOf(node);
-        var n = node.Node;
-        var objectNode = At(node, store.Expression(n));
-        var objectType = CheckExpression(objectNode);
-        var indexType = CheckExpression(At(node, store.ArgumentExpression(n)));
-        if ((Types.Flags(objectType) & TypeFlags.Any) != 0)
-        {
-            return IsErrorType(objectType) ? errorType : anyType;
-        }
-        if (IsUncertainExpression(objectNode) || IsUnsupportedType(objectType))
-        {
-            uncertainExpressions.Add(node);
+            // for object literal assume that type of 'super' is 'any'
             return anyType;
         }
-        var apparentType = GetApparentType(GetNonNullableType(objectType));
-        var indexFlags = Types.Flags(indexType);
-        string? name = (indexFlags & TypeFlags.StringLiteral) != 0 ? (string)Types.Literal(indexType).Value!
-            : (indexFlags & TypeFlags.NumberLiteral) != 0 ? JsNumber.ToString((double)Types.Literal(indexType).Value!)
-            : (indexFlags & TypeFlags.UniqueESSymbol) != 0 ? GetPropertyNameFromType(indexType) // late-bound members (module C3)
-            : null;
-        if (name is not null)
+        // at this point the only legal case for parent is ClassLikeDeclaration
+        var classLikeDeclaration = At(node, store.Parent(container));
+        if (GetBaseTypeNodeOfClass(classLikeDeclaration).IsNone)
         {
-            var prop = GetPropertyOfType(apparentType, name);
-            if (!prop.IsNone)
-            {
-                return GetTypeOfSymbol(prop);
-            }
+            Error(node, Diagnostics.super_can_only_be_referenced_in_a_derived_class);
+            return errorType;
         }
-        var isNumericIndex = (indexFlags & TypeFlags.NumberLike) != 0;
-        if ((Types.Record(apparentType).ObjectFlags & ObjectFlags.Reference) != 0 && !Types.Object(apparentType).Target.IsNone)
+        if (ClassDeclarationExtendsNull(classLikeDeclaration))
         {
-            var target = Types.Object(apparentType).Target;
-            if ((target == globalArrayType || target == globalReadonlyArrayType) && isNumericIndex)
-            {
-                var typeArguments = GetTypeArguments(apparentType);
-                if (typeArguments.Length > 0)
-                {
-                    return typeArguments[0];
-                }
-            }
+            return isCallExpression ? errorType : nullWideningType;
         }
-        if ((Types.Flags(apparentType) & TypeFlags.Object) != 0 && (indexFlags & (TypeFlags.StringLike | TypeFlags.NumberLike)) != 0)
+        var classType = GetDeclaredTypeOfSymbol(GetSymbolOfDeclaration(classLikeDeclaration));
+        var baseTypes = GetBaseTypes(classType);
+        if (baseTypes.Count == 0)
         {
-            IndexInfo? stringInfo = null;
-            foreach (var info in GetIndexInfosOfType(apparentType))
-            {
-                var keyFlags = Types.Flags(info.KeyType);
-                if ((keyFlags & TypeFlags.Number) != 0 && (isNumericIndex || (name is not null && IsNumericLiteralName(name))))
-                {
-                    return info.Type;
-                }
-                if ((keyFlags & TypeFlags.String) != 0)
-                {
-                    stringInfo = info;
-                }
-            }
-            if (stringInfo is not null)
-            {
-                return stringInfo.Type;
-            }
+            return errorType;
         }
-        uncertainExpressions.Add(node);
-        return anyType;
+        var baseClassType = baseTypes[0];
+        if (store.Kind(container) == SyntaxKind.Constructor && IsInConstructorArgumentInitializer(store, n, container))
+        {
+            // issue custom error message for super property access in constructor arguments (to be aligned with old compiler)
+            Error(node, Diagnostics.super_cannot_be_referenced_in_constructor_arguments);
+            return errorType;
+        }
+        return isSuperStatic ? GetBaseConstructorTypeOfClass(classType) : GetTypeWithThisArgument(baseClassType, ThisTypeOfClassOrInterface(classType));
     }
 
-    // checker.ts getApplicableIndexInfoForName: an index signature for string keys (or numbers for numeric names)
-    private bool HasApplicableIndexInfoForName(Type type, string name)
+    // checker.ts checkSuperExpression's isLegalUsageOfSuperExpression
+    private static bool IsLegalUsageOfSuperExpression(NodeStore store, Node container, bool isCallExpression)
     {
-        foreach (var info in GetIndexInfosOfType(type))
+        if (isCallExpression)
         {
-            var keyFlags = Types.Flags(info.KeyType);
-            if ((keyFlags & (TypeFlags.String | TypeFlags.Any)) != 0 || ((keyFlags & TypeFlags.Number) != 0 && IsNumericLiteralName(name)) ||
-                (keyFlags & (TypeFlags.TemplateLiteral | TypeFlags.StringMapping)) != 0)
+            // TS 1.0 SPEC (April 2014): 4.8.1
+            // Super calls are only permitted in constructors of derived classes
+            return store.Kind(container) == SyntaxKind.Constructor;
+        }
+        // TS 1.0 SPEC (April 2014)
+        // 'super' property access is allowed
+        // - In a constructor, instance member function, instance member accessor, or instance member variable initializer where this references a derived class instance
+        // - In a static member function or static member accessor
+        // topmost container must be something that is directly nested in the class declaration\object literal expression
+        var parent = store.Parent(container);
+        if (Utilities.IsClassLike(store, parent) || store.Kind(parent) == SyntaxKind.ObjectLiteralExpression)
+        {
+            if (Utilities.IsStatic(store, container))
+            {
+                return store.Kind(container) is SyntaxKind.MethodDeclaration or SyntaxKind.MethodSignature or SyntaxKind.GetAccessor or SyntaxKind.SetAccessor
+                    or SyntaxKind.PropertyDeclaration or SyntaxKind.ClassStaticBlockDeclaration;
+            }
+            return store.Kind(container) is SyntaxKind.MethodDeclaration or SyntaxKind.MethodSignature or SyntaxKind.GetAccessor or SyntaxKind.SetAccessor
+                or SyntaxKind.PropertyDeclaration or SyntaxKind.PropertySignature or SyntaxKind.Constructor;
+        }
+        return false;
+    }
+
+    // utilities.ts getSuperContainer
+    private static Node GetSuperContainer(NodeStore store, Node node, bool stopOnFunctions)
+    {
+        while (true)
+        {
+            node = store.Parent(node);
+            if (node.IsNone)
+            {
+                return Node.None;
+            }
+            switch (store.Kind(node))
+            {
+                case SyntaxKind.ComputedPropertyName:
+                    node = store.Parent(node);
+                    break;
+                case SyntaxKind.FunctionDeclaration:
+                case SyntaxKind.FunctionExpression:
+                case SyntaxKind.ArrowFunction:
+                    if (!stopOnFunctions)
+                    {
+                        continue;
+                    }
+                    return node;
+                case SyntaxKind.PropertyDeclaration:
+                case SyntaxKind.PropertySignature:
+                case SyntaxKind.MethodDeclaration:
+                case SyntaxKind.MethodSignature:
+                case SyntaxKind.Constructor:
+                case SyntaxKind.GetAccessor:
+                case SyntaxKind.SetAccessor:
+                case SyntaxKind.ClassStaticBlockDeclaration:
+                    return node;
+                case SyntaxKind.Decorator:
+                    // Decorators are always applied outside of the body of a class or method.
+                    if (store.Kind(store.Parent(node)) == SyntaxKind.Parameter && Utilities.IsClassElement(store, store.Parent(store.Parent(node))))
+                    {
+                        // If the decorator's parent is a Parameter, we resolve the this container from
+                        // the grandparent class declaration.
+                        node = store.Parent(store.Parent(node));
+                    }
+                    else if (Utilities.IsClassElement(store, store.Parent(node)))
+                    {
+                        // If the decorator's parent is a class element, we resolve the 'this' container
+                        // from the parent class declaration.
+                        node = store.Parent(node);
+                    }
+                    break;
+            }
+        }
+    }
+
+    // checker.ts isInConstructorArgumentInitializer
+    private static bool IsInConstructorArgumentInitializer(NodeStore store, Node node, Node constructorDecl)
+    {
+        for (var n = node; !n.IsNone; n = store.Parent(n))
+        {
+            if (Utilities.IsFunctionLikeDeclaration(store, n))
+            {
+                return false;
+            }
+            if (store.Kind(n) == SyntaxKind.Parameter && store.Parent(n) == constructorDecl)
             {
                 return true;
             }
@@ -1007,301 +2024,20 @@ internal sealed partial class Checker
         return false;
     }
 
-    private readonly HashSet<(NodeRef, Type)> nonExistentPropertyReports = [];
-    // checker.ts reportNonexistentProperty (C1: object and primitive types; unions are left to the narrowing of C7, the
-    // lib suggestions and unchecked JavaScript to C9)
-    private void ReportNonexistentProperty(NodeRef propNode, Type containingType)
-    {
-        if ((Types.Flags(containingType) & (TypeFlags.Union | TypeFlags.Intersection | TypeFlags.Instantiable)) != 0)
-        {
-            return;
-        }
-        if (!nonExistentPropertyReports.Add((propNode, containingType)))
-        {
-            return;
-        }
-        var store = StoreOf(propNode);
-        var propName = Utilities.DeclarationNameToString(store, propNode.Node);
-        var escapedName = store.Texts.GetString(store.EscapedText(propNode.Node))!;
-        DiagnosticMessageChain chain;
-        ProgramRelatedInformation? relatedInfo = null;
-        if (TypeHasStaticProperty(escapedName, containingType))
-        {
-            var typeName = TypeToString(containingType);
-            chain = ProgramDiagnostics.ChainDiagnosticMessages(null, Diagnostics.Property_0_does_not_exist_on_type_1_Did_you_mean_to_access_the_static_member_2_instead, propName, typeName, typeName + "." + propName);
-        }
-        else
-        {
-            var promisedType = GetPromisedTypeOfPromise(containingType);
-            if (!promisedType.IsNone && !GetPropertyOfType(promisedType, escapedName).IsNone)
-            {
-                chain = ProgramDiagnostics.ChainDiagnosticMessages(null, Diagnostics.Property_0_does_not_exist_on_type_1, propName, TypeToString(containingType));
-                relatedInfo = CreateRelatedForNode(propNode, Diagnostics.Did_you_forget_to_use_await);
-            }
-            else
-            {
-                var container = TypeToString(containingType);
-                var suggestion = GetSuggestedSymbolForNonexistentProperty(escapedName, containingType);
-                if (!suggestion.IsNone)
-                {
-                    var suggestedName = SymbolName(suggestion);
-                    chain = ProgramDiagnostics.ChainDiagnosticMessages(null, Diagnostics.Property_0_does_not_exist_on_type_1_Did_you_mean_2, propName, container, suggestedName);
-                    var suggestionValueDeclaration = ValueDeclarationOf(suggestion);
-                    if (!suggestionValueDeclaration.IsNone)
-                    {
-                        relatedInfo = CreateRelatedForNode(suggestionValueDeclaration, Diagnostics._0_is_declared_here, suggestedName);
-                    }
-                }
-                else
-                {
-                    chain = ProgramDiagnostics.ChainDiagnosticMessages(null, Diagnostics.Property_0_does_not_exist_on_type_1, propName, container);
-                }
-            }
-        }
-        var diagnostic = CreateDiagnosticForNode(propNode, Diagnostics.Property_0_does_not_exist_on_type_1, propName, "");
-        diagnostic.Code = chain.Code;
-        diagnostic.Category = chain.Category;
-        diagnostic.MessageText = chain.MessageText;
-        if (relatedInfo is not null)
-        {
-            diagnostic.RelatedInformation = [relatedInfo];
-        }
-        diagnostics.Add(diagnostic);
-    }
+    // ---- C1's "uncertain" mechanism (TODO(C6/C9): removed when inference and JSX are exact) ----
 
-    // checker.ts typeHasStaticProperty
-    private bool TypeHasStaticProperty(string propName, Type containingType)
-    {
-        var symbol = Types.Symbol(containingType);
-        if (symbol.IsNone)
-        {
-            return false;
-        }
-        var prop = GetPropertyOfType(GetTypeOfSymbol(symbol), propName);
-        if (prop.IsNone)
-        {
-            return false;
-        }
-        var valueDeclaration = ValueDeclarationOf(prop);
-        return !valueDeclaration.IsNone && Utilities.IsStatic(StoreOf(valueDeclaration), valueDeclaration.Node);
-    }
-
-    // checker.ts getPromisedTypeOfPromise (a reference to the global Promise type: its type argument)
-    private Type GetPromisedTypeOfPromise(Type type)
-    {
-        if ((Types.ObjectFlagsOf(type) & ObjectFlags.Reference) == 0 || deferredGlobalPromiseType.IsNone)
-        {
-            return Type.None;
-        }
-        var target = Types.Object(type).Target;
-        return target == deferredGlobalPromiseType ? GetTypeArguments(type)[0] : Type.None;
-    }
-
-    // checker.ts getSuggestedSymbolForNonexistentProperty (isValidPropertyAccessForCompletions: accessibility, C8)
-    private SymbolRef GetSuggestedSymbolForNonexistentProperty(string name, Type containingType) =>
-        GetSpellingSuggestionForName(Utilities.UnescapeLeadingUnderscores(name), GetPropertiesOfType(containingType), SymbolFlags.Value);
-
-    // checker.ts lookupSymbolForPrivateIdentifierDeclaration: the containing classes from the inside out; the member whose
-    // declaration name is this private identifier (the binder names it after the class's symbol id)
-    private SymbolRef LookupSymbolForPrivateIdentifierDeclaration(NodeRef propName)
-    {
-        var store = StoreOf(propName);
-        var text = store.Texts.Span(store.EscapedText(propName.Node)).ToString();
-        for (var containingClass = Utilities.GetContainingClass(store, propName.Node); !containingClass.IsNone; containingClass = Utilities.GetContainingClass(store, containingClass))
-        {
-            var classSymbol = GetSymbolOfDeclaration(At(propName, containingClass));
-            foreach (var table in (SymTable?[])[MembersOf(classSymbol), ExportsOf(classSymbol)])
-            {
-                if (table is null)
-                {
-                    continue;
-                }
-                for (var i = 0; i < table.Count; i++)
-                {
-                    var member = table.ValueAt(i);
-                    var declaration = ValueDeclarationOf(member);
-                    if (declaration.IsNone)
-                    {
-                        continue;
-                    }
-                    var ds = StoreOf(declaration);
-                    var memberName = Utilities.DeclarationNameField(ds, declaration.Node);
-                    if (!memberName.IsNone && ds.Kind(memberName) == SyntaxKind.PrivateIdentifier && ds.Texts.Equals(ds.EscapedText(memberName), text))
-                    {
-                        return member;
-                    }
-                }
-            }
-        }
-        return SymbolRef.None;
-    }
-
-    // checker.ts checkSuperExpression (C1: the types; the diagnostics of invalid super uses: TODO(C5)): in a call and in
-    // static members the base constructor type, elsewhere the base class instance type
-    private Type CheckSuperExpressionForMembers(NodeRef node)
-    {
-        var store = StoreOf(node);
-        var parent = store.Parent(node.Node);
-        var isCallExpression = store.Kind(parent) == SyntaxKind.CallExpression && store.Expression(parent) == node.Node;
-        var container = Utilities.GetThisContainer(store, node.Node, includeArrowFunctions: true, includeClassComputedPropertyName: false);
-        // skip arrow functions
-        while (!container.IsNone && store.Kind(container) == SyntaxKind.ArrowFunction)
-        {
-            container = Utilities.GetThisContainer(store, container, includeArrowFunctions: true, includeClassComputedPropertyName: false);
-        }
-        var classDecl = Utilities.GetContainingClass(store, node.Node);
-        if (classDecl.IsNone)
-        {
-            return errorType;
-        }
-        var classType = GetDeclaredTypeOfClassOrInterface(GetSymbolOfDeclaration(At(node, classDecl)));
-        var baseTypes = GetBaseTypes(classType);
-        if (baseTypes.Count == 0)
-        {
-            return errorType;
-        }
-        return isCallExpression || (!container.IsNone && Utilities.IsStatic(store, container)) ? GetBaseConstructorTypeOfClass(classType) : baseTypes[0];
-    }
-
-    /// <summary>checker.ts checkQualifiedName (TODO(C5): diagnostics).</summary>
-    internal Type CheckQualifiedName(NodeRef node)
-    {
-        var store = StoreOf(node);
-        var left = At(node, store.Left(node.Node));
-        var leftType = Utilities.IsPartOfTypeQuery(store, node.Node) && Utilities.IsThisIdentifier(store, left.Node) ? CheckThisExpression(left) : CheckEntityNameExpressionForTypeQuery(left);
-        return CheckPropertyAccessOnType(node, leftType, At(node, store.Right(node.Node)));
-    }
-
-    // TODO(C5): resolveCall / overload resolution. C1: the return type of the first signature of the callee (calls to
-    // non-generic declarations with a declared return type), any for untyped calls.
-    private Type CheckCallExpression(NodeRef node)
-    {
-        var store = StoreOf(node);
-        var isNew = store.Kind(node.Node) == SyntaxKind.NewExpression;
-        var callee = At(node, store.Expression(node.Node));
-        Type funcType;
-        if (store.Kind(callee.Node) is SyntaxKind.SuperKeyword or SyntaxKind.ImportKeyword)
-        {
-            funcType = errorType;
-        }
-        else
-        {
-            funcType = CheckExpressionCached(callee);
-        }
-        var arguments = store.Arguments(node.Node);
-        if (!arguments.IsNone)
-        {
-            foreach (var argument in store.Nodes(arguments))
-            {
-                CheckExpressionCached(At(node, argument));
-            }
-        }
-        if (store.Kind(callee.Node) == SyntaxKind.SuperKeyword)
-        {
-            // checkCallExpression: a super call is of type void (TODO(C5): resolveCallExpression's super checks)
-            return voidType;
-        }
-        if (store.Kind(callee.Node) == SyntaxKind.ImportKeyword)
-        {
-            // checkImportCallExpression: the module reference (TODO(C5): the Promise of the module type)
-            if (!arguments.IsNone && store.Length(arguments) > 0 && Utilities.IsStringLiteralLike(store, store.Element(arguments, 0)))
-            {
-                ResolveExternalModuleName(node, At(node, store.Element(arguments, 0)));
-            }
-            return anyType;
-        }
-        if (IsErrorType(funcType))
-        {
-            return errorType;
-        }
-        if ((Types.Flags(funcType) & TypeFlags.Any) != 0)
-        {
-            if (IsUncertainExpression(callee))
-            {
-                uncertainExpressions.Add(node);
-            }
-            return anyType;
-        }
-        var signatures = GetSignaturesOfType(funcType, isNew ? SignatureKind.Construct : SignatureKind.Call);
-        if (signatures.Count == 0)
-        {
-            return errorType;
-        }
-        var typeArgumentNodes = store.TypeArguments(node.Node);
-        if (!typeArgumentNodes.IsNone && store.Length(typeArgumentNodes) > 0 && !IsUncertainExpression(callee))
-        {
-            // explicit type arguments: the first signature of a matching arity, instantiated with them (getSignatureInstantiation;
-            // the choice among several candidates is C5's overload resolution)
-            var typeArguments = new Type[store.Length(typeArgumentNodes)];
-            for (var i = 0; i < typeArguments.Length; i++)
-            {
-                typeArguments[i] = GetTypeFromTypeNode(At(node, store.Element(typeArgumentNodes, i)));
-            }
-            var candidates = signatures.FindAll(s =>
-            {
-                var typeParameters = Types.Elements(Signatures.Record(s).TypeParameters).ToArray();
-                return typeArguments.Length >= GetMinTypeArgumentCount(typeParameters) && typeArguments.Length <= typeParameters.Length;
-            });
-            if (candidates.Count > 0)
-            {
-                if (candidates.Count > 1)
-                {
-                    uncertainExpressions.Add(node);
-                }
-                return GetReturnTypeOfSignature(GetSignatureInstantiation(candidates[0], typeArguments, Utilities.IsInJSFile(store, node.Node)));
-            }
-        }
-        var signature = signatures[0];
-        if (signatures.Count > 1 || Signatures.Record(signature).TypeParameters.Count > 0 || IsUncertainExpression(callee))
-        {
-            // TODO(C5/C6): overload resolution and the inference of type arguments. C1 takes the first signature's
-            // return type (its members name the symbols an instantiation would) and marks the result as uncertain, so
-            // no diagnostics are derived from it.
-            uncertainExpressions.Add(node);
-        }
-        var returnType = GetReturnTypeOfSignature(signature);
-        if ((Types.Flags(returnType) & TypeFlags.ESSymbolLike) != 0 && IsSymbolOrSymbolForCall(node))
-        {
-            // checkCallExpression: `const s = Symbol()` declares a unique symbol (module C3)
-            var parent = Parent(node);
-            while (Kind(parent) == SyntaxKind.ParenthesizedExpression)
-            {
-                parent = Parent(parent);
-            }
-            return GetESSymbolLikeTypeForNode(parent);
-        }
-        return returnType;
-    }
-
-    // checker.ts isSymbolOrSymbolForCall
-    private bool IsSymbolOrSymbolForCall(NodeRef node)
-    {
-        var store = StoreOf(node);
-        if (store.Kind(node.Node) != SyntaxKind.CallExpression)
-        {
-            return false;
-        }
-        var left = store.Expression(node.Node);
-        if (store.Kind(left) == SyntaxKind.PropertyAccessExpression && store.Texts.Equals(store.EscapedText(store.Name(left)), "for"))
-        {
-            left = store.Expression(left);
-        }
-        if (store.Kind(left) != SyntaxKind.Identifier || !store.Texts.Equals(store.EscapedText(left), "Symbol"))
-        {
-            return false;
-        }
-        // make sure `Symbol` is the global symbol
-        var globalESSymbol = GetGlobalSymbol("Symbol", SymbolFlags.Value, null);
-        return !globalESSymbol.IsNone && globalESSymbol == ResolveName(At(node, left), "Symbol", NodeRef.None, SymbolFlags.Value, null, isUse: false);
-    }
-
-    // Expressions whose C1 type is an approximation (calls without overload resolution and inference, and what is
-    // derived from them): their members resolve symbols, but no diagnostics are reported on them.
+    // Expressions whose type depends on an approximation (calls resolved with type arguments C6 does not infer yet,
+    // JSX contexts of C9 and what is derived from them): their members resolve symbols, but no diagnostics are
+    // reported on them.
     private readonly HashSet<NodeRef> uncertainExpressions = [];
     private readonly HashSet<SymbolRef> uncertainSymbols = [];
 
     private bool IsUncertainExpression(NodeRef node)
     {
+        if (node.IsNone)
+        {
+            return false;
+        }
         var store = StoreOf(node);
         var n = node.Node;
         while (store.Kind(n) is SyntaxKind.ParenthesizedExpression or SyntaxKind.NonNullExpression)
@@ -1311,407 +2047,7 @@ internal sealed partial class Checker
         return uncertainExpressions.Contains(At(node, n));
     }
 
-    // TODO(C5): checkBinaryLikeExpression. C1: the result types of the operators that do not depend on contextual or
-    // narrowed types.
-    private Type CheckBinaryExpression(NodeRef node)
-    {
-        var store = StoreOf(node);
-        var op = store.Kind(store.OperatorToken(node.Node));
-        var leftType = CheckExpression(At(node, store.Left(node.Node)));
-        var rightType = CheckExpression(At(node, store.Right(node.Node)));
-        switch (op)
-        {
-            case SyntaxKind.CommaToken:
-            case SyntaxKind.EqualsToken:
-                return rightType;
-            case SyntaxKind.LessThanToken:
-            case SyntaxKind.GreaterThanToken:
-            case SyntaxKind.LessThanEqualsToken:
-            case SyntaxKind.GreaterThanEqualsToken:
-            case SyntaxKind.EqualsEqualsToken:
-            case SyntaxKind.ExclamationEqualsToken:
-            case SyntaxKind.EqualsEqualsEqualsToken:
-            case SyntaxKind.ExclamationEqualsEqualsToken:
-            case SyntaxKind.InstanceOfKeyword:
-            case SyntaxKind.InKeyword:
-                return booleanType;
-            case SyntaxKind.PlusToken:
-            case SyntaxKind.PlusEqualsToken:
-                if ((Types.Flags(leftType) & TypeFlags.StringLike) != 0 || (Types.Flags(rightType) & TypeFlags.StringLike) != 0)
-                {
-                    return stringType;
-                }
-                if ((Types.Flags(leftType) & TypeFlags.NumberLike) != 0 && (Types.Flags(rightType) & TypeFlags.NumberLike) != 0)
-                {
-                    return numberType;
-                }
-                if ((Types.Flags(leftType) & TypeFlags.BigIntLike) != 0 && (Types.Flags(rightType) & TypeFlags.BigIntLike) != 0)
-                {
-                    return bigintType;
-                }
-                return (Types.Flags(leftType) & TypeFlags.Any) != 0 || (Types.Flags(rightType) & TypeFlags.Any) != 0 ? anyType : errorType;
-            case SyntaxKind.MinusToken:
-            case SyntaxKind.AsteriskToken:
-            case SyntaxKind.AsteriskAsteriskToken:
-            case SyntaxKind.SlashToken:
-            case SyntaxKind.PercentToken:
-            case SyntaxKind.LessThanLessThanToken:
-            case SyntaxKind.GreaterThanGreaterThanToken:
-            case SyntaxKind.GreaterThanGreaterThanGreaterThanToken:
-            case SyntaxKind.AmpersandToken:
-            case SyntaxKind.BarToken:
-            case SyntaxKind.CaretToken:
-            case SyntaxKind.MinusEqualsToken:
-            case SyntaxKind.AsteriskEqualsToken:
-            case SyntaxKind.AsteriskAsteriskEqualsToken:
-            case SyntaxKind.SlashEqualsToken:
-            case SyntaxKind.PercentEqualsToken:
-            case SyntaxKind.LessThanLessThanEqualsToken:
-            case SyntaxKind.GreaterThanGreaterThanEqualsToken:
-            case SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken:
-            case SyntaxKind.AmpersandEqualsToken:
-            case SyntaxKind.BarEqualsToken:
-            case SyntaxKind.CaretEqualsToken:
-                return (Types.Flags(leftType) & TypeFlags.BigIntLike) != 0 && (Types.Flags(rightType) & TypeFlags.BigIntLike) != 0 ? bigintType : numberType;
-            default:
-                // (&&, ||, ??, and their assignments: C5/C7)
-                return GetUnionType([leftType, rightType], UnionReduction.Subtype);
-        }
-    }
-
-    // TODO(C5): getReturnTypeFromBody (async and generator functions, contextual return types, never/void inference).
-    // C1: void without returned expressions, else the union of the widened types of the returned expressions.
-    private Type GetReturnTypeFromBody(NodeRef func)
-    {
-        var store = StoreOf(func);
-        var body = store.Body(func.Node);
-        if (body.IsNone)
-        {
-            return errorType;
-        }
-        var isAsync = Utilities.HasSyntacticModifierUncached(store, func.Node, ModifierFlags.Async);
-        if (!store.AsteriskToken(func.Node).IsNone)
-        {
-            return GetGeneratorReturnTypeFromBody(func, isAsync);
-        }
-        Type returnType;
-        if (store.Kind(body) != SyntaxKind.Block)
-        {
-            returnType = CheckExpressionCached(At(func, body));
-            if (IsConstContext(At(func, body)))
-            {
-                returnType = GetRegularTypeOfLiteralType(returnType);
-            }
-        }
-        else
-        {
-            // checkAndAggregateReturnExpressionTypes (functionHasImplicitReturn: the binder's end flow node; reachability: C7)
-            var types = new List<Type>();
-            var hasReturnWithNoExpression = !BindingOf(func.File).EndFlowNodeOf(func.Node).IsNone;
-            var hasReturnOfTypeNever = false;
-            ForEachReturnStatement(store, body, statement =>
-            {
-                var expression = store.Expression(statement);
-                if (expression.IsNone)
-                {
-                    hasReturnWithNoExpression = true;
-                    return;
-                }
-                var type = CheckExpressionCached(At(func, expression));
-                if ((Types.Flags(type) & TypeFlags.Never) != 0)
-                {
-                    hasReturnOfTypeNever = true;
-                }
-                if (!types.Contains(type))
-                {
-                    types.Add(type);
-                }
-            });
-            if (types.Count == 0 && !hasReturnWithNoExpression && (hasReturnOfTypeNever || MayReturnNever(store, func.Node)))
-            {
-                return isAsync ? CreatePromiseType(neverType) : neverType;
-            }
-            if (types.Count == 0)
-            {
-                return isAsync ? CreatePromiseType(voidType) : voidType;
-            }
-            if (strictNullChecks && hasReturnWithNoExpression && !types.Contains(undefinedType))
-            {
-                types.Add(undefinedType);
-            }
-            returnType = GetUnionType(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(types), UnionReduction.Subtype);
-        }
-        if (IsUnitType(returnType))
-        {
-            // getWidenedLiteralLikeTypeForContextualReturnTypeIfNeeded (contextual literal return types: C5)
-            returnType = GetRegularTypeOfLiteralType(GetWidenedLiteralType(returnType));
-        }
-        returnType = GetWidenedType(returnType);
-        return isAsync ? CreatePromiseType(returnType) : returnType;
-    }
-
-    // getReturnTypeFromBody for generators (C1: the yielded operand types; yield* delegation, contextual iteration types
-    // and async awaiting are TODO(C5/C6), and functions using yield* are typed any)
-    private Type GetGeneratorReturnTypeFromBody(NodeRef func, bool isAsync)
-    {
-        var store = StoreOf(func);
-        var body = store.Body(func.Node);
-        if (store.Kind(body) != SyntaxKind.Block || HasContextualType(func))
-        {
-            return anyType;
-        }
-        // checkAndAggregateReturnExpressionTypes
-        var returnTypes = new List<Type>();
-        var hasReturnWithNoExpression = !BindingOf(func.File).EndFlowNodeOf(func.Node).IsNone;
-        var hasReturnOfTypeNever = false;
-        ForEachReturnStatement(store, body, statement =>
-        {
-            var expression = store.Expression(statement);
-            if (expression.IsNone)
-            {
-                hasReturnWithNoExpression = true;
-                return;
-            }
-            var type = CheckExpressionCached(At(func, expression));
-            if ((Types.Flags(type) & TypeFlags.Never) != 0)
-            {
-                hasReturnOfTypeNever = true;
-            }
-            if (!returnTypes.Contains(type))
-            {
-                returnTypes.Add(type);
-            }
-        });
-        var fallbackReturnType = voidType;
-        Type returnType = Type.None;
-        if (returnTypes.Count == 0 && !hasReturnWithNoExpression && (hasReturnOfTypeNever || MayReturnNever(store, func.Node)))
-        {
-            fallbackReturnType = neverType;
-        }
-        else if (returnTypes.Count > 0)
-        {
-            if (strictNullChecks && hasReturnWithNoExpression && !returnTypes.Contains(undefinedType))
-            {
-                returnTypes.Add(undefinedType);
-            }
-            returnType = GetUnionType(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(returnTypes), UnionReduction.Subtype);
-        }
-        // checkAndAggregateYieldOperandTypes
-        var yieldTypes = new List<Type>();
-        var delegates = false;
-        ForEachYieldExpression(store, body, yield =>
-        {
-            if (!store.AsteriskToken(yield).IsNone)
-            {
-                delegates = true;
-                return;
-            }
-            var operand = store.Expression(yield);
-            var type = operand.IsNone ? undefinedWideningType : CheckExpressionCached(At(func, operand));
-            if (!yieldTypes.Contains(type))
-            {
-                yieldTypes.Add(type);
-            }
-        });
-        if (delegates || (isAsync && yieldTypes.Exists(t => (Types.Flags(t) & TypeFlags.Object) != 0)))
-        {
-            return anyType;
-        }
-        var yieldType = yieldTypes.Count > 0 ? GetUnionType(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(yieldTypes), UnionReduction.Subtype) : Type.None;
-        if (!yieldType.IsNone && IsUnitType(yieldType))
-        {
-            yieldType = GetRegularTypeOfLiteralType(GetWidenedLiteralType(yieldType));
-        }
-        if (!returnType.IsNone && IsUnitType(returnType))
-        {
-            returnType = GetRegularTypeOfLiteralType(GetWidenedLiteralType(returnType));
-        }
-        if (!yieldType.IsNone)
-        {
-            yieldType = GetWidenedType(yieldType);
-        }
-        if (!returnType.IsNone)
-        {
-            returnType = GetWidenedType(returnType);
-        }
-        return CreateGeneratorType(yieldType.IsNone ? neverType : yieldType, returnType.IsNone ? fallbackReturnType : returnType, unknownType, isAsync);
-    }
-
-    // checker.ts createGeneratorType
-    private Type CreateGeneratorType(Type yieldType, Type returnType, Type nextType, bool isAsync)
-    {
-        var generator = GetGlobalType(isAsync ? "AsyncGenerator" : "Generator", 3, reportErrors: false);
-        if (generator.IsNone || generator == emptyGenericType)
-        {
-            var iterableIterator = GetGlobalType(isAsync ? "AsyncIterableIterator" : "IterableIterator", 3, reportErrors: false);
-            if (!iterableIterator.IsNone && iterableIterator != emptyGenericType)
-            {
-                return CreateTypeReference(iterableIterator, [yieldType, returnType, nextType]);
-            }
-            GetGlobalType(isAsync ? "AsyncIterableIterator" : "IterableIterator", 3, reportErrors: true);
-            return emptyObjectType;
-        }
-        return CreateTypeReference(generator, [yieldType, returnType, nextType]);
-    }
-
-    // utilities.ts forEachYieldExpression
-    private static void ForEachYieldExpression(NodeStore store, Node body, Action<Node> visitor)
-    {
-        Traverse(body);
-
-        void Traverse(Node node)
-        {
-            switch (store.Kind(node))
-            {
-                case SyntaxKind.YieldExpression:
-                    visitor(node);
-                    var operand = store.Expression(node);
-                    if (!operand.IsNone)
-                    {
-                        Traverse(operand);
-                    }
-                    return;
-                case SyntaxKind.EnumDeclaration:
-                case SyntaxKind.InterfaceDeclaration:
-                case SyntaxKind.ModuleDeclaration:
-                case SyntaxKind.TypeAliasDeclaration:
-                    return;
-            }
-            if (Utilities.IsFunctionLike(store, node))
-            {
-                var name = store.Kind(node) is SyntaxKind.ArrowFunction or SyntaxKind.Constructor ? Node.None : store.Name(node);
-                if (!name.IsNone && store.Kind(name) == SyntaxKind.ComputedPropertyName)
-                {
-                    Traverse(store.Expression(name));
-                }
-                return;
-            }
-            if (!Utilities.IsPartOfTypeNode(store, node))
-            {
-                NodeVisitor.ForEachChild<object>(store, node, child =>
-                {
-                    Traverse(child);
-                    return null;
-                });
-            }
-        }
-    }
-
-    // checker.ts checkYieldExpression (C1: the next type of generators without a return type annotation and contextual
-    // type, TODO(C5/C6): annotated and contextually typed generators, yield* and the assignability checks)
-    private Type CheckYieldExpression(NodeRef node)
-    {
-        var store = StoreOf(node);
-        var n = node.Node;
-        var operand = store.Expression(n);
-        if (!operand.IsNone)
-        {
-            CheckExpression(At(node, operand));
-        }
-        var func = Utilities.GetContainingFunctionOrNone(store, n);
-        if (func.IsNone || store.AsteriskToken(func).IsNone)
-        {
-            return anyType;
-        }
-        if (!store.AsteriskToken(n).IsNone || !store.Type(func).IsNone || HasContextualType(At(node, func)))
-        {
-            uncertainExpressions.Add(node);
-            return anyType;
-        }
-        if (noImplicitAny && !ExpressionResultIsUnused(store, n) && GetApproximateContextualType(node, 0).IsNone)
-        {
-            Error(node, Diagnostics.yield_expression_implicitly_results_in_an_any_type_because_its_containing_generator_lacks_a_return_type_annotation);
-        }
-        return anyType;
-    }
-
-    // utilities.ts expressionResultIsUnused
-    private static bool ExpressionResultIsUnused(NodeStore store, Node node)
-    {
-        while (true)
-        {
-            var parent = store.Parent(node);
-            switch (store.Kind(parent))
-            {
-                case SyntaxKind.ParenthesizedExpression:
-                    node = parent;
-                    continue;
-                case SyntaxKind.ExpressionStatement:
-                case SyntaxKind.VoidExpression:
-                    return true;
-                case SyntaxKind.ForStatement:
-                    return store.Initializer(parent) == node || store.Incrementor(parent) == node;
-                case SyntaxKind.BinaryExpression when store.Kind(store.OperatorToken(parent)) == SyntaxKind.CommaToken:
-                    if (store.Left(parent) == node)
-                    {
-                        return true;
-                    }
-                    node = parent;
-                    continue;
-                default:
-                    return false;
-            }
-        }
-    }
-
-    // checker.ts mayReturnNever
-    private static bool MayReturnNever(NodeStore store, Node func) => store.Kind(func) switch
-    {
-        SyntaxKind.FunctionExpression or SyntaxKind.ArrowFunction => true,
-        SyntaxKind.MethodDeclaration => store.Kind(store.Parent(func)) == SyntaxKind.ObjectLiteralExpression,
-        _ => false,
-    };
-
-    // checker.ts isUnitType
-    private bool IsUnitType(Type type) => (Types.Flags(type) & TypeFlags.Unit) != 0;
-
-    private Type deferredGlobalPromiseType;
-
-    // checker.ts createPromiseType (TODO(C5): getAwaitedType of the promised type)
-    private Type CreatePromiseType(Type promisedType)
-    {
-        if (deferredGlobalPromiseType.IsNone)
-        {
-            var t = GetGlobalType("Promise", 1, reportErrors: true);
-            deferredGlobalPromiseType = t.IsNone ? emptyGenericType : t;
-        }
-        return deferredGlobalPromiseType != emptyGenericType ? CreateTypeReference(deferredGlobalPromiseType, [promisedType]) : unknownType;
-    }
-
-    // utilities.ts forEachReturnStatement
-    private static void ForEachReturnStatement(NodeStore store, Node body, Action<Node> visitor)
-    {
-        Traverse(body);
-
-        void Traverse(Node node)
-        {
-            switch (store.Kind(node))
-            {
-                case SyntaxKind.ReturnStatement:
-                    visitor(node);
-                    return;
-                case SyntaxKind.CaseBlock:
-                case SyntaxKind.Block:
-                case SyntaxKind.IfStatement:
-                case SyntaxKind.DoStatement:
-                case SyntaxKind.WhileStatement:
-                case SyntaxKind.ForStatement:
-                case SyntaxKind.ForInStatement:
-                case SyntaxKind.ForOfStatement:
-                case SyntaxKind.WithStatement:
-                case SyntaxKind.SwitchStatement:
-                case SyntaxKind.CaseClause:
-                case SyntaxKind.DefaultClause:
-                case SyntaxKind.LabeledStatement:
-                case SyntaxKind.TryStatement:
-                case SyntaxKind.CatchClause:
-                    NodeVisitor.ForEachChild<object>(store, node, child =>
-                    {
-                        Traverse(child);
-                        return null;
-                    });
-                    return;
-            }
-        }
-    }
+    // Whether the diagnostics derived from the type of an expression are not reported: the expression's type is an
+    // approximation of C1's mechanism (TODO(C6/C9)) or the flow type of a reference whose narrowing is pending (TODO(C7)).
+    private bool SuppressDerivedDiagnostics(NodeRef expr, Type type) => IsUncertainExpression(expr) || IsNarrowingPending(expr, type);
 }
