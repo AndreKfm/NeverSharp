@@ -51,6 +51,22 @@ internal sealed partial class Checker
     /// <summary>checker.ts getTypeReferenceArity.</summary>
     internal int GetTypeReferenceArity(Type type) => Types.Object(Types.Object(type).Target).TypeParameters.Count;
 
+    // checker.ts getTupleElementLabel (named tuple members and parameters)
+    private string GetTupleElementLabel(NodeRef declaration)
+    {
+        var store = StoreOf(declaration);
+        var name = store.Name(declaration.Node);
+        if (!name.IsNone && store.Kind(name) == SyntaxKind.Identifier)
+        {
+            return store.Texts.GetString(store.EscapedText(name)) ?? "";
+        }
+        return "arg";
+    }
+
+    // checker.ts removeMissingType
+    private Type RemoveMissingType(Type type, bool isOptional) =>
+        exactOptionalPropertyTypes && isOptional ? FilterType(type, t => t != missingType) : type;
+
     /// <summary>checker.ts getElementTypes.</summary>
     internal Type[] GetElementTypes(Type type)
     {

@@ -584,12 +584,25 @@ internal sealed partial class Checker
         return type;
     }
 
-    // checker.ts getWriteTypeOfSymbol (the cases C3 needs; accessors' own write types: C8)
+    // checker.ts getWriteTypeOfSymbol (instantiated accessors; getWriteTypeOfAccessors: the setter's annotation, the
+    // rest of it: C8)
     private Type GetWriteTypeOfSymbol(SymbolRef symbol)
     {
-        if ((SymbolFlagsOf(symbol) & SymbolFlags.Accessor) != 0 && (GetCheckFlags(symbol) & CheckFlags.Instantiated) != 0)
+        if ((SymbolFlagsOf(symbol) & SymbolFlags.Accessor) != 0)
         {
-            return GetWriteTypeOfInstantiatedSymbol(symbol);
+            if ((GetCheckFlags(symbol) & CheckFlags.Instantiated) != 0)
+            {
+                return GetWriteTypeOfInstantiatedSymbol(symbol);
+            }
+            var setter = GetDeclarationOfKind(symbol, SyntaxKind.SetAccessor);
+            if (!setter.IsNone)
+            {
+                var annotation = GetTypeAnnotationFromAccessor(setter);
+                if (!annotation.IsNone)
+                {
+                    return GetTypeFromTypeNode(annotation);
+                }
+            }
         }
         return GetTypeOfSymbol(symbol);
     }

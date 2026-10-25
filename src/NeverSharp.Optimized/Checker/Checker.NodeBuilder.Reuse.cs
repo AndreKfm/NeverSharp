@@ -116,16 +116,6 @@ internal sealed partial class Checker
         return !result.IsNone ? SetTextRange(context, result, node) : Node.None;
     }
 
-    // skipTypeParentheses
-    private NodeRef SkipTypeParentheses(NodeRef node)
-    {
-        while (Kind(node) == SyntaxKind.ParenthesizedType)
-        {
-            node = At(node, StoreOf(node).Type(node.Node));
-        }
-        return node;
-    }
-
     private Node TryVisitSimpleTypeNode(NodeBuilderContext context, NodeRef node)
     {
         var innerNode = SkipTypeParentheses(node);
@@ -453,29 +443,6 @@ internal sealed partial class Checker
             (store.Flags(n) & NodeFlags.JSDoc) != 0;
     }
 
-    // checker.ts hasLateBindableName
-    private bool HasLateBindableName(NodeRef node)
-    {
-        var name = GetNameOfDeclarationRef(node);
-        return !name.IsNone && IsLateBindableName(name);
-    }
-
-    // checker.ts isLateBindableName (the checks without checking the expression: a computed name of an entity name expression)
-    private bool IsLateBindableName(NodeRef name)
-    {
-        var store = StoreOf(name);
-        if (store.Kind(name.Node) != SyntaxKind.ComputedPropertyName)
-        {
-            return false;
-        }
-        var expression = store.Expression(name.Node);
-        if (!Utilities.IsEntityNameExpression(store, expression))
-        {
-            return false;
-        }
-        return (Types.Flags(CheckExpressionForNameType(At(name, expression))) & TypeFlags.StringOrNumberLiteralOrUnique) != 0;
-    }
-
     // checker.ts isLateBindableIndexSignature (computed names of index signature types: C3)
     private static bool IsLateBindableIndexSignature(NodeRef name)
     {
@@ -503,8 +470,8 @@ internal sealed partial class Checker
             return EnterNewScope(context, node, record.Parameters, Types.Elements(record.TypeParameters).ToArray());
         }
         var typeParameters = store.Kind(node.Node) == SyntaxKind.ConditionalType
-            ? GetInferTypeParameters(node)
-            : [GetDeclaredTypeOfTypeParameter(GetSymbolOfDeclaration(At(node, store.TypeParameter(node.Node))))];
+            ? GetInferTypeParameters(node) ?? []
+            :[GetDeclaredTypeOfTypeParameter(GetSymbolOfDeclaration(At(node, store.TypeParameter(node.Node))))];
         return EnterNewScope(context, node, null, typeParameters);
     }
 
