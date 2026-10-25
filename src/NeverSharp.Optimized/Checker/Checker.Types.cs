@@ -177,7 +177,19 @@ internal sealed partial class Checker
         {
             Types.CreateTypeParameter(SymbolRef.None);
         }
+        // createTypeChecker, after the signatures and iteration types (module C3: these types take their ids here)
+        emptyStringType = GetStringLiteralType("");
+        zeroType = GetNumberLiteralType(0);
+        zeroBigIntType = GetBigIntLiteralType("0");
+        // createTypeofType: typeofNEFacts' keys in insertion order
+        typeofType = GetUnionType([GetStringLiteralType("string"), GetStringLiteralType("number"), GetStringLiteralType("bigint"), GetStringLiteralType("boolean"),
+            GetStringLiteralType("symbol"), GetStringLiteralType("undefined"), GetStringLiteralType("object"), GetStringLiteralType("function")]);
     }
+
+    private Type emptyStringType;
+    private Type zeroType;
+    private Type zeroBigIntType;
+    private Type typeofType;
 
     // ---- common accessors ----
 
