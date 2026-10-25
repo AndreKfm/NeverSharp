@@ -1773,9 +1773,23 @@ internal sealed partial class Checker
         return type;
     }
 
-    // checker.ts getTypeOfPrototypeProperty (TODO(C3): the instantiation with any type arguments)
-    private Type GetTypeOfPrototypeProperty(SymbolRef prototype) =>
-        GetDeclaredTypeOfClassOrInterface(GetParentOfSymbol(prototype));
+    // checker.ts getTypeOfPrototypeProperty: the class instance type with any for its type parameters
+    private Type GetTypeOfPrototypeProperty(SymbolRef prototype)
+    {
+        // TypeScript 1.0 spec (April 2014): 8.4
+        // Every class automatically contains a static property member named 'prototype',
+        // the type of which is an instantiation of the class type with type Any supplied as a type argument for each type parameter.
+        // It is an error to explicitly declare a static property member with the name 'prototype'.
+        var classType = GetDeclaredTypeOfClassOrInterface(GetParentOfSymbol(prototype));
+        if ((Types.Flags(classType) & TypeFlags.Object) != 0 && Types.Object(classType).HasTypeParameters)
+        {
+            var typeParameters = Types.Object(classType).TypeParameters;
+            var arguments = new Type[typeParameters.Count];
+            Array.Fill(arguments, anyType);
+            return CreateTypeReference(classType, arguments);
+        }
+        return classType;
+    }
 
     private Type ReportCircularityError(SymbolRef symbol)
     {
@@ -2178,8 +2192,8 @@ internal sealed partial class Checker
         var parent = store.Parent(node);
         if (kind == SyntaxKind.VariableDeclaration && store.Kind(store.Parent(parent)) == SyntaxKind.ForInStatement)
         {
-            // TODO(C3): keyof T for type parameter expressions
-            return stringType;
+            var indexType = GetIndexType(GetNonNullableType(CheckExpressionCached(At(declaration, store.Expression(store.Parent(parent))))));
+            return (Types.Flags(indexType) & (TypeFlags.TypeParameter | TypeFlags.Index)) != 0 ? GetExtractStringType(indexType) : stringType;
         }
         if (kind == SyntaxKind.VariableDeclaration && store.Kind(store.Parent(parent)) == SyntaxKind.ForOfStatement)
         {
