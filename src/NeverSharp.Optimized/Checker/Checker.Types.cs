@@ -786,8 +786,8 @@ internal sealed partial class Checker
     }
 
     /// <summary>
-    /// checker.ts getIntersectionType. TODO(C3/C4): the normalization of intersections containing unions (cross
-    /// products, primitive union intersection) and the constrained type variable reduction.
+    /// checker.ts getIntersectionType. TODO(C4): the constrained type variable reduction and the redundant template
+    /// literal extraction (both need the subtype relation).
     /// </summary>
     internal Type GetIntersectionType(ReadOnlySpan<Type> types, SymbolRef aliasSymbol = default, TypeList aliasTypeArguments = default)
     {
@@ -836,18 +836,237 @@ internal sealed partial class Checker
         {
             return typeSet[0];
         }
+        // (the reduction of `T & P` for a type variable T and a primitive P needs the strict subtype relation: C4)
         var span = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(typeSet);
         var id = GetTypeListId(span) + GetAliasId(aliasSymbol, aliasTypeArguments);
         if (!intersectionTypes.TryGetValue(id, out var result))
         {
-            // TODO(C3/C4): includes & Union: intersectUnionsOfPrimitiveTypes, the undefined/null distribution and the cross product.
-            result = Types.CreateUnionOrIntersection(TypeFlags.Intersection, GetPropagatingFlagsOfTypes(span, TypeFlags.Nullable), Types.CreateList(span), Type.None);
-            ref var record = ref Types.Record(result);
-            record.AliasSymbol = aliasSymbol;
-            record.AliasTypeArguments = aliasTypeArguments;
+            if ((includes & TypeFlags.Union) != 0)
+            {
+                // module C3: the normalization of intersections containing unions
+                result = GetIntersectionOfUnions(typeSet, types.Length, aliasSymbol, aliasTypeArguments);
+            }
+            else
+            {
+                result = Types.CreateUnionOrIntersection(TypeFlags.Intersection, GetPropagatingFlagsOfTypes(span, TypeFlags.Nullable), Types.CreateList(span), Type.None);
+                ref var record = ref Types.Record(result);
+                record.AliasSymbol = aliasSymbol;
+                record.AliasTypeArguments = aliasTypeArguments;
+            }
             intersectionTypes[id] = result;
         }
         return result;
+    }
+
+    // getIntersectionType's union cases: we normalize combinations of intersection and union types based on the
+    // distributive property of the '&' operator (X & (A | B) is X & A | X & B), so union types are always at the top level.
+    private Type GetIntersectionOfUnions(List<Type> typeSet, int inputCount, SymbolRef aliasSymbol, TypeList aliasTypeArguments)
+    {
+        if (IntersectUnionsOfPrimitiveTypes(typeSet))
+        {
+            // When the intersection creates a reduced set (which might mean that *all* union types have
+            // disappeared), we restart the operation to get a new set of combined flags. Once we have
+            // reduced we'll never reduce again, so this occurs at most once.
+            return GetIntersectionType(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(typeSet), aliasSymbol, aliasTypeArguments);
+        }
+        if (typeSet.TrueForAll(t => (Types.Flags(t) & TypeFlags.Union) != 0 && (Types.Flags(Types.Elements(Types.Union(t).Types)[0]) & TypeFlags.Undefined) != 0))
+        {
+            var containedUndefinedType = typeSet.Exists(ContainsMissingType) ? missingType : undefinedType;
+            RemoveFromEach(typeSet, TypeFlags.Undefined);
+            return GetUnionType([GetIntersectionType(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(typeSet)), containedUndefinedType], UnionReduction.Literal, aliasSymbol, aliasTypeArguments);
+        }
+        if (typeSet.TrueForAll(t => (Types.Flags(t) & TypeFlags.Union) != 0 &&
+            ((Types.Flags(Types.Elements(Types.Union(t).Types)[0]) & TypeFlags.Null) != 0 || (Types.Flags(Types.Elements(Types.Union(t).Types)[1]) & TypeFlags.Null) != 0)))
+        {
+            RemoveFromEach(typeSet, TypeFlags.Null);
+            return GetUnionType([GetIntersectionType(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(typeSet)), nullType], UnionReduction.Literal, aliasSymbol, aliasTypeArguments);
+        }
+        if (typeSet.Count >= 3 && inputCount > 2)
+        {
+            // When we have three or more constituents, more than two inputs (to head off infinite reexpansion), some of which are unions, we employ a "divide and conquer" strategy
+            // where A & B & C & D is processed as (A & B) & (C & D).
+            var middle = typeSet.Count / 2;
+            var left = GetIntersectionType(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(typeSet)[..middle]);
+            var right = GetIntersectionType(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(typeSet)[middle..]);
+            return GetIntersectionType([left, right], aliasSymbol, aliasTypeArguments);
+        }
+        // We are attempting to construct a type of the form X & (A | B) & (C | D). Transform this into a type of
+        // the form X & A & C | X & A & D | X & B & C | X & B & D. If the estimated size of the resulting union type
+        // exceeds 100000 constituents, report an error.
+        var array = typeSet.ToArray();
+        if (!CheckCrossProductUnion(array))
+        {
+            return errorType;
+        }
+        var constituents = GetCrossProductIntersections(array);
+        // We attach a denormalized origin type when at least one constituent of the cross-product union is an
+        // intersection (i.e. when the intersection didn't just reduce one or more unions to smaller unions) and
+        // the denormalized origin has fewer constituents than the union itself.
+        var origin = constituents.Exists(t => (Types.Flags(t) & TypeFlags.Intersection) != 0) && GetConstituentCountOfTypes(constituents) > GetConstituentCountOfTypes(typeSet)
+            ? Types.CreateUnionOrIntersection(TypeFlags.Intersection, ObjectFlags.None, Types.CreateList(array), Type.None)
+            : Type.None;
+        return GetUnionType(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(constituents), UnionReduction.Literal, aliasSymbol, aliasTypeArguments, origin);
+    }
+
+    // checker.ts getCrossProductIntersections
+    private List<Type> GetCrossProductIntersections(Type[] types)
+    {
+        var count = 1;
+        foreach (var t in types)
+        {
+            count *= (Types.Flags(t) & TypeFlags.Union) != 0 ? Types.Union(t).Types.Count : (Types.Flags(t) & TypeFlags.Never) != 0 ? 0 : 1;
+        }
+        var intersections = new List<Type>();
+        for (var i = 0; i < count; i++)
+        {
+            var constituents = (Type[])types.Clone();
+            var n = i;
+            for (var j = types.Length - 1; j >= 0; j--)
+            {
+                if ((Types.Flags(types[j]) & TypeFlags.Union) != 0)
+                {
+                    var sourceTypes = Types.Elements(Types.Union(types[j]).Types);
+                    var length = sourceTypes.Length;
+                    constituents[j] = sourceTypes[n % length];
+                    n /= length;
+                }
+            }
+            var t = GetIntersectionType(constituents);
+            if ((Types.Flags(t) & TypeFlags.Never) == 0)
+            {
+                intersections.Add(t);
+            }
+        }
+        return intersections;
+    }
+
+    // checker.ts getConstituentCount
+    private int GetConstituentCount(Type type)
+    {
+        var flags = Types.Flags(type);
+        if ((flags & TypeFlags.UnionOrIntersection) == 0 || !Types.Record(type).AliasSymbol.IsNone)
+        {
+            return 1;
+        }
+        if ((flags & TypeFlags.Union) != 0 && !Types.Union(type).Origin.IsNone)
+        {
+            return GetConstituentCount(Types.Union(type).Origin);
+        }
+        return GetConstituentCountOfTypes(Types.Elements(Types.Union(type).Types).ToArray());
+    }
+
+    private int GetConstituentCountOfTypes(IEnumerable<Type> types)
+    {
+        var n = 0;
+        foreach (var t in types)
+        {
+            n += GetConstituentCount(t);
+        }
+        return n;
+    }
+
+    // checker.ts removeFromEach
+    private void RemoveFromEach(List<Type> types, TypeFlags flag)
+    {
+        for (var i = 0; i < types.Count; i++)
+        {
+            types[i] = FilterType(types[i], t => (Types.Flags(t) & flag) == 0);
+        }
+    }
+
+    // checker.ts eachUnionContains
+    private bool EachUnionContains(List<Type> unionTypes, Type type)
+    {
+        foreach (var u in unionTypes)
+        {
+            var members = Types.Elements(Types.Union(u).Types);
+            if (!ContainsType(members, type))
+            {
+                if (type == missingType)
+                {
+                    return ContainsType(members, undefinedType);
+                }
+                if (type == undefinedType)
+                {
+                    return ContainsType(members, missingType);
+                }
+                var flags = Types.Flags(type);
+                var primitive = (flags & TypeFlags.StringLiteral) != 0 ? stringType
+                    : (flags & (TypeFlags.Enum | TypeFlags.NumberLiteral)) != 0 ? numberType
+                    : (flags & TypeFlags.BigIntLiteral) != 0 ? bigintType
+                    : (flags & TypeFlags.UniqueESSymbol) != 0 ? esSymbolType
+                    : Type.None;
+                if (primitive.IsNone || !ContainsType(members, primitive))
+                {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    // checker.ts intersectUnionsOfPrimitiveTypes: if the given list of types contains more than one union of primitive
+    // types, replace the first with a union containing an intersection of those primitive types, then remove the other
+    // unions and return true. Otherwise, do nothing and return false.
+    private bool IntersectUnionsOfPrimitiveTypes(List<Type> types)
+    {
+        List<Type>? unionTypes = null;
+        var index = types.FindIndex(t => (Types.ObjectFlagsOf(t) & ObjectFlags.PrimitiveUnion) != 0);
+        if (index < 0)
+        {
+            return false;
+        }
+        var i = index + 1;
+        // Remove all but the first union of primitive types and collect them in the unionTypes array.
+        while (i < types.Count)
+        {
+            var t = types[i];
+            if ((Types.ObjectFlagsOf(t) & ObjectFlags.PrimitiveUnion) != 0)
+            {
+                (unionTypes ??= [types[index]]).Add(t);
+                types.RemoveAt(i);
+            }
+            else
+            {
+                i++;
+            }
+        }
+        // Return false if there was only one union of primitive types
+        if (unionTypes is null)
+        {
+            return false;
+        }
+        // We have more than one union of primitive types, now intersect them. For each
+        // type in each union we check if the type is matched in every union and if so
+        // we include it in the result.
+        var checkedTypes = new List<Type>();
+        var result = new List<Type>();
+        foreach (var u in unionTypes)
+        {
+            foreach (var t in Types.Elements(Types.Union(u).Types).ToArray())
+            {
+                if (InsertType(checkedTypes, t))
+                {
+                    if (EachUnionContains(unionTypes, t))
+                    {
+                        // undefinedType/missingType should always come sorted first so we leverage that here
+                        if (t == undefinedType && result.Count > 0 && result[0] == missingType)
+                        {
+                            continue;
+                        }
+                        if (t == missingType && result.Count > 0 && result[0] == undefinedType)
+                        {
+                            result[0] = missingType;
+                            continue;
+                        }
+                        InsertType(result, t);
+                    }
+                }
+            }
+        }
+        // Finally replace the first union with the result
+        types[index] = GetUnionTypeFromSortedList(result, ObjectFlags.PrimitiveUnion);
+        return true;
     }
 
     // ---- widening of literal types ----

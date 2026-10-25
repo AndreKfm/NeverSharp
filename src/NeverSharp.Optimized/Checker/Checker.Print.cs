@@ -924,6 +924,10 @@ internal sealed partial class Checker
             if ((flags & TypeFlags.Union) != 0 && !Types.Union(type).Origin.IsNone)
             {
                 source = Types.Union(type).Origin;
+                if ((Types.Flags(source) & TypeFlags.UnionOrIntersection) == 0)
+                {
+                    return GenericTypeToText(source, enclosingDeclaration, depth) ?? "any"; // a `keyof T` origin (module C3)
+                }
             }
             var members = Types.Elements(Types.Union(source).Types).ToArray();
             var types = (Types.Flags(source) & TypeFlags.Union) != 0 ? FormatUnionTypes(members) : [.. members];
@@ -969,7 +973,8 @@ internal sealed partial class Checker
                     var elementText = TypeToText(typeArguments[0], enclosingDeclaration, false, false, depth + 1);
                     var elementFlags = Types.Flags(typeArguments[0]);
                     if ((elementFlags & (TypeFlags.Union | TypeFlags.Intersection)) != 0 && Types.Record(typeArguments[0]).AliasSymbol.IsNone && (elementFlags & TypeFlags.Boolean) == 0
-                        || elementText.Contains("=>", StringComparison.Ordinal))
+                        || elementText.Contains("=>", StringComparison.Ordinal)
+                        || ((elementFlags & (TypeFlags.Index | TypeFlags.Conditional)) != 0 && Types.Record(typeArguments[0]).AliasSymbol.IsNone)) // `(keyof T)[]` (module C3)
                     {
                         elementText = "(" + elementText + ")";
                     }
@@ -1255,6 +1260,16 @@ internal sealed partial class Checker
                 text += " extends " + (TryReuseAnnotation(constraintNode, constraint, false) ?? TypeToText(constraint, enclosingDeclaration, false, false, depth + 1));
             }
         }
+        // the (instantiated) default (module C3: getDefaultFromTypeParameter)
+        var defaultNode = At(declaration, StoreOf(declaration).Default(declaration.Node));
+        if (!defaultNode.IsNone)
+        {
+            var defaultType = GetDefaultFromTypeParameter(typeParameter);
+            if (!defaultType.IsNone)
+            {
+                text += " = " + (TryReuseAnnotation(defaultNode, defaultType, false) ?? TypeToText(defaultType, enclosingDeclaration, false, false, depth + 1));
+            }
+        }
         return text;
     }
 
@@ -1295,7 +1310,8 @@ internal sealed partial class Checker
             var declaration = ValueDeclarationOf(parameter);
             var isRest = !declaration.IsNone && Kind(declaration) == SyntaxKind.Parameter && !StoreOf(declaration).DotDotDotToken(declaration.Node).IsNone;
             var isOptional = i >= record.MinArgumentCount && !isRest;
-            var parameterType = GetTypeOfSymbol(parameter);
+            var fullParameterType = GetTypeOfSymbol(parameter);
+            var parameterType = fullParameterType;
             if (isOptional)
             {
                 parameterType = RemoveUndefinedForOptional(parameterType);
@@ -1305,7 +1321,8 @@ internal sealed partial class Checker
             var parameterName = SymbolName(parameter);
             sb.Append(isRest ? "..." : "").Append(nameFromSource ? Reused(parameterName) : parameterName).Append(isOptional ? "?" : "").Append(": ")
                 .Append((isParameterDeclaration ? TryReuseAnnotation(At(declaration, StoreOf(declaration).Type(declaration.Node)), parameterType, false) : null)
-                    ?? TypeToText(parameterType, enclosingDeclaration, false, false, depth + 1));
+                    // a parameter type that is not reused keeps its `undefined` (instantiated signatures, module C3)
+                    ?? TypeToText(Signatures.Record(signature).Target.IsNone ? parameterType : fullParameterType, enclosingDeclaration, false, false, depth + 1));
         }
         sb.Append(')');
         var returnType = GetReturnTypeOfSignature(signature);
