@@ -344,3 +344,11 @@ Profile binder at 68a7829 (idle 5.2 %), variance gate PASS: cs-o-aot-ws-bind vs 
 ### Phase 2 closed (2026-10-25)
 
 Closed by the author after BO4. Summary of Gate B, the binder endpoint (1.207, inconclusive), the four additional runs (down to 0.425 vs typescript-go and 1.146 vs tsrs), claims, disclosed differences, modules and steps: [phase2-summary.md](phase2-summary.md).
+
+## Phase 3: type checker (Track O only)
+
+Plan: [phase3-plan.md](phase3-plan.md); draft amendment preregistration.md §17 (`prereg/v9`, not yet accepted).
+
+### P1: printer (2026-10-25) — printer gate passes
+
+Brief: [modules/P1.md](modules/P1.md), run in parallel with C0. One attempt (Opus 5.5, medium effort); commit d867305, merged; the printer gate passes on the orchestrator's rerun on main. `src/NeverSharp.Optimized/Printer/`: `createPrinter` (printNode/printList/printFile), every `emit*` function (types, expressions, statements, declarations, JSX, JSDoc; binary expressions on an explicit stack), list formats and line-terminator logic, the text writer, literal and identifier escaping, shebang/pinned comments/triple-slash directives as `removeComments` keeps them. Left out: print handlers and their parenthesizer substitutions, comment emission beyond `removeComments: true`, source maps, emit helpers and generated names (transformer-only). Printer gate (`gate.mjs --phase printer`; oracle `dump-ts-printer.mjs` = `createPrinter({ removeComments: true, newLine: LineFeed }).printFile`): **50,177 of 50,177 identical** (ParseForTypeErrors). 6 gate runs; no parser code changed.
