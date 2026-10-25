@@ -347,25 +347,11 @@ internal sealed partial class Checker
         return false;
     }
 
+    // checker.ts getDeclarationNodeFlagsFromSymbol
     private NodeFlags GetDeclarationNodeFlagsFromSymbol(SymbolRef symbol)
     {
         var declaration = ValueDeclarationOf(symbol);
-        if (declaration.IsNone)
-        {
-            return 0;
-        }
-        var store = StoreOf(declaration);
-        var node = declaration.Node;
-        var flags = store.Flags(node);
-        if (store.Kind(node) == SyntaxKind.VariableDeclaration)
-        {
-            var list = store.Parent(node);
-            if (store.Kind(list) == SyntaxKind.VariableDeclarationList)
-            {
-                flags |= store.Flags(list);
-            }
-        }
-        return flags;
+        return declaration.IsNone ? 0 : Utilities.GetCombinedNodeFlags(StoreOf(declaration), declaration.Node);
     }
 
     // checker.ts appendIndexInfo
@@ -590,6 +576,48 @@ internal sealed partial class Checker
             }
         }
         return Type.None;
+    }
+
+    // nodebuilder isMappedTypeHomomorphic / isHomomorphicMappedTypeWithNonHomomorphicInstantiation
+    private bool IsHomomorphicMappedTypeWithNonHomomorphicInstantiation(Type type)
+    {
+        var target = Types.Object(type).Target;
+        return !target.IsNone && !GetHomomorphicTypeVariable(target).IsNone && GetHomomorphicTypeVariable(type).IsNone;
+    }
+
+    // nodebuilder createMappedTypeNodeFromType: the target's template type instantiated for the new constraint type
+    // parameter (instantiateType(getTemplateTypeFromMappedType(target), makeArrayTypeMapper([typeParameter of target,
+    // modifiers type of target], [typeParameter, newConstraintParam])))
+    private Type InstantiateMappedTemplateForNewConstraint(Type type, Type newConstraintParameter)
+    {
+        var target = Types.Object(type).Target;
+        return InstantiateType(GetTemplateTypeFromMappedType(target),
+            MakeArrayTypeMapper([GetTypeParameterFromMappedType(target), GetModifiersTypeFromMappedType(target)], [GetTypeParameterFromMappedType(type), newConstraintParameter]));
+    }
+
+    // nodebuilder createMappedTypeNodeFromType: instantiateType(getConstraintOfTypeParameter(getTypeFromTypeNode(
+    // type.declaration.typeParameter.constraint.type)) || unknownType, type.mapper)
+    private Type GetOriginalConstraintOfHomomorphicMappedType(Type type)
+    {
+        var data = Types.Object(type);
+        var declaration = data.Declaration;
+        var store = StoreOf(declaration);
+        var constraint = store.Constraint(store.TypeParameter(declaration.Node));
+        var constraintOfParameter = GetConstraintOfTypeParameter(GetTypeFromTypeNode(At(declaration, store.Type(constraint))));
+        return InstantiateType(constraintOfParameter.IsNone ? unknownType : constraintOfParameter, data.Mapper);
+    }
+
+    // nodebuilder conditionalTypeToTypeNode: the extends, true and false types instantiated with
+    // prependTypeMapping(type.root.checkType, newParam, type.mapper)
+    private (Type ExtendsType, Type TrueType, Type FalseType) GetConditionalTypeBranchesWithNewCheckType(Type type, Type newCheckType)
+    {
+        var data = Types.Data<ConditionalData>(type);
+        var root = data.Root;
+        var newMapper = PrependTypeMapping(root.CheckType, newCheckType, data.Mapper);
+        var store = StoreOf(root.Node);
+        return (InstantiateType(root.ExtendsType, newMapper),
+            InstantiateType(GetTypeFromTypeNode(At(root.Node, store.TrueType(root.Node.Node))), newMapper),
+            InstantiateType(GetTypeFromTypeNode(At(root.Node, store.FalseType(root.Node.Node))), newMapper));
     }
 
     // checker.ts instantiateMappedType
