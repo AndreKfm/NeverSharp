@@ -309,7 +309,20 @@ internal sealed partial class Checker
         }
         if (isEntityName)
         {
-            // (qualifiers of import types: C3)
+            // isImportTypeQualifierPart (module C3)
+            var qualifierNode = name;
+            var qualifierParent = parent;
+            while (store.Kind(qualifierParent) == SyntaxKind.QualifiedName)
+            {
+                qualifierNode = qualifierParent;
+                qualifierParent = store.Parent(qualifierParent);
+            }
+            if (!qualifierParent.IsNone && store.Kind(qualifierParent) == SyntaxKind.ImportType && store.Qualifier(qualifierParent) == qualifierNode)
+            {
+                GetTypeFromTypeNode(At(nameRef, qualifierParent));
+                var sym = SymbolNodeLinks.Has(nameRef) ? SymbolNodeLinks.Get(nameRef).ResolvedSymbol : SymbolRef.None;
+                return sym == unknownSymbol ? SymbolRef.None : sym;
+            }
         }
         while (Utilities.IsRightSideOfQualifiedNameOrPropertyAccess(store, name) || (store.Kind(store.Parent(name)) == SyntaxKind.JSDocMemberName && store.Right(store.Parent(name)) == name))
         {

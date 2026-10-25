@@ -203,7 +203,7 @@ internal sealed partial class Checker
     }
 
     // checker.ts checkMembersForOverrideModifier / checkExistingMemberForOverrideModifier / checkMemberForOverrideModifier
-    // (TODO(C3): getTypeWithThisArgument; members with dynamic names are left to C8)
+    // (members with dynamic names are left to C8)
     private void CheckMembersForOverrideModifier(NodeRef node)
     {
         var store = StoreOf(node);
@@ -212,14 +212,15 @@ internal sealed partial class Checker
         {
             return;
         }
-        var type = GetDeclaredTypeOfSymbol(classSymbol);
-        if ((Types.Flags(type) & TypeFlags.Object) == 0)
+        var declaredType = GetDeclaredTypeOfSymbol(classSymbol);
+        if ((Types.Flags(declaredType) & TypeFlags.Object) == 0)
         {
             return;
         }
+        var type = GetTypeWithThisArgument(declaredType);
         var baseTypeNode = GetBaseTypeNodeOfClass(node);
-        var baseTypes = baseTypeNode.IsNone ? [] : GetBaseTypes(type);
-        var baseWithThis = baseTypes.Count > 0 ? baseTypes[0] : Type.None;
+        var baseTypes = baseTypeNode.IsNone ? [] : GetBaseTypes(declaredType);
+        var baseWithThis = baseTypes.Count > 0 ? GetTypeWithThisArgument(baseTypes[0], Types.Object(declaredType).ThisType) : Type.None;
         var nodeInAmbientContext = (store.Flags(node.Node) & NodeFlags.Ambient) != 0;
         foreach (var member in store.Nodes(store.Members(node.Node)))
         {
@@ -264,7 +265,7 @@ internal sealed partial class Checker
         if (!baseWithThis.IsNone && (memberHasOverrideModifier || compilerOptions.NoImplicitOverride == true))
         {
             var thisType = memberIsStatic ? GetTypeOfSymbol(classSymbol) : type;
-            var baseType = memberIsStatic ? GetBaseConstructorTypeOfClass(type) : baseWithThis;
+            var baseType = memberIsStatic ? GetBaseConstructorTypeOfClass(GetDeclaredTypeOfSymbol(classSymbol)) : baseWithThis;
             var name = NameOf(declaredProp);
             var prop = GetPropertyOfType(thisType, name);
             var baseProp = (Types.Flags(baseType) & (TypeFlags.Object | TypeFlags.Intersection)) != 0 ? GetPropertyOfType(baseType, name) : SymbolRef.None;
@@ -306,7 +307,7 @@ internal sealed partial class Checker
         }
         else if (memberHasOverrideModifier)
         {
-            Error(member, Diagnostics.This_member_cannot_have_an_override_modifier_because_its_containing_class_0_does_not_extend_another_class, TypeToString(type));
+            Error(member, Diagnostics.This_member_cannot_have_an_override_modifier_because_its_containing_class_0_does_not_extend_another_class, TypeToString(GetDeclaredTypeOfSymbol(classSymbol)));
         }
     }
 
@@ -337,9 +338,9 @@ internal sealed partial class Checker
                 continue;
             }
             var propName = store.Name(member);
-            if (store.Kind(propName) is not (SyntaxKind.Identifier or SyntaxKind.PrivateIdentifier))
+            if (store.Kind(propName) is not (SyntaxKind.Identifier or SyntaxKind.PrivateIdentifier or SyntaxKind.ComputedPropertyName))
             {
-                continue; // TODO(C3): computed property names
+                continue;
             }
             var type = GetTypeOfSymbol(GetSymbolOfDeclaration(At(node, member)));
             if ((Types.Flags(type) & (TypeFlags.AnyOrUnknown | TypeFlags.Undefined)) != 0 || IsUnsupportedType(type))
@@ -484,7 +485,8 @@ internal sealed partial class Checker
                 VisitList(node, store.TypeArguments(n));
                 return false;
             case SyntaxKind.ImportType:
-                // TODO(C3): import types (the module reference is resolved in getTypeFromImportTypeNode)
+                // checkImportType: the module reference is resolved in getTypeFromImportTypeNode (module C3)
+                GetTypeFromTypeNode(node);
                 CheckImportTypeModule(node);
                 return false;
             case SyntaxKind.ImportDeclaration:

@@ -30,6 +30,16 @@ internal sealed partial class Checker
             {
                 return MappedTypeToText(type, enclosingDeclaration, depth);
             }
+            if ((Types.ObjectFlagsOf(type) & ObjectFlags.InstantiationExpressionType) != 0)
+            {
+                // the type query `typeof f<T>` the instantiation expression type comes from, reused
+                var existing = Types.Object(type).Node;
+                if (!existing.IsNone && Kind(existing) == SyntaxKind.TypeQuery && GetTypeFromTypeNode(existing) == type)
+                {
+                    var file = FileAt(existing.File);
+                    return Reused(PrintReusedTypeNode(file.Store, file.Root, existing.Node));
+                }
+            }
             return null;
         }
         if ((flags & TypeFlags.Index) != 0)

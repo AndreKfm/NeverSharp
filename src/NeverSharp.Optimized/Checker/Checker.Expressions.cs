@@ -943,6 +943,7 @@ internal sealed partial class Checker
         var indexFlags = Types.Flags(indexType);
         string? name = (indexFlags & TypeFlags.StringLiteral) != 0 ? (string)Types.Literal(indexType).Value!
             : (indexFlags & TypeFlags.NumberLiteral) != 0 ? JsNumber.ToString((double)Types.Literal(indexType).Value!)
+            : (indexFlags & TypeFlags.UniqueESSymbol) != 0 ? GetPropertyNameFromType(indexType) // late-bound members (module C3)
             : null;
         if (name is not null)
         {
