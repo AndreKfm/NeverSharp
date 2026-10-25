@@ -303,28 +303,52 @@ internal static class CheckerDump
 
     /// <summary>
     /// typeWriter.ts visitNode's filter: <c>isExpressionNode(node) || node.kind === Identifier || isDeclarationName(node)</c>.
-    /// TODO(C2): the utilities (isExpressionNode, isDeclarationName) and the types walk's exclusions (isPartOfTypeNode,
-    /// getMeaningFromDeclaration, ...) come with the checker modules; until then no node is visited.
     /// </summary>
-    private static bool IsWalkCandidate(NodeStore store, Node node) => false;
+    private static bool IsWalkCandidate(NodeStore store, Node node) =>
+        Utilities.IsExpressionNode(store, node) || store.Kind(node) == SyntaxKind.Identifier || Utilities.IsDeclarationName(store, node);
 
     private static void WriteType(StringBuilder sb, Checker checker, SourceFile file, Node node, bool hadErrors)
     {
-        var type = checker.GetTypeAtLocation(checker.Ref(file, node));
-        if (type.IsNone)
+        var store = file.Store;
+        var parent = store.Parent(node);
+        var kind = store.Kind(node);
+        var isTypeAliasName = store.Kind(parent) == SyntaxKind.TypeAliasDeclaration && store.Name(parent) == node;
+        if (Utilities.IsPartOfTypeNode(store, node) ||
+            (kind == SyntaxKind.Identifier && (Utilities.GetMeaningFromDeclaration(store, parent) & SemanticMeaning.Value) == 0 && !isTypeAliasName))
         {
             return;
         }
+        if (kind == SyntaxKind.OmittedExpression)
+        {
+            return;
+        }
+        var type = Utilities.IsExpressionWithTypeArgumentsInClassExtendsClause(store, parent) ? checker.GetTypeAtLocation(checker.Ref(file, parent)) : NeverSharp.Optimized.Type.None;
+        if (type.IsNone || (checker.GetTypeFlags(type) & TypeFlags.Any) != 0)
+        {
+            type = checker.GetTypeAtLocation(checker.Ref(file, node));
+        }
         string typeString;
         string? underline = null;
-        if (!hadErrors && (checker.GetTypeFlags(type) & TypeFlags.Any) != 0)
+        if (!hadErrors && (checker.GetTypeFlags(type) & TypeFlags.Any) != 0 &&
+            store.Kind(parent) != SyntaxKind.BindingElement &&
+            !Utilities.IsPropertyAccessOrQualifiedName(store, parent) &&
+            !Utilities.IsLabelName(store, node) &&
+            !(store.Kind(parent) == SyntaxKind.ModuleDeclaration && Utilities.IsGlobalScopeAugmentation(store, parent)) &&
+            store.Kind(parent) != SyntaxKind.MetaProperty &&
+            !IsImportStatementName(store, node) &&
+            !IsExportStatementName(store, node) &&
+            !IsIntrinsicJsxTag(store, file, node))
         {
-            // (and the exclusions of typeWriter.ts: binding elements, property access / qualified names, labels, ...; C2)
-            typeString = checker.IntrinsicName(type);
+            typeString = checker.IntrinsicNameOf(type);
         }
         else
         {
-            (typeString, underline) = checker.TypeToBaselineText(type, checker.Ref(file, file.Store.Parent(node)), inTypeAlias: false);
+            var enclosing = checker.Ref(file, parent);
+            (typeString, underline) = checker.TypeToBaselineText(type, enclosing, inTypeAlias: false);
+            if (kind == SyntaxKind.Identifier && isTypeAliasName && typeString == store.Texts.GetString(store.EscapedText(node)))
+            {
+                (typeString, underline) = checker.TypeToBaselineText(type, enclosing, inTypeAlias: true);
+            }
         }
         var (prefix, lineText) = LinePrefix(file, node);
         sb.Append(prefix).Append(lineText).Append(" : ").Append(EscapeLine(typeString)).Append('\n');
@@ -334,9 +358,49 @@ internal static class CheckerDump
         }
     }
 
+    // typeWriter.ts isImportStatementName
+    private static bool IsImportStatementName(NodeStore store, Node node)
+    {
+        var parent = store.Parent(node);
+        return store.Kind(parent) switch
+        {
+            SyntaxKind.ImportSpecifier => store.Name(parent) == node || store.PropertyName(parent) == node,
+            SyntaxKind.ImportClause => store.Name(parent) == node,
+            SyntaxKind.ImportEqualsDeclaration => store.Name(parent) == node,
+            _ => false,
+        };
+    }
+
+    // typeWriter.ts isExportStatementName
+    private static bool IsExportStatementName(NodeStore store, Node node)
+    {
+        var parent = store.Parent(node);
+        return store.Kind(parent) switch
+        {
+            SyntaxKind.ExportAssignment => store.Expression(parent) == node,
+            SyntaxKind.ExportSpecifier => store.Name(parent) == node || store.PropertyName(parent) == node,
+            _ => false,
+        };
+    }
+
+    // typeWriter.ts isIntrinsicJsxTag
+    private static bool IsIntrinsicJsxTag(NodeStore store, SourceFile file, Node node)
+    {
+        var p = store.Parent(node);
+        if (store.Kind(p) is not (SyntaxKind.JsxOpeningElement or SyntaxKind.JsxClosingElement or SyntaxKind.JsxSelfClosingElement))
+        {
+            return false;
+        }
+        if (store.TagName(p) != node)
+        {
+            return false;
+        }
+        return Utilities.IsIntrinsicJsxName(Utilities.GetSourceTextOfNodeFromSourceFile(store, file.Root, node));
+    }
+
     private static void WriteSymbol(StringBuilder sb, Checker checker, SourceFile file, Node node)
     {
-        var symbol = checker.GetSymbolAtLocation(checker.Ref(file, node));
+        var symbol = checker.GetSymbolAtLocationPublic(checker.Ref(file, node));
         if (symbol.IsNone)
         {
             return;

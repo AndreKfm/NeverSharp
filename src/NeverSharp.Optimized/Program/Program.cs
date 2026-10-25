@@ -200,7 +200,10 @@ internal sealed class Program
                 result.Add(ProgramDiagnostic.FromFile(file, d));
             }
         }
-        result.AddRange(checker.GetDiagnostics(file));
+        if (includeBindAndCheckDiagnostics)
+        {
+            result.AddRange(checker.GetDiagnostics(file));
+        }
         return result;
     }
 
