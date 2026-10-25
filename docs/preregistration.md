@@ -352,3 +352,13 @@ typescript-go (the reference and the method this project copies); oxc and swc (R
 | `binder` | tsgo7-bind(-single), tsrs-bind(-single), cs-o-aot-ws-bind(-single), cs-o-aot-srv-bind(-single) | tsgo7-bind-single, cs-o-aot-ws-bind-single | the Phase 2 binder endpoint (§15) and its additional runs |
 
 Every binding configuration of the run's profile must be present and below the limit; otherwise the gate fails. This replaces §15's "the other C# runtimes as secondary configurations" for the binder: the binder endpoint reports the NativeAOT runtimes (Workstation and Server GC) only; the JIT runtimes are not measured for the binder (secondary configurations in every Phase 1 run, never close to the primary one). Reason: run time (the last full parse-only run took 45 minutes, of which tsc6-parse 24 %, Track F 16 % and the JIT single-threaded configurations 25 %). The Track F verdict, the Track O endpoint and the six additional runs are unchanged and keep the rules they were measured under.
+
+## 17. Phase 3: type checker (draft amendment `prereg/v9`, not yet accepted)
+
+**Scope (decided by the author, 2026-10-25).** The type checker of TypeScript 6.0.3 (`src/compiler/checker.ts`) in full, for Track O only, with the program layer it needs (compiler options, host, default library, file set). Port rules of §5.4 apply. Plan: [phase3-plan.md](phase3-plan.md).
+
+**Gate C.** Every equivalence unit as a one-file program (the unit plus TypeScript 6.0.3's default library; options `{}` with `noResolve: true`): byte-identical canonical dumps against tsc 6.0.3 of (1) the semantic, global and suggestion diagnostics with flattened message chains and (2) the types of every expression and declaration name in the style of TypeScript's `.types` baselines. Track O Gate 2 applies to the checker code.
+
+**Endpoint.** Each benchmark repository's file list as one program with the Gate C options, parse+bind+check: `cs-o-aot-ws-check` against `tsgo7-check` (typescript-go 7.0.2 checking the same program), with G, interval and decision rule as in §8, from the first protocol-compliant run after Gate C passes completely; a measurement profile `check` (§16 style) with the single-threaded variants of both as the variance gate's binding rows. The diagnostic counts of both sides are reported with every comparison. Disclosed: typescript-go's checker ports TypeScript 7 and differs from 6.0.3's in places; the repositories' dependencies are not installed and imports are not resolved, identically on both sides.
+
+**Status.** Draft; to be accepted and tagged (`prereg/v9`, OpenTimestamps) by the author before any checker measurement.
