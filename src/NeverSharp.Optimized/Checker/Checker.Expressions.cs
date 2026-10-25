@@ -229,6 +229,16 @@ internal sealed partial class Checker
                 return undefinedWideningType;
             case SyntaxKind.YieldExpression:
                 return CheckYieldExpression(node);
+            case SyntaxKind.MetaProperty:
+                // checkMetaProperty: import.meta is the global ImportMeta type (TODO(C5): the module kind checks 1343/1470,
+                // new.target)
+                if (store.KeywordToken(n) == SyntaxKind.ImportKeyword && store.Texts.Equals(store.EscapedText(store.Name(n)), "meta"))
+                {
+                    var importMeta = GetGlobalType("ImportMeta", 0, reportErrors: true);
+                    return importMeta.IsNone ? errorType : importMeta;
+                }
+                uncertainExpressions.Add(node);
+                return anyType;
             default:
                 // TODO(C5): super, yield, tagged templates, meta properties, JSX (C9), synthetic expressions
                 return errorType;

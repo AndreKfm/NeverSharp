@@ -76,7 +76,11 @@ internal sealed partial class Checker
             }
             else if (store.Kind(parent) == SyntaxKind.MetaProperty && store.Name(parent) == n)
             {
-                // TODO(C9): `new.target` and `import.meta` symbols
+                // the `meta` of import.meta: the transient member of getGlobalImportMetaExpressionType (TODO(C5): new.target)
+                if (store.KeywordToken(parent) == SyntaxKind.ImportKeyword && store.Texts.Equals(store.EscapedText(n), "meta"))
+                {
+                    return GetImportMetaExpressionMetaSymbol();
+                }
                 return SymbolRef.None;
             }
         }
@@ -165,10 +169,35 @@ internal sealed partial class Checker
             }
             case SyntaxKind.ExportKeyword:
                 return store.Kind(parent) == SyntaxKind.ExportAssignment ? NodeSymbol(At(node, parent)) : SymbolRef.None;
+            case SyntaxKind.MetaProperty:
+            {
+                var metaType = CheckExpressionCached(node);
+                return IsErrorType(metaType) || (Types.Flags(metaType) & TypeFlags.Object) == 0 ? SymbolRef.None : Types.Symbol(metaType);
+            }
             default:
-                // (import/new meta properties, instanceof, JSX namespaced names: C5/C9)
+                // (instanceof, JSX namespaced names: C5/C9)
                 return SymbolRef.None;
         }
+    }
+
+    private SymbolRef importMetaExpressionMetaSymbol;
+
+    // checker.ts getGlobalImportMetaExpressionType: `ImportMetaExpression { meta: ImportMeta }` (its `meta` member)
+    private SymbolRef GetImportMetaExpressionMetaSymbol()
+    {
+        if (importMetaExpressionMetaSymbol.IsNone)
+        {
+            var symbol = CreateSymbol(SymbolFlags.None, "ImportMetaExpression");
+            var meta = CreateSymbol(SymbolFlags.Property, "meta", CheckFlags.Readonly);
+            TransientSymbols.Record(meta).Parent = symbol;
+            var importMeta = GetGlobalType("ImportMeta", 0, reportErrors: true);
+            ValueSymbolLinks.Get(meta).ResolvedType = importMeta.IsNone ? errorType : importMeta;
+            var members = new SymTable();
+            members.Set("meta", meta);
+            TransientSymbols.Record(symbol).Members = members;
+            importMetaExpressionMetaSymbol = meta;
+        }
+        return importMetaExpressionMetaSymbol;
     }
 
     private static bool IsDeclarationNameOrImportPropertyName(NodeStore store, Node name)
