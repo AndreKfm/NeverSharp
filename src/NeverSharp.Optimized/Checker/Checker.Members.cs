@@ -593,6 +593,17 @@ internal sealed partial class Checker
         var expression = At(baseTypeNode, store.Expression(baseTypeNode.Node));
         if (!Utilities.IsEntityNameExpression(store, expression.Node))
         {
+            // a class expression base: its declared class type (other expressions: TODO(C5/C6))
+            var expressionConstructorType = GetBaseConstructorTypeOfClass(type);
+            var constructorSymbol = Types.Symbol(expressionConstructorType);
+            if ((Types.Flags(expressionConstructorType) & TypeFlags.Object) != 0 && !constructorSymbol.IsNone && (SymbolFlagsOf(constructorSymbol) & SymbolFlags.Class) != 0)
+            {
+                var classBase = GetDeclaredTypeOfSymbol(constructorSymbol);
+                if (classBase != type && (Types.Flags(classBase) & TypeFlags.Object) != 0 && Types.Object(classBase).LocalTypeParameters.Count == 0)
+                {
+                    data.ResolvedBaseTypes = [classBase];
+                }
+            }
             return;
         }
         var baseSymbol = ResolveEntityName(expression, SymbolFlags.Value, ignoreErrors: true);
@@ -601,11 +612,31 @@ internal sealed partial class Checker
             return;
         }
         baseSymbol = ResolveSymbol(baseSymbol);
-        if ((SymbolFlagsOf(baseSymbol) & SymbolFlags.Class) == 0)
+        Type baseType;
+        if ((SymbolFlagsOf(baseSymbol) & SymbolFlags.Class) != 0)
         {
-            return;
+            baseType = GetTypeFromClassOrInterfaceReference(baseTypeNode, baseSymbol);
         }
-        var baseType = GetTypeFromClassOrInterfaceReference(baseTypeNode, baseSymbol);
+        else
+        {
+            // The class derives from a "class-like" constructor function: the return type of the first construct
+            // signature (TODO(C3/C6): getInstantiatedConstructorsForTypeArguments)
+            var baseConstructorType = GetApparentType(GetTypeOfSymbol(baseSymbol));
+            if ((Types.Flags(baseConstructorType) & TypeFlags.Any) != 0)
+            {
+                if (!IsErrorType(baseConstructorType))
+                {
+                    data.ResolvedBaseTypes = [baseConstructorType];
+                }
+                return;
+            }
+            var constructors = GetSignaturesOfType(baseConstructorType, SignatureKind.Construct);
+            if (constructors.Count == 0)
+            {
+                return;
+            }
+            baseType = GetReturnTypeOfSignature(constructors[0]);
+        }
         if (IsErrorType(baseType) || baseType == type || (Types.Flags(baseType) & TypeFlags.Object) == 0)
         {
             return;
@@ -960,7 +991,9 @@ internal sealed partial class Checker
                 }
                 else
                 {
-                    data.ResolvedBaseConstructorType = errorType;
+                    // checkExpression of a non-entity-name heritage expression (class expressions, calls)
+                    var expressionType = CheckExpressionCached(At(baseTypeNode, expression));
+                    data.ResolvedBaseConstructorType = (Types.Flags(expressionType) & (TypeFlags.Object | TypeFlags.Any)) != 0 ? expressionType : errorType;
                 }
             }
         }
@@ -1975,6 +2008,14 @@ internal sealed partial class Checker
         if (!initializer.IsNone)
         {
             var type = WidenTypeInferredFromInitializer(declaration, CheckExpressionCached(At(declaration, initializer)));
+            if (IsUncertainExpression(At(declaration, initializer)))
+            {
+                var symbol = GetSymbolOfDeclaration(declaration);
+                if (!symbol.IsNone)
+                {
+                    uncertainSymbols.Add(symbol);
+                }
+            }
             return AddOptionality(type, isProperty, isOptional);
         }
         if (kind == SyntaxKind.PropertyDeclaration && noImplicitAny)
@@ -2087,6 +2128,21 @@ internal sealed partial class Checker
                     // Don't issue a suggestion for binding elements since the codefix doesn't yet support them.
                     return;
                 }
+                break;
+            case SyntaxKind.FunctionDeclaration:
+            case SyntaxKind.MethodDeclaration:
+            case SyntaxKind.MethodSignature:
+            case SyntaxKind.GetAccessor:
+            case SyntaxKind.SetAccessor:
+            case SyntaxKind.FunctionExpression:
+            case SyntaxKind.ArrowFunction:
+                // TODO(C6): the generator yield widening kind
+                if (noImplicitAny && (store.Kind(node) == SyntaxKind.ArrowFunction || store.Name(node).IsNone))
+                {
+                    Error(declaration, Diagnostics.Function_expression_which_lacks_return_type_annotation_implicitly_has_an_0_return_type, typeAsString);
+                    return;
+                }
+                diagnostic = noImplicitAny ? Diagnostics._0_which_lacks_return_type_annotation_implicitly_has_an_1_return_type : Diagnostics._0_implicitly_has_an_1_return_type_but_a_better_type_may_be_inferred_from_usage;
                 break;
             case SyntaxKind.VariableDeclaration:
             default:

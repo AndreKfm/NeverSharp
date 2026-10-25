@@ -111,9 +111,28 @@ internal sealed partial class Checker
                 ref var record = ref Types.Record(placeholder);
                 record.AliasSymbol = aliasSymbol;
                 record.AliasTypeArguments = GetTypeArgumentsForAliasSymbol(aliasSymbol);
+                unsupportedTypes.Add(placeholder);
                 return SetCachedNodeType(node, placeholder);
             }
         }
+    }
+
+    // The placeholder types of type nodes C1 does not resolve (TODO(C3)): property accesses on them are not reported.
+    private readonly HashSet<Type> unsupportedTypes = [];
+
+    /// <summary>Whether a type stands for a type C1 cannot compute (a placeholder, or a reference to an alias of one).</summary>
+    private bool IsUnsupportedType(Type type)
+    {
+        if (unsupportedTypes.Contains(type))
+        {
+            return true;
+        }
+        var alias = Types.Record(type).AliasSymbol;
+        if (!alias.IsNone && (SymbolFlagsOf(alias) & SymbolFlags.TypeAlias) != 0)
+        {
+            return unsupportedTypes.Contains(GetDeclaredTypeOfSymbol(alias));
+        }
+        return false;
     }
 
     private Type GetCachedNodeType(NodeRef node) => TypeNodeLinks.Has(node) ? TypeNodeLinks.Get(node).ResolvedType : Type.None;
