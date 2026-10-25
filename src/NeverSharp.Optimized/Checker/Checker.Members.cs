@@ -783,9 +783,15 @@ internal sealed partial class Checker
         var data = Types.Object(type);
         if (!data.DeclaredMembersResolved)
         {
-            data.DeclaredMembersResolved = true;
+            // (as resolveDeclaredMembers' `!type.declaredProperties`: a recursive call while the late-bound members are
+            // resolved computes the members again)
             var symbol = Types.Symbol(type);
             var members = GetMembersOfSymbol(symbol);
+            if (data.DeclaredMembersResolved)
+            {
+                return data;
+            }
+            data.DeclaredMembersResolved = true;
             data.DeclaredProperties = GetNamedMembers(members);
             // Start with signatures at empty array in case of recursive types
             data.DeclaredCallSignatures = [];
