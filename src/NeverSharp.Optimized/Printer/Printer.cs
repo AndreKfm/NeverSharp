@@ -218,8 +218,23 @@ internal sealed partial class Printer
     // pipelineEmitWithHint, which (without onBeforeEmitNode/onAfterEmitNode and preserveSourceNewlines) is the worker.
     private void PipelineEmit(EmitHint emitHint, Node node)
     {
+        // Track O (module C2): the onEmitNode handler of typeWriter.ts' underlining printer, which toggles the writer's
+        // underlining around every node whose fully-synthetic state differs from the current one.
+        if (IsFullySynthetic is not null && IsFullySynthetic(node) != writer.Underlining)
+        {
+            writer.Underlining = !writer.Underlining;
+            PipelineEmitWithHintWorker(emitHint, node);
+            writer.Underlining = !writer.Underlining;
+            return;
+        }
         PipelineEmitWithHintWorker(emitHint, node);
     }
+
+    /// <summary>
+    /// Track O (module C2): typeWriter.ts' onEmitNode handler (nodeIsSynthesized(node) and no parse tree node behind
+    /// it); null for printers without that handler.
+    /// </summary>
+    internal Func<Node, bool>? IsFullySynthetic { get; set; }
 
     private void PipelineEmitWithHintWorker(EmitHint hint, Node node)
     {

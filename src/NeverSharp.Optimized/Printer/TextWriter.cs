@@ -80,14 +80,29 @@ internal sealed class EmitTextWriter
         }
     }
 
+    /// <summary>
+    /// Track O (module C2): the second writer of typeWriter.ts' underlining printer (src/harness/typeWriter.ts), kept in
+    /// step with this one: every text written here is written there as '^' (while <see cref="Underlining"/>) or spaces.
+    /// </summary>
+    internal StringBuilder? Underline { get; set; }
+
+    /// <summary>Whether the nodes being written are fully synthetic (see <see cref="Underline"/>).</summary>
+    internal bool Underlining { get; set; }
+
     private void WriteText(string s)
     {
         if (s.Length > 0)
         {
             if (lineStart)
             {
+                Underline?.Append(GetIndentString(indent));
                 s = GetIndentString(indent) + s;
+                Underline?.Append(Underlining ? '^' : ' ', s.Length - GetIndentString(indent).Length);
                 lineStart = false;
+            }
+            else
+            {
+                Underline?.Append(Underlining ? '^' : ' ', s.Length);
             }
             output.Append(s);
             UpdateLineCountAndPosFor(s);
@@ -124,6 +139,7 @@ internal sealed class EmitTextWriter
 
     internal void RawWrite(string s)
     {
+        Underline?.Append(Underlining ? '^' : ' ', s.Length);
         output.Append(s);
         UpdateLineCountAndPosFor(s);
         hasTrailingComment = false;
@@ -141,6 +157,7 @@ internal sealed class EmitTextWriter
     {
         if (!lineStart || force)
         {
+            Underline?.Append(newLine);
             output.Append(newLine);
             lineCount++;
             linePos = output.Length;

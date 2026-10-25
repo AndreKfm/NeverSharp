@@ -425,7 +425,7 @@ internal sealed partial class Checker
         var data = Types.TypeParameter(typeParameter);
         if (!data.Default.IsNone)
         {
-            return data.Default == resolvingDefaultType ? Type.None : data.Default;
+            return data.Default == resolvingDefaultType || data.Default == noConstraintType ? Type.None : data.Default;
         }
         data.Default = resolvingDefaultType;
         var result = Type.None;
