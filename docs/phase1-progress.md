@@ -340,3 +340,7 @@ Brief: [modules/BO4.md](modules/BO4.md). One attempt (Opus 5.5, high effort); co
 ### Binder additional run after BO4 (2026-10-25, Windows only)
 
 Profile binder at 68a7829 (idle 5.2 %), variance gate PASS: cs-o-aot-ws-bind vs tsgo7-bind **0.425 [0.419, 0.431]**; single-threaded 0.635; vs tsrs-bind **1.146 [1.127, 1.161]**: within 20 % of tsrs (secondary, additional run); single-threaded 1.176. `results/phase2/additional/2026-10-25T05-13-51-186Z/NOTE.md`.
+
+### Phase 2 closed (2026-10-25)
+
+Closed by the author after BO4. Summary of Gate B, the binder endpoint (1.207, inconclusive), the four additional runs (down to 0.425 vs typescript-go and 1.146 vs tsrs), claims, disclosed differences, modules and steps: [phase2-summary.md](phase2-summary.md).
