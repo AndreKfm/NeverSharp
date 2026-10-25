@@ -30,6 +30,11 @@
 //        (harness/astdump/dump-ts-binder.mjs; reused while the oracle script, typescript and the manifest are unchanged),
 //        the Track O binder dumps (NeverSharp.Dump.Optimized binder) and harness/astdump/compare-binder.mjs per JSDoc
 //        mode; no parser gates)
+//        node harness/port/gate.mjs --track optimized --phase printer [--jsdoc-mode types] [--main ...]
+//        (Phase 3, module P1, printer gate P: Track O Gate 2 build + headers, the tsc 6.0.3 printer dumps
+//        (harness/astdump/dump-ts-printer.mjs; reused while the oracle script, typescript and the manifest are unchanged),
+//        the Track O printer dumps (NeverSharp.Dump.Optimized printer) and harness/astdump/compare-printer.mjs per JSDoc
+//        mode; no parser gates)
 // Exit code 0 only if every gate passes; prints one line per gate and a JSON summary.
 
 import { spawnSync } from "node:child_process";
@@ -45,8 +50,9 @@ const main = arg("--main", root);
 const track = arg("--track", "faithful");
 if (track !== "faithful" && track !== "optimized") throw new Error("--track must be faithful or optimized");
 const phase = arg("--phase", "parser");
-if (phase !== "parser" && phase !== "binder") throw new Error("--phase must be parser or binder");
+if (phase !== "parser" && phase !== "binder" && phase !== "printer") throw new Error("--phase must be parser, binder or printer");
 if (phase === "binder" && track !== "optimized") throw new Error("--phase binder is defined for --track optimized only (phase2-plan.md)");
+if (phase === "printer" && track !== "optimized") throw new Error("--phase printer is defined for --track optimized only (phase3-plan.md)");
 // Track O is always checked completely (it starts from the finished Track F): every gate of M5.
 const moduleId = track === "optimized" ? "M5" : arg("--module", "M1");
 if (!["M1", "M2", "M34", "M5"].includes(moduleId)) throw new Error(`no gate defined for ${moduleId}`);
@@ -55,7 +61,7 @@ const dumpProject = track === "optimized" ? "tools/NeverSharp.Dump.Optimized" : 
 const testProject = track === "optimized" ? "tests/NeverSharp.Optimized.Tests" : "tests/NeverSharp.Faithful.Tests";
 
 // Worktrees lack the untracked inputs: copy the unit-test vectors in (read-only use).
-for (const m of phase === "binder" ? [] : ["M1", "M2"]) {
+for (const m of phase !== "parser" ? [] : ["M1", "M2"]) {
     const vectors = join(root, "artifacts", "vectors", m);
     if (existsSync(vectors)) continue;
     const source = join(main, "artifacts", "vectors", m);
@@ -111,6 +117,36 @@ if (phase === "binder") {
     }
     const pass = results.every(r => r.pass);
     console.log(JSON.stringify({ track, phase, modes, sections: sections.split(","), pass, results }));
+    process.exit(pass ? 0 : 1);
+}
+if (phase === "printer") {
+    // Printer gate P (phase3-plan.md, module P1): per JSDoc mode the tsc 6.0.3 printer dump (the oracle), Track O's
+    // printer dump and the compare; the same oracle caching as Gate B.
+    const corpus = join(main, "artifacts", "equivalence");
+    const modes = arg("--jsdoc-mode", "types").split(",");
+    const oracle = join(root, "harness", "astdump", "dump-ts-printer.mjs");
+    const tsVersion = JSON.parse(readFileSync(createRequire(oracle).resolve("typescript/package.json"), "utf8")).version;
+    const lf = file => readFileSync(file, "utf8").replaceAll("\r\n", "\n");
+    const stamp = createHash("sha256").update(lf(oracle)).update(tsVersion).update(readFileSync(join(corpus, "manifest.json"))).digest("hex");
+    const valid = dir => existsSync(`${dir}.stamp`) && existsSync(`${dir}.outcomes.json`) && readFileSync(`${dir}.stamp`, "utf8") === stamp;
+    let dumpBuilt = false;
+    for (const mode of modes) {
+        let expected = join(corpus, "dumps", `ts-printer-${mode}`);
+        if (!valid(expected)) {
+            expected = join(root, "artifacts", "dumps", `ts-printer-${mode}`);
+            if (valid(expected)) console.log(`(oracle dumps of mode ${mode} reused: ${expected})`);
+            else if (gate(`oracle-${mode}`, node, [oracle, "--corpus", corpus, "--jsdoc-mode", mode, "--out", expected], { timeout: 60 * 60 * 1000, showOutput: true })) writeFileSync(`${expected}.stamp`, stamp);
+            else continue;
+        }
+        else console.log(`(oracle dumps of mode ${mode} reused: ${expected})`);
+        if (!dumpBuilt && !(dumpBuilt = gate("printer-dump-build", "dotnet", ["build", dumpProject, "-c", "Release", "-nologo", "-v", "q"], { showOutput: true }))) break;
+        const actual = join(root, "artifacts", "dumps", `cs-${track}-printer-${mode}`);
+        const dumped = gate(`printer-dump-${mode}`, "dotnet", ["run", "-c", "Release", "--no-build", "--project", dumpProject, "--", "printer", "--jsdoc-mode", mode, "--corpus", corpus, "--out", actual],
+            { timeout: 30 * 60 * 1000, showOutput: true });
+        if (dumped) gate(`printer-compare-${mode}`, node, ["harness/astdump/compare-printer.mjs", "--corpus", corpus, "--jsdoc-mode", mode, "--expected", expected, "--actual", actual, "--show", "15"], { showOutput: true });
+    }
+    const pass = results.every(r => r.pass);
+    console.log(JSON.stringify({ track, phase, modes, pass, results }));
     process.exit(pass ? 0 : 1);
 }
 gate("unit-tests", "dotnet", ["test", "--project", testProject, "-c", "Release"]);

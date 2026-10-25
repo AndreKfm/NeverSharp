@@ -3,7 +3,8 @@
     The canonical dump writers (tools/NeverSharp.Dump, the same sources) compiled against Track O,
     so both tracks are checked by one writer. Default outputs: dumps/cs-optimized, cs-optimized-parsenone,
     cs-optimized-tokens. Phase 2 (module B0): this project's own Program.cs (the shared one plus mode "binder")
-    and BinderDump.cs, the binder dump (dumps/cs-optimized-binder-<mode>).
+    and BinderDump.cs, the binder dump (dumps/cs-optimized-binder-<mode>). Phase 3 (module P1): PrinterDump.cs, the
+    printer dump (mode "printer", dumps/cs-optimized-printer-<mode>).
   -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>

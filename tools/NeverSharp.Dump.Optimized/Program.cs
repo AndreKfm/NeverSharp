@@ -7,20 +7,26 @@
 //   binder                    binder dump for Gate B (module B0; harness/astdump/dump-ts-binder.mjs has the format)
 //                             --jsdoc-mode all|none|types   -> <corpus>/dumps/cs-optimized-binder-<mode>
 //   (--binder with any mode selects the binder dump too)
+//   printer                   printer dump for the printer gate (Phase 3, module P1; harness/astdump/dump-ts-printer.mjs)
+//                             --jsdoc-mode all|none|types (default types) -> <corpus>/dumps/cs-optimized-printer-<mode>
+//                             [--units <id,id,...>] dumps only these units (for probing)
+//   (--printer with any mode selects the printer dump too)
 
 using NeverSharp.Dump;
 
-return args.Length == 0 ? Usage() : Array.IndexOf(args, "--binder") >= 0 ? BinderDump.Run(new Options(args)) : args[0] switch
+return args.Length == 0 ? Usage() : Array.IndexOf(args, "--binder") >= 0 ? BinderDump.Run(new Options(args)) :
+    Array.IndexOf(args, "--printer") >= 0 ? PrinterDump.Run(new Options(args)) : args[0] switch
 {
     "tokens" => TokenDump.Run(new Options(args)),
     "ast" => AstDump.Run(new Options(args)),
     "ast-replay" => AstDump.Replay(new Options(args)),
     "binder" => BinderDump.Run(new Options(args)),
+    "printer" => PrinterDump.Run(new Options(args)),
     _ => Usage(),
 };
 
 static int Usage()
 {
-    Console.Error.WriteLine("usage: NeverSharp.Dump.Optimized tokens|ast|ast-replay|binder [--corpus <dir>] [--out <dir>] [--jsdoc-mode all|none|types] [--timeout-ms <n>]");
+    Console.Error.WriteLine("usage: NeverSharp.Dump.Optimized tokens|ast|ast-replay|binder|printer [--corpus <dir>] [--out <dir>] [--jsdoc-mode all|none|types] [--timeout-ms <n>]");
     return 2;
 }
