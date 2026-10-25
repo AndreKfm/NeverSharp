@@ -56,19 +56,6 @@ internal enum ContainerFlags
 }
 
 /// <summary>
-/// types.ts: CompilerOptions, the options binder.ts reads. The oracle binds with `{}`: all undefined, so the computed
-/// values apply (utilities.ts: getEmitScriptTarget = target ?? LatestStandard, getAlwaysStrict = alwaysStrict !== false).
-/// </summary>
-internal sealed class CompilerOptions
-{
-    public ScriptTarget? Target { get; set; }
-
-    public bool? AlwaysStrict { get; set; }
-
-    public bool? NoFallthroughCasesInSwitch { get; set; }
-}
-
-/// <summary>
 /// binder.ts: createBinder / bindSourceFile. TypeScript keeps the binder's state in the closure of one binder
 /// (createBinder); here the state lives in the instances of this class, one per thread and reused, like the parser's
 /// (typescript-go: the Binder struct of internal/binder/binder.go, taken from a pool per file).

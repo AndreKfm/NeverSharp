@@ -30,11 +30,18 @@
 //        (harness/astdump/dump-ts-binder.mjs; reused while the oracle script, typescript and the manifest are unchanged),
 //        the Track O binder dumps (NeverSharp.Dump.Optimized binder) and harness/astdump/compare-binder.mjs per JSDoc
 //        mode; no parser gates)
+//        node harness/port/gate.mjs --track optimized --phase checker [--jsdoc-mode types] [--sections diagnostics,types,symbols]
+//        [--sample N] [--main ...]   (Phase 3, Gate C: Track O Gate 2 build + headers, the tsc 6.0.3 checker dumps
+//        (harness/astdump/dump-ts-checker.mjs; reused while the oracle script, typescript and the manifest are unchanged;
+//        about 19 minutes per mode when they must be made), the Track O checker dumps (NeverSharp.Dump.Optimized checker,
+//        the default library read from the main checkout's pinned typescript package) and harness/astdump/compare-checker.mjs
+//        per JSDoc mode. --sample N: only a fixed sample of N units (seeded, the same for every run with the same N) is
+//        dumped by Track O and compared; the oracle dumps are the full corpus's. No parser or binder gates)
 // Exit code 0 only if every gate passes; prints one line per gate and a JSON summary.
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cpSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -45,8 +52,9 @@ const main = arg("--main", root);
 const track = arg("--track", "faithful");
 if (track !== "faithful" && track !== "optimized") throw new Error("--track must be faithful or optimized");
 const phase = arg("--phase", "parser");
-if (phase !== "parser" && phase !== "binder") throw new Error("--phase must be parser or binder");
+if (phase !== "parser" && phase !== "binder" && phase !== "checker") throw new Error("--phase must be parser, binder or checker");
 if (phase === "binder" && track !== "optimized") throw new Error("--phase binder is defined for --track optimized only (phase2-plan.md)");
+if (phase === "checker" && track !== "optimized") throw new Error("--phase checker is defined for --track optimized only (phase3-plan.md)");
 // Track O is always checked completely (it starts from the finished Track F): every gate of M5.
 const moduleId = track === "optimized" ? "M5" : arg("--module", "M1");
 if (!["M1", "M2", "M34", "M5"].includes(moduleId)) throw new Error(`no gate defined for ${moduleId}`);
@@ -55,7 +63,7 @@ const dumpProject = track === "optimized" ? "tools/NeverSharp.Dump.Optimized" : 
 const testProject = track === "optimized" ? "tests/NeverSharp.Optimized.Tests" : "tests/NeverSharp.Faithful.Tests";
 
 // Worktrees lack the untracked inputs: copy the unit-test vectors in (read-only use).
-for (const m of phase === "binder" ? [] : ["M1", "M2"]) {
+for (const m of phase === "parser" ? ["M1", "M2"] : []) {
     const vectors = join(root, "artifacts", "vectors", m);
     if (existsSync(vectors)) continue;
     const source = join(main, "artifacts", "vectors", m);
@@ -111,6 +119,55 @@ if (phase === "binder") {
     }
     const pass = results.every(r => r.pass);
     console.log(JSON.stringify({ track, phase, modes, sections: sections.split(","), pass, results }));
+    process.exit(pass ? 0 : 1);
+}
+if (phase === "checker") {
+    // Gate C (phase3-plan.md): per JSDoc mode the tsc 6.0.3 checker dump (the oracle), Track O's checker dump and the compare.
+    const corpus = join(main, "artifacts", "equivalence");
+    const modes = arg("--jsdoc-mode", "types").split(",");
+    const sections = arg("--sections", "diagnostics,types,symbols");
+    const sample = arg("--sample", undefined);
+    const oracle = join(root, "harness", "astdump", "dump-ts-checker.mjs");
+    const tsVersion = JSON.parse(readFileSync(createRequire(oracle).resolve("typescript/package.json"), "utf8")).version;
+    const lf = file => readFileSync(file, "utf8").replaceAll("\r\n", "\n");
+    const stamp = createHash("sha256").update(lf(oracle)).update(tsVersion).update(readFileSync(join(corpus, "manifest.json"))).digest("hex");
+    const valid = dir => existsSync(`${dir}.stamp`) && existsSync(`${dir}.outcomes.json`) && readFileSync(`${dir}.stamp`, "utf8") === stamp;
+    const dumpsDir = join(root, "artifacts", "dumps");
+    mkdirSync(dumpsDir, { recursive: true });
+    // The sample: N units chosen by a seeded hash of their ids (fixed for a given N), written as a units file.
+    let unitsArgs = [];
+    if (sample !== undefined) {
+        const n = Number(sample);
+        if (!(n > 0)) throw new Error("--sample needs a positive number of units");
+        const { units } = JSON.parse(readFileSync(join(corpus, "manifest.json"), "utf8"));
+        const key = id => createHash("sha256").update(`20261025:${id}`).digest("hex");
+        const chosen = units.map(u => ({ id: u.id, key: key(u.id) })).sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0).slice(0, n).map(u => u.id).sort();
+        const unitsFile = join(dumpsDir, `checker-sample-${n}.txt`);
+        writeFileSync(unitsFile, chosen.join("\n") + "\n");
+        unitsArgs = ["--units", unitsFile];
+    }
+    // The default library the C# side reads: the main checkout's pinned typescript 6.0.3 package (the oracle's folder).
+    const libDir = join(createRequire(join(main, "harness", "astdump", "dump-ts-checker.mjs")).resolve("typescript/lib/lib.d.ts"), "..");
+    let dumpBuilt = false;
+    for (const mode of modes) {
+        // Expected: the main checkout's dumps if current (read only), else this checkout's, else a new oracle run here.
+        let expected = join(corpus, "dumps", `ts-checker-${mode}`);
+        if (!valid(expected)) {
+            expected = join(dumpsDir, `ts-checker-${mode}`);
+            if (valid(expected)) console.log(`(oracle dumps of mode ${mode} reused: ${expected})`);
+            else if (gate(`oracle-${mode}`, node, [oracle, "--corpus", corpus, "--jsdoc-mode", mode, "--out", expected], { timeout: 3 * 60 * 60 * 1000, showOutput: true })) writeFileSync(`${expected}.stamp`, stamp);
+            else continue;
+        }
+        else console.log(`(oracle dumps of mode ${mode} reused: ${expected})`);
+        // Built once (the project, the program layer and the checker); then run without building per mode.
+        if (!dumpBuilt && !(dumpBuilt = gate("checker-dump-build", "dotnet", ["build", dumpProject, "-c", "Release", "-nologo", "-v", "q"], { showOutput: true }))) break;
+        const actual = join(dumpsDir, `cs-${track}-checker-${mode}`);
+        const dumped = gate(`checker-dump-${mode}`, "dotnet", ["run", "-c", "Release", "--no-build", "--project", dumpProject, "--", "checker", "--jsdoc-mode", mode, "--corpus", corpus, "--out", actual, "--lib-dir", libDir, ...unitsArgs],
+            { timeout: 60 * 60 * 1000, showOutput: true });
+        if (dumped) gate(`checker-compare-${mode}`, node, ["harness/astdump/compare-checker.mjs", "--corpus", corpus, "--jsdoc-mode", mode, "--expected", expected, "--actual", actual, "--sections", sections, "--show", "15", ...unitsArgs], { showOutput: true });
+    }
+    const pass = results.every(r => r.pass);
+    console.log(JSON.stringify({ track, phase, modes, sections: sections.split(","), sample: sample === undefined ? null : Number(sample), pass, results }));
     process.exit(pass ? 0 : 1);
 }
 gate("unit-tests", "dotnet", ["test", "--project", testProject, "-c", "Release"]);
