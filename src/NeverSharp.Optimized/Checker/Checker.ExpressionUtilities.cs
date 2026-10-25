@@ -2,7 +2,12 @@
 // Portions Copyright (c) Microsoft Corporation.
 // SPDX-License-Identifier: Apache-2.0
 //
-// Ported from src/compiler/utilities.ts and src/compiler/checker.ts (the syntactic helpers of the expression checker:
+// Ported from src/compiler/utilities.ts and src/compiler/checker.ts (module C5; the functions are listed below)
+//   https://github.com/microsoft/TypeScript at commit 050880ce59e30b356b686bd3144efe24f875ebc8
+// Port structure follows internal/checker/checker.go
+//   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
+// Modified: translated from TypeScript to C#; module C5 (details below).
+// Functions (the syntactic helpers of the expression checker:
 // getAssignmentTargetKind, isCompoundAssignment, isInCompoundLikeAssignment, skipOuterExpressions,
 // walkUpParenthesizedExpressions, isBinaryLogicalOperator, isFunctionExpressionOrArrowFunction, isSuperCall,
 // getInvokedExpression, getEffectiveReturnTypeNode, getThisParameter, createDiagnosticForNodeFromMessageChain,

@@ -2,7 +2,12 @@
 // Portions Copyright (c) Microsoft Corporation.
 // SPDX-License-Identifier: Apache-2.0
 //
-// Ported from src/compiler/checker.ts (checkExpression, checkExpressionWorker, checkExpressionCached,
+// Ported from src/compiler/checker.ts (module C5; the functions are listed below)
+//   https://github.com/microsoft/TypeScript at commit 050880ce59e30b356b686bd3144efe24f875ebc8
+// Port structure follows internal/checker/checker.go
+//   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
+// Modified: translated from TypeScript to C#; module C5 (details below).
+// Functions (checkExpression, checkExpressionWorker, checkExpressionCached,
 // getTypeOfExpression, getQuickTypeOfExpression, getContextFreeTypeOfExpression, checkExpressionWithContextualType,
 // checkExpressionForMutableLocation, isConstContext, instantiateTypeWithSingleGenericCallSignature, checkConstEnumAccess,
 // the literal, template, parenthesized, assertion, satisfies, non-null, typeof, void, delete, meta property, spread
@@ -176,6 +181,9 @@ internal sealed partial class Checker
             case SyntaxKind.SatisfiesExpression:
             case SyntaxKind.SpreadElement:
                 uncertain = IsUncertainExpression(At(node, store.Expression(n)));
+                break;
+            case SyntaxKind.YieldExpression:
+                uncertain = !store.AsteriskToken(n).IsNone && !store.Expression(n).IsNone && IsUncertainExpression(At(node, store.Expression(n)));
                 break;
             case SyntaxKind.ConditionalExpression:
                 uncertain = IsUncertainExpression(At(node, store.WhenTrue(n))) || IsUncertainExpression(At(node, store.WhenFalse(n)));

@@ -2,7 +2,12 @@
 // Portions Copyright (c) Microsoft Corporation.
 // SPDX-License-Identifier: Apache-2.0
 //
-// Ported from src/compiler/checker.ts (contextual typing: getContextualType and its cases, getApparentTypeOfContextualType,
+// Ported from src/compiler/checker.ts (module C5; the functions are listed below)
+//   https://github.com/microsoft/TypeScript at commit 050880ce59e30b356b686bd3144efe24f875ebc8
+// Port structure follows internal/checker/checker.go
+//   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
+// Modified: translated from TypeScript to C#; module C5 (details below).
+// Functions (contextual typing: getContextualType and its cases, getApparentTypeOfContextualType,
 // instantiateContextualType, instantiateInstantiableTypes, getContextualSignature, getContextualCallSignature,
 // isAritySmaller, getIntersectedSignatures, combineSignaturesOfIntersectionMembers, getContextuallyTypedParameterType,
 // getContextualTypeForVariableLikeDeclaration, getContextualTypeForInitializerExpression,

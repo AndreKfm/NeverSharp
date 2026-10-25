@@ -280,9 +280,13 @@ internal sealed partial class Checker
             var rest = GetRestArrayTypeOfTupleType(type);
             return rest.IsNone ? CreateTupleType([]) : rest;
         }
+        // (Array.prototype.slice clamps to the array and gives an empty slice when index > endIndex, module C5)
         var typeArguments = GetTypeArguments(type);
-        return CreateTupleType(typeArguments[index..endIndex].ToArray(), target.ElementFlags![index..endIndex], isReadonly: false,
-            target.LabeledElementDeclarations?[index..endIndex]);
+        var end = Math.Max(Math.Min(endIndex, Math.Min(typeArguments.Length, target.ElementFlags!.Length)), 0);
+        var start = Math.Min(index, end);
+        var labels = target.LabeledElementDeclarations;
+        return CreateTupleType(typeArguments[start..end].ToArray(), target.ElementFlags![start..end], isReadonly: false,
+            labels is null ? null : labels[Math.Min(start, labels.Length)..Math.Min(end, labels.Length)]);
     }
 
     // checker.ts getRestArrayTypeOfTupleType

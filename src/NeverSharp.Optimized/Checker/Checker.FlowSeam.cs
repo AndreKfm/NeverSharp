@@ -176,7 +176,7 @@ internal sealed partial class Checker
             }
             else if (!sensitive)
             {
-                if ((flags & FlowFlags.Condition) != 0 && !node.IsNone && MayNarrowObject(store, node, rootName))
+                if ((flags & FlowFlags.Condition) != 0 && !node.IsNone && MayNarrowObject(expr, store, node, rootName))
                 {
                     return true;
                 }
@@ -235,7 +235,7 @@ internal sealed partial class Checker
 
     // whether a condition or call may narrow an object type mentioned by the name: instanceof, in, or a call (type
     // predicates and assertion functions) whose operands mention it
-    private static bool MayNarrowObject(NodeStore store, Node node, string name)
+    private bool MayNarrowObject(NodeRef context, NodeStore store, Node node, string name)
     {
         var found = false;
         Visit(node);
@@ -249,8 +249,16 @@ internal sealed partial class Checker
             }
             switch (store.Kind(n))
             {
-                case SyntaxKind.BinaryExpression when store.Kind(store.OperatorToken(n)) is SyntaxKind.InstanceOfKeyword or SyntaxKind.InKeyword:
-                    if (MentionsName(store, store.Kind(store.OperatorToken(n)) == SyntaxKind.InKeyword ? store.Right(n) : store.Left(n), name))
+                case SyntaxKind.BinaryExpression when store.Kind(store.OperatorToken(n)) == SyntaxKind.InstanceOfKeyword:
+                    // (instanceof an any-typed constructor does not narrow)
+                    if (MentionsName(store, store.Left(n), name) && (Types.Flags(CheckExpressionCached(At(context, store.Right(n)))) & TypeFlags.Any) == 0)
+                    {
+                        found = true;
+                        return;
+                    }
+                    break;
+                case SyntaxKind.BinaryExpression when store.Kind(store.OperatorToken(n)) == SyntaxKind.InKeyword:
+                    if (MentionsName(store, store.Right(n), name))
                     {
                         found = true;
                         return;

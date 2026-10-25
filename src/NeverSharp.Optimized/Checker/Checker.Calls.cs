@@ -2,7 +2,12 @@
 // Portions Copyright (c) Microsoft Corporation.
 // SPDX-License-Identifier: Apache-2.0
 //
-// Ported from src/compiler/checker.ts (call resolution: getEffectiveCallArguments, getResolvedSignature, resolveSignature,
+// Ported from src/compiler/checker.ts (module C5; the functions are listed below)
+//   https://github.com/microsoft/TypeScript at commit 050880ce59e30b356b686bd3144efe24f875ebc8
+// Port structure follows internal/checker/checker.go
+//   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
+// Modified: translated from TypeScript to C#; module C5 (details below).
+// Functions (call resolution: getEffectiveCallArguments, getResolvedSignature, resolveSignature,
 // resolveCallExpression, resolveNewExpression, resolveTaggedTemplateExpression, resolveInstanceofExpression,
 // resolveUntypedCall, resolveErrorCall, reorderCandidates, hasCorrectArity, hasCorrectTypeArgumentArity,
 // getSignatureApplicabilityError, getThisArgumentOfCall, getThisArgumentType, inferTypeArguments, getSpreadArgumentType,
@@ -1128,7 +1133,7 @@ internal sealed partial class Checker
             var thisArgumentType = GetThisArgumentType(thisArgumentNode);
             var errorNode = reportErrors ? (!thisArgumentNode.IsNone ? thisArgumentNode : node) : NodeRef.None;
             var headMessage = Diagnostics.The_this_context_of_type_0_is_not_assignable_to_method_s_this_of_type_1;
-            if (!SuppressDerivedDiagnostics(thisArgumentNode, thisArgumentType) &&
+            if (!(reportErrors && SuppressDerivedDiagnostics(thisArgumentNode, thisArgumentType)) &&
                 !CheckTypeRelatedTo(thisArgumentType, thisType, relation, errorNode, headMessage, containingMessageChain, errorOutputContainer))
             {
                 return errorOutputContainer.Errors ?? [];
@@ -1149,7 +1154,7 @@ internal sealed partial class Checker
                 // parameter types yet and therefore excess property checks may yield false positives (see #17041).
                 var checkArgType = (checkMode & CheckMode.SkipContextSensitive) != 0 ? GetRegularTypeOfObjectLiteral(argType) : argType;
                 var effectiveCheckArgumentNode = GetEffectiveCheckNode(arg);
-                if (!arg.IsSynthetic && SuppressDerivedDiagnostics(arg.Node, argType))
+                if (reportErrors && !arg.IsSynthetic && SuppressDerivedDiagnostics(arg.Node, argType))
                 {
                     continue; // TODO(C6/C7): the argument's type is an approximation
                 }
@@ -1575,7 +1580,7 @@ internal sealed partial class Checker
         // no arguments excluded from assignability checks.
         // If candidate is undefined, it means that no candidates had a suitable arity. In that case,
         // skip the checkApplicableSignature check.
-        if (inferenceUsed)
+        if (inferenceUsed || args.Exists(a => !a.IsSynthetic && IsUncertainExpression(a.Node)))
         {
             // TODO(C6): the candidates failed with the seam's inferences; the failure is not reported
             MarkUncertainCall(node, args);

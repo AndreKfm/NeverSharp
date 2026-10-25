@@ -2,7 +2,12 @@
 // Portions Copyright (c) Microsoft Corporation.
 // SPDX-License-Identifier: Apache-2.0
 //
-// Ported from src/compiler/checker.ts (property and element access: checkNonNullExpression, checkNonNullType,
+// Ported from src/compiler/checker.ts (module C5; the functions are listed below)
+//   https://github.com/microsoft/TypeScript at commit 050880ce59e30b356b686bd3144efe24f875ebc8
+// Port structure follows internal/checker/checker.go
+//   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
+// Modified: translated from TypeScript to C#; module C5 (details below).
+// Functions (property and element access: checkNonNullExpression, checkNonNullType,
 // checkNonNullTypeWithReporter, checkNonNullNonVoidType, reportObjectPossiblyNullOrUndefinedError,
 // reportCannotInvokePossiblyNullOrUndefinedError, checkPropertyAccessExpression, checkPropertyAccessChain,
 // checkQualifiedName, checkPropertyAccessExpressionOrQualifiedName, isMethodAccessForCall,
@@ -55,6 +60,10 @@ internal sealed partial class Checker
                     }
                 }
                 Error(node, Diagnostics.Object_is_of_type_unknown);
+            }
+            else
+            {
+                uncertainExpressions.Add(node); // TODO(C7): the narrowed type is not known
             }
             return errorType;
         }
@@ -1158,9 +1167,13 @@ internal sealed partial class Checker
         {
             return false;
         }
+        // (the types are constituents of the expressions' types when getIndexedAccessType distributes over unions: the
+        // narrowing check considers any type)
+        _ = objectType;
+        _ = indexType;
         var store = StoreOf(accessNode);
-        return SuppressDerivedDiagnostics(At(accessNode, store.Expression(accessNode.Node)), objectType) ||
-            SuppressDerivedDiagnostics(At(accessNode, store.ArgumentExpression(accessNode.Node)), indexType);
+        return SuppressDerivedDiagnostics(At(accessNode, store.Expression(accessNode.Node)), unknownType) ||
+            SuppressDerivedDiagnostics(At(accessNode, store.ArgumentExpression(accessNode.Node)), unknownType);
     }
 
     // checker.ts checkElementAccessExpression
