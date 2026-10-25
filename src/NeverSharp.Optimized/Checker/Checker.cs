@@ -457,13 +457,8 @@ internal sealed partial class Checker
         deferredDiagnostics.Clear();
     }
 
-    // program.ts canIncludeBindAndCheckDiagnostics (the TypeScript script kinds; JavaScript: module C9)
-    private bool CanIncludeBindAndCheckDiagnostics(int file)
-    {
-        var store = FileAt(file).Store;
-        var root = FileAt(file).Root;
-        return store.CheckJsDirective(root) is not { Enabled: false } && store.ScriptKind(root) is ScriptKind.TS or ScriptKind.TSX or ScriptKind.External or ScriptKind.Deferred;
-    }
+    // utilities.ts canIncludeBindAndCheckDiagnostics (plain and checked JavaScript files included since module C9a)
+    private bool CanIncludeBindAndCheckDiagnostics(int file) => Program.CanIncludeBindAndCheckDiagnostics(FileAt(file), compilerOptions);
 
     /// <summary>checker.ts getSuggestionDiagnostics(file).</summary>
     internal List<ProgramDiagnostic> GetSuggestionDiagnostics(SourceFile file)

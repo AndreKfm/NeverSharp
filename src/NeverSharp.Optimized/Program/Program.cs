@@ -43,10 +43,12 @@ internal sealed class Program
     private readonly Dictionary<string, SourceFile?> filesByName = new(StringComparer.Ordinal);
     private readonly HashSet<string> libFiles = new(StringComparer.Ordinal);
     private readonly List<ProgramDiagnostic> fileProcessingDiagnostics = [];
+    private readonly List<ProgramDiagnostic> configDiagnostics = [];
     private List<SourceFile>? processingDefaultLibFiles = [];
     private List<SourceFile>? processingOtherFiles = [];
     private readonly List<SourceFile> files;
     private Checker? checker;
+    private Dictionary<SourceFile, List<Diagnostic>>? additionalSyntacticDiagnostics;
 
     private Program(IReadOnlyList<string> rootNames, CompilerOptions options, ICompilerHost host)
     {
@@ -100,7 +102,89 @@ internal sealed class Program
         files.AddRange(processingOtherFiles);
         processingDefaultLibFiles = null;
         processingOtherFiles = null;
+
+        VerifyEmitFilePaths();
     }
+
+    // program.ts verifyCompilerOptions, its last part: "If the emit is enabled make sure that every output file is unique
+    // and not overwriting any of the input files" (forEachEmittedFile, getOutputPathsFor, verifyEmitFilePath). Track O's
+    // options have no noEmit, suppressOutputPathCheck, emitDeclarationOnly, outFile, outDir or declarationDir, so the
+    // emit is enabled and every output lies next to its input; no config file, so the tsconfig hint is always chained.
+    private void VerifyEmitFilePaths()
+    {
+        var emitFilesSeen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var file in files)
+        {
+            // getSourceFilesToEmit: sourceFileMayBeEmitted (declaration files are not emitted; root files are not from
+            // an external library; JSON files are not emitted without outDir/outFile)
+            var store = file.Store;
+            var fileName = store.FileName(file.Root);
+            if (store.IsDeclarationFile(file.Root) || TsPath.FileExtensionIs(fileName, ".json"))
+            {
+                continue;
+            }
+            var withoutExtension = RemoveFileExtension(fileName);
+            VerifyEmitFilePath(withoutExtension + GetOutputExtension(fileName), emitFilesSeen);
+            if (options.GetEmitDeclarations())
+            {
+                VerifyEmitFilePath(withoutExtension + GetDeclarationEmitExtensionForPath(fileName), emitFilesSeen);
+            }
+        }
+    }
+
+    private void VerifyEmitFilePath(string emitFileName, HashSet<string> emitFilesSeen)
+    {
+        var emitFilePath = ToPath(emitFileName);
+        // Report error if the output overwrites input file
+        if (filesByName.ContainsKey(emitFilePath))
+        {
+            // The program is from either an inferred project or an external project
+            var chain = ProgramDiagnostics.ChainDiagnosticMessages(null, Diagnostics.Adding_a_tsconfig_json_file_will_help_organize_projects_that_contain_both_TypeScript_and_JavaScript_files_Learn_more_at_https_Colon_Slash_Slashaka_ms_Slashtsconfig);
+            chain = ProgramDiagnostics.ChainDiagnosticMessages([chain], Diagnostics.Cannot_write_file_0_because_it_would_overwrite_input_file, emitFileName);
+            configDiagnostics.Add(ProgramDiagnostics.CreateCompilerDiagnosticFromMessageChain(chain));
+        }
+        var emitFileKey = !host.UseCaseSensitiveFileNames ? emitFilePath.ToLowerInvariant() : emitFilePath;
+        // Report error if multiple files write into same file
+        if (!emitFilesSeen.Add(emitFileKey))
+        {
+            // Already seen the same emit file - report error
+            configDiagnostics.Add(ProgramDiagnostics.CreateCompilerDiagnosticFromMessageChain(ProgramDiagnostics.ChainDiagnosticMessages(null, Diagnostics.Cannot_write_file_0_because_it_would_be_overwritten_by_multiple_input_files, emitFileName)));
+        }
+    }
+
+    // emitter.ts getOutputExtension
+    private string GetOutputExtension(string fileName)
+    {
+        return TsPath.FileExtensionIs(fileName, ".json") ? ".json"
+            : options.Jsx == JsxEmit.Preserve && FileExtensionIsOneOf(fileName, ".jsx", ".tsx") ? ".jsx"
+            : FileExtensionIsOneOf(fileName, ".mts", ".mjs") ? ".mjs"
+            : FileExtensionIsOneOf(fileName, ".cts", ".cjs") ? ".cjs"
+            : ".js";
+    }
+
+    // utilities.ts getDeclarationEmitExtensionForPath
+    private static string GetDeclarationEmitExtensionForPath(string path)
+    {
+        return FileExtensionIsOneOf(path, ".mjs", ".mts") ? ".d.mts"
+            : FileExtensionIsOneOf(path, ".cjs", ".cts") ? ".d.cts"
+            : FileExtensionIsOneOf(path, ".json") ? ".d.json.ts"
+            : ".d.ts";
+    }
+
+    // utilities.ts removeFileExtension (extensionsToRemove)
+    private static string RemoveFileExtension(string path)
+    {
+        foreach (var extension in ExtensionsToRemove)
+        {
+            if (TsPath.FileExtensionIs(path, extension))
+            {
+                return path[..^extension.Length];
+            }
+        }
+        return path;
+    }
+
+    private static readonly string[] ExtensionsToRemove = [".d.ts", ".d.mts", ".d.cts", ".mjs", ".mts", ".cjs", ".cts", ".ts", ".js", ".tsx", ".jsx", ".json"];
 
     /// <summary>program.ts createProgram(rootNames, options, host).</summary>
     internal static Program Create(IReadOnlyList<string> rootNames, CompilerOptions options, ICompilerHost host)
@@ -139,8 +223,9 @@ internal sealed class Program
 
     /// <summary>
     /// program.getOptionsDiagnostics(): the diagnostics of file processing without a file (e.g. TS6504 for a JavaScript
-    /// root file without allowJs). (Option validation, verifyCompilerOptions, finds nothing for the options C0
-    /// supports; TypeScript sorts and deduplicates these, sortAndDeduplicateDiagnostics: not needed while at most one
+    /// root file without allowJs) and the emit-path check of verifyCompilerOptions (TS5055 for a JavaScript root file
+    /// whose output would overwrite it; the rest of option validation finds nothing for the options C0 supports).
+    /// (TypeScript sorts and deduplicates these, sortAndDeduplicateDiagnostics: not needed while at most one
     /// exists per program, C8 ports it.)
     /// </summary>
     internal List<ProgramDiagnostic> GetOptionsDiagnostics()
@@ -153,6 +238,8 @@ internal sealed class Program
                 result.Add(d);
             }
         }
+        // the configuration diagnostics of verifyCompilerOptions (TS5055/TS5056 of the emit paths; module C9a)
+        result.AddRange(configDiagnostics);
         return result;
     }
 
@@ -160,17 +247,29 @@ internal sealed class Program
     internal List<ProgramDiagnostic> GetGlobalDiagnostics() => GetTypeChecker().GetGlobalDiagnostics();
 
     /// <summary>
-    /// program.getSyntacticDiagnostics(file): the parse diagnostics (for JavaScript files also the additional syntactic
-    /// diagnostics, which need allowJs; not ported yet).
+    /// program.getSyntacticDiagnostics(file), getSyntacticDiagnosticsForFile: the parse diagnostics, for JavaScript files
+    /// preceded by the additional syntactic diagnostics (TypeScript-only constructs, getJSSyntacticDiagnosticsForFile;
+    /// computed once per file, as TypeScript caches them in sourceFile.additionalSyntacticDiagnostics).
     /// </summary>
     internal List<ProgramDiagnostic> GetSyntacticDiagnostics(SourceFile file)
     {
         ArgumentNullException.ThrowIfNull(file);
-        if (options.GetAllowJSCompilerOption() && file.Store.ScriptKind(file.Root) is ScriptKind.JS or ScriptKind.JSX)
-        {
-            throw new NotSupportedException("Program (module C0): the additional syntactic diagnostics of JavaScript files (module C9)");
-        }
         var result = new List<ProgramDiagnostic>();
+        // For JavaScript files, we report semantic errors for using TypeScript-only
+        // constructs from within a JavaScript file as syntactic errors.
+        if (Utilities.IsInJSFile(file.Store, file.Root))
+        {
+            additionalSyntacticDiagnostics ??= new Dictionary<SourceFile, List<Diagnostic>>(ReferenceEqualityComparer.Instance);
+            if (!additionalSyntacticDiagnostics.TryGetValue(file, out var additional))
+            {
+                additional = JsSyntacticDiagnostics.GetForFile(file, options);
+                additionalSyntacticDiagnostics.Add(file, additional);
+            }
+            foreach (var d in additional)
+            {
+                result.Add(ProgramDiagnostic.FromFile(file, d));
+            }
+        }
         foreach (var d in file.ParseDiagnostics)
         {
             result.Add(ProgramDiagnostic.FromFile(file, d));
@@ -179,37 +278,91 @@ internal sealed class Program
     }
 
     /// <summary>
-    /// program.getSemanticDiagnostics(file): getBindAndCheckDiagnosticsForFile, the bind diagnostics (for the script
-    /// kinds that include them) followed by the checker's diagnostics. Module C0: no comment-directive filtering
-    /// (@ts-ignore, @ts-expect-error), no program diagnostics of the file (e.g. unknown lib references); C8 completes.
+    /// program.getSemanticDiagnostics(file): getBindAndCheckDiagnosticsForFileNoCache, the bind diagnostics followed by
+    /// the checker's diagnostics (in plain JavaScript files only the codes of plainJSErrors; in checked JavaScript files
+    /// also the JSDoc parse diagnostics), filtered by the comment directives (not in plain JavaScript files). No program
+    /// diagnostics of the file (e.g. unknown lib references); C8 completes.
     /// </summary>
     internal List<ProgramDiagnostic> GetSemanticDiagnostics(SourceFile file)
     {
         var checker = GetTypeChecker();
         var result = new List<ProgramDiagnostic>();
+        if (!CanIncludeBindAndCheckDiagnostics(file, options))
+        {
+            return result; // skipTypeChecking
+        }
         var store = file.Store;
         var scriptKind = store.ScriptKind(file.Root);
-        var isTsNoCheck = store.CheckJsDirective(file.Root) is { Enabled: false };
-        // By default, only type-check .ts, .tsx, Deferred, plain JS, checked JS and External
-        // - plain JS: .js files with no // ts-check and checkJs: undefined (module C9 adds the JavaScript kinds)
-        var includeBindAndCheckDiagnostics = !isTsNoCheck && scriptKind is ScriptKind.TS or ScriptKind.TSX or ScriptKind.External or ScriptKind.Deferred;
-        if (includeBindAndCheckDiagnostics && file.Binding is { } binding)
+        var isJs = scriptKind is ScriptKind.JS or ScriptKind.JSX;
+        var isPlainJs = IsPlainJsFile(file, options.CheckJs);
+        var isCheckJs = isJs && IsCheckJsEnabledForFile(file, options) == true;
+        if (file.Binding is { } binding)
         {
             foreach (var d in binding.BindDiagnostics)
+            {
+                if (!isPlainJs || PlainJSErrors.Contains(d.Code))
+                {
+                    result.Add(ProgramDiagnostic.FromFile(file, d));
+                }
+            }
+        }
+        foreach (var d in checker.GetDiagnostics(file))
+        {
+            if (!isPlainJs || PlainJSErrors.Contains(d.Code))
+            {
+                result.Add(d);
+            }
+        }
+        if (isCheckJs && file.JsDocDiagnostics is { } jsDocDiagnostics)
+        {
+            foreach (var d in jsDocDiagnostics)
             {
                 result.Add(ProgramDiagnostic.FromFile(file, d));
             }
         }
-        if (includeBindAndCheckDiagnostics)
-        {
-            result.AddRange(checker.GetDiagnostics(file));
-        }
+        // getMergedBindAndCheckDiagnostics: skip ts-expect-error errors in plain JS files
         var commentDirectives = store.CommentDirectives(file.Root);
-        if (!includeBindAndCheckDiagnostics || commentDirectives is not { Count: > 0 })
+        if (isPlainJs || commentDirectives is not { Count: > 0 })
         {
             return result;
         }
         return GetDiagnosticsWithPrecedingDirectives(file, commentDirectives, result);
+    }
+
+    // utilities.ts isPlainJsFile
+    internal static bool IsPlainJsFile(SourceFile? file, bool? checkJs)
+    {
+        return file is not null && file.Store.ScriptKind(file.Root) is ScriptKind.JS or ScriptKind.JSX && file.Store.CheckJsDirective(file.Root) is null && checkJs is null;
+    }
+
+    // utilities.ts isCheckJsEnabledForFile
+    internal static bool? IsCheckJsEnabledForFile(SourceFile file, CompilerOptions options)
+    {
+        return file.Store.CheckJsDirective(file.Root) is { } directive ? directive.Enabled : options.CheckJs;
+    }
+
+    /// <summary>utilities.ts canIncludeBindAndCheckDiagnostics (the part of skipTypeChecking Track O's options reach).</summary>
+    internal static bool CanIncludeBindAndCheckDiagnostics(SourceFile file, CompilerOptions options)
+    {
+        var store = file.Store;
+        if (store.CheckJsDirective(file.Root) is { Enabled: false })
+        {
+            return false;
+        }
+        var scriptKind = store.ScriptKind(file.Root);
+        if (scriptKind is ScriptKind.TS or ScriptKind.TSX or ScriptKind.External)
+        {
+            return true;
+        }
+        var isJs = scriptKind is ScriptKind.JS or ScriptKind.JSX;
+        var isCheckJs = isJs && IsCheckJsEnabledForFile(file, options) == true;
+        var isPlainJs = IsPlainJsFile(file, options.CheckJs);
+
+        // By default, only type-check .ts, .tsx, Deferred, plain JS, checked JS and External
+        // - plain JS: .js files with no // ts-check and checkJs: undefined
+        // - check JS: .js files with either // ts-check or checkJs: true
+        // - external: files that are added by plugins
+        return isPlainJs || isCheckJs || scriptKind == ScriptKind.Deferred;
     }
 
     // program.ts getMergedBindAndCheckDiagnostics / getDiagnosticsWithPrecedingDirectives / markPrecedingCommentDirectiveLine:
@@ -542,4 +695,103 @@ internal sealed class Program
     private static string RemovePrefix(string s, string prefix) => s.StartsWith(prefix, StringComparison.Ordinal) ? s[prefix.Length..] : s;
 
     private static string RemoveSuffix(string s, string suffix) => s.EndsWith(suffix, StringComparison.Ordinal) ? s[..^suffix.Length] : s;
+
+    // program.ts plainJSErrors: the bind and check diagnostics reported in plain JavaScript files.
+    private static readonly HashSet<int> PlainJSErrors =
+    [
+        // binder errors
+        Diagnostics.Cannot_redeclare_block_scoped_variable_0.Code,
+        Diagnostics.A_module_cannot_have_multiple_default_exports.Code,
+        Diagnostics.Another_export_default_is_here.Code,
+        Diagnostics.The_first_export_default_is_here.Code,
+        Diagnostics.Identifier_expected_0_is_a_reserved_word_at_the_top_level_of_a_module.Code,
+        Diagnostics.Identifier_expected_0_is_a_reserved_word_in_strict_mode_Modules_are_automatically_in_strict_mode.Code,
+        Diagnostics.Identifier_expected_0_is_a_reserved_word_that_cannot_be_used_here.Code,
+        Diagnostics.constructor_is_a_reserved_word.Code,
+        Diagnostics.delete_cannot_be_called_on_an_identifier_in_strict_mode.Code,
+        Diagnostics.Code_contained_in_a_class_is_evaluated_in_JavaScript_s_strict_mode_which_does_not_allow_this_use_of_0_For_more_information_see_https_Colon_Slash_Slashdeveloper_mozilla_org_Slashen_US_Slashdocs_SlashWeb_SlashJavaScript_SlashReference_SlashStrict_mode.Code,
+        Diagnostics.Invalid_use_of_0_Modules_are_automatically_in_strict_mode.Code,
+        Diagnostics.Invalid_use_of_0_in_strict_mode.Code,
+        Diagnostics.A_label_is_not_allowed_here.Code,
+        Diagnostics.with_statements_are_not_allowed_in_strict_mode.Code,
+        // grammar errors
+        Diagnostics.A_break_statement_can_only_be_used_within_an_enclosing_iteration_or_switch_statement.Code,
+        Diagnostics.A_break_statement_can_only_jump_to_a_label_of_an_enclosing_statement.Code,
+        Diagnostics.A_class_declaration_without_the_default_modifier_must_have_a_name.Code,
+        Diagnostics.A_class_member_cannot_have_the_0_keyword.Code,
+        Diagnostics.A_comma_expression_is_not_allowed_in_a_computed_property_name.Code,
+        Diagnostics.A_continue_statement_can_only_be_used_within_an_enclosing_iteration_statement.Code,
+        Diagnostics.A_continue_statement_can_only_jump_to_a_label_of_an_enclosing_iteration_statement.Code,
+        Diagnostics.A_default_clause_cannot_appear_more_than_once_in_a_switch_statement.Code,
+        Diagnostics.A_default_export_must_be_at_the_top_level_of_a_file_or_module_declaration.Code,
+        Diagnostics.A_definite_assignment_assertion_is_not_permitted_in_this_context.Code,
+        Diagnostics.A_destructuring_declaration_must_have_an_initializer.Code,
+        Diagnostics.A_get_accessor_cannot_have_parameters.Code,
+        Diagnostics.A_rest_element_cannot_contain_a_binding_pattern.Code,
+        Diagnostics.A_rest_element_cannot_have_a_property_name.Code,
+        Diagnostics.A_rest_element_cannot_have_an_initializer.Code,
+        Diagnostics.A_rest_element_must_be_last_in_a_destructuring_pattern.Code,
+        Diagnostics.A_rest_parameter_cannot_have_an_initializer.Code,
+        Diagnostics.A_rest_parameter_must_be_last_in_a_parameter_list.Code,
+        Diagnostics.A_rest_parameter_or_binding_pattern_may_not_have_a_trailing_comma.Code,
+        Diagnostics.A_return_statement_cannot_be_used_inside_a_class_static_block.Code,
+        Diagnostics.A_set_accessor_cannot_have_rest_parameter.Code,
+        Diagnostics.A_set_accessor_must_have_exactly_one_parameter.Code,
+        Diagnostics.An_export_declaration_can_only_be_used_at_the_top_level_of_a_module.Code,
+        Diagnostics.An_export_declaration_cannot_have_modifiers.Code,
+        Diagnostics.An_import_declaration_can_only_be_used_at_the_top_level_of_a_module.Code,
+        Diagnostics.An_import_declaration_cannot_have_modifiers.Code,
+        Diagnostics.An_object_member_cannot_be_declared_optional.Code,
+        Diagnostics.Argument_of_dynamic_import_cannot_be_spread_element.Code,
+        Diagnostics.Cannot_assign_to_private_method_0_Private_methods_are_not_writable.Code,
+        Diagnostics.Cannot_redeclare_identifier_0_in_catch_clause.Code,
+        Diagnostics.Catch_clause_variable_cannot_have_an_initializer.Code,
+        Diagnostics.Class_decorators_can_t_be_used_with_static_private_identifier_Consider_removing_the_experimental_decorator.Code,
+        Diagnostics.Classes_can_only_extend_a_single_class.Code,
+        Diagnostics.Classes_may_not_have_a_field_named_constructor.Code,
+        Diagnostics.Did_you_mean_to_use_a_Colon_An_can_only_follow_a_property_name_when_the_containing_object_literal_is_part_of_a_destructuring_pattern.Code,
+        Diagnostics.Duplicate_label_0.Code,
+        Diagnostics.Dynamic_imports_can_only_accept_a_module_specifier_and_an_optional_set_of_attributes_as_arguments.Code,
+        Diagnostics.for_await_loops_cannot_be_used_inside_a_class_static_block.Code,
+        Diagnostics.JSX_attributes_must_only_be_assigned_a_non_empty_expression.Code,
+        Diagnostics.JSX_elements_cannot_have_multiple_attributes_with_the_same_name.Code,
+        Diagnostics.JSX_expressions_may_not_use_the_comma_operator_Did_you_mean_to_write_an_array.Code,
+        Diagnostics.JSX_property_access_expressions_cannot_include_JSX_namespace_names.Code,
+        Diagnostics.Jump_target_cannot_cross_function_boundary.Code,
+        Diagnostics.Line_terminator_not_permitted_before_arrow.Code,
+        Diagnostics.Modifiers_cannot_appear_here.Code,
+        Diagnostics.Only_a_single_variable_declaration_is_allowed_in_a_for_in_statement.Code,
+        Diagnostics.Only_a_single_variable_declaration_is_allowed_in_a_for_of_statement.Code,
+        Diagnostics.Private_identifiers_are_not_allowed_outside_class_bodies.Code,
+        Diagnostics.Private_identifiers_are_only_allowed_in_class_bodies_and_may_only_be_used_as_part_of_a_class_member_declaration_property_access_or_on_the_left_hand_side_of_an_in_expression.Code,
+        Diagnostics.Property_0_is_not_accessible_outside_class_1_because_it_has_a_private_identifier.Code,
+        Diagnostics.Tagged_template_expressions_are_not_permitted_in_an_optional_chain.Code,
+        Diagnostics.The_left_hand_side_of_a_for_of_statement_may_not_be_async.Code,
+        Diagnostics.The_variable_declaration_of_a_for_in_statement_cannot_have_an_initializer.Code,
+        Diagnostics.The_variable_declaration_of_a_for_of_statement_cannot_have_an_initializer.Code,
+        Diagnostics.Trailing_comma_not_allowed.Code,
+        Diagnostics.Variable_declaration_list_cannot_be_empty.Code,
+        Diagnostics._0_and_1_operations_cannot_be_mixed_without_parentheses.Code,
+        Diagnostics._0_expected.Code,
+        Diagnostics._0_is_not_a_valid_meta_property_for_keyword_1_Did_you_mean_2.Code,
+        Diagnostics._0_list_cannot_be_empty.Code,
+        Diagnostics._0_modifier_already_seen.Code,
+        Diagnostics._0_modifier_cannot_appear_on_a_constructor_declaration.Code,
+        Diagnostics._0_modifier_cannot_appear_on_a_module_or_namespace_element.Code,
+        Diagnostics._0_modifier_cannot_appear_on_a_parameter.Code,
+        Diagnostics._0_modifier_cannot_appear_on_class_elements_of_this_kind.Code,
+        Diagnostics._0_modifier_cannot_be_used_here.Code,
+        Diagnostics._0_modifier_must_precede_1_modifier.Code,
+        Diagnostics._0_declarations_can_only_be_declared_inside_a_block.Code,
+        Diagnostics._0_declarations_must_be_initialized.Code,
+        Diagnostics.extends_clause_already_seen.Code,
+        Diagnostics.let_is_not_allowed_to_be_used_as_a_name_in_let_or_const_declarations.Code,
+        Diagnostics.Class_constructor_may_not_be_a_generator.Code,
+        Diagnostics.Class_constructor_may_not_be_an_accessor.Code,
+        Diagnostics.await_expressions_are_only_allowed_within_async_functions_and_at_the_top_levels_of_modules.Code,
+        Diagnostics.await_using_statements_are_only_allowed_within_async_functions_and_at_the_top_levels_of_modules.Code,
+        Diagnostics.Private_field_0_must_be_declared_in_an_enclosing_class.Code,
+        // Type errors
+        Diagnostics.This_condition_will_always_return_0_since_JavaScript_compares_objects_by_reference_not_value.Code,
+    ];
 }
