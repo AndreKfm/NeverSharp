@@ -19,7 +19,7 @@ The parser and binder work per file; the checker works per **program**: it resol
 |---|---|
 | C0 | oracle (diagnostics + types dump), compare, `gate.mjs --phase checker`; Track O program layer: compiler options, host, default library loading (parse+bind the lib files once per process and share them read-only), file set, `Program` with per-file parse/bind results; a checker skeleton and the C# dump writer; data layout decision for types, signatures, symbol links and node links (handles and per-checker arenas, following typescript-go's checker structure) |
 | C1 | checker core: `initializeTypeChecker`, global symbol table and lib merging, intrinsic types, `resolveName`, `getSymbolOfNode`, symbol and node links, `getTypeOfSymbol`, declared types of classes/interfaces/enums/aliases, type references, unions/intersections, literal types |
-| C2 | type printing: node builder and printer subset needed by `typeToString` / `symbolToString` (diagnostic messages and the types dump depend on it) |
+| C2 | type printing: node builder (the printer itself is module P1, ported in parallel with C0) and printer subset needed by `typeToString` / `symbolToString` (diagnostic messages and the types dump depend on it) |
 | C3 | instantiation and mappers, generics, conditional/indexed/mapped types, template literal types |
 | C4 | relations: assignability, comparability, subtype, identity, structural comparison, relation caches, elaboration of diagnostic chains |
 | C5 | expressions: `checkExpression` family, literals, operators, property access, calls and overload resolution, contextual typing |
