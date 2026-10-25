@@ -98,6 +98,21 @@ internal sealed class TypeStore
 
     /// <summary>The data of a type parameter.</summary>
     internal TypeParameterData TypeParameter(Type type) => typeParameters[types[type.Id].Data];
+
+    // The data of the instantiable kinds module C3 adds (indexed access, index, conditional, substitution, template
+    // literal and string mapping types), one record class per kind.
+    private readonly List<object> instantiables = [null!];
+
+    /// <summary>A new type of an instantiable kind with its data record.</summary>
+    internal Type CreateWithData(TypeFlags flags, object data, SymbolRef symbol = default)
+    {
+        instantiables.Add(data);
+        return Create(flags, ObjectFlags.None, symbol, instantiables.Count - 1);
+    }
+
+    /// <summary>The data record of a type created by <see cref="CreateWithData"/>.</summary>
+    internal T Data<T>(Type type) where T : class => (T)instantiables[types[type.Id].Data];
+
     private IntrinsicData[] intrinsics = new IntrinsicData[32];
     private int intrinsicCount;
     private LiteralData[] literals = new LiteralData[64];
@@ -222,6 +237,27 @@ internal sealed class ObjectTypeData
     public bool HasResolvedTypeArguments;
     public Dictionary<string, Type>? Instantiations;
     public NodeRef Node; // deferred type reference node (C3)
+
+    // AnonymousType / DeferredTypeReference / MappedType (C3): the instantiation's mapper (Target: the instantiated type)
+    public TypeMapper? Mapper;
+
+    // TupleType (C3)
+    public ElementFlags[]? ElementFlags;
+    public int MinLength;
+    public int FixedLength;
+    public ElementFlags CombinedFlags;
+    public bool Readonly;
+    public NodeRef[]? LabeledElementDeclarations;
+
+    // MappedType (C3)
+    public NodeRef Declaration;
+    public Type MappedTypeParameter;
+    public Type ConstraintType;
+    public Type NameType;
+    public Type TemplateType;
+    public Type ModifiersType;
+    public Type ResolvedApparentType;
+    public bool ContainsError;
 }
 
 /// <summary>types.ts TypeParameter.</summary>
@@ -230,6 +266,72 @@ internal sealed class TypeParameterData
     public Type Constraint;
     public Type Default;
     public bool IsThisType;
+    public Type Target;          // the type parameter this one is an instantiation of (C3)
+    public TypeMapper? Mapper;   // the mapper of that instantiation (C3)
+}
+
+/// <summary>types.ts IndexedAccessType (C3).</summary>
+internal sealed class IndexedAccessData
+{
+    public Type ObjectType;
+    public Type IndexType;
+    public AccessFlags AccessFlags;
+}
+
+/// <summary>types.ts IndexType (C3).</summary>
+internal sealed class IndexData
+{
+    public Type Type;
+    public IndexFlags IndexFlags;
+}
+
+/// <summary>types.ts TemplateLiteralType (C3).</summary>
+internal sealed class TemplateLiteralData
+{
+    public string[] Texts = [];
+    public Type[] Types = [];
+}
+
+/// <summary>types.ts StringMappingType (C3; the symbol is the common record's).</summary>
+internal sealed class StringMappingData
+{
+    public Type Type;
+}
+
+/// <summary>types.ts SubstitutionType (C3).</summary>
+internal sealed class SubstitutionData
+{
+    public Type BaseType;
+    public Type Constraint;
+}
+
+/// <summary>types.ts ConditionalRoot (C3).</summary>
+internal sealed class ConditionalRoot
+{
+    public NodeRef Node;
+    public Type CheckType;
+    public Type ExtendsType;
+    public bool IsDistributive;
+    public Type[]? InferTypeParameters;
+    public Type[]? OuterTypeParameters;
+    public Dictionary<string, Type>? Instantiations;
+    public SymbolRef AliasSymbol;
+    public TypeList AliasTypeArguments;
+}
+
+/// <summary>types.ts ConditionalType (C3).</summary>
+internal sealed class ConditionalData
+{
+    public ConditionalRoot Root = null!;
+    public Type CheckType;
+    public Type ExtendsType;
+    public TypeMapper? Mapper;
+    public TypeMapper? CombinedMapper;
+    public Type ResolvedTrueType;
+    public Type ResolvedFalseType;
+    public Type ResolvedInferredTrueType;
+    public Type ResolvedDefaultConstraint;
+    public Type ResolvedConstraintOfDistributive; // None: not computed; noConstraintType: false
 }
 
 /// <summary>types.ts IndexInfo.</summary>

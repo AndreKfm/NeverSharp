@@ -376,7 +376,11 @@ internal sealed partial class Checker
         var type = !typeNode.IsNone ? GetTypeFromTypeNode(At(declaration, typeNode)) : errorType;
         if (PopTypeResolution())
         {
-            // (generic type aliases: the instantiation cache is C3)
+            InitializeTypeAliasInstantiations(symbol, type);
+            if (type == intrinsicMarkerType && NameOf(symbol) == "BuiltinIteratorReturn")
+            {
+                type = GetBuiltinIteratorReturnType();
+            }
         }
         else
         {
@@ -561,7 +565,11 @@ internal sealed partial class Checker
             data.ResolvedBaseTypes = [];
             var symbol = Types.Symbol(type);
             var flags = symbol.IsNone ? SymbolFlags.None : SymbolFlagsOf(symbol);
-            if ((flags & SymbolFlags.Class) != 0)
+            if ((Types.ObjectFlagsOf(type) & ObjectFlags.Tuple) != 0)
+            {
+                data.ResolvedBaseTypes = [GetTupleBaseType(type)];
+            }
+            else if ((flags & SymbolFlags.Class) != 0)
             {
                 ResolveBaseTypesOfClass(type, data);
             }
@@ -574,74 +582,105 @@ internal sealed partial class Checker
         return data.ResolvedBaseTypes;
     }
 
-    // checker.ts resolveBaseTypesOfClass (base classes given by a reference to a class; class-like constructor
-    // functions and mixins: C5)
+    // checker.ts resolveBaseTypesOfClass (module C3: with the instantiated constructors of the base expression)
     private void ResolveBaseTypesOfClass(Type type, ObjectTypeData data)
     {
-        var symbol = Types.Symbol(type);
-        var declaration = ValueDeclarationOf(symbol);
-        if (declaration.IsNone || !Utilities.IsClassLike(StoreOf(declaration), declaration.Node))
+        var baseConstructorType = GetApparentType(GetBaseConstructorTypeOfClass(type));
+        if ((Types.Flags(baseConstructorType) & (TypeFlags.Object | TypeFlags.Intersection | TypeFlags.Any)) == 0)
         {
+            data.ResolvedBaseTypes = [];
             return;
         }
+        var declaration = ValueDeclarationOf(Types.Symbol(type));
         var baseTypeNode = GetBaseTypeNodeOfClass(declaration);
-        if (baseTypeNode.IsNone)
-        {
-            return;
-        }
-        var store = StoreOf(baseTypeNode);
-        var expression = At(baseTypeNode, store.Expression(baseTypeNode.Node));
-        if (!Utilities.IsEntityNameExpression(store, expression.Node))
-        {
-            // a class expression base: its declared class type (other expressions: TODO(C5/C6))
-            var expressionConstructorType = GetBaseConstructorTypeOfClass(type);
-            var constructorSymbol = Types.Symbol(expressionConstructorType);
-            if ((Types.Flags(expressionConstructorType) & TypeFlags.Object) != 0 && !constructorSymbol.IsNone && (SymbolFlagsOf(constructorSymbol) & SymbolFlags.Class) != 0)
-            {
-                var classBase = GetDeclaredTypeOfSymbol(constructorSymbol);
-                if (classBase != type && (Types.Flags(classBase) & TypeFlags.Object) != 0 && Types.Object(classBase).LocalTypeParameters.Count == 0)
-                {
-                    data.ResolvedBaseTypes = [classBase];
-                }
-            }
-            return;
-        }
-        var baseSymbol = ResolveEntityName(expression, SymbolFlags.Value, ignoreErrors: true);
-        if (baseSymbol.IsNone || baseSymbol == unknownSymbol)
-        {
-            return;
-        }
-        baseSymbol = ResolveSymbol(baseSymbol);
         Type baseType;
-        if ((SymbolFlagsOf(baseSymbol) & SymbolFlags.Class) != 0)
+        var baseConstructorSymbol = Types.Symbol(baseConstructorType);
+        var originalBaseType = !baseConstructorSymbol.IsNone ? GetDeclaredTypeOfSymbol(baseConstructorSymbol) : Type.None;
+        if (!baseConstructorSymbol.IsNone && (SymbolFlagsOf(baseConstructorSymbol) & SymbolFlags.Class) != 0 && AreAllOuterTypeParametersApplied(originalBaseType))
         {
-            baseType = GetTypeFromClassOrInterfaceReference(baseTypeNode, baseSymbol);
+            // When base constructor type is a class with no captured type arguments we know that the constructors all have the same type parameters as the
+            // class and all return the instance type of the class. There is no need for further checks and we can apply the
+            // type arguments in the same manner as a type reference to get the same error reporting experience.
+            baseType = GetTypeFromClassOrInterfaceReference(baseTypeNode, baseConstructorSymbol);
+        }
+        else if ((Types.Flags(baseConstructorType) & TypeFlags.Any) != 0)
+        {
+            baseType = baseConstructorType;
         }
         else
         {
-            // The class derives from a "class-like" constructor function: the return type of the first construct
-            // signature (TODO(C3/C6): getInstantiatedConstructorsForTypeArguments)
-            var baseConstructorType = GetApparentType(GetTypeOfSymbol(baseSymbol));
-            if ((Types.Flags(baseConstructorType) & TypeFlags.Any) != 0)
-            {
-                if (!IsErrorType(baseConstructorType))
-                {
-                    data.ResolvedBaseTypes = [baseConstructorType];
-                }
-                return;
-            }
-            var constructors = GetSignaturesOfType(baseConstructorType, SignatureKind.Construct);
+            // The class derives from a "class-like" constructor function, check that we have at least one construct signature
+            // with a matching number of type parameters and use the return type of the first instantiated signature. Elsewhere
+            // we check that all instantiated signatures return the same type.
+            var constructors = GetInstantiatedConstructorsForTypeArguments(baseConstructorType, baseTypeNode);
             if (constructors.Count == 0)
             {
+                Error(At(baseTypeNode, StoreOf(baseTypeNode).Expression(baseTypeNode.Node)), Diagnostics.No_base_constructor_has_the_specified_number_of_type_arguments);
+                data.ResolvedBaseTypes = [];
                 return;
             }
             baseType = GetReturnTypeOfSignature(constructors[0]);
         }
-        if (IsErrorType(baseType) || baseType == type || (Types.Flags(baseType) & TypeFlags.Object) == 0)
+        if (IsErrorType(baseType))
         {
+            data.ResolvedBaseTypes = [];
             return;
         }
-        data.ResolvedBaseTypes = [baseType];
+        var reducedBaseType = GetReducedType(baseType);
+        if (!IsValidBaseType(reducedBaseType))
+        {
+            // (elaborateNeverIntersection: C4)
+            Error(At(baseTypeNode, StoreOf(baseTypeNode).Expression(baseTypeNode.Node)), Diagnostics.Base_constructor_return_type_0_is_not_an_object_type_or_intersection_of_object_types_with_statically_known_members, TypeToString(reducedBaseType));
+            data.ResolvedBaseTypes = [];
+            return;
+        }
+        if (type == reducedBaseType || HasBaseType(reducedBaseType, type))
+        {
+            Error(ValueDeclarationOf(Types.Symbol(type)), Diagnostics.Type_0_recursively_references_itself_as_a_base_type, TypeToString(type, NodeRef.None, TypeFormatFlags.WriteArrayAsGenericType));
+            data.ResolvedBaseTypes = [];
+            return;
+        }
+        data.ResolvedBaseTypes = [reducedBaseType];
+    }
+
+    // checker.ts areAllOuterTypeParametersApplied
+    private bool AreAllOuterTypeParametersApplied(Type type)
+    {
+        // An unapplied type parameter has its symbol still the same as the matching argument symbol.
+        // Since parameters are applied outer-to-inner, only the last outer parameter needs to be checked.
+        if ((Types.Flags(type) & TypeFlags.Object) == 0)
+        {
+            return true;
+        }
+        var outerTypeParameters = Types.Object(type).OuterTypeParameters;
+        if (outerTypeParameters.Count > 0)
+        {
+            var last = outerTypeParameters.Count - 1;
+            var typeArguments = GetTypeArguments(type);
+            return Types.Symbol(Types.Elements(outerTypeParameters)[last]) != Types.Symbol(typeArguments[last]);
+        }
+        return true;
+    }
+
+    // checker.ts getInstantiatedConstructorsForTypeArguments / getConstructorsForTypeArguments
+    private List<Signature> GetInstantiatedConstructorsForTypeArguments(Type type, NodeRef baseTypeNode)
+    {
+        var store = StoreOf(baseTypeNode);
+        var typeArgumentNodes = store.TypeArguments(baseTypeNode.Node);
+        var typeArgCount = typeArgumentNodes.IsNone ? 0 : store.Length(typeArgumentNodes);
+        var isJavascript = Utilities.IsInJSFile(store, baseTypeNode.Node);
+        var result = new List<Signature>();
+        Type[]? typeArguments = null;
+        foreach (var sig in GetSignaturesOfType(type, SignatureKind.Construct))
+        {
+            var typeParameters = Types.Elements(Signatures.Record(sig).TypeParameters).ToArray();
+            if ((isJavascript || typeArgCount >= GetMinTypeArgumentCount(typeParameters)) && typeArgCount <= typeParameters.Length)
+            {
+                typeArguments ??= TypeArgumentsFromTypeReferenceNode(baseTypeNode);
+                result.Add(typeParameters.Length > 0 ? GetSignatureInstantiation(sig, typeArguments, isJavascript) : sig);
+            }
+        }
+        return result;
     }
 
     private void ResolveBaseTypesOfInterface(Type type, ObjectTypeData data)
@@ -772,83 +811,28 @@ internal sealed partial class Checker
             }
             else if ((objectFlags & ObjectFlags.ClassOrInterface) != 0)
             {
-                ResolveObjectTypeMembers(type, ResolveDeclaredMembers(type));
+                // resolveClassOrInterfaceMembers
+                ResolveObjectTypeMembers(type, type, ResolveDeclaredMembers(type), [], []);
+            }
+            else if ((objectFlags & ObjectFlags.ReverseMapped) != 0)
+            {
+                // (reverse mapped types: C6)
+                SetStructuredTypeMembers(type, emptySymbols, null, null, null);
             }
             else if ((objectFlags & ObjectFlags.Anonymous) != 0)
             {
                 ResolveAnonymousTypeMembers(type);
             }
+            else if ((objectFlags & ObjectFlags.Mapped) != 0)
+            {
+                ResolveMappedTypeMembers(type);
+            }
             else
             {
-                // (reverse mapped and mapped types: C3)
                 SetStructuredTypeMembers(type, emptySymbols, null, null, null);
             }
         }
         return data;
-    }
-
-    // checker.ts resolveTypeReferenceMembers. TODO(C3): instantiation; C1 resolves the members of the target (the
-    // instantiated members keep the target members' names, declarations and parents).
-    private void ResolveTypeReferenceMembers(Type type)
-    {
-        var target = Types.Object(type).Target;
-        if (target.IsNone || target == type)
-        {
-            ResolveObjectTypeMembers(type, ResolveDeclaredMembers(type));
-            return;
-        }
-        var resolved = ResolveStructuredTypeMembers(target);
-        var data = Types.Object(type);
-        data.Members = resolved.Members;
-        data.Properties = resolved.Properties;
-        data.CallSignatures = resolved.CallSignatures;
-        data.ConstructSignatures = resolved.ConstructSignatures;
-        data.IndexInfos = resolved.IndexInfos;
-        data.MembersResolved = true;
-    }
-
-    // checker.ts resolveObjectTypeMembers (without instantiation, see resolveTypeReferenceMembers)
-    private void ResolveObjectTypeMembers(Type type, ObjectTypeData source)
-    {
-        var symbol = Types.Symbol(type);
-        var members = GetMembersOfSymbol(symbol);
-        var callSignatures = source.DeclaredCallSignatures!;
-        var constructSignatures = source.DeclaredConstructSignatures!;
-        var indexInfos = source.DeclaredIndexInfos!;
-        var baseTypes = GetBaseTypes(type);
-        if (baseTypes.Count > 0)
-        {
-            var symbolTable = new SymTable(source.DeclaredProperties!.Count);
-            foreach (var p in source.DeclaredProperties!)
-            {
-                symbolTable.Set(NameOf(p), p);
-            }
-            // copy index signature symbol as well (for quickinfo)
-            var sourceIndex = members.Get(InternalSymbolName.Index);
-            if (!sourceIndex.IsNone)
-            {
-                symbolTable.Set(InternalSymbolName.Index, sourceIndex);
-            }
-            members = symbolTable;
-            SetStructuredTypeMembers(type, members, callSignatures, constructSignatures, indexInfos);
-            foreach (var baseType in baseTypes)
-            {
-                AddInheritedMembers(members, GetPropertiesOfType(baseType));
-                callSignatures = [.. callSignatures, .. GetSignaturesOfType(baseType, SignatureKind.Call)];
-                constructSignatures = [.. constructSignatures, .. GetSignaturesOfType(baseType, SignatureKind.Construct)];
-                var inheritedIndexInfos = baseType != anyType ? GetIndexInfosOfType(baseType) : [new IndexInfo { KeyType = stringType, Type = anyType }];
-                var combined = new List<IndexInfo>(indexInfos);
-                foreach (var info in inheritedIndexInfos)
-                {
-                    if (!indexInfos.Exists(i => i.KeyType == info.KeyType))
-                    {
-                        combined.Add(info);
-                    }
-                }
-                indexInfos = combined;
-            }
-        }
-        SetStructuredTypeMembers(type, members, callSignatures, constructSignatures, indexInfos);
     }
 
     // checker.ts addInheritedMembers
@@ -884,6 +868,18 @@ internal sealed partial class Checker
     // checker.ts resolveAnonymousTypeMembers (instantiated anonymous types: C3)
     private void ResolveAnonymousTypeMembers(Type type)
     {
+        var typeData = Types.Object(type);
+        if (!typeData.Target.IsNone)
+        {
+            SetStructuredTypeMembers(type, emptySymbols, null, null, null);
+            var mapper = typeData.Mapper!;
+            var instantiatedMembers = CreateInstantiatedSymbolTable(GetPropertiesOfObjectType(typeData.Target), mapper, mappingThisOnly: false);
+            var instantiatedCallSignatures = InstantiateSignatures(GetSignaturesOfType(typeData.Target, SignatureKind.Call), mapper);
+            var instantiatedConstructSignatures = InstantiateSignatures(GetSignaturesOfType(typeData.Target, SignatureKind.Construct), mapper);
+            var instantiatedIndexInfos = InstantiateIndexInfos(GetIndexInfosOfType(typeData.Target), mapper);
+            SetStructuredTypeMembers(type, instantiatedMembers, instantiatedCallSignatures, instantiatedConstructSignatures, instantiatedIndexInfos);
+            return;
+        }
         var symbol = GetMergedSymbol(Types.Symbol(type));
         if (symbol.IsNone)
         {
@@ -963,41 +959,94 @@ internal sealed partial class Checker
         }
     }
 
-    // checker.ts getBaseConstructorTypeOfClass (TODO(C5): the type of an arbitrary base expression; C1 resolves base
-    // classes named by entity names)
+    private const int ResolvedBaseConstructorTypeProperty = 6;
+
+    /// <summary>
+    /// checker.ts getBaseConstructorTypeOfClass: undefinedType without an extends clause, errorType after an error,
+    /// nullType for `extends null`, anyType for an any-typed expression, or an object type with construct signatures.
+    /// </summary>
     private Type GetBaseConstructorTypeOfClass(Type classType)
     {
         var data = Types.Object(classType);
         if (data.ResolvedBaseConstructorType.IsNone)
         {
-            data.ResolvedBaseConstructorType = undefinedType;
             var declaration = ValueDeclarationOf(Types.Symbol(classType));
             var baseTypeNode = declaration.IsNone ? NodeRef.None : GetBaseTypeNodeOfClass(declaration);
-            if (!baseTypeNode.IsNone)
+            if (baseTypeNode.IsNone)
             {
-                var store = StoreOf(baseTypeNode);
-                var expression = store.Expression(baseTypeNode.Node);
-                if (Utilities.IsEntityNameExpression(store, expression))
+                return data.ResolvedBaseConstructorType = undefinedType;
+            }
+            if (!PushTypeResolution(classType, ResolvedBaseConstructorTypeProperty))
+            {
+                return errorType;
+            }
+            var baseConstructorType = CheckExpression(At(baseTypeNode, StoreOf(baseTypeNode).Expression(baseTypeNode.Node)));
+            // (JavaScript @extends tags: C9)
+            if ((Types.Flags(baseConstructorType) & (TypeFlags.Object | TypeFlags.Intersection)) != 0)
+            {
+                // Resolving the members of a class requires us to resolve the base class of that class.
+                // We force resolution here such that we catch circularities now.
+                if ((Types.Flags(baseConstructorType) & TypeFlags.Object) != 0)
                 {
-                    var baseSymbol = ResolveEntityName(At(baseTypeNode, expression), SymbolFlags.Value, ignoreErrors: true);
-                    if (!baseSymbol.IsNone && baseSymbol != unknownSymbol)
-                    {
-                        data.ResolvedBaseConstructorType = GetTypeOfSymbol(ResolveSymbol(baseSymbol));
-                    }
-                    else
-                    {
-                        data.ResolvedBaseConstructorType = errorType;
-                    }
+                    ResolveStructuredTypeMembers(baseConstructorType);
                 }
-                else
+            }
+            if (!PopTypeResolution())
+            {
+                Error(declaration, Diagnostics._0_is_referenced_directly_or_indirectly_in_its_own_base_expression, SymbolToString(Types.Symbol(classType)));
+                if (Types.Object(classType).ResolvedBaseConstructorType.IsNone)
                 {
-                    // checkExpression of a non-entity-name heritage expression (class expressions, calls)
-                    var expressionType = CheckExpressionCached(At(baseTypeNode, expression));
-                    data.ResolvedBaseConstructorType = (Types.Flags(expressionType) & (TypeFlags.Object | TypeFlags.Any)) != 0 ? expressionType : errorType;
+                    Types.Object(classType).ResolvedBaseConstructorType = errorType;
                 }
+                return Types.Object(classType).ResolvedBaseConstructorType;
+            }
+            if ((Types.Flags(baseConstructorType) & TypeFlags.Any) == 0 && baseConstructorType != nullWideningType && !IsConstructorType(baseConstructorType))
+            {
+                // (Type_0_is_not_a_constructor_function_type and its related information: C8)
+                if (Types.Object(classType).ResolvedBaseConstructorType.IsNone)
+                {
+                    Types.Object(classType).ResolvedBaseConstructorType = errorType;
+                }
+                return Types.Object(classType).ResolvedBaseConstructorType;
+            }
+            if (Types.Object(classType).ResolvedBaseConstructorType.IsNone)
+            {
+                Types.Object(classType).ResolvedBaseConstructorType = baseConstructorType;
             }
         }
         return data.ResolvedBaseConstructorType;
+    }
+
+    // checker.ts isConstructorType
+    private bool IsConstructorType(Type type)
+    {
+        if (GetSignaturesOfType(type, SignatureKind.Construct).Count > 0)
+        {
+            return true;
+        }
+        if ((Types.Flags(type) & TypeFlags.TypeVariable) != 0)
+        {
+            var constraint = GetBaseConstraintOfType(type);
+            return !constraint.IsNone && IsMixinConstructorType(constraint);
+        }
+        return false;
+    }
+
+    // checker.ts isMixinConstructorType: a type with a single construct signature `new (...args: any[]) => X`
+    private bool IsMixinConstructorType(Type type)
+    {
+        var signatures = GetSignaturesOfType(type, SignatureKind.Construct);
+        if (signatures.Count == 1)
+        {
+            var s = signatures[0];
+            ref var record = ref Signatures.Record(s);
+            if (record.TypeParameters.Count == 0 && record.Parameters is { Length: 1 } && (record.Flags & SignatureFlags.HasRestParameter) != 0)
+            {
+                var paramType = GetTypeOfSymbol(record.Parameters[0]);
+                return (Types.Flags(paramType) & TypeFlags.Any) != 0 || (IsArrayType(paramType) && (Types.Flags(GetTypeArguments(paramType)[0]) & TypeFlags.Any) != 0);
+            }
+        }
+        return false;
     }
 
     // checker.ts getDefaultConstructSignatures (base class constructors: the base's construct signatures with the
@@ -1016,16 +1065,39 @@ internal sealed partial class Checker
             record.ResolvedReturnType = classType;
             return [signature];
         }
+        var baseTypeNode = GetBaseTypeNodeOfClass(declaration);
+        var isJavaScript = Utilities.IsInJSFile(StoreOf(baseTypeNode), baseTypeNode.Node);
+        var typeArguments = TypeArgumentsFromTypeReferenceNode(baseTypeNode);
+        var typeArgCount = typeArguments.Length;
         var result = new List<Signature>();
         foreach (var baseSignature in baseSignatures)
         {
-            ref var b = ref Signatures.Record(baseSignature);
-            var sig = Signatures.Create((b.Flags & SignatureFlags.PropagatingFlags) | (isAbstract ? SignatureFlags.Abstract : SignatureFlags.None), b.Declaration,
-                Types.Object(classType).LocalTypeParameters, b.ThisParameter, b.MinArgumentCount);
-            ref var r = ref Signatures.Record(sig);
-            r.Parameters = Signatures.Record(baseSignature).Parameters;
-            r.ResolvedReturnType = classType;
-            result.Add(sig);
+            var baseTypeParameters = Types.Elements(Signatures.Record(baseSignature).TypeParameters).ToArray();
+            var minTypeArgumentCount = GetMinTypeArgumentCount(baseTypeParameters);
+            var typeParamCount = baseTypeParameters.Length;
+            if (isJavaScript || (typeArgCount >= minTypeArgumentCount && typeArgCount <= typeParamCount))
+            {
+                Signature sig;
+                if (typeParamCount > 0)
+                {
+                    sig = CreateSignatureInstantiation(baseSignature, FillMissingTypeArguments(typeArguments, baseTypeParameters, minTypeArgumentCount, isJavaScript));
+                }
+                else
+                {
+                    // cloneSignature
+                    ref var b = ref Signatures.Record(baseSignature);
+                    sig = Signatures.Create(b.Flags & SignatureFlags.PropagatingFlags, b.Declaration, b.TypeParameters, b.ThisParameter, b.MinArgumentCount);
+                    ref var c = ref Signatures.Record(sig);
+                    c.Parameters = Signatures.Record(baseSignature).Parameters;
+                    c.Target = Signatures.Record(baseSignature).Target;
+                    c.Mapper = Signatures.Record(baseSignature).Mapper;
+                }
+                ref var r = ref Signatures.Record(sig);
+                r.TypeParameters = Types.Object(classType).LocalTypeParameters;
+                r.ResolvedReturnType = classType;
+                r.Flags = isAbstract ? r.Flags | SignatureFlags.Abstract : r.Flags & ~SignatureFlags.Abstract;
+                result.Add(sig);
+            }
         }
         return result;
     }
@@ -1081,27 +1153,7 @@ internal sealed partial class Checker
         return GetPropertiesOfObjectType(type);
     }
 
-    /// <summary>checker.ts getApparentType (instantiable types: their constraint, TODO(C3)).</summary>
-    internal Type GetApparentType(Type type)
-    {
-        var t = type;
-        var flags = Types.Flags(t);
-        if ((flags & TypeFlags.Instantiable) != 0)
-        {
-            var constraint = (flags & TypeFlags.TypeParameter) != 0 ? GetConstraintOfTypeParameter(t) : Type.None;
-            t = constraint.IsNone ? unknownType : constraint;
-            flags = Types.Flags(t);
-        }
-        return (flags & TypeFlags.StringLike) != 0 ? globalStringType
-            : (flags & TypeFlags.NumberLike) != 0 ? globalNumberType
-            : (flags & TypeFlags.BigIntLike) != 0 ? GetGlobalBigIntType()
-            : (flags & TypeFlags.BooleanLike) != 0 ? globalBooleanType
-            : (flags & TypeFlags.ESSymbolLike) != 0 ? GetGlobalESSymbolType()
-            : (flags & TypeFlags.NonPrimitive) != 0 ? emptyObjectType
-            : (flags & TypeFlags.Index) != 0 ? stringNumberSymbolType
-            : (flags & TypeFlags.Unknown) != 0 && !strictNullChecks ? emptyObjectType
-            : t;
-    }
+    // (getApparentType: Checker.Generics.cs, module C3)
 
     private Type deferredGlobalBigIntType;
     private Type deferredGlobalESSymbolType;
@@ -1126,33 +1178,7 @@ internal sealed partial class Checker
         return deferredGlobalESSymbolType;
     }
 
-    /// <summary>checker.ts getConstraintOfTypeParameter (the declared constraint; C3 resolves circularities and defaults).</summary>
-    internal Type GetConstraintOfTypeParameter(Type typeParameter)
-    {
-        var data = Types.TypeParameter(typeParameter);
-        if (data.IsThisType || !data.Constraint.IsNone)
-        {
-            return data.Constraint == noConstraintType ? Type.None : data.Constraint;
-        }
-        var symbol = Types.Symbol(typeParameter);
-        var constraint = noConstraintType;
-        foreach (var declaration in DeclarationsOf(symbol) ?? [])
-        {
-            if (Kind(declaration) == SyntaxKind.TypeParameter)
-            {
-                var store = StoreOf(declaration);
-                var constraintNode = store.Constraint(declaration.Node);
-                if (!constraintNode.IsNone)
-                {
-                    data.Constraint = circularConstraintType;
-                    constraint = GetTypeFromTypeNode(At(declaration, constraintNode));
-                    break;
-                }
-            }
-        }
-        data.Constraint = constraint;
-        return constraint == noConstraintType || constraint == circularConstraintType ? Type.None : constraint;
-    }
+    // (getConstraintOfTypeParameter: Checker.Instantiate.cs, module C3)
 
     /// <summary>checker.ts getPropertyOfType.</summary>
     internal SymbolRef GetPropertyOfType(Type type, string name, bool skipObjectFunctionPropertyAugment = false)
@@ -1277,7 +1303,18 @@ internal sealed partial class Checker
                 r.Declarations = declarations;
                 if (propSet.Count > 0)
                 {
-                    r.ValueDeclaration = ValueDeclarationOf(singleProp);
+                    var firstValueDeclaration = ValueDeclarationOf(singleProp);
+                    r.ValueDeclaration = firstValueDeclaration;
+                    // result.parent = firstValueDeclaration.symbol.parent (module C3: instantiated members of one
+                    // declaration share its parent)
+                    if (!firstValueDeclaration.IsNone && propSet.TrueForAll(p => ValueDeclarationOf(p) == firstValueDeclaration))
+                    {
+                        var declarationSymbol = NodeSymbol(firstValueDeclaration);
+                        if (!declarationSymbol.IsNone)
+                        {
+                            TransientSymbols.Record(result).Parent = ParentOf(declarationSymbol);
+                        }
+                    }
                 }
             }
         }
@@ -1473,7 +1510,9 @@ internal sealed partial class Checker
             return errorType;
         }
         var declaration = Signatures.Record(signature).Declaration;
-        var type = declaration.IsNone ? anyType : GetReturnTypeFromAnnotation(declaration);
+        var signatureTarget = Signatures.Record(signature).Target;
+        var type = !signatureTarget.IsNone ? InstantiateType(GetReturnTypeOfSignature(signatureTarget), MapperAt(Signatures.Record(signature).Mapper))
+            : declaration.IsNone ? anyType : GetReturnTypeFromAnnotation(declaration);
         if (type.IsNone)
         {
             var store = StoreOf(declaration);
@@ -1581,7 +1620,16 @@ internal sealed partial class Checker
         {
             return errorType;
         }
-        // (deferred, instantiated, mapped and reverse-mapped symbols: C3)
+        // (deferred-type symbols of unions and intersections: C4/C5; reverse-mapped symbols: C6)
+        var checkFlags = GetCheckFlags(symbol);
+        if ((checkFlags & CheckFlags.Instantiated) != 0)
+        {
+            return GetTypeOfInstantiatedSymbol(symbol);
+        }
+        if ((checkFlags & CheckFlags.Mapped) != 0)
+        {
+            return GetTypeOfMappedSymbol(symbol);
+        }
         var flags = SymbolFlagsOf(symbol);
         if ((flags & (SymbolFlags.Variable | SymbolFlags.Property)) != 0)
         {
