@@ -204,7 +204,91 @@ internal sealed class Program
         {
             result.AddRange(checker.GetDiagnostics(file));
         }
+        var commentDirectives = store.CommentDirectives(file.Root);
+        if (!includeBindAndCheckDiagnostics || commentDirectives is not { Count: > 0 })
+        {
+            return result;
+        }
+        return GetDiagnosticsWithPrecedingDirectives(file, commentDirectives, result);
+    }
+
+    // program.ts getMergedBindAndCheckDiagnostics / getDiagnosticsWithPrecedingDirectives / markPrecedingCommentDirectiveLine:
+    // diagnostics suppressed by a @ts-ignore or @ts-expect-error directive on a preceding line (only comment lines in
+    // between), plus an error for each unused @ts-expect-error
+    private static List<ProgramDiagnostic> GetDiagnosticsWithPrecedingDirectives(SourceFile file, List<CommentDirective> commentDirectives, List<ProgramDiagnostic> diagnostics)
+    {
+        var store = file.Store;
+        var sourceFileLike = new SourceFileNodeLike(store, file.Root);
+        var lineStarts = Scanner.GetLineStarts(sourceFileLike);
+        var text = store.SourceFileText(file.Root).Chars.ToString();
+        // createCommentDirectivesMap: keyed by the line of each directive's end (a later directive on a line replaces the
+        // earlier one but keeps its position in the map's order)
+        var lines = new List<int>();
+        var directivesByLine = new Dictionary<int, CommentDirective>();
+        foreach (var directive in commentDirectives)
+        {
+            var line = Scanner.ComputeLineAndCharacterOfPosition(lineStarts, directive.Range.End).Line;
+            if (!directivesByLine.ContainsKey(line))
+            {
+                lines.Add(line);
+            }
+            directivesByLine[line] = directive;
+        }
+        var usedLines = new HashSet<int>();
+        var result = new List<ProgramDiagnostic>();
+        foreach (var diagnostic in diagnostics)
+        {
+            if (diagnostic.SourceFile is null || diagnostic.StartOrUndefined is not { } start || !IsSuppressed(start))
+            {
+                result.Add(diagnostic);
+            }
+        }
+        foreach (var line in lines)
+        {
+            var directive = directivesByLine[line];
+            if (directive.Type == CommentDirectiveType.ExpectError && !usedLines.Contains(line))
+            {
+                var d = Utilities.CreateFileDiagnostic(store, file.Root, directive.Range.Pos, directive.Range.End - directive.Range.Pos, Diagnostics.Unused_ts_expect_error_directive);
+                result.Add(ProgramDiagnostic.FromFile(file, d));
+            }
+        }
         return result;
+
+        bool IsSuppressed(int start)
+        {
+            for (var line = Scanner.ComputeLineAndCharacterOfPosition(lineStarts, start).Line - 1; line >= 0; line--)
+            {
+                if (directivesByLine.ContainsKey(line))
+                {
+                    usedLines.Add(line);
+                    return true;
+                }
+                var lineEnd = line + 1 < lineStarts.Count ? lineStarts[line + 1] : text.Length;
+                var lineText = text[lineStarts[line]..lineEnd].Trim();
+                if (lineText.Length != 0 && !IsLineComment(lineText))
+                {
+                    return false;
+                }
+            }
+            return false;
+        }
+
+        // /^\s*\/\/.*$/ on the trimmed line ('.' does not match line terminators)
+        static bool IsLineComment(string lineText)
+        {
+            if (!lineText.StartsWith("//", StringComparison.Ordinal))
+            {
+                return false;
+            }
+            foreach (var c in lineText)
+            {
+                if (c is '\n' or '\r' or (char)0x2028 or (char)0x2029)
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
     }
 
     /// <summary>program.getSuggestionDiagnostics(file): the checker's suggestion diagnostics.</summary>
