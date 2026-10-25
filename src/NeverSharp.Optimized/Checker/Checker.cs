@@ -595,8 +595,16 @@ internal sealed class DiagnosticCollection
         return ~low;
     }
 
-    // utilities.ts diagnosticsEqualityComparer: same file, start, length, code and message text.
-    private static bool EqualityComparer(ProgramDiagnostic a, ProgramDiagnostic b) => CompareSkipRelatedInformation(a, b) == 0;
+    /// <summary>
+    /// utilities.ts diagnosticsEqualityComparer: same file, start, length, code (the canonical head's when set) and
+    /// head message text (the canonical head's when set).
+    /// </summary>
+    private static bool EqualityComparer(ProgramDiagnostic a, ProgramDiagnostic b) =>
+        string.Equals(FilePath(a), FilePath(b), StringComparison.Ordinal) &&
+        CompareValues(a.StartOrUndefined, b.StartOrUndefined) == 0 &&
+        CompareValues(a.LengthOrUndefined, b.LengthOrUndefined) == 0 &&
+        DiagnosticCode(a) == DiagnosticCode(b) &&
+        string.Equals(DiagnosticHeadMessage(a), DiagnosticHeadMessage(b), StringComparison.Ordinal);
 
     /// <summary>utilities.ts compareDiagnosticsSkipRelatedInformation.</summary>
     internal static int CompareSkipRelatedInformation(DiagnosticRelatedInformation d1, DiagnosticRelatedInformation d2)
@@ -616,12 +624,116 @@ internal sealed class DiagnosticCollection
         {
             return c;
         }
-        c = d1.Code.CompareTo(d2.Code);
+        c = DiagnosticCode(d1).CompareTo(DiagnosticCode(d2));
         if (c != 0)
         {
             return Math.Sign(c);
         }
-        return Math.Sign(string.CompareOrdinal(ProgramDiagnostics.FlattenDiagnosticMessageText(d1, "\n"), ProgramDiagnostics.FlattenDiagnosticMessageText(d2, "\n")));
+        return CompareMessageText(d1, d2);
+    }
+
+    // utilities.ts getDiagnosticCode / getDiagnosticMessage (the canonical head's when set)
+    private static int DiagnosticCode(DiagnosticRelatedInformation d) => d is ProgramDiagnostic { CanonicalHead: { } head } && head.Code != 0 ? head.Code : d.Code;
+
+    private static string DiagnosticHeadMessage(DiagnosticRelatedInformation d) =>
+        d is ProgramDiagnostic { CanonicalHead: { } head } && head.MessageText.Length > 0 ? head.MessageText : d.MessageText;
+
+    private static List<DiagnosticMessageChain>? ChainNext(DiagnosticRelatedInformation d) => d switch
+    {
+        ProgramDiagnostic p => p.Chain?.Next,
+        ProgramRelatedInformation r => r.Chain?.Next,
+        _ => null,
+    };
+
+    // utilities.ts compareMessageText: a diagnostic message with more elaboration is *less than* one with less
+    // elaboration that is otherwise similar.
+    private static int CompareMessageText(DiagnosticRelatedInformation d1, DiagnosticRelatedInformation d2)
+    {
+        var res = Math.Sign(string.CompareOrdinal(DiagnosticHeadMessage(d1), DiagnosticHeadMessage(d2)));
+        if (res != 0)
+        {
+            return res;
+        }
+        res = CompareMessageChain(ChainNext(d1), ChainNext(d2));
+        if (res != 0)
+        {
+            return res;
+        }
+        var h1 = d1 is ProgramDiagnostic { CanonicalHead: not null };
+        var h2 = d2 is ProgramDiagnostic { CanonicalHead: not null };
+        return h1 && !h2 ? -1 : h2 && !h1 ? 1 : 0;
+    }
+
+    // utilities.ts compareMessageChain: first by size of the message chain, then by content.
+    private static int CompareMessageChain(List<DiagnosticMessageChain>? c1, List<DiagnosticMessageChain>? c2)
+    {
+        if (c1 is null && c2 is null)
+        {
+            return 0;
+        }
+        if (c1 is null)
+        {
+            return 1;
+        }
+        if (c2 is null)
+        {
+            return -1;
+        }
+        var res = CompareMessageChainSize(c1, c2);
+        return res != 0 ? res : CompareMessageChainContent(c1, c2);
+    }
+
+    private static int CompareMessageChainSize(List<DiagnosticMessageChain>? c1, List<DiagnosticMessageChain>? c2)
+    {
+        if (c1 is null && c2 is null)
+        {
+            return 0;
+        }
+        if (c1 is null)
+        {
+            return 1;
+        }
+        if (c2 is null)
+        {
+            return -1;
+        }
+        var res = c2.Count.CompareTo(c1.Count);
+        if (res != 0)
+        {
+            return Math.Sign(res);
+        }
+        for (var i = 0; i < c2.Count; i++)
+        {
+            res = CompareMessageChainSize(c1[i].Next, c2[i].Next);
+            if (res != 0)
+            {
+                return res;
+            }
+        }
+        return 0;
+    }
+
+    // Assumes the two chains have the same shape.
+    private static int CompareMessageChainContent(List<DiagnosticMessageChain> c1, List<DiagnosticMessageChain> c2)
+    {
+        for (var i = 0; i < c2.Count; i++)
+        {
+            var res = Math.Sign(string.CompareOrdinal(c1[i].MessageText, c2[i].MessageText));
+            if (res != 0)
+            {
+                return res;
+            }
+            if (c1[i].Next is null)
+            {
+                continue;
+            }
+            res = CompareMessageChainContent(c1[i].Next!, c2[i].Next!);
+            if (res != 0)
+            {
+                return res;
+            }
+        }
+        return 0;
     }
 
     private static string? FilePath(DiagnosticRelatedInformation d)

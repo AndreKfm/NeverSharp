@@ -383,6 +383,7 @@ internal sealed class SignatureStore
             TypeParameters = typeParameters,
             ThisParameter = thisParameter,
             MinArgumentCount = minArgumentCount,
+            ResolvedMinArgumentCount = -1,
         };
         return new Signature(count);
     }

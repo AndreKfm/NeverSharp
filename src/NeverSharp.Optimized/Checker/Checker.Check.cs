@@ -148,6 +148,7 @@ internal sealed partial class Checker
             case SyntaxKind.ClassExpression:
                 // checkClassExpression: checkClassLikeDeclaration now, the members deferred
                 VisitChildren(node, except: store.Members(n));
+                CheckClassLikeDeclarationRelations(node); // module C4
                 CheckMembersForOverrideModifier(node);
                 CheckPropertyInitialization(node);
                 CheckNodeDeferred(node);
@@ -179,13 +180,20 @@ internal sealed partial class Checker
                 break;
             }
             case SyntaxKind.ClassDeclaration:
+                CheckClassLikeDeclarationRelations(node); // module C4
                 CheckMembersForOverrideModifier(node);
                 CheckPropertyInitialization(node);
                 RegisterForUnusedIdentifiersCheck(node);
                 break;
             case SyntaxKind.InterfaceDeclaration:
+                CheckInterfaceDeclarationRelations(node); // module C4
+                RegisterForUnusedIdentifiersCheck(node);
+                break;
             case SyntaxKind.InferType:
                 RegisterForUnusedIdentifiersCheck(node);
+                break;
+            case SyntaxKind.TypeLiteral:
+                CheckTypeLiteralRelations(node); // module C4
                 break;
             case SyntaxKind.TypeAliasDeclaration:
                 if (store.Kind(store.Type(n)) != SyntaxKind.IntrinsicKeyword)
@@ -477,6 +485,7 @@ internal sealed partial class Checker
                 GetTypeFromTypeNode(node);
                 // type arguments are type nodes of their own; the type name is resolved
                 VisitList(node, store.TypeArguments(n));
+                CheckTypeReferenceTypeArguments(node); // module C4
                 return false;
             case SyntaxKind.ExpressionWithTypeArguments:
                 return CheckExpressionWithTypeArgumentsNode(node);
@@ -642,10 +651,12 @@ internal sealed partial class Checker
             if (!local.IsNone)
             {
                 GetTypeOfSymbol(local);
+                CheckVariableLikeDeclarationRelations(node, local); // module C4
             }
             return;
         }
         GetTypeOfSymbol(symbol);
+        CheckVariableLikeDeclarationRelations(node, symbol); // module C4
     }
 
     // ExpressionWithTypeArguments: in an interface's extends clause or a class's implements clause a type reference;
@@ -658,6 +669,7 @@ internal sealed partial class Checker
         {
             GetTypeFromTypeNode(node);
             VisitList(node, store.TypeArguments(n));
+            CheckTypeReferenceTypeArguments(node); // module C4
             return false;
         }
         if (Utilities.IsExpressionWithTypeArgumentsInClassExtendsClause(store, n))

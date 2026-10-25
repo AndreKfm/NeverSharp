@@ -172,11 +172,14 @@ internal sealed partial class Checker
         noConstraintType = CreateAnonymousType(SymbolRef.None, emptySymbols);
         circularConstraintType = CreateAnonymousType(SymbolRef.None, emptySymbols);
         resolvingDefaultType = CreateAnonymousType(SymbolRef.None, emptySymbols);
-        // markerSuperType, markerSubType, markerOtherType, markerSuperTypeForCheck, markerSubTypeForCheck (C4)
-        for (var i = 0; i < 5; i++)
-        {
-            Types.CreateTypeParameter(SymbolRef.None);
-        }
+        // markerSuperType, markerSubType, markerOtherType, markerSuperTypeForCheck, markerSubTypeForCheck (module C4)
+        markerSuperType = Types.CreateTypeParameter(SymbolRef.None);
+        markerSubType = Types.CreateTypeParameter(SymbolRef.None);
+        Types.TypeParameter(markerSubType).Constraint = markerSuperType;
+        markerOtherType = Types.CreateTypeParameter(SymbolRef.None);
+        markerSuperTypeForCheck = Types.CreateTypeParameter(SymbolRef.None);
+        markerSubTypeForCheck = Types.CreateTypeParameter(SymbolRef.None);
+        Types.TypeParameter(markerSubTypeForCheck).Constraint = markerSuperTypeForCheck;
         // createTypeChecker, after the signatures and iteration types (module C3: these types take their ids here)
         emptyStringType = GetStringLiteralType("");
         zeroType = GetNumberLiteralType(0);
@@ -586,10 +589,23 @@ internal sealed partial class Checker
             {
                 RemoveRedundantLiteralTypes(typeSet, includes, (unionReduction & UnionReduction.Subtype) != 0);
             }
-            // (removeStringLiteralsMatchedByTemplateLiterals, removeConstrainedTypeVariables: TODO(C3))
+            if ((includes & TypeFlags.StringLiteral) != 0 && (includes & (TypeFlags.TemplateLiteral | TypeFlags.StringMapping)) != 0)
+            {
+                RemoveStringLiteralsMatchedByTemplateLiterals(typeSet);
+            }
+            if ((includes & TypeFlags.IncludesConstrainedTypeVariable) != 0)
+            {
+                RemoveConstrainedTypeVariables(typeSet);
+            }
             if (unionReduction == UnionReduction.Subtype)
             {
-                // TODO(C4): removeSubtypes needs the subtype relation; the literal reduction above is kept.
+                // removeSubtypes (module C4)
+                var reducedSet = RemoveSubtypes(typeSet, (includes & TypeFlags.Object) != 0);
+                if (reducedSet is null)
+                {
+                    return errorType;
+                }
+                typeSet = reducedSet;
             }
             if (typeSet.Count == 0)
             {
@@ -797,14 +813,12 @@ internal sealed partial class Checker
         }
     }
 
-    /// <summary>
-    /// checker.ts getIntersectionType. TODO(C4): the constrained type variable reduction and the redundant template
-    /// literal extraction (both need the subtype relation).
-    /// </summary>
-    internal Type GetIntersectionType(ReadOnlySpan<Type> types, SymbolRef aliasSymbol = default, TypeList aliasTypeArguments = default)
+    /// <summary>checker.ts getIntersectionType (the flags parameter last, IntersectionFlags).</summary>
+    internal Type GetIntersectionType(ReadOnlySpan<Type> types, SymbolRef aliasSymbol = default, TypeList aliasTypeArguments = default, IntersectionFlags flags = IntersectionFlags.None)
     {
         var typeSet = new List<Type>();
         var includes = AddTypesToIntersection(typeSet, 0, types);
+        var objectFlags = ObjectFlags.None;
         if ((includes & TypeFlags.Never) != 0)
         {
             return typeSet.Contains(silentNeverType) ? silentNeverType : neverType;
@@ -816,6 +830,10 @@ internal sealed partial class Checker
             ((includes & TypeFlags.BigIntLike) != 0 && (includes & (TypeFlags.DisjointDomains & ~TypeFlags.BigIntLike)) != 0) ||
             ((includes & TypeFlags.ESSymbolLike) != 0 && (includes & (TypeFlags.DisjointDomains & ~TypeFlags.ESSymbolLike)) != 0) ||
             ((includes & TypeFlags.VoidLike) != 0 && (includes & (TypeFlags.DisjointDomains & ~TypeFlags.VoidLike)) != 0))
+        {
+            return neverType;
+        }
+        if ((includes & (TypeFlags.TemplateLiteral | TypeFlags.StringMapping)) != 0 && (includes & TypeFlags.StringLiteral) != 0 && ExtractRedundantTemplateLiterals(typeSet))
         {
             return neverType;
         }
@@ -834,7 +852,10 @@ internal sealed partial class Checker
             ((includes & TypeFlags.Void) != 0 && (includes & TypeFlags.Undefined) != 0) ||
             ((includes & TypeFlags.IncludesEmptyObject) != 0 && (includes & TypeFlags.DefinitelyNonNullable) != 0))
         {
-            RemoveRedundantSupertypes(typeSet, includes);
+            if ((flags & IntersectionFlags.NoSupertypeReduction) == 0)
+            {
+                RemoveRedundantSupertypes(typeSet, includes);
+            }
         }
         if ((includes & TypeFlags.IncludesMissingType) != 0)
         {
@@ -848,19 +869,55 @@ internal sealed partial class Checker
         {
             return typeSet[0];
         }
-        // (the reduction of `T & P` for a type variable T and a primitive P needs the strict subtype relation: C4)
+        if (typeSet.Count == 2 && (flags & IntersectionFlags.NoConstraintReduction) == 0)
+        {
+            var typeVarIndex = (Types.Flags(typeSet[0]) & TypeFlags.TypeVariable) != 0 ? 0 : 1;
+            var typeVariable = typeSet[typeVarIndex];
+            var primitiveType = typeSet[1 - typeVarIndex];
+            if ((Types.Flags(typeVariable) & TypeFlags.TypeVariable) != 0 &&
+                (((Types.Flags(primitiveType) & (TypeFlags.Primitive | TypeFlags.NonPrimitive)) != 0 && !IsGenericStringLikeType(primitiveType)) || (includes & TypeFlags.IncludesEmptyObject) != 0))
+            {
+                // We have an intersection T & P or P & T, where T is a type variable and P is a primitive type, the object type, or {}.
+                var constraint = GetBaseConstraintOfType(typeVariable);
+                // Check that T's constraint is similarly composed of primitive types, the object type, or {}.
+                if (!constraint.IsNone && EveryType(constraint, t => (Types.Flags(t) & (TypeFlags.Primitive | TypeFlags.NonPrimitive)) != 0 || IsEmptyAnonymousObjectType(t)))
+                {
+                    // If T's constraint is a subtype of P, simply return T. For example, given `T extends "a" | "b"`,
+                    // the intersection `T & string` reduces to just T.
+                    if (IsTypeStrictSubtypeOf(constraint, primitiveType))
+                    {
+                        return typeVariable;
+                    }
+                    if (!((Types.Flags(constraint) & TypeFlags.Union) != 0 && SomeType(constraint, c => IsTypeStrictSubtypeOf(c, primitiveType))))
+                    {
+                        // No constituent of T's constraint is a subtype of P. If P is also not a subtype of T's constraint,
+                        // then the constraint and P are unrelated, and the intersection reduces to never. For example, given
+                        // `T extends "a" | "b"`, the intersection `T & number` reduces to never.
+                        if (!IsTypeStrictSubtypeOf(primitiveType, constraint))
+                        {
+                            return neverType;
+                        }
+                    }
+                    // Some constituent of T's constraint is a subtype of P, or P is a subtype of T's constraint. Thus,
+                    // the intersection further constrains the type variable. For example, given `T extends string | number`,
+                    // the intersection `T & "a"` is marked as a constrained type variable. Likewise, given `T extends "a" | 1`,
+                    // the intersection `T & number` is marked as a constrained type variable.
+                    objectFlags = ObjectFlags.IsConstrainedTypeVariable;
+                }
+            }
+        }
         var span = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(typeSet);
-        var id = GetTypeListId(span) + GetAliasId(aliasSymbol, aliasTypeArguments);
+        var id = GetTypeListId(span) + ((flags & IntersectionFlags.NoConstraintReduction) != 0 ? "*" : GetAliasId(aliasSymbol, aliasTypeArguments));
         if (!intersectionTypes.TryGetValue(id, out var result))
         {
             if ((includes & TypeFlags.Union) != 0)
             {
                 // module C3: the normalization of intersections containing unions
-                result = GetIntersectionOfUnions(typeSet, types.Length, aliasSymbol, aliasTypeArguments);
+                result = GetIntersectionOfUnions(typeSet, types.Length, aliasSymbol, aliasTypeArguments, flags);
             }
             else
             {
-                result = Types.CreateUnionOrIntersection(TypeFlags.Intersection, GetPropagatingFlagsOfTypes(span, TypeFlags.Nullable), Types.CreateList(span), Type.None);
+                result = Types.CreateUnionOrIntersection(TypeFlags.Intersection, objectFlags | GetPropagatingFlagsOfTypes(span, TypeFlags.Nullable), Types.CreateList(span), Type.None);
                 ref var record = ref Types.Record(result);
                 record.AliasSymbol = aliasSymbol;
                 record.AliasTypeArguments = aliasTypeArguments;
@@ -872,35 +929,35 @@ internal sealed partial class Checker
 
     // getIntersectionType's union cases: we normalize combinations of intersection and union types based on the
     // distributive property of the '&' operator (X & (A | B) is X & A | X & B), so union types are always at the top level.
-    private Type GetIntersectionOfUnions(List<Type> typeSet, int inputCount, SymbolRef aliasSymbol, TypeList aliasTypeArguments)
+    private Type GetIntersectionOfUnions(List<Type> typeSet, int inputCount, SymbolRef aliasSymbol, TypeList aliasTypeArguments, IntersectionFlags flags)
     {
         if (IntersectUnionsOfPrimitiveTypes(typeSet))
         {
             // When the intersection creates a reduced set (which might mean that *all* union types have
             // disappeared), we restart the operation to get a new set of combined flags. Once we have
             // reduced we'll never reduce again, so this occurs at most once.
-            return GetIntersectionType(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(typeSet), aliasSymbol, aliasTypeArguments);
+            return GetIntersectionType(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(typeSet), aliasSymbol, aliasTypeArguments, flags);
         }
         if (typeSet.TrueForAll(t => (Types.Flags(t) & TypeFlags.Union) != 0 && (Types.Flags(Types.Elements(Types.Union(t).Types)[0]) & TypeFlags.Undefined) != 0))
         {
             var containedUndefinedType = typeSet.Exists(ContainsMissingType) ? missingType : undefinedType;
             RemoveFromEach(typeSet, TypeFlags.Undefined);
-            return GetUnionType([GetIntersectionType(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(typeSet)), containedUndefinedType], UnionReduction.Literal, aliasSymbol, aliasTypeArguments);
+            return GetUnionType([GetIntersectionType(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(typeSet), flags: flags), containedUndefinedType], UnionReduction.Literal, aliasSymbol, aliasTypeArguments);
         }
         if (typeSet.TrueForAll(t => (Types.Flags(t) & TypeFlags.Union) != 0 &&
             ((Types.Flags(Types.Elements(Types.Union(t).Types)[0]) & TypeFlags.Null) != 0 || (Types.Flags(Types.Elements(Types.Union(t).Types)[1]) & TypeFlags.Null) != 0)))
         {
             RemoveFromEach(typeSet, TypeFlags.Null);
-            return GetUnionType([GetIntersectionType(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(typeSet)), nullType], UnionReduction.Literal, aliasSymbol, aliasTypeArguments);
+            return GetUnionType([GetIntersectionType(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(typeSet), flags: flags), nullType], UnionReduction.Literal, aliasSymbol, aliasTypeArguments);
         }
         if (typeSet.Count >= 3 && inputCount > 2)
         {
             // When we have three or more constituents, more than two inputs (to head off infinite reexpansion), some of which are unions, we employ a "divide and conquer" strategy
             // where A & B & C & D is processed as (A & B) & (C & D).
             var middle = typeSet.Count / 2;
-            var left = GetIntersectionType(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(typeSet)[..middle]);
-            var right = GetIntersectionType(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(typeSet)[middle..]);
-            return GetIntersectionType([left, right], aliasSymbol, aliasTypeArguments);
+            var left = GetIntersectionType(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(typeSet)[..middle], flags: flags);
+            var right = GetIntersectionType(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(typeSet)[middle..], flags: flags);
+            return GetIntersectionType([left, right], aliasSymbol, aliasTypeArguments, flags);
         }
         // We are attempting to construct a type of the form X & (A | B) & (C | D). Transform this into a type of
         // the form X & A & C | X & A & D | X & B & C | X & B & D. If the estimated size of the resulting union type
@@ -910,7 +967,7 @@ internal sealed partial class Checker
         {
             return errorType;
         }
-        var constituents = GetCrossProductIntersections(array);
+        var constituents = GetCrossProductIntersections(array, flags);
         // We attach a denormalized origin type when at least one constituent of the cross-product union is an
         // intersection (i.e. when the intersection didn't just reduce one or more unions to smaller unions) and
         // the denormalized origin has fewer constituents than the union itself.
@@ -921,7 +978,7 @@ internal sealed partial class Checker
     }
 
     // checker.ts getCrossProductIntersections
-    private List<Type> GetCrossProductIntersections(Type[] types)
+    private List<Type> GetCrossProductIntersections(Type[] types, IntersectionFlags flags)
     {
         var count = 1;
         foreach (var t in types)
@@ -943,13 +1000,227 @@ internal sealed partial class Checker
                     n /= length;
                 }
             }
-            var t = GetIntersectionType(constituents);
+            var t = GetIntersectionType(constituents, flags: flags);
             if ((Types.Flags(t) & TypeFlags.Never) == 0)
             {
                 intersections.Add(t);
             }
         }
         return intersections;
+    }
+
+    // ---- reductions that need the relations (module C4) ----
+
+    /// <summary>types.ts IntersectionFlags.</summary>
+    [Flags]
+    internal enum IntersectionFlags
+    {
+        None = 0,
+        NoSupertypeReduction = 1 << 0,
+        NoConstraintReduction = 1 << 1,
+    }
+
+    // checker.ts extractRedundantTemplateLiterals
+    private bool ExtractRedundantTemplateLiterals(List<Type> types)
+    {
+        var i = types.Count;
+        var literals = types.FindAll(t => (Types.Flags(t) & TypeFlags.StringLiteral) != 0);
+        while (i > 0)
+        {
+            i--;
+            var t = types[i];
+            if ((Types.Flags(t) & (TypeFlags.TemplateLiteral | TypeFlags.StringMapping)) == 0)
+            {
+                continue;
+            }
+            foreach (var t2 in literals)
+            {
+                if (IsTypeSubtypeOf(t2, t))
+                {
+                    // For example, `get${T}` & "getX" is just "getX", and Lowercase<string> & "foo" is just "foo"
+                    types.RemoveAt(i);
+                    break;
+                }
+                if (IsPatternLiteralType(t))
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    // checker.ts removeStringLiteralsMatchedByTemplateLiterals
+    private void RemoveStringLiteralsMatchedByTemplateLiterals(List<Type> types)
+    {
+        var templates = types.FindAll(IsPatternLiteralType);
+        if (templates.Count > 0)
+        {
+            var i = types.Count;
+            while (i > 0)
+            {
+                i--;
+                var t = types[i];
+                if ((Types.Flags(t) & TypeFlags.StringLiteral) != 0 && templates.Exists(template => IsTypeMatchedByTemplateLiteralOrStringMapping(t, template)))
+                {
+                    types.RemoveAt(i);
+                }
+            }
+        }
+    }
+
+    // checker.ts isTypeMatchedByTemplateLiteralOrStringMapping
+    private bool IsTypeMatchedByTemplateLiteralOrStringMapping(Type type, Type template) =>
+        (Types.Flags(template) & TypeFlags.TemplateLiteral) != 0 ? IsTypeMatchedByTemplateLiteralType(type, template) : IsMemberOfStringMapping(type, template);
+
+    // checker.ts removeConstrainedTypeVariables
+    private void RemoveConstrainedTypeVariables(List<Type> types)
+    {
+        var typeVariables = new List<Type>();
+        // First collect a list of the type variables occurring in constraining intersections.
+        foreach (var type in types)
+        {
+            if ((Types.Flags(type) & TypeFlags.Intersection) != 0 && (Types.ObjectFlagsOf(type) & ObjectFlags.IsConstrainedTypeVariable) != 0)
+            {
+                var members = Types.Elements(Types.Union(type).Types);
+                var index = (Types.Flags(members[0]) & TypeFlags.TypeVariable) != 0 ? 0 : 1;
+                if (!typeVariables.Contains(members[index]))
+                {
+                    typeVariables.Add(members[index]);
+                }
+            }
+        }
+        // For each type variable, check if the constraining intersections for that type variable fully
+        // cover the constraint of the type variable; if so, remove the constraining intersections and
+        // substitute the type variable.
+        foreach (var typeVariable in typeVariables)
+        {
+            var primitives = new List<Type>();
+            // First collect the primitive types from the constraining intersections.
+            foreach (var type in types)
+            {
+                if ((Types.Flags(type) & TypeFlags.Intersection) != 0 && (Types.ObjectFlagsOf(type) & ObjectFlags.IsConstrainedTypeVariable) != 0)
+                {
+                    var members = Types.Elements(Types.Union(type).Types);
+                    var index = (Types.Flags(members[0]) & TypeFlags.TypeVariable) != 0 ? 0 : 1;
+                    if (members[index] == typeVariable)
+                    {
+                        InsertType(primitives, members[1 - index]);
+                    }
+                }
+            }
+            // If every constituent in the type variable's constraint is covered by an intersection of the type
+            // variable and that constituent, remove those intersections and substitute the type variable.
+            var constraint = GetBaseConstraintOfType(typeVariable);
+            if (EveryType(constraint, t => ContainsType(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(primitives), t)))
+            {
+                var i = types.Count;
+                while (i > 0)
+                {
+                    i--;
+                    var type = types[i];
+                    if ((Types.Flags(type) & TypeFlags.Intersection) != 0 && (Types.ObjectFlagsOf(type) & ObjectFlags.IsConstrainedTypeVariable) != 0)
+                    {
+                        var members = Types.Elements(Types.Union(type).Types);
+                        var index = (Types.Flags(members[0]) & TypeFlags.TypeVariable) != 0 ? 0 : 1;
+                        if (members[index] == typeVariable && ContainsType(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(primitives), members[1 - index]))
+                        {
+                            types.RemoveAt(i);
+                        }
+                    }
+                }
+                InsertType(types, typeVariable);
+            }
+        }
+    }
+
+    private readonly Dictionary<string, List<Type>> subtypeReductionCache = new(StringComparer.Ordinal);
+
+    // checker.ts removeSubtypes (null: the union is too complex to represent)
+    private List<Type>? RemoveSubtypes(List<Type> types, bool hasObjectTypes)
+    {
+        // [] and [T] immediately reduce to [] and [T] respectively
+        if (types.Count < 2)
+        {
+            return types;
+        }
+        var id = GetTypeListId(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(types));
+        if (subtypeReductionCache.TryGetValue(id, out var match))
+        {
+            return [.. match];
+        }
+        // We assume that redundant primitive types have already been removed from the types array and that there
+        // are no any and unknown types in the array. Thus, the only possible supertypes for primitive types are empty
+        // object types, and if none of those are present we can exclude primitive types from the subtype check.
+        var hasEmptyObject = hasObjectTypes && types.Exists(t => (Types.Flags(t) & TypeFlags.Object) != 0 && !IsGenericMappedType(t) && IsEmptyResolvedTypeOf(t, ResolveStructuredTypeMembers(t)));
+        var len = types.Count;
+        var i = len;
+        var count = 0;
+        while (i > 0)
+        {
+            i--;
+            var source = types[i];
+            if (hasEmptyObject || (Types.Flags(source) & TypeFlags.StructuredOrInstantiable) != 0)
+            {
+                // A type parameter with a union constraint may be a subtype of some union, but not a subtype of the
+                // individual constituents of that union. For example, `T extends A | B` is a subtype of `A | B`, but not
+                // a subtype of just `A` or just `B`. When we encounter such a type parameter, we therefore check if the
+                // type parameter is a subtype of a union of all the other types.
+                if ((Types.Flags(source) & TypeFlags.TypeParameter) != 0 && (Types.Flags(GetBaseConstraintOrType(source)) & TypeFlags.Union) != 0)
+                {
+                    if (IsTypeRelatedTo(source, GetUnionType(types.ConvertAll(t => t == source ? neverType : t).ToArray()), strictSubtypeRelation))
+                    {
+                        types.RemoveAt(i);
+                    }
+                    continue;
+                }
+                // Find the first property with a unit type, if any. When constituents have a property by the same name
+                // but of a different unit type, we can quickly disqualify them from subtype checks. This helps subtype
+                // reduction of large discriminated union types.
+                var keyProperty = (Types.Flags(source) & (TypeFlags.Object | TypeFlags.Intersection | TypeFlags.InstantiableNonPrimitive)) != 0
+                    ? GetPropertiesOfType(source).Find(p => IsUnitType(GetTypeOfSymbol(p)))
+                    : SymbolRef.None;
+                var keyPropertyType = keyProperty.IsNone ? Type.None : GetRegularTypeOfLiteralType(GetTypeOfSymbol(keyProperty));
+                foreach (var target in types.ToArray())
+                {
+                    if (source != target)
+                    {
+                        if (count == 100000)
+                        {
+                            // After 100000 subtype checks we estimate the remaining amount of work by assuming the
+                            // same ratio of checks per element. If the estimated number of remaining type checks is
+                            // greater than 1M we deem the union type too complex to represent. This for example
+                            // caps union types at 1000 unique object types.
+                            var estimatedCount = (double)count / (len - i) * len;
+                            if (estimatedCount > 1000000)
+                            {
+                                Error(currentNode, Diagnostics.Expression_produces_a_union_type_that_is_too_complex_to_represent);
+                                return null;
+                            }
+                        }
+                        count++;
+                        if (!keyProperty.IsNone && (Types.Flags(target) & (TypeFlags.Object | TypeFlags.Intersection | TypeFlags.InstantiableNonPrimitive)) != 0)
+                        {
+                            var t = GetTypeOfPropertyOfType(target, NameOf(keyProperty));
+                            if (!t.IsNone && IsUnitType(t) && GetRegularTypeOfLiteralType(t) != keyPropertyType)
+                            {
+                                continue;
+                            }
+                        }
+                        if (IsTypeRelatedTo(source, target, strictSubtypeRelation) &&
+                            ((Types.ObjectFlagsOf(GetTargetType(source)) & ObjectFlags.Class) == 0 ||
+                             (Types.ObjectFlagsOf(GetTargetType(target)) & ObjectFlags.Class) == 0 ||
+                             IsTypeDerivedFrom(source, target)))
+                        {
+                            types.RemoveAt(i);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        subtypeReductionCache[id] = [.. types];
+        return types;
     }
 
     // checker.ts getConstituentCount

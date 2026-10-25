@@ -426,7 +426,7 @@ internal sealed partial class Checker
         exactOptionalPropertyTypes ? FilterType(type, t => t != missingType) : GetTypeWithFactsNEUndefined(type);
 
     // checker.ts getTypeWithFacts(type, TypeFacts.NEUndefined) (TODO(C7): the type facts)
-    private Type GetTypeWithFactsNEUndefined(Type type) => FilterType(type, t => (Types.Flags(t) & TypeFlags.Undefined) == 0);
+    private Type GetTypeWithFactsNEUndefined(Type type) => GetTypeWithFacts(type, TypeFacts.NEUndefined);
 
     // checker.ts getLowerBoundOfKeyType: the keys known to always be present
     private Type GetLowerBoundOfKeyType(Type type)

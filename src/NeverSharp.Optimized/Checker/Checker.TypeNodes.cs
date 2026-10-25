@@ -19,8 +19,12 @@ namespace NeverSharp.Optimized;
 
 internal sealed partial class Checker
 {
-    /// <summary>checker.ts getTypeFromTypeNode.</summary>
-    internal Type GetTypeFromTypeNode(NodeRef node)
+    /// <summary>checker.ts getTypeFromTypeNode (getConditionalFlowTypeOfType of the worker's type: module C4).</summary>
+    internal Type GetTypeFromTypeNode(NodeRef node) =>
+        node.IsNone ? errorType : GetConditionalFlowTypeOfType(GetTypeFromTypeNodeWorker(node), node);
+
+    // checker.ts getTypeFromTypeNodeWorker
+    private Type GetTypeFromTypeNodeWorker(NodeRef node)
     {
         if (node.IsNone)
         {

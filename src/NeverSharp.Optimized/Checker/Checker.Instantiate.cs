@@ -588,6 +588,22 @@ internal sealed partial class Checker
     // rest of it: C8)
     private Type GetWriteTypeOfSymbol(SymbolRef symbol)
     {
+        var checkFlags = GetCheckFlags(symbol);
+        if ((checkFlags & CheckFlags.SyntheticProperty) != 0)
+        {
+            // synthetic union and intersection properties (module C4)
+            if ((checkFlags & CheckFlags.DeferredType) != 0)
+            {
+                var deferredWriteType = GetWriteTypeOfSymbolWithDeferredType(symbol);
+                return deferredWriteType.IsNone ? GetTypeOfSymbolWithDeferredType(symbol) : deferredWriteType;
+            }
+            var links = ValueSymbolLinks.Get(symbol);
+            return links.WriteType.IsNone ? links.ResolvedType : links.WriteType;
+        }
+        if ((SymbolFlagsOf(symbol) & SymbolFlags.Property) != 0)
+        {
+            return RemoveMissingType(GetTypeOfSymbol(symbol), (SymbolFlagsOf(symbol) & SymbolFlags.Optional) != 0);
+        }
         if ((SymbolFlagsOf(symbol) & SymbolFlags.Accessor) != 0)
         {
             if ((GetCheckFlags(symbol) & CheckFlags.Instantiated) != 0)

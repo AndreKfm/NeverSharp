@@ -271,8 +271,6 @@ internal sealed partial class Checker
 
     private bool IsReferenceToGlobalIterableLikeType(Type type) => false;
 
-    private bool IsTypeIdenticalTo(Type source, Type target) => source == target;
-
     private Type GetReverseMappedPropertyType(SymbolRef symbol) => throw C3Seam();
 
     private Type GetReverseMappedMappedType(SymbolRef symbol) => throw C3Seam();

@@ -54,7 +54,7 @@ internal sealed partial class Checker
 
     private int FindResolutionCycleStartIndex(object target, int property)
     {
-        for (var i = resolutionTargets.Count - 1; i >= 0; i--)
+        for (var i = resolutionTargets.Count - 1; i >= resolutionStart; i--)
         {
             if (resolutionTargets[i].Property == property && resolutionTargets[i].Target.Equals(target))
             {
@@ -1130,33 +1130,8 @@ internal sealed partial class Checker
     /// <summary>checker.ts getPropertiesOfType (unions and intersections: the members common to the constituents).</summary>
     internal List<SymbolRef> GetPropertiesOfType(Type type)
     {
-        type = GetApparentType(type);
-        if ((Types.Flags(type) & TypeFlags.UnionOrIntersection) != 0)
-        {
-            var result = new List<SymbolRef>();
-            var seen = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var current in Types.Elements(Types.Union(type).Types).ToArray())
-            {
-                foreach (var prop in GetPropertiesOfType(current))
-                {
-                    var name = NameOf(prop);
-                    if (seen.Add(name))
-                    {
-                        var combined = GetPropertyOfUnionOrIntersectionType(type, name, (Types.Flags(type) & TypeFlags.Intersection) != 0);
-                        if (!combined.IsNone)
-                        {
-                            result.Add(combined);
-                        }
-                    }
-                }
-                if ((Types.Flags(type) & TypeFlags.Union) != 0 && GetIndexInfosOfType(current).Count == 0)
-                {
-                    break;
-                }
-            }
-            return result;
-        }
-        return GetPropertiesOfObjectType(type);
+        type = GetReducedApparentType(type);
+        return (Types.Flags(type) & TypeFlags.UnionOrIntersection) != 0 ? GetPropertiesOfUnionOrIntersectionType(type) : GetPropertiesOfObjectType(type);
     }
 
     // (getApparentType: Checker.Generics.cs, module C3)
@@ -1193,7 +1168,7 @@ internal sealed partial class Checker
         {
             return SymbolRef.None;
         }
-        type = GetApparentType(type);
+        type = GetReducedApparentType(type);
         var flags = Types.Flags(type);
         if ((flags & TypeFlags.Object) != 0)
         {
@@ -1241,92 +1216,7 @@ internal sealed partial class Checker
         return SymbolRef.None;
     }
 
-    private readonly Dictionary<(Type, string), SymbolRef> unionProperties = [];
-
-    // checker.ts getPropertyOfUnionOrIntersectionType / createUnionOrIntersectionProperty. TODO(C4/C5): the synthetic
-    // property's type, partial properties, modifiers; C1: the common symbol when every constituent has the same one,
-    // else a synthetic property with the constituents' declarations.
-    private SymbolRef GetPropertyOfUnionOrIntersectionType(Type type, string name, bool skipObjectFunctionPropertyAugment)
-    {
-        if (unionProperties.TryGetValue((type, name), out var cached))
-        {
-            return cached;
-        }
-        var isUnion = (Types.Flags(type) & TypeFlags.Union) != 0;
-        var singleProp = SymbolRef.None;
-        List<SymbolRef>? propSet = null;
-        var missing = false;
-        foreach (var current in Types.Elements(Types.Union(type).Types).ToArray())
-        {
-            var t = GetApparentType(current);
-            if (IsErrorType(t) || (Types.Flags(t) & TypeFlags.Never) != 0)
-            {
-                continue;
-            }
-            var prop = GetPropertyOfType(t, name, skipObjectFunctionPropertyAugment);
-            if (!prop.IsNone)
-            {
-                if (singleProp.IsNone)
-                {
-                    singleProp = prop;
-                }
-                else if (prop != singleProp)
-                {
-                    propSet ??= [singleProp];
-                    if (!propSet.Contains(prop))
-                    {
-                        propSet.Add(prop);
-                    }
-                }
-            }
-            else if (isUnion)
-            {
-                missing = true;
-            }
-        }
-        var result = SymbolRef.None;
-        if (!singleProp.IsNone && !(isUnion && missing))
-        {
-            if (propSet is null)
-            {
-                result = singleProp;
-            }
-            else
-            {
-                result = CreateSymbol(SymbolFlags.Property | (SymbolFlagsOf(singleProp) & SymbolFlags.Optional), name, CheckFlags.SyntheticProperty);
-                var declarations = new List<NodeRef>();
-                foreach (var p in propSet)
-                {
-                    foreach (var d in DeclarationsOf(p) ?? [])
-                    {
-                        if (!declarations.Contains(d))
-                        {
-                            declarations.Add(d);
-                        }
-                    }
-                }
-                ref var r = ref TransientSymbols.Record(result);
-                r.Declarations = declarations;
-                if (propSet.Count > 0)
-                {
-                    var firstValueDeclaration = ValueDeclarationOf(singleProp);
-                    r.ValueDeclaration = firstValueDeclaration;
-                    // result.parent = firstValueDeclaration.symbol.parent (module C3: instantiated members of one
-                    // declaration share its parent)
-                    if (!firstValueDeclaration.IsNone && propSet.TrueForAll(p => ValueDeclarationOf(p) == firstValueDeclaration))
-                    {
-                        var declarationSymbol = NodeSymbol(firstValueDeclaration);
-                        if (!declarationSymbol.IsNone)
-                        {
-                            TransientSymbols.Record(result).Parent = ParentOf(declarationSymbol);
-                        }
-                    }
-                }
-            }
-        }
-        unionProperties[(type, name)] = result;
-        return result;
-    }
+    // (getPropertyOfUnionOrIntersectionType / createUnionOrIntersectionProperty: Checker.UnionProperties.cs, module C4)
 
     /// <summary>checker.ts getSignaturesOfType.</summary>
     internal List<Signature> GetSignaturesOfType(Type type, SignatureKind kind)
@@ -1626,8 +1516,12 @@ internal sealed partial class Checker
         {
             return errorType;
         }
-        // (deferred-type symbols of unions and intersections: C4/C5; reverse-mapped symbols: C6)
+        // (reverse-mapped symbols: C6)
         var checkFlags = GetCheckFlags(symbol);
+        if ((checkFlags & CheckFlags.DeferredType) != 0)
+        {
+            return GetTypeOfSymbolWithDeferredType(symbol);
+        }
         if ((checkFlags & CheckFlags.Instantiated) != 0)
         {
             return GetTypeOfInstantiatedSymbol(symbol);

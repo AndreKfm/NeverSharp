@@ -22,6 +22,9 @@ internal sealed class DiagnosticMessageChain
     public DiagnosticCategory Category;
     public int Code;
     public List<DiagnosticMessageChain>? Next;
+
+    /// <summary>types.ts DiagnosticMessageChain.canonicalHead (the head a suppressed relation error would have had).</summary>
+    public (int Code, string MessageText)? CanonicalHead;
 }
 
 /// <summary>
@@ -34,6 +37,9 @@ internal sealed class ProgramDiagnostic : Diagnostic
 {
     public SourceFile? SourceFile;
     public DiagnosticMessageChain? Chain;
+
+    /// <summary>types.ts Diagnostic.canonicalHead (used to compare and deduplicate diagnostics).</summary>
+    public (int Code, string MessageText)? CanonicalHead;
 
     /// <summary>A diagnostic of <paramref name="file"/> made by the parser or the binder (same members, its file named).</summary>
     internal static ProgramDiagnostic FromFile(SourceFile file, Diagnostic d) => new()

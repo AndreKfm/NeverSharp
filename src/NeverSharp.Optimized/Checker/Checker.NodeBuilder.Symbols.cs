@@ -1292,7 +1292,17 @@ internal sealed partial class Checker
     }
 
     // utilities.ts isNumericLiteralName: (+name).toString() === name
-    private static bool IsNumericLiteralName(string name) => JsNumber.ToString(JsNumber.FromString(name)) == name;
+    // utilities.ts isNumericLiteralName: (+name).toString() === name (a leading '-' and Infinity included, module C4)
+    private static bool IsNumericLiteralName(string name)
+    {
+        var number = name switch
+        {
+            "Infinity" => double.PositiveInfinity,
+            "-Infinity" => double.NegativeInfinity,
+            _ => name.Length > 1 && name[0] == '-' ? -JsNumber.FromString(name[1..]) : JsNumber.FromString(name),
+        };
+        return JsNumber.ToString(number) == name;
+    }
 
     // checker.ts getClonedHashPrivateName
     private Node GetClonedHashPrivateName(SymbolRef symbol)

@@ -585,9 +585,10 @@ internal sealed partial class Checker
         return Type.None;
     }
 
-    // checker.ts isArrayLikeType (the assignability to readonly any[] of other types: C4)
+    // checker.ts isArrayLikeType: a reference to the global Array or ReadonlyArray type, or a type that is not undefined
+    // or null and is assignable to ReadonlyArray<any>
     private bool IsArrayLikeType(Type type) =>
-        IsArrayType(type) || IsTupleType(type) || ((Types.Flags(type) & TypeFlags.Nullable) == 0 && IsTypeAssignableTo(type, anyReadonlyArrayType));
+        IsArrayType(type) || ((Types.Flags(type) & TypeFlags.Nullable) == 0 && IsTypeAssignableTo(type, anyReadonlyArrayType));
 
     // ---- index types (keyof) ----
 
@@ -1323,10 +1324,11 @@ internal sealed partial class Checker
             ((flags & (TypeFlags.InstantiableNonPrimitive | TypeFlags.Index)) != 0 || IsGenericStringLikeType(type) ? ObjectFlags.IsGenericIndexType : 0);
     }
 
-    // checker.ts isGenericReducibleType (TODO(C4): the reducible intersections need the never-reduction of getReducedType)
+    // checker.ts isGenericReducibleType
     private bool IsGenericReducibleType(Type type) =>
-        (Types.Flags(type) & TypeFlags.Union) != 0 && (Types.ObjectFlagsOf(type) & ObjectFlags.ContainsIntersections) != 0 &&
-        ExistsType(Types.Elements(Types.Union(type).Types), IsGenericReducibleType);
+        ((Types.Flags(type) & TypeFlags.Union) != 0 && (Types.ObjectFlagsOf(type) & ObjectFlags.ContainsIntersections) != 0 &&
+            ExistsType(Types.Elements(Types.Union(type).Types), IsGenericReducibleType)) ||
+        ((Types.Flags(type) & TypeFlags.Intersection) != 0 && IsReducibleIntersection(type));
 
     /// <summary>checker.ts maybeTypeOfKind.</summary>
     internal bool MaybeTypeOfKind(Type type, TypeFlags kind) =>
@@ -2273,8 +2275,8 @@ internal sealed partial class Checker
     private readonly Dictionary<Type, Type> resolvedReducedTypes = [];
 
     /// <summary>
-    /// checker.ts getReducedType. TODO(C4): the never-reduction of intersections with conflicting discriminant
-    /// properties (isNeverReducedProperty needs the types of synthetic union and intersection properties).
+    /// checker.ts getReducedType: for a union type, a union of the normalized constituent types; for an intersection
+    /// of types containing one or more mutually exclusive discriminant properties, never.
     /// </summary>
     internal Type GetReducedType(Type type)
     {
@@ -2286,6 +2288,15 @@ internal sealed partial class Checker
                 resolvedReducedTypes[type] = reduced;
             }
             return reduced;
+        }
+        if ((Types.Flags(type) & TypeFlags.Intersection) != 0)
+        {
+            if ((Types.ObjectFlagsOf(type) & ObjectFlags.IsNeverIntersectionComputed) == 0)
+            {
+                var isNever = GetPropertiesOfUnionOrIntersectionType(type).Exists(IsNeverReducedProperty);
+                Types.Record(type).ObjectFlags |= ObjectFlags.IsNeverIntersectionComputed | (isNever ? ObjectFlags.IsNeverIntersection : 0);
+            }
+            return (Types.ObjectFlagsOf(type) & ObjectFlags.IsNeverIntersection) != 0 ? neverType : type;
         }
         return type;
     }
@@ -2380,148 +2391,7 @@ internal sealed partial class Checker
         return MapType(type, mapper);
     }
 
-    // ---- the relation stubs (C4) ----
-
-    /// <summary>
-    /// checker.ts isTypeAssignableTo. TODO(C4): the assignability relation. This stub decides the cases that need no
-    /// structural comparison (identity, any/unknown/never, literals and their primitives, enum literals, unions,
-    /// nullable types, the empty object type, references to the same target with identical arguments) and answers
-    /// false otherwise.
-    /// </summary>
-    internal bool IsTypeAssignableTo(Type source, Type target) => IsSimplyAssignableTo(source, target, 0);
-
-    private bool IsSimplyAssignableTo(Type source, Type target, int depth)
-    {
-        if (source == target || depth > 16)
-        {
-            return source == target;
-        }
-        var s = Types.Flags(source);
-        var t = Types.Flags(target);
-        if ((t & (TypeFlags.Any | TypeFlags.Unknown)) != 0 || (s & TypeFlags.Never) != 0 || source == wildcardType || target == wildcardType)
-        {
-            return true;
-        }
-        if ((s & TypeFlags.Any) != 0)
-        {
-            return (t & TypeFlags.Never) == 0;
-        }
-        if ((s & TypeFlags.Union) != 0)
-        {
-            foreach (var e in Types.Elements(Types.Union(source).Types).ToArray())
-            {
-                if (!IsSimplyAssignableTo(e, target, depth + 1))
-                {
-                    return false;
-                }
-            }
-            return true;
-        }
-        if ((t & TypeFlags.Union) != 0)
-        {
-            foreach (var e in Types.Elements(Types.Union(target).Types).ToArray())
-            {
-                if (IsSimplyAssignableTo(source, e, depth + 1))
-                {
-                    return true;
-                }
-            }
-            return false;
-        }
-        if ((t & TypeFlags.Intersection) != 0)
-        {
-            foreach (var e in Types.Elements(Types.Union(target).Types).ToArray())
-            {
-                if (!IsSimplyAssignableTo(source, e, depth + 1))
-                {
-                    return false;
-                }
-            }
-            return true;
-        }
-        if ((s & TypeFlags.Intersection) != 0)
-        {
-            foreach (var e in Types.Elements(Types.Union(source).Types).ToArray())
-            {
-                if (IsSimplyAssignableTo(e, target, depth + 1))
-                {
-                    return true;
-                }
-            }
-            return false;
-        }
-        if ((s & TypeFlags.Undefined) != 0 && (!strictNullChecks || (t & (TypeFlags.Undefined | TypeFlags.Void)) != 0))
-        {
-            return true;
-        }
-        if ((s & TypeFlags.Null) != 0 && (!strictNullChecks || (t & TypeFlags.Null) != 0))
-        {
-            return true;
-        }
-        if ((s & TypeFlags.Nullable) != 0)
-        {
-            return false;
-        }
-        if ((s & TypeFlags.StringLike) != 0 && (t & TypeFlags.String) != 0)
-        {
-            return true;
-        }
-        if ((s & TypeFlags.NumberLike) != 0 && (t & TypeFlags.Number) != 0)
-        {
-            return true;
-        }
-        if ((s & TypeFlags.BigIntLike) != 0 && (t & TypeFlags.BigInt) != 0)
-        {
-            return true;
-        }
-        if ((s & TypeFlags.BooleanLike) != 0 && (t & TypeFlags.Boolean) != 0)
-        {
-            return true;
-        }
-        if ((s & TypeFlags.ESSymbolLike) != 0 && (t & TypeFlags.ESSymbol) != 0)
-        {
-            return true;
-        }
-        if ((s & TypeFlags.Literal) != 0 && (t & TypeFlags.Literal) != 0)
-        {
-            return GetRegularTypeOfLiteralType(source) == GetRegularTypeOfLiteralType(target);
-        }
-        if ((s & TypeFlags.EnumLiteral) != 0 && (t & TypeFlags.Enum) != 0)
-        {
-            return GetBaseTypeOfEnumLikeType(source) == target;
-        }
-        if ((t & TypeFlags.NonPrimitive) != 0)
-        {
-            return (s & (TypeFlags.Object | TypeFlags.NonPrimitive)) != 0;
-        }
-        if ((t & TypeFlags.Object) != 0 && IsEmptyAnonymousObjectType(target))
-        {
-            return (s & (TypeFlags.Primitive | TypeFlags.Object | TypeFlags.NonPrimitive)) != 0 && (s & TypeFlags.Nullable) == 0;
-        }
-        if ((s & TypeFlags.Object) != 0 && (t & TypeFlags.Object) != 0 &&
-            (Types.ObjectFlagsOf(source) & Types.ObjectFlagsOf(target) & ObjectFlags.Reference) != 0 && Types.Object(source).Target == Types.Object(target).Target)
-        {
-            var sourceArguments = GetTypeArguments(source).ToArray();
-            var targetArguments = GetTypeArguments(target).ToArray();
-            if (sourceArguments.Length == targetArguments.Length)
-            {
-                for (var i = 0; i < sourceArguments.Length; i++)
-                {
-                    if (!IsSimplyAssignableTo(sourceArguments[i], targetArguments[i], depth + 1))
-                    {
-                        return false;
-                    }
-                }
-                return true;
-            }
-        }
-        if ((s & TypeFlags.TypeParameter) != 0)
-        {
-            var constraint = GetConstraintOfTypeParameter(source);
-            return !constraint.IsNone && IsSimplyAssignableTo(constraint, target, depth + 1);
-        }
-        return false;
-    }
+    // (isTypeAssignableTo and the other relations: Checker.Relations.cs, module C4)
 
     /// <summary>checker.ts isTypeAssignableToKind.</summary>
     internal bool IsTypeAssignableToKind(Type source, TypeFlags kind, bool strict = false)
