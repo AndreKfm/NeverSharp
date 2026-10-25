@@ -678,8 +678,8 @@ internal sealed partial class Checker
         }
         foreach (var info in GetIndexInfosOfType(type))
         {
-            // (enumNumberIndexInfo: the index signature of enum objects, C8)
-            types.Add(IsKeyTypeIncluded(info.KeyType, include)
+            // (enumNumberIndexInfo: the index signature of enum objects, module C5)
+            types.Add(info != enumNumberIndexInfo && IsKeyTypeIncluded(info.KeyType, include)
                 ? info.KeyType == stringType && (include & TypeFlags.Number) != 0 ? stringOrNumberType : info.KeyType
                 : neverType);
         }

@@ -758,8 +758,68 @@ internal sealed partial class Checker
         {
             return true;
         }
-        // isConstantVariable || isParameterOrMutableLocalVariable && !isSymbolAssigned (assignments: C7, assumed absent)
-        return (SymbolFlagsOf(symbol) & SymbolFlags.Variable) != 0;
+        // isConstantVariable || isParameterOrMutableLocalVariable && !isSymbolAssigned (TODO(C7): isSymbolAssigned; the
+        // seam looks for assignments to the name in the file)
+        if ((SymbolFlagsOf(symbol) & SymbolFlags.Variable) == 0)
+        {
+            return false;
+        }
+        var declaration = ValueDeclarationOf(symbol);
+        if (declaration.IsNone)
+        {
+            return false;
+        }
+        var store = StoreOf(declaration);
+        if ((Utilities.GetCombinedNodeFlags(store, declaration.Node) & NodeFlags.Constant) != 0)
+        {
+            return true;
+        }
+        return !IsNameAssigned(At(declaration, Utilities.RootOf(store, declaration.Node)), NameOf(symbol));
+    }
+
+    // whether the file assigns to an identifier with the name (isSymbolAssigned approximated by name)
+    private bool IsNameAssigned(NodeRef file, string name)
+    {
+        var store = StoreOf(file);
+        var found = false;
+        Visit(file.Node);
+        return found;
+
+        void Visit(Node n)
+        {
+            if (found)
+            {
+                return;
+            }
+            switch (store.Kind(n))
+            {
+                case SyntaxKind.BinaryExpression when Utilities.IsAssignmentOperator(store.Kind(store.OperatorToken(n))):
+                {
+                    var left = Utilities.SkipParentheses(store, store.Left(n), false);
+                    if (store.Kind(left) == SyntaxKind.Identifier && store.Texts.Equals(store.EscapedText(left), name))
+                    {
+                        found = true;
+                        return;
+                    }
+                    break;
+                }
+                case SyntaxKind.PrefixUnaryExpression or SyntaxKind.PostfixUnaryExpression when store.Operator(n) is SyntaxKind.PlusPlusToken or SyntaxKind.MinusMinusToken:
+                {
+                    var operand = Utilities.SkipParentheses(store, store.Operand(n), false);
+                    if (store.Kind(operand) == SyntaxKind.Identifier && store.Texts.Equals(store.EscapedText(operand), name))
+                    {
+                        found = true;
+                        return;
+                    }
+                    break;
+                }
+            }
+            NodeVisitor.ForEachChild<object>(store, n, child =>
+            {
+                Visit(child);
+                return null;
+            });
+        }
     }
 
     // C1's "uncertain" mechanism: a return type inferred from an approximate return expression type (TODO(C6)) or

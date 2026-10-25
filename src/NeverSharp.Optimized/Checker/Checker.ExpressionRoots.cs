@@ -63,9 +63,19 @@ internal sealed partial class Checker
             case SyntaxKind.Parameter when store.Initializer(parent) == n:
             case SyntaxKind.PropertyDeclaration when store.Initializer(parent) == n:
             case SyntaxKind.BindingElement when store.Initializer(parent) == n:
-            case SyntaxKind.ReturnStatement:
                 CheckExpressionCached(node);
                 return;
+            case SyntaxKind.ReturnStatement:
+            {
+                // checkReturnStatement: the return type of the containing function first
+                var container = Utilities.GetContainingFunctionOrNone(store, n);
+                if (!container.IsNone && store.Kind(container) != SyntaxKind.ClassStaticBlockDeclaration)
+                {
+                    GetReturnTypeOfSignature(GetSignatureFromDeclaration(At(node, container)));
+                }
+                CheckExpressionCached(node);
+                return;
+            }
             case SyntaxKind.ForOfStatement:
                 if (store.Initializer(parent) == n)
                 {

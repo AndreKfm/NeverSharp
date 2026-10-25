@@ -928,7 +928,7 @@ internal sealed partial class Checker
         {
             var classType = GetDeclaredTypeOfClassOrInterface(symbol);
             var baseConstructorType = GetBaseConstructorTypeOfClass(classType);
-            if ((Types.Flags(baseConstructorType) & TypeFlags.Any) != 0)
+            if (baseConstructorType == anyType)
             {
                 baseConstructorIndexInfo = new IndexInfo { KeyType = stringType, Type = anyType, IsReadonly = false }; // (module C5)
             }
@@ -948,8 +948,9 @@ internal sealed partial class Checker
             }
         }
         // (static index signatures of classes: C8; module C5: the index signatures of any-based classes and enums)
-        var anonymousIndexInfos = baseConstructorIndexInfo is not null ? new List<IndexInfo> { baseConstructorIndexInfo } : null;
-        if ((flags & SymbolFlags.Enum) != 0 && ((Types.Flags(GetDeclaredTypeOfSymbol(symbol)) & TypeFlags.Enum) != 0 || HasNumberLikeProperty(exports)))
+        var hasIndexSymbol = exports.Has(InternalSymbolName.Index);
+        var anonymousIndexInfos = baseConstructorIndexInfo is not null && !hasIndexSymbol ? new List<IndexInfo> { baseConstructorIndexInfo } : null;
+        if (!hasIndexSymbol && (flags & SymbolFlags.Enum) != 0 && ((Types.Flags(GetDeclaredTypeOfSymbol(symbol)) & TypeFlags.Enum) != 0 || HasNumberLikeProperty(exports)))
         {
             (anonymousIndexInfos ??= []).Add(enumNumberIndexInfo ??= new IndexInfo { KeyType = numberType, Type = stringType, IsReadonly = true });
         }

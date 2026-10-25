@@ -1466,6 +1466,8 @@ internal sealed partial class Checker
 
     // checker.ts isPostSuperFlowNode (the antecedents of reduce labels are substituted through a map instead of being
     // written into the flow graph)
+    private readonly Dictionary<(int, int), bool> flowNodePostSuper = [];
+
     private bool IsPostSuperFlowNode(int file, FlowNode flow, Dictionary<int, BinderStore.FlowChain>? reduced)
     {
         var binding = BindingOf(file);
@@ -1487,16 +1489,27 @@ internal sealed partial class Checker
             }
             else if ((flags & FlowFlags.BranchLabel) != 0)
             {
+                // (flowNodePostSuper: the result of a branch label is cached, outside of reduce labels)
+                if (reduced is null && flowNodePostSuper.TryGetValue((file, flow.Index), out var cachedPostSuper))
+                {
+                    return cachedPostSuper;
+                }
                 // A branching point is post-super if every branch is post-super.
                 var antecedents = reduced is not null && reduced.TryGetValue(flow.Index, out var replacement) ? replacement : binding.Antecedents(flow);
+                var result = true;
                 foreach (var f in antecedents)
                 {
                     if (!IsPostSuperFlowNode(file, f, reduced))
                     {
-                        return false;
+                        result = false;
+                        break;
                     }
                 }
-                return true;
+                if (reduced is null)
+                {
+                    flowNodePostSuper[(file, flow.Index)] = result;
+                }
+                return result;
             }
             else if ((flags & FlowFlags.LoopLabel) != 0)
             {

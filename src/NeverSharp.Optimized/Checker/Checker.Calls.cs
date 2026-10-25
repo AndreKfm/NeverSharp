@@ -2265,7 +2265,17 @@ internal sealed partial class Checker
     // checker.ts instantiateSignatureInContextOf (TODO(C6): the inferences)
     private Signature InstantiateSignatureInContextOf(Signature signature, Signature contextualSignature, InferenceContext? inferenceContext, Func<Type, Type, bool>? compareTypes = null)
     {
-        var context = CreateInferenceContext(GetTypeParametersForMapper(signature), signature, InferenceFlags.None, compareTypes);
+        var typeParametersForMapper = GetTypeParametersForMapper(signature);
+        var context = CreateInferenceContext(typeParametersForMapper, signature, InferenceFlags.None, compareTypes);
+        // TODO(C6): the seam infers the contextual signature's type parameters positionally when the counts agree (the
+        // inferences of alpha-equivalent generic signatures), else the type parameters themselves
+        var contextualRecord = Signatures.Record(contextualSignature);
+        var contextualTypeParameters = Types.Elements(contextualRecord.TypeParameters.Count == 0 && !contextualRecord.Target.IsNone
+            ? Signatures.Record(contextualRecord.Target).TypeParameters
+            : contextualRecord.TypeParameters).ToArray();
+        context.Mapper = CreateTypeMapper(typeParametersForMapper,
+            contextualTypeParameters.Length == typeParametersForMapper.Length ? contextualTypeParameters : typeParametersForMapper);
+        context.NonFixingMapper = context.Mapper;
         // We clone the inferenceContext to avoid fixing. For example, when the source signature is <T>(x: T) => T[] and
         // the contextual signature is (...args: A) => B, we want to infer the element type of A's constraint (say 'any')
         // for T but leave it possible to later infer '[any]' back to A.

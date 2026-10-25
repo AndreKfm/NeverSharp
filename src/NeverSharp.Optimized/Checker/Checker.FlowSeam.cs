@@ -119,8 +119,17 @@ internal sealed partial class Checker
         switch (store.Kind(root))
         {
             case SyntaxKind.Identifier:
+            {
+                // (only variables and parameters have flow types: not namespaces, aliases, functions, classes or enums)
+                var rootRef = At(expr, root);
+                var rootSymbol = SymbolNodeLinks.Has(rootRef) ? SymbolNodeLinks.Get(rootRef).ResolvedSymbol : SymbolRef.None;
+                if (!rootSymbol.IsNone && rootSymbol != unknownSymbol && (SymbolFlagsOf(rootSymbol) & SymbolFlags.Variable) == 0)
+                {
+                    return false;
+                }
                 rootName = store.Texts.GetString(store.EscapedText(root))!;
                 break;
+            }
             case SyntaxKind.ThisKeyword:
                 rootName = "this";
                 break;
@@ -132,12 +141,25 @@ internal sealed partial class Checker
         }
         // `this` itself is narrowed by type guards only (`this instanceof C`, `isC(this)`); it is never assigned
         var bareThis = store.Kind(n) == SyntaxKind.ThisKeyword;
+        var cacheKey = (At(expr, n), bareThis ? 0 : sensitive ? 1 : 2);
+        if (narrowingPendingCache.TryGetValue(cacheKey, out var cached))
+        {
+            return cached;
+        }
+        return narrowingPendingCache[cacheKey] = IsNarrowingPendingWorker(expr, store, n, rootName, bareThis, sensitive);
+    }
+
+    private readonly Dictionary<(NodeRef, int), bool> narrowingPendingCache = [];
+
+    private bool IsNarrowingPendingWorker(NodeRef expr, NodeStore store, Node n, string rootName, bool bareThis, bool sensitive)
+    {
         var binding = BindingOf(expr.File);
         var flow = binding.FlowNodeOf(n);
         if (flow.IsNone)
         {
             return false;
         }
+        string? referenceText = null;
         var visited = new HashSet<int>();
         var work = new Stack<FlowNode>();
         work.Push(flow);
@@ -176,7 +198,7 @@ internal sealed partial class Checker
             }
             else if (!sensitive)
             {
-                if ((flags & FlowFlags.Condition) != 0 && !node.IsNone && MayNarrowObject(expr, store, node, rootName))
+                if ((flags & FlowFlags.Condition) != 0 && !node.IsNone && MayNarrowObject(expr, store, node, referenceText ??= GetTextOfNode(At(expr, n))))
                 {
                     return true;
                 }
@@ -233,13 +255,15 @@ internal sealed partial class Checker
             ((flags & TypeFlags.Object) != 0 && IsEmptyAnonymousObjectType(type));
     }
 
-    // whether a condition or call may narrow an object type mentioned by the name: instanceof, in, or a call (type
-    // predicates and assertion functions) whose operands mention it
-    private bool MayNarrowObject(NodeRef context, NodeStore store, Node node, string name)
+    // whether a condition may narrow the object type of the reference (by its text): instanceof, in, or a call (type
+    // predicates) whose operand is the reference
+    private bool MayNarrowObject(NodeRef context, NodeStore store, Node node, string referenceText)
     {
         var found = false;
         Visit(node);
         return found;
+
+        bool IsReference(Node operand) => GetTextOfNode(At(context, Utilities.SkipParentheses(store, operand, false))) == referenceText;
 
         void Visit(Node n)
         {
@@ -251,14 +275,14 @@ internal sealed partial class Checker
             {
                 case SyntaxKind.BinaryExpression when store.Kind(store.OperatorToken(n)) == SyntaxKind.InstanceOfKeyword:
                     // (instanceof an any-typed constructor does not narrow)
-                    if (MentionsName(store, store.Left(n), name) && (Types.Flags(CheckExpressionCached(At(context, store.Right(n)))) & TypeFlags.Any) == 0)
+                    if (IsReference(store.Left(n)) && (Types.Flags(CheckExpressionCached(At(context, store.Right(n)))) & TypeFlags.Any) == 0)
                     {
                         found = true;
                         return;
                     }
                     break;
                 case SyntaxKind.BinaryExpression when store.Kind(store.OperatorToken(n)) == SyntaxKind.InKeyword:
-                    if (MentionsName(store, store.Right(n), name))
+                    if (IsReference(store.Right(n)))
                     {
                         found = true;
                         return;
@@ -267,7 +291,7 @@ internal sealed partial class Checker
                 case SyntaxKind.CallExpression:
                     foreach (var argument in store.Nodes(store.Arguments(n)))
                     {
-                        if (MentionsName(store, argument, name))
+                        if (IsReference(argument))
                         {
                             found = true;
                             return;
@@ -344,6 +368,10 @@ internal sealed partial class Checker
                 case SyntaxKind.SuperKeyword:
                     found = name == "super";
                     return;
+                case SyntaxKind.ArrowFunction:
+                case SyntaxKind.FunctionExpression:
+                case SyntaxKind.ClassExpression:
+                    return; // (nested functions: their own control flow)
             }
             NodeVisitor.ForEachChild<object>(store, n, child =>
             {
