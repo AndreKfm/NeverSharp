@@ -758,7 +758,7 @@ internal sealed partial class Checker
                 case SyntaxKind.ThisType:
                     return tpData.IsThisType;
                 case SyntaxKind.Identifier:
-                    return !tpData.IsThisType && Utilities.IsPartOfTypeNode(s, c) && MaybeTypeParameterReference(s, c) && GetTypeFromTypeNode(current) == tp; // use worker because we're looking for === equality
+                    return !tpData.IsThisType && Utilities.IsPartOfTypeNode(s, c) && MaybeTypeParameterReference(s, c) && GetTypeFromTypeNodeWorker(current) == tp; // use worker because we're looking for === equality
                 case SyntaxKind.TypeQuery:
                 {
                     var entityName = s.ExprName(c);
@@ -1641,7 +1641,6 @@ internal sealed partial class Checker
 
     /// <summary>
     /// checker.ts getInstantiationExpressionType: the type of `f&lt;T&gt;` (an expression or type query with type arguments).
-    /// TODO(C4): checkTypeArguments' constraint checks (the type arguments are taken as given).
     /// </summary>
     internal Type GetInstantiationExpressionType(Type exprType, NodeRef node)
     {
@@ -1740,16 +1739,11 @@ internal sealed partial class Checker
             var result = new List<Signature>(applicable.Count);
             foreach (var sig in applicable)
             {
-                var typeParameters = Types.Elements(Signatures.Record(sig).TypeParameters).ToArray();
                 var declaration = Signatures.Record(sig).Declaration;
                 var isJs = !declaration.IsNone && Utilities.IsInJSFile(StoreOf(declaration), declaration.Node);
-                var givenTypeArguments = new Type[typeArgumentCount];
-                for (var i = 0; i < typeArgumentCount; i++)
-                {
-                    givenTypeArguments[i] = GetTypeFromTypeNode(At(node, store.Element(typeArgumentNodes, i)));
-                }
-                var typeArgumentTypes = FillMissingTypeArguments(givenTypeArguments, typeParameters, GetMinTypeArgumentCount(typeParameters), isJs);
-                result.Add(GetSignatureInstantiation(sig, typeArgumentTypes, isJs));
+                // checkTypeArguments (module C4)
+                var typeArgumentTypes = CheckTypeArguments(sig, node, reportErrors: true);
+                result.Add(typeArgumentTypes is not null ? GetSignatureInstantiation(sig, typeArgumentTypes, isJs) : sig);
             }
             return result;
         }

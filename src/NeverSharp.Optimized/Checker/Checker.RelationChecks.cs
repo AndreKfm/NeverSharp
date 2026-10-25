@@ -89,10 +89,10 @@ internal sealed partial class Checker
                 return;
             }
             if (!IsErrorType(type) && !IsErrorType(declarationType) && !IsTypeIdenticalTo(type, declarationType) && (SymbolFlagsOf(symbol) & SymbolFlags.Assignment) == 0 &&
-                HasExactDeclaredType(node) && HasExactDeclaredType(ValueDeclarationOf(symbol)))
+                kind == SyntaxKind.VariableDeclaration && HasExactDeclaredType(node) && HasExactDeclaredType(ValueDeclarationOf(symbol)))
             {
                 // (declarations without a type annotation have the types of their initializers, which are exact only
-                // once C5 lands: TODO(C5))
+                // once C5 lands; property declarations (unique symbol types, 2717) are left to C8: TODO(C5/C8))
                 ErrorNextVariableOrPropertyDeclarationMustHaveSameType(ValueDeclarationOf(symbol), type, node, declarationType);
             }
             if (!initializer.IsNone)
@@ -230,7 +230,10 @@ internal sealed partial class Checker
             {
                 foreach (var baseType in GetBaseTypes(type).ToArray())
                 {
-                    CheckTypeAssignableTo(typeWithThis, GetTypeWithThisArgument(baseType, Types.Object(type).ThisType), name, Diagnostics.Interface_0_incorrectly_extends_interface_1);
+                    // (intersection base types need the index signatures of intersections (resolveIntersectionTypeMembers,
+                    // C5); they are related without reporting: TODO(C5))
+                    CheckTypeAssignableTo(typeWithThis, GetTypeWithThisArgument(baseType, Types.Object(type).ThisType),
+                        (Types.Flags(baseType) & TypeFlags.Intersection) != 0 ? NodeRef.None : name, Diagnostics.Interface_0_incorrectly_extends_interface_1);
                 }
                 CheckIndexConstraints(type, symbol);
             }
@@ -276,14 +279,19 @@ internal sealed partial class Checker
                     var staticBaseType = GetApparentType(baseConstructorType);
                     // (checkBaseTypeAccessibility, the type argument constraints of the base constructors: module C8)
                     var baseWithThis = GetTypeWithThisArgument(baseType, Types.Object(type).ThisType);
-                    if (!CheckTypeAssignableTo(typeWithThis, baseWithThis, NodeRef.None))
+                    var baseExpression = At(baseTypeNode, StoreOf(baseTypeNode).Expression(baseTypeNode.Node));
+                    if (!CheckTypeAssignableTo(typeWithThis, baseWithThis, NodeRef.None) &&
+                        Utilities.IsEntityNameExpression(StoreOf(baseExpression), baseExpression.Node) && !HasInexactMemberTypes(node))
                     {
+                        // (class types with members whose types C5 infers and base types of call expressions (C5/C6) are
+                        // related without reporting: TODO(C5/C6))
                         IssueMemberSpecificError(node, typeWithThis, baseWithThis, Diagnostics.Class_0_incorrectly_extends_base_class_1);
                     }
                     else
                     {
                         // Report static side error only when instance type is assignable
-                        CheckTypeAssignableTo(staticType, GetTypeWithoutSignatures(staticBaseType), nameOrNode, Diagnostics.Class_static_side_0_incorrectly_extends_base_class_static_side_1);
+                        CheckTypeAssignableTo(staticType, GetTypeWithoutSignatures(staticBaseType), HasInexactMemberTypes(node) ? NodeRef.None : nameOrNode,
+                            Diagnostics.Class_static_side_0_incorrectly_extends_base_class_static_side_1);
                     }
                     // (mixin classes, base constructor return types, checkKindsOfPropertyMemberOverrides: module C8)
                 });
@@ -311,7 +319,7 @@ internal sealed partial class Checker
                                 ? Diagnostics.Class_0_incorrectly_implements_class_1_Did_you_mean_to_extend_1_and_inherit_its_members_as_a_subclass
                                 : Diagnostics.Class_0_incorrectly_implements_interface_1;
                             var baseWithThis = GetTypeWithThisArgument(t, Types.Object(type).ThisType);
-                            if (!CheckTypeAssignableTo(typeWithThis, baseWithThis, NodeRef.None))
+                            if (!CheckTypeAssignableTo(typeWithThis, baseWithThis, NodeRef.None) && !HasInexactMemberTypes(node))
                             {
                                 IssueMemberSpecificError(node, typeWithThis, baseWithThis, genericDiag);
                             }
@@ -326,6 +334,44 @@ internal sealed partial class Checker
             CheckIndexConstraints(type, symbol);
             CheckIndexConstraints(staticType, symbol, isStaticIndex: true);
         });
+    }
+
+    // Whether a class has members whose types are inferred from expressions (methods and get accessors without return
+    // type annotations, properties and parameter properties without annotations and with initializers that are not
+    // context free): their types are exact once C5 lands.
+    private bool HasInexactMemberTypes(NodeRef node)
+    {
+        var store = StoreOf(node);
+        foreach (var member in store.Nodes(store.Members(node.Node)))
+        {
+            switch (store.Kind(member))
+            {
+                case SyntaxKind.MethodDeclaration:
+                case SyntaxKind.GetAccessor:
+                    // (generic methods: their relation needs the inference of instantiateSignatureInContextOf, C6)
+                    if ((store.Type(member).IsNone && !store.Body(member).IsNone) || !store.TypeParameters(member).IsNone)
+                    {
+                        return true;
+                    }
+                    break;
+                case SyntaxKind.PropertyDeclaration:
+                    if (store.Type(member).IsNone && !store.Initializer(member).IsNone && !IsContextFreeExpression(At(node, store.Initializer(member))))
+                    {
+                        return true;
+                    }
+                    break;
+                case SyntaxKind.Constructor:
+                    foreach (var parameter in store.Nodes(store.Parameters(member)))
+                    {
+                        if (Utilities.IsParameterPropertyDeclaration(store, parameter, member) && store.Type(parameter).IsNone)
+                        {
+                            return true;
+                        }
+                    }
+                    break;
+            }
+        }
+        return false;
     }
 
     // checker.ts issueMemberSpecificError: iterate over all implemented properties and issue errors on each one which
@@ -547,6 +593,40 @@ internal sealed partial class Checker
         }
     }
 
+    /// <summary>
+    /// checker.ts checkTypeArguments: the signature's type arguments from the type argument nodes of
+    /// <paramref name="node"/> (defaults filled in), or null when one does not satisfy its constraint.
+    /// </summary>
+    internal Type[]? CheckTypeArguments(Signature signature, NodeRef node, bool reportErrors, DiagnosticMessage? headMessage = null)
+    {
+        var store = StoreOf(node);
+        var typeArgumentNodes = store.Nodes(store.TypeArguments(node.Node)).ToArray();
+        var declaration = Signatures.Record(signature).Declaration;
+        var isJavascript = !declaration.IsNone && Utilities.IsInJSFile(StoreOf(declaration), declaration.Node);
+        var typeParameters = Types.Elements(Signatures.Record(signature).TypeParameters).ToArray();
+        var typeArgumentTypes = FillMissingTypeArguments(Array.ConvertAll(typeArgumentNodes, a => GetTypeFromTypeNode(At(node, a))), typeParameters, GetMinTypeArgumentCount(typeParameters), isJavascript);
+        TypeMapper? mapper = null;
+        for (var i = 0; i < typeArgumentNodes.Length; i++)
+        {
+            var constraint = GetConstraintOfTypeParameter(typeParameters[i]);
+            if (!constraint.IsNone)
+            {
+                Func<DiagnosticMessageChain?>? errorInfo = reportErrors && headMessage is not null
+                    ? () => ChainDiagnosticMessages(null, Diagnostics.Type_0_does_not_satisfy_the_constraint_1)
+                    : null;
+                var typeArgumentHeadMessage = headMessage ?? Diagnostics.Type_0_does_not_satisfy_the_constraint_1;
+                mapper ??= CreateTypeMapper(typeParameters, typeArgumentTypes);
+                var typeArgument = typeArgumentTypes[i];
+                if (!CheckTypeAssignableTo(typeArgument, GetTypeWithThisArgument(InstantiateType(constraint, mapper), typeArgument),
+                    reportErrors ? At(node, typeArgumentNodes[i]) : NodeRef.None, typeArgumentHeadMessage, errorInfo))
+                {
+                    return null;
+                }
+            }
+        }
+        return typeArgumentTypes;
+    }
+
     // checker.ts checkTypeArgumentConstraints
     private bool CheckTypeArgumentConstraints(NodeRef node, Type[] typeParameters)
     {
@@ -567,8 +647,13 @@ internal sealed partial class Checker
                     typeArguments = FillMissingTypeArguments(argumentTypes, typeParameters, GetMinTypeArgumentCount(typeParameters), Utilities.IsInJSFile(store, node.Node));
                     mapper = CreateTypeMapper(typeParameters, typeArguments);
                 }
-                result = result && CheckTypeAssignableTo(typeArguments[i], InstantiateType(constraint, mapper), i < typeArgumentNodes.Length ? At(node, typeArgumentNodes[i]) : NodeRef.None,
-                    Diagnostics.Type_0_does_not_satisfy_the_constraint_1);
+                var instantiatedConstraint = InstantiateType(constraint, mapper);
+                // Generic type arguments and constraints are related without reporting before inference (C6) and the
+                // remaining expression types (C5) are ported: their relations can depend on both. TODO(C5/C6).
+                var errorNode = i < typeArgumentNodes.Length && !CouldContainTypeVariables(typeArguments[i]) && !CouldContainTypeVariables(instantiatedConstraint)
+                    ? At(node, typeArgumentNodes[i])
+                    : NodeRef.None;
+                result = result && CheckTypeAssignableTo(typeArguments[i], instantiatedConstraint, errorNode, Diagnostics.Type_0_does_not_satisfy_the_constraint_1);
             }
         }
         return result;

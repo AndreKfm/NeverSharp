@@ -386,8 +386,15 @@ internal sealed partial class Checker
     /// <summary>
     /// checker.ts instantiateSignatureInContextOf. TODO(C6): the inference of the source signature's type arguments
     /// from the contextual signature (createInferenceContext, inferTypes, getInferredTypes); until then the type
-    /// parameters are erased to any.
+    /// parameters are mapped to the contextual signature's type parameters by position when both have as many (what the
+    /// inference yields for signatures of the same shape), and erased to any otherwise.
     /// </summary>
-    internal Signature InstantiateSignatureInContextOf(Signature signature, Signature contextualSignature) =>
-        InstantiateSignature(signature, CreateTypeEraser(Types.Elements(Signatures.Record(signature).TypeParameters).ToArray()), eraseTypeParameters: true);
+    internal Signature InstantiateSignatureInContextOf(Signature signature, Signature contextualSignature)
+    {
+        var typeParameters = Types.Elements(Signatures.Record(signature).TypeParameters).ToArray();
+        var contextualTypeParameters = Types.Elements(Signatures.Record(contextualSignature).TypeParameters).ToArray();
+        return contextualTypeParameters.Length == typeParameters.Length
+            ? InstantiateSignature(signature, CreateTypeMapper(typeParameters, contextualTypeParameters), eraseTypeParameters: true)
+            : InstantiateSignature(signature, CreateTypeEraser(typeParameters), eraseTypeParameters: true);
+    }
 }

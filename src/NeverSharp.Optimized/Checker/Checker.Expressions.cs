@@ -915,7 +915,8 @@ internal sealed partial class Checker
         MarkPropertyAsReferenced(prop, node, isSelfTypeAccess);
         if ((TransientCheckFlags(prop) & CheckFlags.SyntheticProperty) != 0)
         {
-            // the type of a synthetic union or intersection property is not computed before C4/C5
+            // the type of a synthetic union or intersection property is exact since C4, but calls and other uses of it
+            // need the signatures of union and intersection types (resolveUnionTypeMembers: C5)
             uncertainExpressions.Add(node);
         }
         return GetTypeOfSymbol(prop);

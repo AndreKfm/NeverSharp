@@ -288,6 +288,8 @@ internal sealed partial class Checker
             if ((c.Types.Flags(target) & TypeFlags.Never) == 0 && c.IsLiteralType(source) && !c.TypeCouldHaveTopLevelSingletonTypes(target))
             {
                 generalizedSource = c.GetBaseTypeOfLiteralType(source);
+                // (Debug.assert(!isTypeAssignableTo(generalizedSource, target)): TypeScript evaluates the relation)
+                c.IsTypeAssignableTo(generalizedSource, target);
                 generalizedSourceType = c.GetTypeNameForErrorDisplay(generalizedSource);
             }
             // If `target` is of indexed access type (And `source` it is not), we use the object type of `target` for better error reporting
@@ -2546,7 +2548,9 @@ internal sealed partial class Checker
                         var targetPosition = targetHasRestElement && sourcePosition >= targetStartCount
                             ? targetArity - 1 - Math.Min(sourcePositionFromEnd, targetEndCount)
                             : sourcePosition;
-                        var targetFlags = targetTarget.ElementFlags![targetPosition];
+                        // (a position outside the target, e.g. -1 for two variadic target elements, reads undefined in
+                        // TypeScript: no flags)
+                        var targetFlags = targetPosition >= 0 && targetPosition < targetTarget.ElementFlags!.Length ? targetTarget.ElementFlags[targetPosition] : ElementFlags.None;
                         if ((targetFlags & ElementFlags.Variadic) != 0 && (sourceFlags & ElementFlags.Variadic) == 0)
                         {
                             if (reportErrors)

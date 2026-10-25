@@ -388,8 +388,22 @@ internal sealed partial class Checker
         return !property.IsNone && (GetCheckFlags(property) & CheckFlags.ReadPartial) == 0 ? property : SymbolRef.None;
     }
 
+    // types.ts UnionOrIntersectionType.resolvedProperties
+    private readonly Dictionary<Type, List<SymbolRef>> resolvedPropertiesOfUnionsOrIntersections = [];
+
     /// <summary>checker.ts getPropertiesOfUnionOrIntersectionType.</summary>
     internal List<SymbolRef> GetPropertiesOfUnionOrIntersectionType(Type type)
+    {
+        if (resolvedPropertiesOfUnionsOrIntersections.TryGetValue(type, out var resolved))
+        {
+            return resolved;
+        }
+        resolved = ComputePropertiesOfUnionOrIntersectionType(type);
+        resolvedPropertiesOfUnionsOrIntersections[type] = resolved;
+        return resolved;
+    }
+
+    private List<SymbolRef> ComputePropertiesOfUnionOrIntersectionType(Type type)
     {
         var members = new SymTable();
         foreach (var current in Types.Elements(Types.Union(type).Types).ToArray())

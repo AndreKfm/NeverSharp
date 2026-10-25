@@ -9,8 +9,8 @@
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
 // Modified: translated from TypeScript to C#; module C1. Stubs: instantiation (C3: members of type references and of
 // generic declarations are taken uninstantiated from their targets, which keeps the symbols the instantiated members
-// would have; mapped, conditional, indexed and template types), union and intersection property synthesis beyond
-// identical members (C4/C5), return types inferred from bodies (C5), contextual parameter types (C5/C6).
+// would have; mapped, conditional, indexed and template types), return types inferred from bodies (C5), contextual
+// parameter types (C5/C6). Union and intersection properties: Checker.UnionProperties.cs (module C4).
 
 using NeverSharp.Generated;
 
@@ -629,8 +629,9 @@ internal sealed partial class Checker
         var reducedBaseType = GetReducedType(baseType);
         if (!IsValidBaseType(reducedBaseType))
         {
-            // (elaborateNeverIntersection: C4)
-            Error(At(baseTypeNode, StoreOf(baseTypeNode).Expression(baseTypeNode.Node)), Diagnostics.Base_constructor_return_type_0_is_not_an_object_type_or_intersection_of_object_types_with_statically_known_members, TypeToString(reducedBaseType));
+            var elaboration = ElaborateNeverIntersection(null, baseType); // module C4
+            var diagnostic = ChainDiagnosticMessages(elaboration, Diagnostics.Base_constructor_return_type_0_is_not_an_object_type_or_intersection_of_object_types_with_statically_known_members, TypeToString(reducedBaseType));
+            diagnostics.Add(CreateDiagnosticForNodeFromMessageChain(At(baseTypeNode, StoreOf(baseTypeNode).Expression(baseTypeNode.Node)), diagnostic, null));
             data.ResolvedBaseTypes = [];
             return;
         }

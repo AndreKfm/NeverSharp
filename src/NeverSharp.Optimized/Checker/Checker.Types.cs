@@ -10,9 +10,9 @@
 // Port structure follows internal/checker/checker.go (type creation, union and intersection construction)
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
 // Modified: translated from TypeScript to C#; module C1. Types are handles in creation order (the handle is the type id,
-// docs/phase3-checker-layout.md), so union members sorted by id are sorted by handle. Stubs: subtype reduction
-// (C4: removeSubtypes), the distribution of intersections over unions beyond the null/undefined cases (C3/C4), template
-// literal and string mapping types (C3).
+// docs/phase3-checker-layout.md), so union members sorted by id are sorted by handle. Module C4: subtype reduction
+// (removeSubtypes), removeStringLiteralsMatchedByTemplateLiterals, removeConstrainedTypeVariables and the intersection
+// reductions that need the relations (T & primitive, redundant template literals, IntersectionFlags).
 
 using System.Globalization;
 using System.Text;
