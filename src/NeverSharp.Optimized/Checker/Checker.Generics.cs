@@ -917,6 +917,98 @@ internal sealed partial class Checker
         return SetCachedNodeType(node, GetTemplateLiteralType(texts, types));
     }
 
+    // checker.ts getTypeFromImportTypeNode
+    private Type GetTypeFromImportTypeNode(NodeRef node)
+    {
+        var cached = GetCachedNodeType(node);
+        if (!cached.IsNone)
+        {
+            return cached;
+        }
+        var store = StoreOf(node);
+        var n = node.Node;
+        var argument = store.Argument(n);
+        if (store.Kind(argument) != SyntaxKind.LiteralType || !Utilities.IsStringLiteralLike(store, store.Literal(argument)))
+        {
+            Error(At(node, argument), Diagnostics.String_literal_expected);
+            SymbolNodeLinks.Get(node).ResolvedSymbol = unknownSymbol;
+            return SetCachedNodeType(node, errorType);
+        }
+        var targetMeaning = store.IsTypeOf(n) ? SymbolFlags.Value : (store.Flags(n) & NodeFlags.JSDoc) != 0 ? SymbolFlags.Value | SymbolFlags.Type : SymbolFlags.Type;
+        var innerModuleSymbol = ResolveExternalModuleName(node, At(node, store.Literal(argument)));
+        if (innerModuleSymbol.IsNone)
+        {
+            SymbolNodeLinks.Get(node).ResolvedSymbol = unknownSymbol;
+            return SetCachedNodeType(node, errorType);
+        }
+        var isExportEquals = ExportsOf(innerModuleSymbol)?.Has(InternalSymbolName.ExportEquals) == true;
+        var moduleSymbol = ResolveExternalModuleSymbol(innerModuleSymbol, dontResolveAlias: false);
+        var qualifier = store.Qualifier(n);
+        if (!qualifier.IsNone && !Utilities.NodeIsMissing(store, qualifier))
+        {
+            var nameStack = new List<Node>();
+            for (var q = qualifier; ; q = store.Left(q))
+            {
+                if (store.Kind(q) == SyntaxKind.QualifiedName)
+                {
+                    nameStack.Insert(0, store.Right(q));
+                }
+                else
+                {
+                    nameStack.Insert(0, q);
+                    break;
+                }
+            }
+            var currentNamespace = moduleSymbol;
+            for (var i = 0; i < nameStack.Count; i++)
+            {
+                var current = nameStack[i];
+                var meaning = i < nameStack.Count - 1 ? SymbolFlags.Namespace : targetMeaning;
+                var currentName = store.Texts.GetString(store.EscapedText(current)) ?? "";
+                // typeof a.b.c is normally resolved using `checkExpression` which in turn defers to `checkQualifiedName`
+                // That, in turn, ultimately uses `getPropertyOfType` on the type of the symbol, which differs slightly from
+                // the `exports` lookup process that only looks up namespace members which is used for most type references
+                var mergedResolvedSymbol = GetMergedSymbol(ResolveSymbol(currentNamespace));
+                var symbolFromVariable = store.IsTypeOf(n) || (Utilities.IsInJSFile(store, n) && isExportEquals)
+                    ? GetPropertyOfType(GetTypeOfSymbol(mergedResolvedSymbol), currentName)
+                    : SymbolRef.None;
+                var symbolFromModule = store.IsTypeOf(n) ? SymbolRef.None : GetSymbol(GetExportsOfSymbol(mergedResolvedSymbol), currentName, meaning);
+                var next = !symbolFromModule.IsNone ? symbolFromModule : symbolFromVariable;
+                if (next.IsNone)
+                {
+                    Error(At(node, current), Diagnostics.Namespace_0_has_no_exported_member_1, GetFullyQualifiedName(currentNamespace), Utilities.DeclarationNameToString(store, current));
+                    return SetCachedNodeType(node, errorType);
+                }
+                SymbolNodeLinks.Get(At(node, current)).ResolvedSymbol = next;
+                SymbolNodeLinks.Get(At(node, store.Parent(current))).ResolvedSymbol = next;
+                currentNamespace = next;
+            }
+            return SetCachedNodeType(node, ResolveImportSymbolType(node, currentNamespace, targetMeaning));
+        }
+        if ((SymbolFlagsOf(moduleSymbol) & targetMeaning) != 0)
+        {
+            return SetCachedNodeType(node, ResolveImportSymbolType(node, moduleSymbol, targetMeaning));
+        }
+        var errorMessage = targetMeaning == SymbolFlags.Value
+            ? Diagnostics.Module_0_does_not_refer_to_a_value_but_is_used_as_a_value_here
+            : Diagnostics.Module_0_does_not_refer_to_a_type_but_is_used_as_a_type_here_Did_you_mean_typeof_import_0;
+        Error(node, errorMessage, store.Texts.GetString(store.Text(store.Literal(argument))));
+        SymbolNodeLinks.Get(node).ResolvedSymbol = unknownSymbol;
+        return SetCachedNodeType(node, errorType);
+    }
+
+    // checker.ts resolveImportSymbolType
+    private Type ResolveImportSymbolType(NodeRef node, SymbolRef symbol, SymbolFlags meaning)
+    {
+        var resolvedSymbol = ResolveSymbol(symbol);
+        SymbolNodeLinks.Get(node).ResolvedSymbol = resolvedSymbol;
+        if (meaning == SymbolFlags.Value)
+        {
+            return GetInstantiationExpressionType(GetTypeOfSymbol(symbol), node); // intentionally doesn't use resolved symbol so type is cached as expected on the alias
+        }
+        return GetTypeReferenceType(node, resolvedSymbol); // getTypeReferenceType doesn't handle aliases - it must get the resolved symbol
+    }
+
     // ---- template literal and string mapping types ----
 
     private readonly Dictionary<string, Type> templateLiteralTypes = new(StringComparer.Ordinal);

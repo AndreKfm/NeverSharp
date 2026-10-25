@@ -102,6 +102,8 @@ internal sealed partial class Checker
                 return GetTypeFromInferTypeNode(node);
             case SyntaxKind.TemplateLiteralType:
                 return GetTypeFromTemplateTypeNode(node);
+            case SyntaxKind.ImportType:
+                return GetTypeFromImportTypeNode(node);
             case SyntaxKind.Identifier:
             case SyntaxKind.QualifiedName:
             case SyntaxKind.PropertyAccessExpression:
@@ -343,7 +345,7 @@ internal sealed partial class Checker
     private NodeList TypeArgumentsOf(NodeRef node)
     {
         var store = StoreOf(node);
-        return store.Kind(node.Node) is SyntaxKind.TypeReference or SyntaxKind.ExpressionWithTypeArguments ? store.TypeArguments(node.Node) : NodeList.None;
+        return store.Kind(node.Node) is SyntaxKind.TypeReference or SyntaxKind.ExpressionWithTypeArguments or SyntaxKind.ImportType or SyntaxKind.TypeQuery ? store.TypeArguments(node.Node) : NodeList.None;
     }
 
     private Type[] TypeArgumentsFromTypeReferenceNode(NodeRef node)
@@ -514,12 +516,12 @@ internal sealed partial class Checker
         return SetCachedNodeType(node, GetRegularTypeOfLiteralType(GetWidenedType(type)));
     }
 
-    // checker.ts checkExpressionWithTypeArguments for a type query (instantiation expressions: C3)
+    // checker.ts checkExpressionWithTypeArguments for a type query
     private Type CheckExpressionWithTypeArguments(NodeRef node)
     {
         var store = StoreOf(node);
         var exprName = At(node, store.ExprName(node.Node));
-        return CheckEntityNameExpressionForTypeQuery(exprName);
+        return GetInstantiationExpressionType(CheckEntityNameExpressionForTypeQuery(exprName), node);
     }
 
     // checkExpression of the entity name of a type query: identifiers, qualified names (properties of the left side)
