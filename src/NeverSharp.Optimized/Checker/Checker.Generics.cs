@@ -1759,8 +1759,24 @@ internal sealed partial class Checker
         return cache[type] = type;
     }
 
+    // Results of getSimplifiedConditionalType per (type, writing). TypeScript recomputes them; the result depends only on
+    // the types and the relation caches, so a cache leaves the results unchanged and keeps nested conditional types
+    // (whose simplification relates their check types, which simplify the next level again) from exponential work.
+    private readonly Dictionary<(Type, bool), Type> simplifiedConditionalTypes = [];
+
     // checker.ts getSimplifiedConditionalType
     private Type GetSimplifiedConditionalType(Type type, bool writing)
+    {
+        if (simplifiedConditionalTypes.TryGetValue((type, writing), out var cached))
+        {
+            return cached;
+        }
+        var result = GetSimplifiedConditionalTypeWorker(type, writing);
+        simplifiedConditionalTypes[(type, writing)] = result;
+        return result;
+    }
+
+    private Type GetSimplifiedConditionalTypeWorker(Type type, bool writing)
     {
         var data = Types.Data<ConditionalData>(type);
         var checkType = data.CheckType;
