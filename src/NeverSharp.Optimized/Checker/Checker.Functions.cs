@@ -271,7 +271,8 @@ internal sealed partial class Checker
                 // if inference didn't come up with anything but unknown, fall back to the binding pattern if present.
                 if (ValueSymbolLinks.Get(parameter).ResolvedType == unknownType)
                 {
-                    ValueSymbolLinks.Get(parameter).ResolvedType = GetTypeFromBindingPattern(At(declaration, name));
+                    var patternType = GetTypeFromBindingPattern(At(declaration, name)); // (before the links are written: the call can grow them)
+                    ValueSymbolLinks.Get(parameter).ResolvedType = patternType;
                 }
                 AssignBindingElementTypes(At(declaration, name), ValueSymbolLinks.Get(parameter).ResolvedType);
             }

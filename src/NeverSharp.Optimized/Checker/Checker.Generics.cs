@@ -284,7 +284,8 @@ internal sealed partial class Checker
             {
                 literalTypes.Add(GetNumberLiteralType(i));
             }
-            ValueSymbolLinks.Get(lengthSymbol).ResolvedType = GetUnionType(literalTypes.ToArray());
+            var lengthType = GetUnionType(literalTypes.ToArray()); // (before the links are written: the call can grow them)
+            ValueSymbolLinks.Get(lengthSymbol).ResolvedType = lengthType;
         }
         properties.Add(lengthSymbol);
         var type = CreateObjectType(ObjectFlags.Tuple | ObjectFlags.Reference, SymbolRef.None);
@@ -1334,7 +1335,8 @@ internal sealed partial class Checker
             if ((Types.ObjectFlagsOf(type) & ObjectFlags.IsGenericTypeComputed) == 0)
             {
                 var data = Types.Data<SubstitutionData>(type);
-                Types.Record(type).ObjectFlags |= ObjectFlags.IsGenericTypeComputed | GetGenericObjectFlags(data.BaseType) | GetGenericObjectFlags(data.Constraint);
+                var genericFlags = GetGenericObjectFlags(data.BaseType) | GetGenericObjectFlags(data.Constraint); // (before the record is written)
+                Types.Record(type).ObjectFlags |= ObjectFlags.IsGenericTypeComputed | genericFlags;
             }
             return Types.ObjectFlagsOf(type) & ObjectFlags.IsGenericType;
         }

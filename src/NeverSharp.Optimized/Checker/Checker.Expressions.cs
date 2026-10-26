@@ -430,7 +430,8 @@ internal sealed partial class Checker
         foreach (var e in missingElements)
         {
             var symbol = CreateSymbol(SymbolFlags.Property | SymbolFlags.Optional, GetPropertyNameFromBindingElement(At(pattern, e))!);
-            ValueSymbolLinks.Get(symbol).ResolvedType = GetTypeFromBindingElement(At(pattern, e), includePatternInType: false, reportErrors: false);
+            var elementType = GetTypeFromBindingElement(At(pattern, e), includePatternInType: false, reportErrors: false); // (before the links are written: the call can grow them)
+            ValueSymbolLinks.Get(symbol).ResolvedType = elementType;
             members.Set(NameOf(symbol), symbol);
         }
         var result = CreateAnonymousType(Types.Symbol(type), members, [], [], GetIndexInfosOfType(type));

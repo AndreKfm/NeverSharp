@@ -285,8 +285,8 @@ internal sealed partial class Checker
                 var existingProp = members.Get(propName);
                 if (!existingProp.IsNone)
                 {
-                    ref var existingLinks = ref ValueSymbolLinks.Get(existingProp);
-                    existingLinks.NameType = GetUnionType([existingLinks.NameType, propNameType]);
+                    var unionNameType = GetUnionType([ValueSymbolLinks.Get(existingProp).NameType, propNameType]); // (before the links are written)
+                    ValueSymbolLinks.Get(existingProp).NameType = unionNameType;
                     var links = mappedSymbolLinks[existingProp];
                     mappedSymbolLinks[existingProp] = links with { KeyType = GetUnionType([links.KeyType, keyType]) };
                 }

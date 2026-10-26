@@ -670,9 +670,11 @@ internal sealed partial class Checker
                 var flags = SymbolFlagsOf(prop);
                 var isSetonlyAccessor = (flags & SymbolFlags.SetAccessor) != 0 && (flags & SymbolFlags.GetAccessor) == 0;
                 var result = CreateSymbol(SymbolFlags.Property | SymbolFlags.Optional, NameOf(prop), (GetCheckFlags(prop) & CheckFlags.Late) | (isReadonly ? CheckFlags.Readonly : CheckFlags.None));
-                ValueSymbolLinks.Get(result).ResolvedType = isSetonlyAccessor ? undefinedType : AddOptionality(GetTypeOfSymbol(prop), isProperty: true);
+                var propType = isSetonlyAccessor ? undefinedType : AddOptionality(GetTypeOfSymbol(prop), isProperty: true); // (before the links are written)
+                ValueSymbolLinks.Get(result).ResolvedType = propType;
                 TransientSymbols.Record(result).Declarations = DeclarationsOf(prop);
-                ValueSymbolLinks.Get(result).NameType = GetNameTypeOfSymbol(prop);
+                var nameType = GetNameTypeOfSymbol(prop); // (before the links are written: the call can grow them)
+                ValueSymbolLinks.Get(result).NameType = nameType;
                 members.Set(NameOf(prop), result);
             }
         }
@@ -780,9 +782,11 @@ internal sealed partial class Checker
                     var leftType = GetTypeOfSymbol(leftProp);
                     var leftTypeWithoutUndefined = RemoveMissingOrUndefinedType(leftType);
                     var rightTypeWithoutUndefined = RemoveMissingOrUndefinedType(rightType);
-                    ValueSymbolLinks.Get(result).ResolvedType = leftTypeWithoutUndefined == rightTypeWithoutUndefined ? leftType : GetUnionType([leftType, rightTypeWithoutUndefined], UnionReduction.Subtype);
+                    var propType = leftTypeWithoutUndefined == rightTypeWithoutUndefined ? leftType : GetUnionType([leftType, rightTypeWithoutUndefined], UnionReduction.Subtype); // (before the links are written)
+                    ValueSymbolLinks.Get(result).ResolvedType = propType;
                     TransientSymbols.Record(result).Declarations = declarations;
-                    ValueSymbolLinks.Get(result).NameType = GetNameTypeOfSymbol(leftProp);
+                    var nameType = GetNameTypeOfSymbol(leftProp); // (before the links are written: the call can grow them)
+                    ValueSymbolLinks.Get(result).NameType = nameType;
                     members.Set(name, result);
                 }
             }
@@ -835,9 +839,11 @@ internal sealed partial class Checker
             return prop;
         }
         var result = CreateSymbol(SymbolFlags.Property | (flags & SymbolFlags.Optional), NameOf(prop), (GetCheckFlags(prop) & CheckFlags.Late) | (isReadonly ? CheckFlags.Readonly : CheckFlags.None));
-        ValueSymbolLinks.Get(result).ResolvedType = isSetonlyAccessor ? undefinedType : GetTypeOfSymbol(prop);
+        var propType = isSetonlyAccessor ? undefinedType : GetTypeOfSymbol(prop); // (before the links are written)
+        ValueSymbolLinks.Get(result).ResolvedType = propType;
         TransientSymbols.Record(result).Declarations = DeclarationsOf(prop);
-        ValueSymbolLinks.Get(result).NameType = GetNameTypeOfSymbol(prop);
+        var nameType = GetNameTypeOfSymbol(prop); // (before the links are written: the call can grow them)
+        ValueSymbolLinks.Get(result).NameType = nameType;
         return result;
     }
 

@@ -228,7 +228,8 @@ internal sealed partial class Checker
                         signatures = signatures.ConvertAll(s =>
                         {
                             var clone = CloneSignature(s);
-                            Signatures.Record(clone).ResolvedReturnType = IncludeMixinType(GetReturnTypeOfSignature(s), types, mixinFlags, index);
+                            var mixinReturnType = IncludeMixinType(GetReturnTypeOfSignature(s), types, mixinFlags, index); // (before the record is written)
+                            Signatures.Record(clone).ResolvedReturnType = mixinReturnType;
                             return clone;
                         });
                     }
@@ -472,7 +473,8 @@ internal sealed partial class Checker
             var paramSymbol = CreateSymbol(SymbolFlags.FunctionScopedVariable | (isOptional && !isRestParam ? SymbolFlags.Optional : SymbolFlags.None),
                 paramName ?? "arg" + i.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 isRestParam ? CheckFlags.RestParameter : isOptional ? CheckFlags.OptionalParameter : CheckFlags.None);
-            ValueSymbolLinks.Get(paramSymbol).ResolvedType = isRestParam ? CreateArrayType(unionParamType) : unionParamType;
+            var paramType = isRestParam ? CreateArrayType(unionParamType) : unionParamType; // (before the links are written)
+            ValueSymbolLinks.Get(paramSymbol).ResolvedType = paramType;
             parameters[i] = paramSymbol;
         }
         if (needsExtraRestElement)

@@ -209,9 +209,12 @@ internal sealed partial class Checker
         AddUndefinedToGlobalsOrErrorOnRedeclaration();
 
         ValueSymbolLinks.Get(undefinedSymbol).ResolvedType = undefinedWideningType;
-        ValueSymbolLinks.Get(argumentsSymbol).ResolvedType = GetGlobalType("IArguments", 0, reportErrors: true);
+        // (the types are computed before the links are written: the calls can grow them)
+        var argumentsType = GetGlobalType("IArguments", 0, reportErrors: true);
+        ValueSymbolLinks.Get(argumentsSymbol).ResolvedType = argumentsType;
         ValueSymbolLinks.Get(unknownSymbol).ResolvedType = errorType;
-        ValueSymbolLinks.Get(globalThisSymbol).ResolvedType = CreateObjectType(ObjectFlags.Anonymous, globalThisSymbol);
+        var globalThisObjectType = CreateObjectType(ObjectFlags.Anonymous, globalThisSymbol);
+        ValueSymbolLinks.Get(globalThisSymbol).ResolvedType = globalThisObjectType;
 
         // Initialize special types
         globalArrayType = GetGlobalType("Array", 1, reportErrors: true);

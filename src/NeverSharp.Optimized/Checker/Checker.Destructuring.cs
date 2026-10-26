@@ -121,8 +121,7 @@ internal sealed partial class Checker
                 }
             }
             // Use contextual parameter type if one is available
-            var type = NameOf(parameterSymbol) == "this" ? GetContextualThisParameterType(func) : GetContextuallyTypedParameterType(declaration);
-            if (!type.IsNone)
+            var type = NameOf(parameterSymbol) == "this" ? GetContextualThisParameterType(func) : GetContextuallyTypedParameterType(declaration);            if (!type.IsNone)
             {
                 return AddOptionality(type, isProperty: false, isOptional);
             }
@@ -541,7 +540,8 @@ internal sealed partial class Checker
             var text = GetPropertyNameFromType(exprType);
             var flags = SymbolFlags.Property | (!store.Initializer(e).IsNone ? SymbolFlags.Optional : SymbolFlags.None);
             var symbol = CreateSymbol(flags, text);
-            ValueSymbolLinks.Get(symbol).ResolvedType = GetTypeFromBindingElement(At(pattern, e), includePatternInType, reportErrors);
+            var elementType = GetTypeFromBindingElement(At(pattern, e), includePatternInType, reportErrors); // (before the links are written: the call can grow them)
+            ValueSymbolLinks.Get(symbol).ResolvedType = elementType;
             members.Set(text, symbol);
         }
         var result = CreateAnonymousType(SymbolRef.None, members, [], [], stringIndexInfo is not null ? [stringIndexInfo] : []);
