@@ -1047,7 +1047,7 @@ internal sealed partial class Checker
             {
                 if (SuppressDerivedDiagnostics(left, assigneeType) || SuppressDerivedDiagnostics(right, valueType))
                 {
-                    return; // TODO(C6/C7): an operand's type is an approximation
+                    return; // TODO(C6): an operand's type is an approximation
                 }
                 DiagnosticMessage? headMessage = null;
                 if (compilerOptions.ExactOptionalPropertyTypes == true && store.Kind(left.Node) == SyntaxKind.PropertyAccessExpression && MaybeTypeOfKind(valueType, TypeFlags.Undefined))
@@ -1078,7 +1078,7 @@ internal sealed partial class Checker
         {
             if (SuppressDerivedDiagnostics(left, leftType) || SuppressDerivedDiagnostics(right, rightType))
             {
-                return; // TODO(C6/C7): an operand's type is an approximation
+                return; // TODO(C6): an operand's type is an approximation
             }
             var wouldWorkWithAwait = false;
             var errNode = errNodeOrToken;
@@ -1257,7 +1257,7 @@ internal sealed partial class Checker
             var type = location == cond ? condType : CheckExpression(location);
             if (SuppressDerivedDiagnostics(location, type))
             {
-                return; // TODO(C6/C7): the type is an approximation
+                return; // TODO(C6): the type is an approximation
             }
             if ((Types.Flags(type) & TypeFlags.EnumLiteral) != 0 && store.Kind(location.Node) == SyntaxKind.PropertyAccessExpression)
             {

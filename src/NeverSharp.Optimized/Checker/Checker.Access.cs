@@ -1178,7 +1178,7 @@ internal sealed partial class Checker
     }
 
     // the diagnostics of an element access whose object or index type is an approximation (C1's "uncertain"
-    // mechanism, TODO(C6)) or a reference whose narrowing is pending (TODO(C7))
+    // mechanism, TODO(C6))
     private bool IsAccessDiagnosticSuppressed(NodeRef accessNode, Type objectType, Type indexType)
     {
         if (accessNode.IsNone || Kind(accessNode) != SyntaxKind.ElementAccessExpression)

@@ -1200,7 +1200,7 @@ internal sealed partial class Checker
 
     // ---- identifiers ----
 
-    /// <summary>checker.ts checkIdentifier (TODO(C7): getNarrowedTypeOfSymbol, the flow container and the definite assignment checks).</summary>
+    /// <summary>checker.ts checkIdentifier (the flow part: Checker.FlowCheck.cs; TODO(C7 follow-up): getNarrowedTypeOfSymbol's destructured discriminants).</summary>
     internal Type CheckIdentifier(NodeRef node, CheckMode checkMode = CheckMode.Normal)
     {
         var store = StoreOf(node);

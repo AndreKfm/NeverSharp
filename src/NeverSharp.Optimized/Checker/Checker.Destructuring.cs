@@ -306,8 +306,7 @@ internal sealed partial class Checker
     }
 
     // Whether the diagnostics derived from the type of a binding pattern's parent are not reported: the parent's type
-    // is an approximation (C1's "uncertain" mechanism, TODO(C6)) or comes from a reference whose narrowing is pending
-    // (TODO(C7))
+    // is an approximation (C1's "uncertain" mechanism, TODO(C6))
     private bool SuppressBindingPatternDiagnostics(NodeRef parent, Type parentType)
     {
         if (IsUncertainBindingParent(parent))

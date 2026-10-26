@@ -746,8 +746,8 @@ internal sealed partial class Checker
         return aggregatedTypes;
     }
 
-    // C1's "uncertain" mechanism: a return type inferred from an approximate return expression type (TODO(C6)) or
-    // from a reference whose narrowing is pending (TODO(C7)) is an approximation
+    // C1's "uncertain" mechanism: a return type inferred from an approximate return expression type (TODO(C6)) is an
+    // approximation
     private void MarkUncertainReturn(NodeRef func, NodeRef expr, Type type)
     {
         if (SuppressDerivedDiagnostics(expr, type))

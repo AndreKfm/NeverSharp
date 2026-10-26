@@ -289,7 +289,7 @@ internal sealed partial class Checker
         }
         if (!errorNode.IsNone && SuppressDerivedDiagnostics(errorNode, inputType))
         {
-            errorNode = NodeRef.None; // TODO(C6/C7): the input type is an approximation
+            errorNode = NodeRef.None; // TODO(C6): the input type is an approximation
         }
         var t = GetIteratedTypeOrElementType(use, inputType, sentType, errorNode, checkAssignability: true);
         return t.IsNone ? anyType : t;

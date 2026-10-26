@@ -1170,7 +1170,7 @@ internal sealed partial class Checker
                 var effectiveCheckArgumentNode = GetEffectiveCheckNode(arg);
                 if (reportErrors && !arg.IsSynthetic && SuppressDerivedDiagnostics(arg.Node, argType))
                 {
-                    continue; // TODO(C6/C7): the argument's type is an approximation
+                    continue; // TODO(C6): the argument's type is an approximation
                 }
                 var countBefore = errorOutputContainer.Errors?.Count ?? 0;
                 var errorNode = reportErrors ? effectiveCheckArgumentNode.Node : NodeRef.None;
