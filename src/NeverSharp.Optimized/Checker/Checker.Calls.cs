@@ -139,7 +139,9 @@ internal sealed partial class Checker
             {
                 var arg = At(node, args[i]);
                 // We can call checkExpressionCached because spread expressions never have a contextual type.
-                var spreadType = store.Kind(args[i]) == SyntaxKind.SpreadElement ? CheckExpressionCached(At(node, store.Expression(args[i]))) : Type.None;
+                var spreadType = store.Kind(args[i]) != SyntaxKind.SpreadElement ? Type.None
+                    : flowLoopCount != 0 ? CheckExpression(At(node, store.Expression(args[i]))) // (module C7)
+                    : CheckExpressionCached(At(node, store.Expression(args[i])));
                 if (!spreadType.IsNone && IsTupleType(spreadType))
                 {
                     var elementTypes = GetElementTypes(spreadType);
@@ -251,8 +253,20 @@ internal sealed partial class Checker
         // resolution should be deferred.
         if (result != resolvingSignature)
         {
-            // (flowLoopStart === flowLoopCount: C7)
-            SignatureLinks.Get(node).ResolvedSignature = result;
+            // if signature resolution originated on a node that itself depends on the contextual type
+            // then it's possible that the resolved signature might not be the same as the one that would be computed in source order
+            // since resolving such signature leads to resolving the potential outer signature, its arguments and thus the very same signature
+            // it's possible that this inner resolution sets the resolvedSignature first.
+            // In such a case we ignore the local result and reuse the correct one that was cached.
+            var current = SignatureLinks.Get(node).ResolvedSignature;
+            if (current != resolvingSignature)
+            {
+                result = current;
+            }
+            // If signature resolution originated in control flow type analysis (for example to compute the
+            // assigned type in a flow assignment) we don't cache the result as it may be based on temporary
+            // types from the control flow analysis. (module C7)
+            SignatureLinks.Get(node).ResolvedSignature = flowLoopStart == flowLoopCount ? result : cached;
         }
         return result;
     }

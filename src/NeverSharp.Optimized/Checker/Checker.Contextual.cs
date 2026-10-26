@@ -704,7 +704,23 @@ internal sealed partial class Checker
                 {
                     return GetTypeFromTypeNode(overallAnnotation);
                 }
-                // (annotated parents of JavaScript property assignments: C9)
+                // the property of an annotated parent (module C7, needed once flow types no longer suppress the check)
+                var leftStore = StoreOf(left);
+                if (Utilities.IsAccessExpression(leftStore, left.Node) && leftStore.Kind(leftStore.Expression(left.Node)) == SyntaxKind.Identifier)
+                {
+                    var id = At(left, leftStore.Expression(left.Node));
+                    var parentSymbol = ResolveName(id, leftStore.Texts.GetString(leftStore.EscapedText(id.Node))!, NodeRef.None, SymbolFlags.Value, null, isUse: true);
+                    if (!parentSymbol.IsNone)
+                    {
+                        var parentDeclaration = ValueDeclarationOf(parentSymbol);
+                        var annotated = parentDeclaration.IsNone ? NodeRef.None : GetEffectiveTypeAnnotationNode(parentDeclaration);
+                        if (!annotated.IsNone && leftStore.Kind(left.Node) == SyntaxKind.PropertyAccessExpression)
+                        {
+                            return GetTypeOfPropertyOfContextualType(GetTypeFromTypeNode(annotated), leftStore.Texts.GetString(leftStore.EscapedText(leftStore.Name(left.Node)))!);
+                        }
+                        return Type.None;
+                    }
+                }
                 return Utilities.IsInJSFile(StoreOf(decl), decl.Node) || decl == left ? Type.None : GetTypeOfExpression(left);
             }
             default:

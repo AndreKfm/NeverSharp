@@ -55,6 +55,10 @@ internal sealed partial class Checker
             var mapper = MapperAt(Signatures.Record(signature).Mapper);
             predicate = targetTypePredicate is null ? null : mapper is null ? targetTypePredicate : InstantiateTypePredicate(targetTypePredicate, mapper);
         }
+        else if (Signatures.Record(signature).CompositeSignatures is { } compositeSignatures)
+        {
+            predicate = GetUnionOrIntersectionTypePredicate(compositeSignatures, Signatures.Record(signature).CompositeKind);
+        }
         else
         {
             var declaration = Signatures.Record(signature).Declaration;
@@ -72,6 +76,43 @@ internal sealed partial class Checker
         }
         resolvedTypePredicates[signature] = predicate;
         return predicate;
+    }
+
+    // checker.ts getUnionOrIntersectionTypePredicate
+    private TypePredicateInfo? GetUnionOrIntersectionTypePredicate(Signature[] signatures, TypeFlags kind)
+    {
+        TypePredicateInfo? last = null;
+        var types = new List<Type>();
+        foreach (var sig in signatures)
+        {
+            var pred = GetTypePredicateOfSignature(sig);
+            if (pred is not null)
+            {
+                // Constituent type predicates must all have matching kinds. We don't create composite type predicates for assertions.
+                if ((pred.Kind != TypePredicateKind.This && pred.Kind != TypePredicateKind.Identifier) ||
+                    (last is not null && !(last.Kind == pred.Kind && last.ParameterIndex == pred.ParameterIndex)))
+                {
+                    return null;
+                }
+                last = pred;
+                types.Add(pred.Type);
+            }
+            else
+            {
+                // In composite union signatures we permit and ignore signatures with a return type `false`.
+                var returnType = kind != TypeFlags.Intersection ? GetReturnTypeOfSignature(sig) : Type.None;
+                if (returnType != falseType && returnType != regularFalseType)
+                {
+                    return null;
+                }
+            }
+        }
+        if (last is null)
+        {
+            return null;
+        }
+        var compositeType = kind == TypeFlags.Intersection ? GetIntersectionType(types.ToArray()) : GetUnionType(types.ToArray());
+        return new TypePredicateInfo { Kind = last.Kind, ParameterName = last.ParameterName, ParameterIndex = last.ParameterIndex, Type = compositeType };
     }
 
     // checker.ts getTypePredicateFromBody: a function with a single return of a boolean expression that refines one
