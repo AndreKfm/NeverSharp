@@ -18,10 +18,8 @@
 //   https://github.com/microsoft/TypeScript at commit 050880ce59e30b356b686bd3144efe24f875ebc8
 // Port structure follows internal/checker/checker.go
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
-// Modified: translated from TypeScript to C#; module C5 (replaces C1's getReturnTypeFromBody). TODO(C6): the
-// inferences of inferFromAnnotatedParametersAndReturn; parameters contextually typed by a signature instantiated with an
-// inference context are marked with C1's "uncertain" mechanism. TODO(C7): functionHasImplicitReturn (reachability) and
-// isSymbolAssigned. TODO(C8): the grammar checks of await and yield expressions and checkReturnExpression.
+// Modified: translated from TypeScript to C#; module C5 (replaces C1's getReturnTypeFromBody); module C6: the
+// inferences of inferFromAnnotatedParametersAndReturn. TODO(C8): the grammar checks of await and yield expressions and checkReturnExpression.
 
 using NeverSharp.Generated;
 
@@ -30,9 +28,6 @@ namespace NeverSharp.Optimized;
 internal sealed partial class Checker
 {
     private readonly HashSet<NodeRef> checkedClassExpressions = [];
-
-    // the implicit any errors of parameters whose contextual type depends on inferences are not reported (TODO(C6))
-    private int suppressImplicitAnyDepth;
 
     /// <summary>checker.ts checkFunctionExpressionOrObjectLiteralMethod.</summary>
     internal Type CheckFunctionExpressionOrObjectLiteralMethod(NodeRef node, CheckMode checkMode)
@@ -112,29 +107,12 @@ internal sealed partial class Checker
                 {
                     instantiatedContextualSignature = inferenceContext is not null ? InstantiateSignature(contextualSignature, inferenceContext.Mapper) : contextualSignature;
                 }
-                if (inferenceContext is not null || IsUncertainSignature(contextualSignature) || IsInUncertainContext(node))
-                {
-                    // TODO(C6): the contextual signature is instantiated with inferences that are not made yet
-                    MarkUncertainParameters(node);
-                }
                 AssignContextualParameterTypes(signature, instantiatedContextualSignature);
             }
             else
             {
                 // Force resolution of all parameter types such that the absence of a contextual type is consistently reflected.
-                if (IsInUncertainContext(node, inferentialArgument: true))
-                {
-                    // TODO(C6): the contextual type depends on inferences that are not made yet; the implicit any
-                    // errors are not reported
-                    MarkUncertainParameters(node);
-                    suppressImplicitAnyDepth++;
-                    AssignNonContextualParameterTypes(signature);
-                    suppressImplicitAnyDepth--;
-                }
-                else
-                {
-                    AssignNonContextualParameterTypes(signature);
-                }
+                AssignNonContextualParameterTypes(signature);
             }
         }
         else if (!contextualSignature.IsNone && store.TypeParameters(node.Node).IsNone && ParametersOf(contextualSignature).Length > store.Length(store.Parameters(node.Node)))
@@ -156,112 +134,6 @@ internal sealed partial class Checker
         }
         // checkSignatureDeclaration
         CheckSignatureLikeDeclaration(node, deferBody: true);
-    }
-
-    // a contextual signature whose declaration's types are approximations (C1's "uncertain" mechanism)
-    private bool IsUncertainSignature(Signature signature)
-    {
-        var declaration = Signatures.Record(signature).Declaration;
-        return !declaration.IsNone && IsExpressionKind(Kind(declaration)) && IsUncertainExpression(declaration);
-    }
-
-    private static bool IsExpressionKind(SyntaxKind kind) => kind is SyntaxKind.FunctionExpression or SyntaxKind.ArrowFunction;
-
-    // C1's "uncertain" mechanism: the contextual type of the expression comes from a call or a function whose types are
-    // approximations (TODO(C6))
-    private bool IsInUncertainContext(NodeRef node, bool inferentialArgument = false)
-    {
-        var store = StoreOf(node);
-        var n = node.Node;
-        while (true)
-        {
-            var parent = store.Parent(n);
-            switch (store.Kind(parent))
-            {
-                case SyntaxKind.ParenthesizedExpression:
-                case SyntaxKind.ConditionalExpression:
-                case SyntaxKind.ArrayLiteralExpression:
-                case SyntaxKind.SpreadElement:
-                case SyntaxKind.ObjectLiteralExpression:
-                case SyntaxKind.PropertyAssignment:
-                case SyntaxKind.ShorthandPropertyAssignment:
-                case SyntaxKind.BinaryExpression:
-                case SyntaxKind.ReturnStatement:
-                    n = parent;
-                    continue;
-                case SyntaxKind.CallExpression:
-                case SyntaxKind.NewExpression:
-                case SyntaxKind.TaggedTemplateExpression:
-                    if (store.Expression(parent) == n)
-                    {
-                        return false;
-                    }
-                    if (uncertainExpressions.Contains(At(node, parent)))
-                    {
-                        return true;
-                    }
-                    if (inferentialArgument)
-                    {
-                        // the argument is checked in an inference context (the contextual type depends on inferences)
-                        var argument = At(node, n);
-                        for (var i = inferenceContextCount - 1; i >= 0; i--)
-                        {
-                            if (inferenceContextNodes[i] == argument && inferenceContexts[i] is not null)
-                            {
-                                return true;
-                            }
-                        }
-                    }
-                    return false;
-                case SyntaxKind.ArrowFunction:
-                case SyntaxKind.FunctionExpression:
-                    return uncertainExpressions.Contains(At(node, parent));
-                case SyntaxKind.Block:
-                {
-                    var func = store.Parent(parent);
-                    return store.Kind(func) is SyntaxKind.ArrowFunction or SyntaxKind.FunctionExpression or SyntaxKind.MethodDeclaration && uncertainExpressions.Contains(At(node, func));
-                }
-                default:
-                    return false;
-            }
-        }
-    }
-
-    // C1's "uncertain" mechanism: the types of the function's parameters are approximations (TODO(C6))
-    private void MarkUncertainParameters(NodeRef func)
-    {
-        var store = StoreOf(func);
-        uncertainExpressions.Add(func);
-        foreach (var parameter in store.Nodes(store.Parameters(func.Node)))
-        {
-            if (!store.Type(parameter).IsNone)
-            {
-                continue;
-            }
-            MarkUncertainBindingName(At(func, parameter));
-        }
-    }
-
-    private void MarkUncertainBindingName(NodeRef declaration)
-    {
-        var store = StoreOf(declaration);
-        var name = store.Name(declaration.Node);
-        if (Utilities.IsBindingPattern(store, name))
-        {
-            foreach (var element in store.Nodes(store.Elements(name)))
-            {
-                if (store.Kind(element) == SyntaxKind.BindingElement)
-                {
-                    MarkUncertainBindingName(At(declaration, element));
-                }
-            }
-            return;
-        }
-        var symbol = GetSymbolOfDeclaration(declaration);
-        if (!symbol.IsNone)
-        {
-            uncertainSymbols.Add(symbol);
-        }
     }
 
     // checker.ts inferFromAnnotatedParametersAndReturn
@@ -381,7 +253,7 @@ internal sealed partial class Checker
         }
         var declaration = ValueDeclarationOf(parameter);
         var type = !contextualType.IsNone ? contextualType
-            : !declaration.IsNone ? GetWidenedTypeForVariableLikeDeclaration(declaration, reportErrors: suppressImplicitAnyDepth == 0)
+            : !declaration.IsNone ? GetWidenedTypeForVariableLikeDeclaration(declaration, reportErrors: true)
             : GetTypeOfSymbol(parameter);
         var isOptional = !declaration.IsNone && StoreOf(declaration).Initializer(declaration.Node).IsNone && IsOptionalDeclaration(declaration);
         type = AddOptionality(type, isProperty: false, isOptional);
@@ -503,7 +375,6 @@ internal sealed partial class Checker
             // Async or normal arrow function
             var bodyRef = At(func, body);
             returnType = CheckExpressionCached(bodyRef, innerCheckMode);
-            MarkUncertainReturn(func, bodyRef, returnType);
             if (IsConstContext(bodyRef))
             {
                 returnType = GetRegularTypeOfLiteralType(returnType);
@@ -711,7 +582,6 @@ internal sealed partial class Checker
             }
             var exprRef = At(func, expr);
             var type = CheckExpressionCached(exprRef, checkMode);
-            MarkUncertainReturn(func, exprRef, type);
             if ((functionFlags & FunctionFlags.Async) != 0)
             {
                 // From within an async function you can return either a non-promise value or a promise. Any
@@ -744,16 +614,6 @@ internal sealed partial class Checker
             }
         }
         return aggregatedTypes;
-    }
-
-    // C1's "uncertain" mechanism: a return type inferred from an approximate return expression type (TODO(C6)) is an
-    // approximation
-    private void MarkUncertainReturn(NodeRef func, NodeRef expr, Type type)
-    {
-        if (SuppressDerivedDiagnostics(expr, type))
-        {
-            uncertainExpressions.Add(func);
-        }
     }
 
     // checker.ts mayReturnNever
@@ -801,7 +661,7 @@ internal sealed partial class Checker
         var operand = store.Expression(n);
         var yieldExpressionType = !operand.IsNone ? CheckExpression(At(node, operand)) : undefinedWideningType;
         var yieldedType = GetYieldedTypeOfYieldExpression(node, yieldExpressionType, signatureNextType, isAsync);
-        if (!returnType.IsNone && !yieldedType.IsNone && !(operand.IsNone ? false : SuppressDerivedDiagnostics(At(node, operand), yieldExpressionType)))
+        if (!returnType.IsNone && !yieldedType.IsNone)
         {
             CheckTypeAssignableToAndOptionallyElaborate(yieldedType, signatureYieldType, operand.IsNone ? node : At(node, operand), operand.IsNone ? NodeRef.None : At(node, operand));
         }

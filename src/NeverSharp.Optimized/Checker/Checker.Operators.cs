@@ -153,10 +153,6 @@ internal sealed partial class Checker
     {
         if (!IsTypeAssignableTo(type, numberOrBigIntType))
         {
-            if (SuppressDerivedDiagnostics(operand, type))
-            {
-                return false;
-            }
             var awaitedType = isAwaitValid ? GetAwaitedTypeOfPromise(type) : Type.None;
             ErrorAndMaybeSuggestAwait(operand, !awaitedType.IsNone && IsTypeAssignableTo(awaitedType, numberOrBigIntType), diagnostic);
             return false;
@@ -197,7 +193,7 @@ internal sealed partial class Checker
         // and the right operand to be of type Any, a subtype of the 'Function' interface type, or have a call or construct signature.
         // The result is always of the Boolean primitive type.
         // NOTE: do not raise error if leftType is unknown as related error was already reported
-        if (!IsTypeAny(leftType) && AllTypesAssignableToKind(leftType, TypeFlags.Primitive) && !SuppressDerivedDiagnostics(left, leftType))
+        if (!IsTypeAny(leftType) && AllTypesAssignableToKind(leftType, TypeFlags.Primitive))
         {
             Error(left, Diagnostics.The_left_hand_side_of_an_instanceof_expression_must_be_of_type_any_an_object_type_or_a_type_parameter);
         }
@@ -237,7 +233,7 @@ internal sealed partial class Checker
             // Unlike in 'checkPrivateIdentifierExpression' we now have access to the RHS type
             // which provides us with the opportunity to emit more detailed errors
             var resolved = SymbolNodeLinks.Has(left) ? SymbolNodeLinks.Get(left).ResolvedSymbol : SymbolRef.None;
-            if (resolved.IsNone && !Utilities.GetContainingClass(store, left.Node).IsNone && !SuppressDerivedDiagnostics(right, rightType))
+            if (resolved.IsNone && !Utilities.GetContainingClass(store, left.Node).IsNone)
             {
                 ReportNonexistentProperty(left, rightType);
             }
@@ -246,14 +242,11 @@ internal sealed partial class Checker
         {
             // The type of the lef operand must be assignable to string, number, or symbol.
             var nonNullLeft = CheckNonNullType(leftType, left);
-            if (!SuppressDerivedDiagnostics(left, leftType))
-            {
-                CheckTypeAssignableTo(nonNullLeft, stringNumberSymbolType, left);
-            }
+            CheckTypeAssignableTo(nonNullLeft, stringNumberSymbolType, left);
         }
         // The type of the right operand must be assignable to 'object'.
         var nonNullRight = CheckNonNullType(rightType, right);
-        if (!SuppressDerivedDiagnostics(right, rightType) && CheckTypeAssignableTo(nonNullRight, nonPrimitiveType, right))
+        if (CheckTypeAssignableTo(nonNullRight, nonPrimitiveType, right))
         {
             // The {} type is assignable to the object type, yet {} might represent a primitive type. Here we
             // detect and error on {} that results from narrowing the unknown type, as well as intersections
@@ -487,18 +480,11 @@ internal sealed partial class Checker
         var optionalError = isRest
             ? Diagnostics.The_target_of_an_object_rest_assignment_may_not_be_an_optional_property_access
             : Diagnostics.The_left_hand_side_of_an_assignment_expression_may_not_be_an_optional_property_access;
-        if (CheckReferenceExpression(target, error, optionalError) && !SuppressDerivedDiagnostics(target, targetType) && !IsUncertainType(sourceType))
+        if (CheckReferenceExpression(target, error, optionalError))
         {
             CheckTypeAssignableToAndOptionallyElaborate(sourceType, targetType, target, target);
         }
         return sourceType;
-    }
-
-    // a source type of a destructuring assignment computed from an uncertain expression (C1's "uncertain" mechanism)
-    private static bool IsUncertainType(Type type)
-    {
-        _ = type;
-        return false;
     }
 
     // checker.ts isSideEffectFree
@@ -1045,10 +1031,6 @@ internal sealed partial class Checker
             if (CheckReferenceExpression(left, Diagnostics.The_left_hand_side_of_an_assignment_expression_must_be_a_variable_or_a_property_access,
                 Diagnostics.The_left_hand_side_of_an_assignment_expression_may_not_be_an_optional_property_access))
             {
-                if (SuppressDerivedDiagnostics(left, assigneeType) || SuppressDerivedDiagnostics(right, valueType))
-                {
-                    return; // TODO(C6): an operand's type is an approximation
-                }
                 DiagnosticMessage? headMessage = null;
                 if (compilerOptions.ExactOptionalPropertyTypes == true && store.Kind(left.Node) == SyntaxKind.PropertyAccessExpression && MaybeTypeOfKind(valueType, TypeFlags.Undefined))
                 {
@@ -1076,10 +1058,6 @@ internal sealed partial class Checker
 
         void ReportOperatorError(Func<Type, Type, bool>? isRelated = null)
         {
-            if (SuppressDerivedDiagnostics(left, leftType) || SuppressDerivedDiagnostics(right, rightType))
-            {
-                return; // TODO(C6): an operand's type is an approximation
-            }
             var wouldWorkWithAwait = false;
             var errNode = errNodeOrToken;
             if (isRelated is not null)
@@ -1255,10 +1233,6 @@ internal sealed partial class Checker
                 return;
             }
             var type = location == cond ? condType : CheckExpression(location);
-            if (SuppressDerivedDiagnostics(location, type))
-            {
-                return; // TODO(C6): the type is an approximation
-            }
             if ((Types.Flags(type) & TypeFlags.EnumLiteral) != 0 && store.Kind(location.Node) == SyntaxKind.PropertyAccessExpression)
             {
                 var expressionSymbol = SymbolNodeLinks.Has(At(location, store.Expression(location.Node))) ? SymbolNodeLinks.Get(At(location, store.Expression(location.Node))).ResolvedSymbol : SymbolRef.None;
@@ -1441,10 +1415,7 @@ internal sealed partial class Checker
     {
         if ((Types.Flags(type) & TypeFlags.Void) != 0)
         {
-            if (!SuppressDerivedDiagnostics(node, type))
-            {
-                Error(node, Diagnostics.An_expression_of_type_void_cannot_be_tested_for_truthiness);
-            }
+            Error(node, Diagnostics.An_expression_of_type_void_cannot_be_tested_for_truthiness);
         }
         else
         {

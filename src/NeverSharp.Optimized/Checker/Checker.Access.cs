@@ -40,36 +40,28 @@ internal sealed partial class Checker
     /// <summary>checker.ts checkNonNullType.</summary>
     internal Type CheckNonNullType(Type type, NodeRef node) => CheckNonNullTypeWithReporter(type, node, ReportObjectPossiblyNullOrUndefinedError);
 
-    // checker.ts checkNonNullTypeWithReporter (the errors are not reported for operands of C1's "uncertain" mechanism,
-    // TODO(C6))
+    // checker.ts checkNonNullTypeWithReporter
     private Type CheckNonNullTypeWithReporter(Type type, NodeRef node, Action<NodeRef, TypeFacts> reportError)
     {
-        var suppress = SuppressDerivedDiagnostics(node, type);
         if (strictNullChecks && (Types.Flags(type) & TypeFlags.Unknown) != 0)
         {
-            if (!suppress)
+            var store = StoreOf(node);
+            if (Utilities.IsEntityNameExpression(store, node.Node))
             {
-                var store = StoreOf(node);
-                if (Utilities.IsEntityNameExpression(store, node.Node))
+                var nodeText = EntityNameToString(node);
+                if (nodeText.Length < 100)
                 {
-                    var nodeText = EntityNameToString(node);
-                    if (nodeText.Length < 100)
-                    {
-                        Error(node, Diagnostics._0_is_of_type_unknown, nodeText);
-                        return errorType;
-                    }
+                    Error(node, Diagnostics._0_is_of_type_unknown, nodeText);
+                    return errorType;
                 }
-                Error(node, Diagnostics.Object_is_of_type_unknown);
             }
+            Error(node, Diagnostics.Object_is_of_type_unknown);
             return errorType;
         }
         var facts = GetTypeFacts(type, TypeFacts.IsUndefinedOrNull);
         if ((facts & TypeFacts.IsUndefinedOrNull) != 0)
         {
-            if (!suppress)
-            {
-                reportError(node, facts);
-            }
+            reportError(node, facts);
             var t = GetNonNullableType(type);
             return (Types.Flags(t) & (TypeFlags.Nullable | TypeFlags.Never)) != 0 ? errorType : t;
         }
@@ -115,7 +107,7 @@ internal sealed partial class Checker
     internal Type CheckNonNullNonVoidType(Type type, NodeRef node)
     {
         var nonNullType = CheckNonNullType(type, node);
-        if ((Types.Flags(nonNullType) & TypeFlags.Void) != 0 && !SuppressDerivedDiagnostics(node, type))
+        if ((Types.Flags(nonNullType) & TypeFlags.Void) != 0)
         {
             var store = StoreOf(node);
             if (Utilities.IsEntityNameExpression(store, node.Node))
@@ -214,11 +206,6 @@ internal sealed partial class Checker
         var assignmentKind = GetAssignmentTargetKind(node);
         var apparentType = GetApparentType(assignmentKind != AssignmentKind.None || IsMethodAccessForCall(store, node.Node) ? GetWidenedType(leftType) : leftType);
         var isAnyLike = (Types.Flags(apparentType) & TypeFlags.Any) != 0 || apparentType == silentNeverType;
-        var leftUncertain = IsUncertainExpression(left);
-        if (leftUncertain)
-        {
-            uncertainExpressions.Add(node);
-        }
         SymbolRef prop;
         string rightName;
         if (store.Kind(right.Node) == SyntaxKind.PrivateIdentifier)
@@ -297,7 +284,7 @@ internal sealed partial class Checker
                     }
                     return anyType;
                 }
-                if (rightName.Length > 0 && !leftUncertain && !CheckAndReportErrorForExtendingInterface(node))
+                if (rightName.Length > 0 && !CheckAndReportErrorForExtendingInterface(node))
                 {
                     ReportNonexistentProperty(right, IsThisTypeParameter(leftType) ? apparentType : leftType);
                 }
@@ -1177,23 +1164,6 @@ internal sealed partial class Checker
         return CheckElementAccessExpression(node, CheckNonNullExpression(expression), checkMode);
     }
 
-    // the diagnostics of an element access whose object or index type is an approximation (C1's "uncertain"
-    // mechanism, TODO(C6))
-    private bool IsAccessDiagnosticSuppressed(NodeRef accessNode, Type objectType, Type indexType)
-    {
-        if (accessNode.IsNone || Kind(accessNode) != SyntaxKind.ElementAccessExpression)
-        {
-            return false;
-        }
-        // (the types are constituents of the expressions' types when getIndexedAccessType distributes over unions: the
-        // narrowing check considers any type)
-        _ = objectType;
-        _ = indexType;
-        var store = StoreOf(accessNode);
-        return SuppressDerivedDiagnostics(At(accessNode, store.Expression(accessNode.Node)), unknownType) ||
-            SuppressDerivedDiagnostics(At(accessNode, store.ArgumentExpression(accessNode.Node)), unknownType);
-    }
-
     // checker.ts checkElementAccessExpression
     private Type CheckElementAccessExpression(NodeRef node, Type exprType, CheckMode checkMode)
     {
@@ -1201,10 +1171,6 @@ internal sealed partial class Checker
         var objectType = GetAssignmentTargetKind(node) != AssignmentKind.None || IsMethodAccessForCall(store, node.Node) ? GetWidenedType(exprType) : exprType;
         var indexExpression = At(node, store.ArgumentExpression(node.Node));
         var indexType = CheckExpression(indexExpression);
-        if (IsUncertainExpression(At(node, store.Expression(node.Node))))
-        {
-            uncertainExpressions.Add(node);
-        }
         if (IsErrorType(objectType) || objectType == silentNeverType)
         {
             return objectType;
@@ -1371,10 +1337,6 @@ internal sealed partial class Checker
                 resultType = GetUnionType(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(types));
                 return;
             }
-        }
-        if (SuppressDerivedDiagnostics(At(accessExpression, store.Expression(accessExpression.Node)), objectType))
-        {
-            return;
         }
         var globalThisMember = propName is null ? SymbolRef.None : globals.Get(propName);
         if (Types.Symbol(objectType) == globalThisSymbol && propName is not null && !globalThisMember.IsNone && (SymbolFlagsOf(globalThisMember) & SymbolFlags.BlockScoped) != 0)

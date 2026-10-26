@@ -927,18 +927,29 @@ internal sealed partial class Checker
             TypeMapper? combinedMapper = null;
             if (root.InferTypeParameters is not null)
             {
-                // TODO(C6): createInferenceContext and inferTypes(context.inferences, checkType, extendsType, NoConstraints |
-                // AlwaysStrict) when the check type is not deferred. Without inference candidates an infer type parameter
-                // maps to its constraint instantiated with the non-fixing mapper, or to unknown (getInferredType).
-                var contextMapper = CreateUninferredMapper(root.InferTypeParameters, mapper);
+                // When we're looking at making an inference for an infer type, when we get its constraint, it'll automagically be
+                // instantiated with the context, so it doesn't need the mapper for the inference context - however the constraint
+                // may refer to another _root_, _uncloned_ `infer` type parameter, or to something mapped by `mapper`. So we
+                // combine `context.nonFixingMapper` with `mapper` so their constraints can be instantiated in the context of
+                // `mapper`, and incorporate all of the component mappers into the combined mapper for the true and false members.
+                var context = CreateInferenceContext(root.InferTypeParameters, Signature.None, InferenceFlags.None);
+                if (mapper is not null)
+                {
+                    context.NonFixingMapper = CombineTypeMappers(context.NonFixingMapper, mapper);
+                }
+                if (!checkTypeDeferred)
+                {
+                    // We don't want inferences from constraints as they may cause us to eagerly resolve the
+                    // conditional type instead of deferring resolution. Also, we always want strict function
+                    // types rules (i.e. proper contravariance) for inferences.
+                    InferTypes(context.Inferences, checkType, extendsType, InferencePriority.NoConstraints | InferencePriority.AlwaysStrict);                }
                 // It's possible for 'infer T' type paramteters to be given uninstantiated constraints when the
                 // those type parameters are used in type references (see getInferredTypeParameterConstraint). For
                 // that reason we need context.mapper to be first in the combined mapper. See #42636 for examples.
-                combinedMapper = mapper is not null ? CombineTypeMappers(contextMapper, mapper) : contextMapper;
+                combinedMapper = mapper is not null ? CombineTypeMappers(context.Mapper, mapper) : context.Mapper;
             }
             // Instantiate the extends type including inferences for 'infer T' type parameters
-            var inferredExtendsType = combinedMapper is not null ? InstantiateType(root.ExtendsType, combinedMapper) : extendsType;
-            // We attempt to resolve the conditional type only when the check and extends types are non-generic
+            var inferredExtendsType = combinedMapper is not null ? InstantiateType(root.ExtendsType, combinedMapper) : extendsType;            // We attempt to resolve the conditional type only when the check and extends types are non-generic
             if (!checkTypeDeferred && !IsDeferredType(inferredExtendsType, checkTuples))
             {
                 // Return falseType for a definitely false extends check. We check an instantiations of the two
@@ -1040,37 +1051,6 @@ internal sealed partial class Checker
             }
             return false;
         }
-    }
-
-    // The inference context's mapper of a conditional type's infer type parameters without inference candidates (C6
-    // ports createInferenceContext and inferTypes): each maps to its constraint instantiated with the non-fixing mapper
-    // (the outer mapper combined with the uninferred infer type parameters), or to unknown.
-    private TypeMapper CreateUninferredMapper(Type[] inferTypeParameters, TypeMapper? mapper)
-    {
-        var inferred = new Type[inferTypeParameters.Length];
-        TypeMapper? nonFixingMapper = null;
-        TypeMapper contextMapper = null!;
-        contextMapper = MakeFunctionTypeMapper(t =>
-        {
-            var index = Array.IndexOf(inferTypeParameters, t);
-            if (index < 0)
-            {
-                return t;
-            }
-            if (inferred[index].IsNone)
-            {
-                inferred[index] = unknownType;
-                var constraint = GetConstraintOfTypeParameter(t);
-                if (!constraint.IsNone)
-                {
-                    nonFixingMapper ??= mapper is not null ? CombineTypeMappers(contextMapper, mapper) : contextMapper;
-                    inferred[index] = InstantiateType(constraint, nonFixingMapper);
-                }
-                ClearActiveMapperCaches();
-            }
-            return inferred[index];
-        });
-        return contextMapper;
     }
 
     /// <summary>checker.ts getConditionalTypeInstantiation.</summary>

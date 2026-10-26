@@ -48,12 +48,7 @@ internal sealed partial class Checker
             // missing properties/signatures required to get its iteratedType (like
             // [Symbol.iterator] or next). This may be because we accessed properties from anyType,
             // or it may have led to an error inside getElementTypeOfIterable.
-            var forOfStatement = At(declaration, store.Parent(parent));
-            var t = CheckRightHandSideOfForOf(forOfStatement);
-            if (IsUncertainExpression(At(declaration, store.Expression(forOfStatement.Node))))
-            {
-                MarkUncertainDeclaration(declaration);
-            }
+            var t = CheckRightHandSideOfForOf(At(declaration, store.Parent(parent)));
             return t.IsNone ? anyType : t;
         }
         if (Utilities.IsBindingPattern(store, parent))
@@ -137,10 +132,6 @@ internal sealed partial class Checker
         if (!initializer.IsNone)
         {
             var initializerType = CheckDeclarationInitializer(declaration, checkMode);
-            if (IsUncertainExpression(At(declaration, initializer)))
-            {
-                MarkUncertainDeclaration(declaration);
-            }
             var type = WidenTypeInferredFromInitializer(declaration, initializerType);
             return AddOptionality(type, isProperty, isOptional);
         }
@@ -250,17 +241,6 @@ internal sealed partial class Checker
         return widened;
     }
 
-    // The type of the declaration's symbol is an approximation (C1's "uncertain" mechanism, for C6's inferences): no
-    // diagnostics are derived from its uses
-    private void MarkUncertainDeclaration(NodeRef declaration)
-    {
-        var symbol = GetSymbolOfDeclaration(declaration);
-        if (!symbol.IsNone)
-        {
-            uncertainSymbols.Add(symbol);
-        }
-    }
-
     // ---- binding elements ----
 
     // checker.ts getTypeForBindingElementParent
@@ -285,60 +265,7 @@ internal sealed partial class Checker
         var checkMode = !store.DotDotDotToken(declaration.Node).IsNone ? CheckMode.RestBindingElement : CheckMode.Normal;
         var grandparent = At(declaration, store.Parent(store.Parent(declaration.Node)));
         var parentType = GetTypeForBindingElementParent(grandparent, checkMode);
-        if (IsUncertainBindingParent(grandparent))
-        {
-            MarkUncertainDeclaration(declaration);
-        }
         return parentType.IsNone ? Type.None : GetBindingElementTypeFromParentType(declaration, parentType, noTupleBoundsCheck: false);
-    }
-
-    // C1's "uncertain" mechanism: the parent of a binding element is an uncertain declaration
-    private bool IsUncertainBindingParent(NodeRef parent)
-    {
-        var symbol = GetSymbolOfDeclaration(parent);
-        if (!symbol.IsNone && uncertainSymbols.Contains(symbol))
-        {
-            return true;
-        }
-        var store = StoreOf(parent);
-        var initializer = store.Kind(parent.Node) is SyntaxKind.VariableDeclaration or SyntaxKind.Parameter or SyntaxKind.BindingElement ? store.Initializer(parent.Node) : Node.None;
-        return !initializer.IsNone && IsUncertainExpression(At(parent, initializer));
-    }
-
-    // Whether the diagnostics derived from the type of a binding pattern's parent are not reported: the parent's type
-    // is an approximation (C1's "uncertain" mechanism, TODO(C6))
-    private bool SuppressBindingPatternDiagnostics(NodeRef parent, Type parentType)
-    {
-        if (IsUncertainBindingParent(parent))
-        {
-            return true;
-        }
-        var store = StoreOf(parent);
-        switch (store.Kind(parent.Node))
-        {
-            case SyntaxKind.BindingElement:
-                return SuppressBindingPatternDiagnostics(At(parent, store.Parent(store.Parent(parent.Node))), parentType);
-            case SyntaxKind.Parameter:
-            {
-                var func = store.Parent(parent.Node);
-                return store.Type(parent.Node).IsNone && uncertainExpressions.Contains(At(parent, func));
-            }
-            case SyntaxKind.VariableDeclaration:
-            {
-                var initializer = store.Initializer(parent.Node);
-                if (!initializer.IsNone)
-                {
-                    return false;
-                }
-                var statement = store.Parent(store.Parent(parent.Node));
-                if (store.Kind(statement) == SyntaxKind.ForOfStatement)
-                {
-                    return IsUncertainExpression(At(parent, store.Expression(statement)));
-                }
-                return false;
-            }
-        }
-        return false;
     }
 
     /// <summary>checker.ts getBindingElementTypeFromParentType.</summary>
@@ -365,7 +292,6 @@ internal sealed partial class Checker
             parentType = GetTypeWithFacts(parentType, TypeFacts.NEUndefined);
         }
         var accessFlags = AccessFlags.ExpressionPosition | (noTupleBoundsCheck || HasDefaultValue(store, n) ? AccessFlags.AllowMissing : AccessFlags.None);
-        var suppress = SuppressBindingPatternDiagnostics(At(declaration, patternParent), parentType);
         Type type;
         if (store.Kind(pattern.Node) == SyntaxKind.ObjectBindingPattern)
         {
@@ -374,10 +300,7 @@ internal sealed partial class Checker
                 parentType = GetReducedType(parentType);
                 if ((Types.Flags(parentType) & TypeFlags.Unknown) != 0 || !IsValidSpreadType(parentType))
                 {
-                    if (!suppress)
-                    {
-                        Error(declaration, Diagnostics.Rest_types_may_only_be_created_from_object_types);
-                    }
+                    Error(declaration, Diagnostics.Rest_types_may_only_be_created_from_object_types);
                     return errorType;
                 }
                 var literalMembers = new List<NodeRef>();
@@ -397,19 +320,7 @@ internal sealed partial class Checker
                 var propertyName = store.PropertyName(n);
                 var name = At(declaration, propertyName.IsNone ? store.Name(n) : propertyName);
                 var indexType = GetLiteralTypeFromPropertyName(name);
-                Type declaredType;
-                if (suppress)
-                {
-                    declaredType = GetIndexedAccessTypeOrUndefined(parentType, indexType, accessFlags);
-                    if (declaredType.IsNone)
-                    {
-                        declaredType = errorType;
-                    }
-                }
-                else
-                {
-                    declaredType = GetIndexedAccessType(parentType, indexType, accessFlags, name);
-                }
+                var declaredType = GetIndexedAccessType(parentType, indexType, accessFlags, name);
                 type = GetFlowTypeOfDestructuring(declaration, declaredType);
             }
         }
@@ -418,7 +329,7 @@ internal sealed partial class Checker
             // This elementType will be used if the specific property corresponding to this index is not
             // present (aka the tuple element property). This call also checks that the parentType is in
             // fact an iterable or array (depending on target language).
-            var elementType = CheckIteratedTypeOrElementType(IterationUse.Destructuring | (!store.DotDotDotToken(n).IsNone ? IterationUse.None : IterationUse.PossiblyOutOfBounds), parentType, undefinedType, suppress ? NodeRef.None : pattern);
+            var elementType = CheckIteratedTypeOrElementType(IterationUse.Destructuring | (!store.DotDotDotToken(n).IsNone ? IterationUse.None : IterationUse.PossiblyOutOfBounds), parentType, undefinedType, pattern);
             var index = store.Nodes(store.Elements(pattern.Node)).IndexOf(n);
             if (!store.DotDotDotToken(n).IsNone)
             {
@@ -433,7 +344,7 @@ internal sealed partial class Checker
             else if (IsArrayLikeType(parentType))
             {
                 var indexType = GetNumberLiteralType(index);
-                var declaredType = GetIndexedAccessTypeOrUndefined(parentType, indexType, accessFlags, suppress ? NodeRef.None : At(declaration, store.Name(n)));
+                var declaredType = GetIndexedAccessTypeOrUndefined(parentType, indexType, accessFlags, At(declaration, store.Name(n)));
                 type = GetFlowTypeOfDestructuring(declaration, declaredType.IsNone ? errorType : declaredType);
             }
             else
@@ -593,7 +504,7 @@ internal sealed partial class Checker
         {
             return GetTypeFromBindingPattern(At(element, name), includePatternInType, reportErrors);
         }
-        if (reportErrors && suppressImplicitAnyDepth == 0 && !DeclarationBelongsToPrivateAmbientMember(element))
+        if (reportErrors && !DeclarationBelongsToPrivateAmbientMember(element))
         {
             ReportImplicitAny(element, anyType);
         }

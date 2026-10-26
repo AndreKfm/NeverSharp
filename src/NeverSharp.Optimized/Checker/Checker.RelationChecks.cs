@@ -63,18 +63,9 @@ internal sealed partial class Checker
                 if (!isJSObjectLiteralInitializer)
                 {
                     var initializerType = CheckExpressionCached(initializerRef);
-                    if (!IsUncertainExpression(initializerRef) && !IsUnsupportedType(initializerType))
+                    if (!IsUnsupportedType(initializerType) && !IsUnsupportedType(type))
                     {
-                        if (IsRelatableInitializer(initializerRef, symbol, type))
-                        {
-                            CheckTypeAssignableToAndOptionallyElaborate(initializerType, type, node, initializerRef);
-                        }
-                        else
-                        {
-                            // the relation is computed as TypeScript does (its caches and the types it creates), its
-                            // failure is not reported before the expression types are exact (TODO(C5/C7))
-                            IsTypeAssignableTo(initializerType, type);
-                        }
+                        CheckTypeAssignableToAndOptionallyElaborate(initializerType, type, node, initializerRef);
                     }
                 }
             }
@@ -84,107 +75,26 @@ internal sealed partial class Checker
             // Node is a secondary declaration, check that type is identical to primary declaration and check that
             // initializer is consistent with type associated with the node
             var declarationType = ConvertAutoToAny(GetWidenedTypeForVariableLikeDeclaration(node, reportErrors: false));
-            if (uncertainSymbols.Contains(symbol) || IsUnsupportedType(type) || IsUnsupportedType(declarationType))
+            if (IsUnsupportedType(type) || IsUnsupportedType(declarationType))
             {
                 return;
             }
             if (!IsErrorType(type) && !IsErrorType(declarationType) && !IsTypeIdenticalTo(type, declarationType) && (SymbolFlagsOf(symbol) & SymbolFlags.Assignment) == 0 &&
-                kind == SyntaxKind.VariableDeclaration && HasExactDeclaredType(node) && HasExactDeclaredType(ValueDeclarationOf(symbol)))
+                kind == SyntaxKind.VariableDeclaration)
             {
-                // (declarations without a type annotation have the types of their initializers, which are exact only
-                // once C5 lands; property declarations (unique symbol types, 2717) are left to C8: TODO(C5/C8))
+                // (property declarations (unique symbol types, 2717): TODO(C8))
                 ErrorNextVariableOrPropertyDeclarationMustHaveSameType(ValueDeclarationOf(symbol), type, node, declarationType);
             }
             if (!initializer.IsNone)
             {
                 var initializerRef = At(node, initializer);
                 var initializerType = CheckExpressionCached(initializerRef);
-                if (!IsUncertainExpression(initializerRef) && !IsUnsupportedType(initializerType))
+                if (!IsUnsupportedType(initializerType))
                 {
-                    if (!store.Type(n).IsNone && IsContextFreeExpression(initializerRef))
-                    {
-                        CheckTypeAssignableToAndOptionallyElaborate(initializerType, declarationType, node, initializerRef);
-                    }
-                    else
-                    {
-                        IsTypeAssignableTo(initializerType, declarationType); // (see above)
-                    }
+                    CheckTypeAssignableToAndOptionallyElaborate(initializerType, declarationType, node, initializerRef);
                 }
             }
         }
-    }
-
-    // Whether the initializer can be related to the declared type before contextual typing (C5), inference (C6) and
-    // narrowing (C7) are ported: the declaration has a type annotation and the initializer's type does not depend on
-    // its context. TODO(C5/C7): relate every initializer once expression types are exact.
-    private bool IsRelatableInitializer(NodeRef initializer, SymbolRef symbol, Type type)
-    {
-        if (uncertainSymbols.Contains(symbol) || IsUnsupportedType(type) || initializer.IsNone)
-        {
-            return false;
-        }
-        // (module C5: expression types are exact except where they depend on inference (C6) or narrowing (C7))
-        return !SuppressDerivedDiagnostics(initializer, CheckExpressionCached(initializer));
-    }
-
-    // An expression whose type checkExpression computes without a contextual type: literals, null and undefined, signed
-    // numeric literals, void expressions and (non-const) type assertions.
-    private bool IsContextFreeExpression(NodeRef expression)
-    {
-        var store = StoreOf(expression);
-        var n = expression.Node;
-        switch (store.Kind(n))
-        {
-            case SyntaxKind.ParenthesizedExpression:
-                return IsContextFreeExpression(At(expression, store.Expression(n)));
-            case SyntaxKind.NullKeyword:
-            case SyntaxKind.TrueKeyword:
-            case SyntaxKind.FalseKeyword:
-            case SyntaxKind.NumericLiteral:
-            case SyntaxKind.BigIntLiteral:
-            case SyntaxKind.StringLiteral:
-            case SyntaxKind.NoSubstitutionTemplateLiteral:
-            case SyntaxKind.VoidExpression:
-                return true;
-            case SyntaxKind.Identifier:
-                return GetResolvedSymbol(expression) == undefinedSymbol;
-            case SyntaxKind.PrefixUnaryExpression:
-                return store.Operator(n) is SyntaxKind.MinusToken or SyntaxKind.PlusToken &&
-                    store.Kind(store.Operand(n)) is SyntaxKind.NumericLiteral or SyntaxKind.BigIntLiteral;
-            case SyntaxKind.AsExpression:
-            case SyntaxKind.TypeAssertionExpression:
-                return !Utilities.IsConstAssertion(store, n);
-        }
-        return false;
-    }
-
-    // Whether the declaration's type is exact before C5: it has a type annotation, or it is a variable declaration
-    // (not of a for-in or for-of statement) without an initializer or with a context-free one.
-    private bool HasExactDeclaredType(NodeRef declaration)
-    {
-        if (declaration.IsNone)
-        {
-            return false;
-        }
-        var store = StoreOf(declaration);
-        if (!store.Type(declaration.Node).IsNone)
-        {
-            return true;
-        }
-        if (store.Kind(declaration.Node) != SyntaxKind.VariableDeclaration)
-        {
-            return false;
-        }
-        var statement = store.Parent(store.Parent(declaration.Node));
-        if (store.Kind(statement) is SyntaxKind.ForInStatement or SyntaxKind.ForOfStatement)
-        {
-            // (module C5: the iterated types are exact unless the expression's type depends on inference or narrowing)
-            var expression = At(declaration, store.Expression(statement));
-            return !SuppressDerivedDiagnostics(expression, CheckExpressionCached(expression));
-        }
-        var initializer = store.Initializer(declaration.Node);
-        // (module C5: initializer types are exact unless they depend on inference (C6) or narrowing (C7))
-        return initializer.IsNone || !SuppressDerivedDiagnostics(At(declaration, initializer), CheckExpressionCached(At(declaration, initializer)));
     }
 
     /// <summary>
@@ -286,19 +196,14 @@ internal sealed partial class Checker
                     var staticBaseType = GetApparentType(baseConstructorType);
                     // (checkBaseTypeAccessibility, the type argument constraints of the base constructors: module C8)
                     var baseWithThis = GetTypeWithThisArgument(baseType, Types.Object(type).ThisType);
-                    var baseExpression = At(baseTypeNode, StoreOf(baseTypeNode).Expression(baseTypeNode.Node));
-                    if (!CheckTypeAssignableTo(typeWithThis, baseWithThis, NodeRef.None) &&
-                        Utilities.IsEntityNameExpression(StoreOf(baseExpression), baseExpression.Node) && !HasInexactMemberTypes(node))
+                    if (!CheckTypeAssignableTo(typeWithThis, baseWithThis, NodeRef.None))
                     {
-                        // (class types with members whose types C5 infers and base types of call expressions (C5/C6) are
-                        // related without reporting: TODO(C5/C6))
                         IssueMemberSpecificError(node, typeWithThis, baseWithThis, Diagnostics.Class_0_incorrectly_extends_base_class_1);
                     }
                     else
                     {
                         // Report static side error only when instance type is assignable
-                        CheckTypeAssignableTo(staticType, GetTypeWithoutSignatures(staticBaseType), HasInexactMemberTypes(node) ? NodeRef.None : nameOrNode,
-                            Diagnostics.Class_static_side_0_incorrectly_extends_base_class_static_side_1);
+                        CheckTypeAssignableTo(staticType, GetTypeWithoutSignatures(staticBaseType), nameOrNode, Diagnostics.Class_static_side_0_incorrectly_extends_base_class_static_side_1);
                     }
                     // (mixin classes, base constructor return types, checkKindsOfPropertyMemberOverrides: module C8)
                 });
@@ -326,7 +231,7 @@ internal sealed partial class Checker
                                 ? Diagnostics.Class_0_incorrectly_implements_class_1_Did_you_mean_to_extend_1_and_inherit_its_members_as_a_subclass
                                 : Diagnostics.Class_0_incorrectly_implements_interface_1;
                             var baseWithThis = GetTypeWithThisArgument(t, Types.Object(type).ThisType);
-                            if (!CheckTypeAssignableTo(typeWithThis, baseWithThis, NodeRef.None) && !HasInexactMemberTypes(node))
+                            if (!CheckTypeAssignableTo(typeWithThis, baseWithThis, NodeRef.None))
                             {
                                 IssueMemberSpecificError(node, typeWithThis, baseWithThis, genericDiag);
                             }
@@ -341,49 +246,6 @@ internal sealed partial class Checker
             CheckIndexConstraints(type, symbol);
             CheckIndexConstraints(staticType, symbol, isStaticIndex: true);
         });
-    }
-
-    // Whether a class has members whose types are inferred from expressions (methods and get accessors without return
-    // type annotations, properties and parameter properties without annotations and with initializers that are not
-    // context free): their types are exact once C5 lands.
-    private bool HasInexactMemberTypes(NodeRef node)
-    {
-        var store = StoreOf(node);
-        foreach (var member in store.Nodes(store.Members(node.Node)))
-        {
-            switch (store.Kind(member))
-            {
-                case SyntaxKind.MethodDeclaration:
-                case SyntaxKind.GetAccessor:
-                    // (generic methods: their relation needs the inference of instantiateSignatureInContextOf, C6)
-                    if (!store.TypeParameters(member).IsNone)
-                    {
-                        return true;
-                    }
-                    if (store.Type(member).IsNone && !store.Body(member).IsNone)
-                    {
-                        // (module C5: return types inferred from bodies are exact unless they depend on inference (C6)
-                        // or narrowing (C7))
-                        GetReturnTypeOfSignature(GetSignatureFromDeclaration(At(node, member)));
-                        if (uncertainExpressions.Contains(At(node, member)))
-                        {
-                            return true;
-                        }
-                    }
-                    break;
-                case SyntaxKind.PropertyDeclaration:
-                    if (store.Type(member).IsNone && !store.Initializer(member).IsNone)
-                    {
-                        var initializer = At(node, store.Initializer(member));
-                        if (SuppressDerivedDiagnostics(initializer, CheckExpressionCached(initializer)))
-                        {
-                            return true;
-                        }
-                    }
-                    break;
-            }
-        }
-        return false;
     }
 
     // checker.ts issueMemberSpecificError: iterate over all implemented properties and issue errors on each one which
@@ -660,11 +522,7 @@ internal sealed partial class Checker
                     mapper = CreateTypeMapper(typeParameters, typeArguments);
                 }
                 var instantiatedConstraint = InstantiateType(constraint, mapper);
-                // Generic type arguments and constraints are related without reporting before inference (C6) and the
-                // remaining expression types (C5) are ported: their relations can depend on both. TODO(C5/C6).
-                var errorNode = i < typeArgumentNodes.Length && !CouldContainTypeVariables(typeArguments[i]) && !CouldContainTypeVariables(instantiatedConstraint)
-                    ? At(node, typeArgumentNodes[i])
-                    : NodeRef.None;
+                var errorNode = i < typeArgumentNodes.Length ? At(node, typeArgumentNodes[i]) : NodeRef.None;
                 result = result && CheckTypeAssignableTo(typeArguments[i], instantiatedConstraint, errorNode, Diagnostics.Type_0_does_not_satisfy_the_constraint_1);
             }
         }

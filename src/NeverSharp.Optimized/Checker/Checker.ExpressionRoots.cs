@@ -137,7 +137,7 @@ internal sealed partial class Checker
         // because we accessed properties from anyType, or it may have led to an error inside
         // getElementTypeOfIterable.
         var expression = At(statement, store.Expression(statement.Node));
-        if (!iteratedType.IsNone && !SuppressDerivedDiagnostics(varExpr, leftType) && !SuppressDerivedDiagnostics(expression, iteratedType))
+        if (!iteratedType.IsNone)
         {
             CheckTypeAssignableToAndOptionallyElaborate(iteratedType, leftType, varExpr, expression);
         }

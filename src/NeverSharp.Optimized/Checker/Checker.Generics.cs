@@ -1556,10 +1556,7 @@ internal sealed partial class Checker
                 if (!accessNode.IsNone && indexInfo.KeyType == stringType && !IsTypeAssignableToKind(indexType, TypeFlags.String | TypeFlags.Number))
                 {
                     var indexNode = GetIndexNodeForAccessExpression(accessNode);
-                    if (!IsAccessDiagnosticSuppressed(accessNode, objectType, indexType))
-                    {
-                        Error(indexNode, Diagnostics.Type_0_cannot_be_used_as_an_index_type, TypeToString(indexType));
-                    }
+                    Error(indexNode, Diagnostics.Type_0_cannot_be_used_as_an_index_type, TypeToString(indexType));
                     return (accessFlags & AccessFlags.IncludeUndefined) != 0 ? GetUnionType([indexInfo.Type, missingType]) : indexInfo.Type;
                 }
                 ErrorIfWritingToReadonlyIndex(indexInfo, accessExpression, accessFlags, objectType);
@@ -1598,7 +1595,7 @@ internal sealed partial class Checker
         {
             return anyType;
         }
-        if (!accessNode.IsNone && !IsAccessDiagnosticSuppressed(accessNode, objectType, indexType))
+        if (!accessNode.IsNone)
         {
             var indexNode = GetIndexNodeForAccessExpression(accessNode);
             var indexFlags = Types.Flags(indexType);

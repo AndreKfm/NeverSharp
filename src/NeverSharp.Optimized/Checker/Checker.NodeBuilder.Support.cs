@@ -266,9 +266,7 @@ internal sealed partial class Checker
 
     private bool IsReferenceToGlobalIterableLikeType(Type type) => false;
 
-    private Type GetReverseMappedPropertyType(SymbolRef symbol) => throw C3Seam();
-
-    private Type GetReverseMappedMappedType(SymbolRef symbol) => throw C3Seam();
+    // (GetReverseMappedPropertyType, GetReverseMappedMappedType: Checker.Inference.cs, module C6)
 
     // (getOrCreateTypeFromSignature, getResolvedTypeWithoutAbstractConstructSignatures: Checker.Signatures.cs, module C5)
 }

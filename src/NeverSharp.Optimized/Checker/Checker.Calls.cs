@@ -21,9 +21,9 @@
 // Port structure follows internal/checker/checker.go
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
 // Modified: translated from TypeScript to C#; module C5 (replaces C1's first-signature calls). SyntheticExpression nodes
-// are represented by CallArg values. TODO(C6): the inferred type arguments (Checker.InferenceSeam.cs; a call resolved
-// with inferred type arguments is marked with C1's "uncertain" mechanism). TODO(C9): JSX elements, decorators' call
-// signatures, JavaScript require calls and expando assignments.
+// are represented by CallArg values; module C6: inferTypeArguments with the inferences, getSignatureInstantiation with
+// inferred type parameters, instantiateSignatureInContextOf, applyToReturnTypes with type predicates. TODO(C9): JSX
+// elements, decorators' call signatures, JavaScript require calls and expando assignments.
 
 using NeverSharp.Generated;
 
@@ -354,10 +354,6 @@ internal sealed partial class Checker
         }
         SignatureFlags callChainFlags;
         var funcType = CheckExpression(expression);
-        if ((Types.Flags(funcType) & TypeFlags.AnyOrUnknown) != 0 && SuppressDerivedDiagnostics(expression, funcType))
-        {
-            uncertainExpressions.Add(node); // C1's "uncertain" mechanism: the callee's type is an approximation
-        }
         if (UtilitiesPublic.IsCallChain(store, n))
         {
             var nonOptionalType = GetOptionalExpressionType(funcType, expression);
@@ -398,10 +394,6 @@ internal sealed partial class Checker
             {
                 Error(node, Diagnostics.Untyped_function_calls_may_not_accept_type_arguments);
             }
-            if (IsUncertainExpression(expression))
-            {
-                uncertainExpressions.Add(node);
-            }
             return ResolveUntypedCall(node);
         }
         // If FuncExpr's apparent type(section 3.8.1) is a function type, the call is a typed function call.
@@ -409,10 +401,6 @@ internal sealed partial class Checker
         // with multiple call signatures.
         if (callSignatures.Count == 0)
         {
-            if (SuppressDerivedDiagnostics(expression, funcType))
-            {
-                return ResolveErrorCall(node);
-            }
             if (numConstructSignatures > 0)
             {
                 Error(node, Diagnostics.Value_of_type_0_is_not_callable_Did_you_mean_to_include_new, TypeToString(funcType));
@@ -451,10 +439,6 @@ internal sealed partial class Checker
             return resolvingSignature;
         }
         // (JavaScript @class functions: C9)
-        if (IsUncertainExpression(expression))
-        {
-            uncertainExpressions.Add(node);
-        }
         return ResolveCall(node, callSignatures, candidatesOutArray, checkMode, callChainFlags);
     }
 
@@ -483,10 +467,6 @@ internal sealed partial class Checker
         var n = node.Node;
         var expression = At(node, store.Expression(n));
         var expressionType = CheckNonNullExpression(expression);
-        if ((Types.Flags(expressionType) & TypeFlags.AnyOrUnknown) != 0 && SuppressDerivedDiagnostics(expression, expressionType))
-        {
-            uncertainExpressions.Add(node); // C1's "uncertain" mechanism: the callee's type is an approximation
-        }
         if (expressionType == silentNeverType)
         {
             return silentNeverSignature;
@@ -510,10 +490,6 @@ internal sealed partial class Checker
             if (!store.TypeArguments(n).IsNone)
             {
                 Error(node, Diagnostics.Untyped_function_calls_may_not_accept_type_arguments);
-            }
-            if (IsUncertainExpression(expression))
-            {
-                uncertainExpressions.Add(node);
             }
             return ResolveUntypedCall(node);
         }
@@ -543,10 +519,6 @@ internal sealed partial class Checker
                 Error(node, Diagnostics.Cannot_create_an_instance_of_an_abstract_class);
                 return ResolveErrorCall(node);
             }
-            if (IsUncertainExpression(expression))
-            {
-                uncertainExpressions.Add(node);
-            }
             return ResolveCall(node, constructSignatures, candidatesOutArray, checkMode, SignatureFlags.None);
         }
         // If expressionType's apparent type is an object type with no construct signatures but
@@ -571,10 +543,7 @@ internal sealed partial class Checker
             }
             return signature;
         }
-        if (!SuppressDerivedDiagnostics(expression, expressionType))
-        {
-            InvocationError(expression, expressionType, SignatureKind.Construct);
-        }
+        InvocationError(expression, expressionType, SignatureKind.Construct);
         return ResolveErrorCall(node);
     }
 
@@ -866,7 +835,7 @@ internal sealed partial class Checker
                 }
             }
             // NOTE: do not raise error if right is unknown as related error was already reported
-            else if (!(TypeHasCallOrConstructSignatures(rightType) || IsTypeSubtypeOf(rightType, globalFunctionType)) && !SuppressDerivedDiagnostics(right, rightType))
+            else if (!(TypeHasCallOrConstructSignatures(rightType) || IsTypeSubtypeOf(rightType, globalFunctionType)))
             {
                 Error(right, Diagnostics.The_right_hand_side_of_an_instanceof_expression_must_be_either_of_type_any_a_class_function_or_other_type_assignable_to_the_Function_interface_type_or_an_object_type_with_a_Symbol_hasInstance_method);
                 return ResolveErrorCall(node);
@@ -1147,8 +1116,7 @@ internal sealed partial class Checker
             var thisArgumentType = GetThisArgumentType(thisArgumentNode);
             var errorNode = reportErrors ? (!thisArgumentNode.IsNone ? thisArgumentNode : node) : NodeRef.None;
             var headMessage = Diagnostics.The_this_context_of_type_0_is_not_assignable_to_method_s_this_of_type_1;
-            if (!(reportErrors && SuppressDerivedDiagnostics(thisArgumentNode, thisArgumentType)) &&
-                !CheckTypeRelatedTo(thisArgumentType, thisType, relation, errorNode, headMessage, containingMessageChain, errorOutputContainer))
+            if (!CheckTypeRelatedTo(thisArgumentType, thisType, relation, errorNode, headMessage, containingMessageChain, errorOutputContainer))
             {
                 return errorOutputContainer.Errors ?? [];
             }
@@ -1168,10 +1136,6 @@ internal sealed partial class Checker
                 // parameter types yet and therefore excess property checks may yield false positives (see #17041).
                 var checkArgType = (checkMode & CheckMode.SkipContextSensitive) != 0 ? GetRegularTypeOfObjectLiteral(argType) : argType;
                 var effectiveCheckArgumentNode = GetEffectiveCheckNode(arg);
-                if (reportErrors && !arg.IsSynthetic && SuppressDerivedDiagnostics(arg.Node, argType))
-                {
-                    continue; // TODO(C6): the argument's type is an approximation
-                }
                 var countBefore = errorOutputContainer.Errors?.Count ?? 0;
                 var errorNode = reportErrors ? effectiveCheckArgumentNode.Node : NodeRef.None;
                 if (!CheckTypeRelatedToAndOptionallyElaborate(checkArgType, paramType, relation, errorNode, effectiveCheckArgumentNode.IsSynthetic ? NodeRef.None : effectiveCheckArgumentNode.Node,
@@ -1287,7 +1251,7 @@ internal sealed partial class Checker
         return store.Kind(parent) == SyntaxKind.BinaryExpression && store.Kind(store.OperatorToken(parent)) == SyntaxKind.InstanceOfKeyword && store.Right(parent) == node;
     }
 
-    // checker.ts inferTypeArguments (TODO(C6): the inferences; JSX: C9)
+    // checker.ts inferTypeArguments (JSX: C9)
     private Type[] InferTypeArguments(NodeRef node, Signature signature, List<CallArg> args, CheckMode checkMode, InferenceContext context)
     {
         var store = StoreOf(node);
@@ -1501,7 +1465,6 @@ internal sealed partial class Checker
         var candidateForTypeArgumentError = Signature.None;
         var result = Signature.None;
         var argCheckMode = CheckMode.Normal;
-        var inferenceUsed = false; // TODO(C6): a candidate's type arguments needed inference
         var typeArguments = NodeList.None;
         if (!isDecorator && !isInstanceof && !IsSuperCall(store, n))
         {
@@ -1594,12 +1557,7 @@ internal sealed partial class Checker
         // no arguments excluded from assignability checks.
         // If candidate is undefined, it means that no candidates had a suitable arity. In that case,
         // skip the checkApplicableSignature check.
-        if (inferenceUsed || args.Exists(a => !a.IsSynthetic && IsUncertainExpression(a.Node)))
-        {
-            // TODO(C6): the candidates failed with the seam's inferences; the failure is not reported
-            MarkUncertainCall(node, args);
-        }
-        if (reportErrors && !IsUncertainExpression(node))
+        if (reportErrors)
         {
             // If the call expression is a synthetic call to a `[Symbol.hasInstance]` method then we will produce a head
             // message when reporting diagnostics that explains how we got to `right[Symbol.hasInstance](left)` from
@@ -1813,11 +1771,10 @@ internal sealed partial class Checker
                     else
                     {
                         inferenceContext = CreateInferenceContext(Types.Elements(candidateTypeParameters), candidate, Utilities.IsInJSFile(store, n) ? InferenceFlags.AnyDefault : InferenceFlags.None);
-                        inferenceUsed = true;
                         typeArgumentTypes = InferTypeArguments(node, candidate, args, argCheckMode | CheckMode.SkipGenericFunctions, inferenceContext);
                         argCheckMode |= (inferenceContext.Flags & InferenceFlags.SkippedGenericFunction) != 0 ? CheckMode.SkipGenericFunctions : CheckMode.Normal;
                     }
-                    checkCandidate = GetSignatureInstantiation(candidate, typeArgumentTypes, isJavascript);
+                    checkCandidate = GetSignatureInstantiation(candidate, typeArgumentTypes, isJavascript, inferenceContext?.InferredTypeParameters);
                     // If the original signature has a generic rest type, instantiation may produce a
                     // signature with different arity and we need to perform another arity check.
                     if (!GetNonArrayRestType(candidate).IsNone && !HasCorrectArity(node, args, checkCandidate, trailingComma))
@@ -1845,7 +1802,7 @@ internal sealed partial class Checker
                     if (inferenceContext is not null)
                     {
                         var typeArgumentTypes = InferTypeArguments(node, candidate, args, argCheckMode, inferenceContext);
-                        checkCandidate = GetSignatureInstantiation(candidate, typeArgumentTypes, isJavascript);
+                        checkCandidate = GetSignatureInstantiation(candidate, typeArgumentTypes, isJavascript, inferenceContext.InferredTypeParameters);
                         // If the original signature has a generic rest type, instantiation may produce a
                         // signature with different arity and we need to perform another arity check.
                         if (!GetNonArrayRestType(candidate).IsNone && !HasCorrectArity(node, args, checkCandidate, trailingComma))
@@ -1861,34 +1818,10 @@ internal sealed partial class Checker
                         continue;
                     }
                 }
-                if (inferenceContext is not null)
-                {
-                    // TODO(C6): the type arguments are not inferred yet; the call's type is an approximation
-                    MarkUncertainCall(node, args);
-                }
                 candidateList[candidateIndex] = checkCandidate;
                 return checkCandidate;
             }
             return Signature.None;
-        }
-    }
-
-    // C1's "uncertain" mechanism: the call's type and the parameter types of its function arguments are approximations
-    private void MarkUncertainCall(NodeRef node, List<CallArg> args)
-    {
-        uncertainExpressions.Add(node);
-        foreach (var arg in args)
-        {
-            if (arg.IsSynthetic)
-            {
-                continue;
-            }
-            var store = StoreOf(arg.Node);
-            var n = Utilities.SkipParentheses(store, arg.Node.Node, false);
-            if (store.Kind(n) is SyntaxKind.ArrowFunction or SyntaxKind.FunctionExpression)
-            {
-                MarkUncertainParameters(At(arg.Node, n));
-            }
         }
     }
 
@@ -2225,7 +2158,6 @@ internal sealed partial class Checker
             var inferenceContext = CreateInferenceContext(typeParameters, candidate, Utilities.IsInJSFile(store, node.Node) ? InferenceFlags.AnyDefault : InferenceFlags.None);
             var typeArgumentTypes = InferTypeArguments(node, candidate, args, checkMode | CheckMode.SkipContextSensitive | CheckMode.SkipGenericFunctions, inferenceContext);
             instantiated = CreateSignatureInstantiation(candidate, typeArgumentTypes);
-            uncertainExpressions.Add(node); // TODO(C6)
         }
         candidates[bestIndex] = instantiated;
         return instantiated;
@@ -2276,20 +2208,10 @@ internal sealed partial class Checker
         return maxParamsIndex;
     }
 
-    // checker.ts instantiateSignatureInContextOf (TODO(C6): the inferences)
-    private Signature InstantiateSignatureInContextOf(Signature signature, Signature contextualSignature, InferenceContext? inferenceContext, Func<Type, Type, bool>? compareTypes = null)
+    /// <summary>checker.ts instantiateSignatureInContextOf.</summary>
+    internal Signature InstantiateSignatureInContextOf(Signature signature, Signature contextualSignature, InferenceContext? inferenceContext, Func<Type, Type, bool>? compareTypes = null)
     {
-        var typeParametersForMapper = GetTypeParametersForMapper(signature);
-        var context = CreateInferenceContext(typeParametersForMapper, signature, InferenceFlags.None, compareTypes);
-        // TODO(C6): the seam infers the contextual signature's type parameters positionally when the counts agree (the
-        // inferences of alpha-equivalent generic signatures), else the type parameters themselves
-        var contextualRecord = Signatures.Record(contextualSignature);
-        var contextualTypeParameters = Types.Elements(contextualRecord.TypeParameters.Count == 0 && !contextualRecord.Target.IsNone
-            ? Signatures.Record(contextualRecord.Target).TypeParameters
-            : contextualRecord.TypeParameters).ToArray();
-        context.Mapper = CreateTypeMapper(typeParametersForMapper,
-            contextualTypeParameters.Length == typeParametersForMapper.Length ? contextualTypeParameters : typeParametersForMapper);
-        context.NonFixingMapper = context.Mapper;
+        var context = CreateInferenceContext(GetTypeParametersForMapper(signature), signature, InferenceFlags.None, compareTypes);
         // We clone the inferenceContext to avoid fixing. For example, when the source signature is <T>(x: T) => T[] and
         // the contextual signature is (...args: A) => B, we want to infer the element type of A's constraint (say 'any')
         // for T but leave it possible to later infer '[any]' back to A.
@@ -2342,9 +2264,19 @@ internal sealed partial class Checker
         }
     }
 
-    // checker.ts applyToReturnTypes (type predicates: TODO(C7))
+    // checker.ts applyToReturnTypes
     private void ApplyToReturnTypes(Signature source, Signature target, Action<Type, Type> callback)
     {
+        var targetTypePredicate = GetTypePredicateOfSignature(target);
+        if (targetTypePredicate is not null)
+        {
+            var sourceTypePredicate = GetTypePredicateOfSignature(source);
+            if (sourceTypePredicate is not null && TypePredicateKindsMatch(sourceTypePredicate, targetTypePredicate) && !sourceTypePredicate.Type.IsNone && !targetTypePredicate.Type.IsNone)
+            {
+                callback(sourceTypePredicate.Type, targetTypePredicate.Type);
+                return;
+            }
+        }
         var targetReturnType = GetReturnTypeOfSignature(target);
         if (CouldContainTypeVariables(targetReturnType))
         {
@@ -2387,12 +2319,6 @@ internal sealed partial class Checker
         }
         // (JavaScript require calls: C9)
         var returnType = GetReturnTypeOfSignature(signature);
-        var signatureDeclaration = Signatures.Record(signature).Declaration;
-        if (!signatureDeclaration.IsNone && uncertainExpressions.Contains(signatureDeclaration))
-        {
-            // the return type was inferred from approximate return expression types (C1's "uncertain" mechanism)
-            uncertainExpressions.Add(node);
-        }
         // Treat any call to the global 'Symbol' function that is part of a const variable or readonly property
         // as a fresh unique symbol literal type.
         if ((Types.Flags(returnType) & TypeFlags.ESSymbolLike) != 0 && IsSymbolOrSymbolForCall(node))
@@ -2478,10 +2404,7 @@ internal sealed partial class Checker
         }
         if ((Types.Flags(specifierType) & TypeFlags.Undefined) != 0 || (Types.Flags(specifierType) & TypeFlags.Null) != 0 || !IsTypeAssignableTo(specifierType, stringType))
         {
-            if (!SuppressDerivedDiagnostics(specifier, specifierType))
-            {
-                Error(specifier, Diagnostics.Dynamic_import_s_specifier_must_be_of_type_string_but_here_has_type_0, TypeToString(specifierType));
-            }
+            Error(specifier, Diagnostics.Dynamic_import_s_specifier_must_be_of_type_string_but_here_has_type_0, TypeToString(specifierType));
         }
         if (!optionsType.IsNone)
         {

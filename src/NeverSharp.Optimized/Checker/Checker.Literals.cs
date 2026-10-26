@@ -445,10 +445,7 @@ internal sealed partial class Checker
                 }
                 else
                 {
-                    if (!SuppressDerivedDiagnostics(At(node, store.Expression(memberNode)), type))
-                    {
-                        Error(memberDecl, Diagnostics.Spread_types_may_only_be_created_from_object_types);
-                    }
+                    Error(memberDecl, Diagnostics.Spread_types_may_only_be_created_from_object_types);
                     spread = errorType;
                 }
                 continue;

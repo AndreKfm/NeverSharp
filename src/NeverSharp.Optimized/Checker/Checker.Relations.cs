@@ -301,7 +301,7 @@ internal sealed partial class Checker
         if (sourceTypeParameters.Count > 0 && sourceTypeParameters != Signatures.Record(target).TypeParameters)
         {
             target = GetCanonicalSignature(target);
-            source = InstantiateSignatureInContextOf(source, target);
+            source = InstantiateSignatureInContextOf(source, target, null, (s, t) => compareTypes(s, t, false) != Ternary.False);
         }
         var sourceCount = GetParameterCount(source);
         var sourceRestType = GetNonArrayRestType(source);

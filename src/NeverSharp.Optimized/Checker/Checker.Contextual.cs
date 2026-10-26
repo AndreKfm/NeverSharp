@@ -21,8 +21,8 @@
 // Port structure follows internal/checker/checker.go
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
 // Modified: translated from TypeScript to C#; module C5 (replaces C1's approximate contextual typing). TODO(C9): the
-// contextual types of JSX attributes and children (C1's marker: the parameters of functions in a JSX context are any and
-// marked uncertain), JavaScript assignment declarations and JSDoc type tags.
+// contextual types of JSX attributes and children (C1's marker: the parameters of functions in a JSX context are any),
+// JavaScript assignment declarations and JSDoc type tags.
 
 using NeverSharp.Generated;
 
@@ -268,7 +268,6 @@ internal sealed partial class Checker
         if (GetApparentTypeOfContextualType(func, ContextFlags.Signature) == JsxContextualTypeMarker)
         {
             // TODO(C9): the parameter types of functions in JSX attributes (C1's approximation)
-            MarkUncertainDeclaration(parameter);
             return anyType;
         }
         var contextualSignature = GetContextualSignature(func);

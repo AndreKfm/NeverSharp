@@ -319,7 +319,10 @@ internal sealed partial class Checker
                     var newTypeArguments = InstantiateTypes(Types.Elements(resolvedTypeArguments).ToArray(), mapper, out var changed);
                     return changed ? CreateNormalizedTypeReference(Types.Object(type).Target, newTypeArguments) : type;
                 }
-                // (reverse mapped types: C6)
+                if ((objectFlags & ObjectFlags.ReverseMapped) != 0)
+                {
+                    return InstantiateReverseMappedType(type, mapper);
+                }
                 return GetObjectTypeInstantiation(type, mapper, aliasSymbol, aliasTypeArguments);
             }
             return type;
@@ -1568,8 +1571,22 @@ internal sealed partial class Checker
             {
                 (inferences ??= []).Add(stringNumberSymbolType);
             }
-            // (the template of a mapped type in the extends clause of a conditional type whose check type is a mapped
-            // type: TODO(C6))
+            // When an 'infer T' declaration is the template of a mapped type, and that mapped type is the extends
+            // clause of a conditional whose check type is also a mapped type, give it a constraint equal to the template
+            // of the check type's mapped type
+            else if (Kind(grandParent) == SyntaxKind.MappedType && store.Type(grandParent.Node) == parent.Node &&
+                Kind(Parent(grandParent)) == SyntaxKind.ConditionalType && store.ExtendsType(store.Parent(grandParent.Node)) == grandParent.Node &&
+                store.Kind(store.CheckType(store.Parent(grandParent.Node))) == SyntaxKind.MappedType &&
+                !store.Type(store.CheckType(store.Parent(grandParent.Node))).IsNone)
+            {
+                var checkMappedType = At(grandParent, store.CheckType(store.Parent(grandParent.Node)));
+                var nodeType = GetTypeFromTypeNode(At(grandParent, store.Type(checkMappedType.Node)));
+                var mappedTypeParameter = At(grandParent, store.TypeParameter(checkMappedType.Node));
+                var mappedConstraint = store.Constraint(mappedTypeParameter.Node);
+                inferences ??= [];
+                inferences.Add(InstantiateType(nodeType, MakeUnaryTypeMapper(GetDeclaredTypeOfTypeParameter(GetSymbolOfDeclaration(mappedTypeParameter)),
+                    !mappedConstraint.IsNone ? GetTypeFromTypeNode(At(grandParent, mappedConstraint)) : stringNumberSymbolType)));
+            }
         }
         return inferences is null ? Type.None : GetIntersectionType(inferences.ToArray());
     }
@@ -1620,11 +1637,26 @@ internal sealed partial class Checker
 
     private readonly Dictionary<(Signature, string), Signature> signatureInstantiations = [];
 
-    /// <summary>checker.ts getSignatureInstantiation (without inferred type parameters).</summary>
-    internal Signature GetSignatureInstantiation(Signature signature, Type[] typeArguments, bool isJavascript)
+    /// <summary>checker.ts getSignatureInstantiation.</summary>
+    internal Signature GetSignatureInstantiation(Signature signature, Type[] typeArguments, bool isJavascript, List<Type>? inferredTypeParameters = null)
     {
         var typeParameters = Types.Elements(Signatures.Record(signature).TypeParameters).ToArray();
-        return GetSignatureInstantiationWithoutFillingInTypeArguments(signature, FillMissingTypeArguments(typeArguments, typeParameters, GetMinTypeArgumentCount(typeParameters), isJavascript));
+        var instantiatedSignature = GetSignatureInstantiationWithoutFillingInTypeArguments(signature, FillMissingTypeArguments(typeArguments, typeParameters, GetMinTypeArgumentCount(typeParameters), isJavascript));
+        if (inferredTypeParameters is not null)
+        {
+            var returnSignature = GetSingleCallOrConstructSignature(GetReturnTypeOfSignature(instantiatedSignature));
+            if (!returnSignature.IsNone)
+            {
+                var newReturnSignature = CloneSignature(returnSignature);
+                Signatures.Record(newReturnSignature).TypeParameters = Types.CreateList(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(inferredTypeParameters));
+                var newReturnType = GetOrCreateTypeFromSignature(newReturnSignature);
+                Types.Object(newReturnType).Mapper = MapperAt(Signatures.Record(instantiatedSignature).Mapper);
+                var newInstantiatedSignature = CloneSignature(instantiatedSignature);
+                Signatures.Record(newInstantiatedSignature).ResolvedReturnType = newReturnType;
+                return newInstantiatedSignature;
+            }
+        }
+        return instantiatedSignature;
     }
 
     private Signature GetSignatureInstantiationWithoutFillingInTypeArguments(Signature signature, Type[] typeArguments)

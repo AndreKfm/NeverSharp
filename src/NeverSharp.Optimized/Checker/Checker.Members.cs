@@ -219,8 +219,32 @@ internal sealed partial class Checker
                 {
                     var outerTypeParameters = GetOuterTypeParameters(node, includeThisTypes);
                     var store = StoreOf(node);
+                    if ((Kind(node) is SyntaxKind.FunctionExpression or SyntaxKind.ArrowFunction ||
+                        (Kind(node) == SyntaxKind.MethodDeclaration && store.Kind(store.Parent(node.Node)) == SyntaxKind.ObjectLiteralExpression)) && IsContextSensitive(node))
+                    {
+                        var signatures = GetSignaturesOfType(GetTypeOfSymbol(GetSymbolOfDeclaration(node)), SignatureKind.Call);
+                        if (signatures.Count > 0 && Signatures.Record(signatures[0]).TypeParameters.Count > 0)
+                        {
+                            var result = outerTypeParameters is null ? new List<Type>() : [.. outerTypeParameters];
+                            result.AddRange(Types.Elements(Signatures.Record(signatures[0]).TypeParameters));
+                            return result;
+                        }
+                    }
+                    if (Kind(node) == SyntaxKind.MappedType)
+                    {
+                        (outerTypeParameters ??= []).Add(GetDeclaredTypeOfTypeParameter(GetSymbolOfDeclaration(At(node, store.TypeParameter(node.Node)))));
+                        return outerTypeParameters;
+                    }
+                    if (Kind(node) == SyntaxKind.ConditionalType)
+                    {
+                        var inferTypeParameters = GetInferTypeParameters(node);
+                        if (inferTypeParameters is not null)
+                        {
+                            (outerTypeParameters ??= []).AddRange(inferTypeParameters);
+                        }
+                        return outerTypeParameters;
+                    }
                     var typeParameters = store.TypeParameters(node.Node);
-                    // (mapped and conditional types: C3)
                     if (!typeParameters.IsNone && store.Length(typeParameters) > 0)
                     {
                         outerTypeParameters ??= [];
@@ -823,8 +847,7 @@ internal sealed partial class Checker
             }
             else if ((objectFlags & ObjectFlags.ReverseMapped) != 0)
             {
-                // (reverse mapped types: C6)
-                SetStructuredTypeMembers(type, emptySymbols, null, null, null);
+                ResolveReverseMappedTypeMembers(type);
             }
             else if ((objectFlags & ObjectFlags.Anonymous) != 0)
             {
@@ -1553,8 +1576,11 @@ internal sealed partial class Checker
         {
             return errorType;
         }
-        // (reverse-mapped symbols: C6)
         var checkFlags = GetCheckFlags(symbol);
+        if ((checkFlags & CheckFlags.ReverseMapped) != 0)
+        {
+            return GetTypeOfReverseMappedSymbol(symbol);
+        }
         if ((checkFlags & CheckFlags.DeferredType) != 0)
         {
             return GetTypeOfSymbolWithDeferredType(symbol);

@@ -1888,10 +1888,10 @@ internal sealed partial class Checker
                         if (sourceParams is not null)
                         {
                             // If the source has infer type parameters, we instantiate them in the context of the target
-                            // TODO(C6): createInferenceContext(sourceParams, undefined, None, isRelatedToWorker) and inferTypes from the target's
-                            // extends type; until then the infer type parameters are mapped as without inference candidates.
-                            mapper = c.CreateUninferredMapper(sourceParams, null);
-                            sourceExtends = c.InstantiateType(sourceExtends, mapper);
+                            var ctx = c.CreateInferenceContext(sourceParams, Signature.None, InferenceFlags.None, (s, t) => r.IsRelatedToWorker(s, t, false) != Ternary.False);
+                            c.InferTypes(ctx.Inferences, t.ExtendsType, sourceExtends, InferencePriority.NoConstraints | InferencePriority.AlwaysStrict);
+                            sourceExtends = c.InstantiateType(sourceExtends, ctx.Mapper);
+                            mapper = ctx.Mapper;
                         }
                         if (c.IsTypeIdenticalTo(sourceExtends, t.ExtendsType) &&
                             (r.IsRelatedTo(s.CheckType, t.CheckType, RecursionFlags.Both) != Ternary.False || r.IsRelatedTo(t.CheckType, s.CheckType, RecursionFlags.Both) != Ternary.False))

@@ -183,80 +183,8 @@ internal sealed partial class Checker
         {
             CheckConstEnumAccess(node, type);
         }
-        PropagateUncertainty(node);
         currentNode = saveCurrentNode;
         return type;
-    }
-
-    // C1's "uncertain" mechanism: an expression whose type is computed from the type of an uncertain operand is
-    // uncertain (TODO(C6): removed with the mechanism)
-    private void PropagateUncertainty(NodeRef node)
-    {
-        var store = StoreOf(node);
-        var n = node.Node;
-        bool uncertain;
-        switch (store.Kind(n))
-        {
-            case SyntaxKind.AwaitExpression:
-            case SyntaxKind.SatisfiesExpression:
-            case SyntaxKind.SpreadElement:
-                uncertain = IsUncertainExpression(At(node, store.Expression(n)));
-                break;
-            case SyntaxKind.YieldExpression:
-                uncertain = !store.AsteriskToken(n).IsNone && !store.Expression(n).IsNone && IsUncertainExpression(At(node, store.Expression(n)));
-                break;
-            case SyntaxKind.ConditionalExpression:
-                uncertain = IsUncertainExpression(At(node, store.WhenTrue(n))) || IsUncertainExpression(At(node, store.WhenFalse(n)));
-                break;
-            case SyntaxKind.BinaryExpression:
-                uncertain = store.Kind(store.OperatorToken(n)) switch
-                {
-                    SyntaxKind.BarBarToken or SyntaxKind.AmpersandAmpersandToken or SyntaxKind.QuestionQuestionToken =>
-                        IsUncertainExpression(At(node, store.Left(n))) || IsUncertainExpression(At(node, store.Right(n))),
-                    SyntaxKind.CommaToken or SyntaxKind.EqualsToken => IsUncertainExpression(At(node, store.Right(n))),
-                    _ => false,
-                };
-                break;
-            case SyntaxKind.ArrayLiteralExpression:
-            {
-                uncertain = false;
-                foreach (var element in store.Nodes(store.Elements(n)))
-                {
-                    if (IsUncertainExpression(At(node, element)))
-                    {
-                        uncertain = true;
-                        break;
-                    }
-                }
-                break;
-            }
-            case SyntaxKind.ObjectLiteralExpression:
-            {
-                uncertain = false;
-                foreach (var property in store.Nodes(store.Properties(n)))
-                {
-                    var value = store.Kind(property) switch
-                    {
-                        SyntaxKind.PropertyAssignment => store.Initializer(property),
-                        SyntaxKind.ShorthandPropertyAssignment => store.Name(property),
-                        SyntaxKind.SpreadAssignment => store.Expression(property),
-                        _ => Node.None,
-                    };
-                    if (!value.IsNone && IsUncertainExpression(At(node, value)))
-                    {
-                        uncertain = true;
-                        break;
-                    }
-                }
-                break;
-            }
-            default:
-                return;
-        }
-        if (uncertain)
-        {
-            uncertainExpressions.Add(node);
-        }
     }
 
     // checker.ts checkConstEnumAccess (isolatedModules and verbatimModuleSyntax are not set in Gate C)
@@ -747,7 +675,40 @@ internal sealed partial class Checker
                             return anyFunctionType;
                         }
                         var context = GetInferenceContext(node)!;
-                        // (the inference of the type parameters of the outer function's return type: C6)
+                        // We have an expression that is an argument of a generic function for which we are performing
+                        // type argument inference. The expression is of a function type with a single generic call
+                        // signature and a contextual function type with a single non-generic call signature. Now check
+                        // if the outer function returns a function type with a single non-generic call signature and
+                        // if some of the outer function type parameters have no inferences so far. If so, we can
+                        // potentially add inferred type parameters to the outer function return type.
+                        var returnType = !context.Signature.IsNone ? GetReturnTypeOfSignature(context.Signature) : Type.None;
+                        var returnSignature = !returnType.IsNone ? GetSingleCallOrConstructSignature(returnType) : Signature.None;
+                        if (!returnSignature.IsNone && Signatures.Record(returnSignature).TypeParameters.Count == 0 && !context.Inferences.TrueForAll(HasInferenceCandidates))
+                        {
+                            // Instantiate the signature with its own type parameters as type arguments, possibly
+                            // renaming the type parameters to ensure they have unique names.
+                            var uniqueTypeParameters = GetUniqueTypeParameters(context, Types.Elements(Signatures.Record(signature).TypeParameters).ToArray());
+                            var instantiatedSignature = GetSignatureInstantiationWithoutFillingInTypeArguments(signature, uniqueTypeParameters);
+                            // Infer from the parameters of the instantiated signature to the parameters of the
+                            // contextual signature starting with an empty set of inference candidates.
+                            var inferences = context.Inferences.ConvertAll(info => CreateInferenceInfo(info.TypeParameter));
+                            ApplyToParameterTypes(instantiatedSignature, contextualSignature, (source, target) => InferTypes(inferences, source, target, InferencePriority.None, contravariant: true));
+                            if (inferences.Exists(HasInferenceCandidates))
+                            {
+                                // We have inference candidates, indicating that one or more type parameters are referenced
+                                // in the parameter types of the contextual signature. Now also infer from the return type.
+                                ApplyToReturnTypes(instantiatedSignature, contextualSignature, (source, target) => InferTypes(inferences, source, target));
+                                // If the type parameters for which we produced candidates do not have any inferences yet,
+                                // we adopt the new inference candidates and add the type parameters of the expression type
+                                // to the set of inferred type parameters for the outer function return type.
+                                if (!HasOverlappingInferences(context.Inferences, inferences))
+                                {
+                                    MergeInferences(context.Inferences, inferences);
+                                    (context.InferredTypeParameters ??= []).AddRange(uniqueTypeParameters);
+                                    return GetOrCreateTypeFromSignature(instantiatedSignature);
+                                }
+                            }
+                        }
                         return GetOrCreateTypeFromSignature(InstantiateSignatureInContextOf(signature, contextualSignature, context));
                     }
                 }
@@ -1043,10 +1004,7 @@ internal sealed partial class Checker
         {
             return targetType;
         }
-        if (!SuppressDerivedDiagnostics(expression, exprType))
-        {
-            CheckTypeAssignableToAndOptionallyElaborate(exprType, targetType, node, expression, Diagnostics.Type_0_does_not_satisfy_the_expected_type_1);
-        }
+        CheckTypeAssignableToAndOptionallyElaborate(exprType, targetType, node, expression, Diagnostics.Type_0_does_not_satisfy_the_expected_type_1);
         return exprType;
     }
 
@@ -1233,10 +1191,6 @@ internal sealed partial class Checker
             return nonInferrableAnyType;
         }
         var type = GetTypeOfSymbol(localOrExportSymbol);
-        if (uncertainSymbols.Contains(localOrExportSymbol))
-        {
-            uncertainExpressions.Add(node);
-        }
         var assignmentKind = GetAssignmentTargetKind(node);
         var flags = SymbolFlagsOf(localOrExportSymbol);
         if (assignmentKind != AssignmentKind.None)
@@ -2064,36 +2018,5 @@ internal sealed partial class Checker
             }
         }
         return false;
-    }
-
-    // ---- C1's "uncertain" mechanism (TODO(C6/C9): removed when inference and JSX are exact) ----
-
-    // Expressions whose type depends on an approximation (calls resolved with type arguments C6 does not infer yet,
-    // JSX contexts of C9 and what is derived from them): their members resolve symbols, but no diagnostics are
-    // reported on them.
-    private readonly HashSet<NodeRef> uncertainExpressions = [];
-    private readonly HashSet<SymbolRef> uncertainSymbols = [];
-
-    private bool IsUncertainExpression(NodeRef node)
-    {
-        if (node.IsNone)
-        {
-            return false;
-        }
-        var store = StoreOf(node);
-        var n = node.Node;
-        while (store.Kind(n) is SyntaxKind.ParenthesizedExpression or SyntaxKind.NonNullExpression)
-        {
-            n = store.Expression(n);
-        }
-        return uncertainExpressions.Contains(At(node, n));
-    }
-
-    // Whether the diagnostics derived from the type of an expression are not reported: the expression's type is an
-    // approximation of C1's mechanism (TODO(C6/C9)).
-    private bool SuppressDerivedDiagnostics(NodeRef expr, Type type)
-    {
-        _ = type;
-        return IsUncertainExpression(expr);
     }
 }

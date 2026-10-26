@@ -909,8 +909,8 @@ internal sealed partial class Checker
         var symbol = Types.Symbol(type);
         return (!symbol.IsNone && (SymbolFlagsOf(symbol) & (SymbolFlags.ObjectLiteral | SymbolFlags.TypeLiteral | SymbolFlags.Enum | SymbolFlags.ValueModule)) != 0 &&
                 (SymbolFlagsOf(symbol) & SymbolFlags.Class) == 0 && !TypeHasCallOrConstructSignatures(type)) ||
-            (objectFlags & ObjectFlags.ObjectRestType) != 0;
-        // (reverse mapped types: C6)
+            (objectFlags & ObjectFlags.ObjectRestType) != 0 ||
+            ((objectFlags & ObjectFlags.ReverseMapped) != 0 && IsObjectTypeWithInferableIndex(ReverseMappedSource(type)));
     }
 
     /// <summary>utilities.ts getSelectedEffectiveModifierFlags (JSDoc modifiers: C9).</summary>
