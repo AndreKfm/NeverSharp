@@ -778,38 +778,45 @@ internal sealed partial class Checker
     }
 
     // whether the file assigns to an identifier with the name (isSymbolAssigned approximated by name)
+    // (the assigned names of a file are collected once, like markNodeAssignments marks a container once)
     private bool IsNameAssigned(NodeRef file, string name)
     {
+        if (!assignedNamesOfFiles.TryGetValue(file.File, out var names))
+        {
+            names = CollectAssignedNames(file);
+            assignedNamesOfFiles[file.File] = names;
+        }
+        return names.Contains(name);
+    }
+
+    private readonly Dictionary<int, HashSet<string>> assignedNamesOfFiles = [];
+
+    private HashSet<string> CollectAssignedNames(NodeRef file)
+    {
         var store = StoreOf(file);
-        var found = false;
+        var names = new HashSet<string>(StringComparer.Ordinal);
         Visit(file.Node);
-        return found;
+        return names;
 
         void Visit(Node n)
         {
-            if (found)
-            {
-                return;
-            }
             switch (store.Kind(n))
             {
                 case SyntaxKind.BinaryExpression when Utilities.IsAssignmentOperator(store.Kind(store.OperatorToken(n))):
                 {
                     var left = Utilities.SkipParentheses(store, store.Left(n), false);
-                    if (store.Kind(left) == SyntaxKind.Identifier && store.Texts.Equals(store.EscapedText(left), name))
+                    if (store.Kind(left) == SyntaxKind.Identifier)
                     {
-                        found = true;
-                        return;
+                        names.Add(store.Texts.GetString(store.EscapedText(left))!);
                     }
                     break;
                 }
                 case SyntaxKind.PrefixUnaryExpression or SyntaxKind.PostfixUnaryExpression when store.Operator(n) is SyntaxKind.PlusPlusToken or SyntaxKind.MinusMinusToken:
                 {
                     var operand = Utilities.SkipParentheses(store, store.Operand(n), false);
-                    if (store.Kind(operand) == SyntaxKind.Identifier && store.Texts.Equals(store.EscapedText(operand), name))
+                    if (store.Kind(operand) == SyntaxKind.Identifier)
                     {
-                        found = true;
-                        return;
+                        names.Add(store.Texts.GetString(store.EscapedText(operand))!);
                     }
                     break;
                 }
