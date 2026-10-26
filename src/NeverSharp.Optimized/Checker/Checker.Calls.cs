@@ -2385,7 +2385,21 @@ internal sealed partial class Checker
         {
             return GetESSymbolLikeTypeForNode(At(node, WalkUpParenthesizedExpressions(store, store.Parent(n))));
         }
-        // (assertion signatures in expression statements: TODO(C7); JavaScript expando symbols: C9)
+        // assertion signatures in expression statements (module C7; JavaScript expando symbols: C9)
+        if (store.Kind(n) == SyntaxKind.CallExpression && store.QuestionDotToken(n).IsNone && store.Kind(store.Parent(n)) == SyntaxKind.ExpressionStatement &&
+            (Types.Flags(returnType) & TypeFlags.Void) != 0 && GetTypePredicateOfSignature(signature) is not null)
+        {
+            var callee = At(node, store.Expression(n));
+            if (!Utilities.IsDottedName(store, callee.Node))
+            {
+                Error(callee, Diagnostics.Assertions_require_the_call_target_to_be_an_identifier_or_qualified_name);
+            }
+            else if (GetEffectsSignature(node).IsNone)
+            {
+                var diagnostic = Error(callee, Diagnostics.Assertions_require_every_name_in_the_call_target_to_be_declared_with_an_explicit_type_annotation);
+                GetTypeOfDottedName(callee, diagnostic);
+            }
+        }
         return returnType;
     }
 

@@ -256,12 +256,7 @@ internal sealed partial class Checker
         return [Signatures.Record(signature).Parameters ?? []];
     }
 
-    // checker.ts getTypePredicateOfSignature (C5/C7)
-    private TypePredicateInfo? GetTypePredicateOfSignature(Signature signature) => null;
-
     // ---- instantiation (C3 seams not ported yet) ----
-
-    private TypePredicateInfo InstantiateTypePredicate(TypePredicateInfo predicate, object mapper) => throw C3Seam();
 
     private Signature InstantiateSignatureForSymbol(Signature signature, SymbolRef symbol) => signature;
 

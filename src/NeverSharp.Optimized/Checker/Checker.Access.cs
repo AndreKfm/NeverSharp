@@ -40,8 +40,8 @@ internal sealed partial class Checker
     /// <summary>checker.ts checkNonNullType.</summary>
     internal Type CheckNonNullType(Type type, NodeRef node) => CheckNonNullTypeWithReporter(type, node, ReportObjectPossiblyNullOrUndefinedError);
 
-    // checker.ts checkNonNullTypeWithReporter (TODO(C7): the errors are not reported for references whose narrowing is
-    // pending)
+    // checker.ts checkNonNullTypeWithReporter (the errors are not reported for operands of C1's "uncertain" mechanism,
+    // TODO(C6))
     private Type CheckNonNullTypeWithReporter(Type type, NodeRef node, Action<NodeRef, TypeFacts> reportError)
     {
         var suppress = SuppressDerivedDiagnostics(node, type);
@@ -60,10 +60,6 @@ internal sealed partial class Checker
                     }
                 }
                 Error(node, Diagnostics.Object_is_of_type_unknown);
-            }
-            else
-            {
-                uncertainExpressions.Add(node); // TODO(C7): the narrowed type is not known
             }
             return errorType;
         }
@@ -303,14 +299,7 @@ internal sealed partial class Checker
                 }
                 if (rightName.Length > 0 && !leftUncertain && !CheckAndReportErrorForExtendingInterface(node))
                 {
-                    if (IsNarrowingPending(left, leftType))
-                    {
-                        uncertainExpressions.Add(node); // TODO(C7): the property may exist on the narrowed type
-                    }
-                    else
-                    {
-                        ReportNonexistentProperty(right, IsThisTypeParameter(leftType) ? apparentType : leftType);
-                    }
+                    ReportNonexistentProperty(right, IsThisTypeParameter(leftType) ? apparentType : leftType);
                 }
                 return errorType;
             }
@@ -503,10 +492,10 @@ internal sealed partial class Checker
         return false;
     }
 
-    // checker.ts getFlowTypeOfAccessExpression (TODO(C7): getFlowTypeOfProperty and the flow type)
+    // checker.ts getFlowTypeOfAccessExpression (module C7: getFlowTypeOfProperty and the flow type; TODO(C9): JavaScript
+    // assignment declarations)
     private Type GetFlowTypeOfAccessExpression(NodeRef node, SymbolRef prop, Type propType, NodeRef errorNode, CheckMode checkMode)
     {
-        _ = errorNode;
         // Only compute control flow type if this is a property access expression that isn't an
         // assignment target, and the referenced property was declared as a variable, property,
         // accessor, or optional method.
@@ -522,11 +511,40 @@ internal sealed partial class Checker
         }
         if (propType == autoType)
         {
-            // getFlowTypeOfProperty (TODO(C7))
-            return anyType;
+            return GetFlowTypeOfProperty(node, prop);
         }
         propType = GetNarrowableTypeForReference(propType, node, checkMode);
-        var flowType = GetFlowTypeOfReference(node, propType, propType);
+        // If strict null checks and strict property initialization checks are enabled, if we have
+        // a this.xxx property access, if the property is an instance property without an initializer,
+        // and if we are in a constructor of the same class as the property declaration, assume that
+        // the property is uninitialized at the top of the control flow.
+        var store = StoreOf(node);
+        var assumeUninitialized = false;
+        if (strictNullChecks && compilerOptions.GetStrictOptionValue(compilerOptions.StrictPropertyInitialization) &&
+            Utilities.IsAccessExpression(store, node.Node) && store.Kind(store.Expression(node.Node)) == SyntaxKind.ThisKeyword)
+        {
+            var declaration = prop.IsNone ? NodeRef.None : ValueDeclarationOf(prop);
+            if (!declaration.IsNone && IsPropertyWithoutInitializer(declaration))
+            {
+                var ds = StoreOf(declaration);
+                if (!Utilities.IsStatic(ds, declaration.Node))
+                {
+                    var flowContainer = GetControlFlowContainer(node);
+                    if (Kind(flowContainer) == SyntaxKind.Constructor && flowContainer.File == declaration.File &&
+                        StoreOf(flowContainer).Parent(flowContainer.Node) == ds.Parent(declaration.Node) && (ds.Flags(declaration.Node) & NodeFlags.Ambient) == 0)
+                    {
+                        assumeUninitialized = true;
+                    }
+                }
+            }
+        }
+        var flowType = GetFlowTypeOfReference(node, propType, assumeUninitialized ? GetOptionalType(propType) : propType);
+        if (assumeUninitialized && !ContainsUndefinedType(propType) && ContainsUndefinedType(flowType))
+        {
+            Error(errorNode, Diagnostics.Property_0_is_used_before_being_assigned, SymbolToString(prop));
+            // Return the declared type to reduce follow-on errors
+            return propType;
+        }
         return assignmentKind != AssignmentKind.None ? GetBaseTypeOfLiteralType(flowType) : flowType;
     }
 

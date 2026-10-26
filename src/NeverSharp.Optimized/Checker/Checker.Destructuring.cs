@@ -146,8 +146,10 @@ internal sealed partial class Checker
         }
         if (kind == SyntaxKind.PropertyDeclaration && (noImplicitAny || Utilities.IsInJSFile(store, node)))
         {
-            // TODO(C7): the type of a property from this.x assignments in the constructor or static blocks (getFlowTypeInConstructor)
-            return Type.None;
+            // module C7: the type of a property from this.x assignments in the constructor or static blocks (TODO(C9): the
+            // JavaScript forms)
+            var flowType = GetTypeOfPropertyFromConstructorFlow(declaration);
+            return flowType.IsNone ? Type.None : AddOptionality(flowType, isProperty: true, isOptional);
         }
         if (kind == SyntaxKind.JsxAttribute)
         {
@@ -327,13 +329,12 @@ internal sealed partial class Checker
                 var initializer = store.Initializer(parent.Node);
                 if (!initializer.IsNone)
                 {
-                    return IsNarrowingPending(At(parent, initializer), parentType);
+                    return false;
                 }
                 var statement = store.Parent(store.Parent(parent.Node));
                 if (store.Kind(statement) == SyntaxKind.ForOfStatement)
                 {
-                    var expression = At(parent, store.Expression(statement));
-                    return IsUncertainExpression(expression) || IsNarrowingPending(expression, GetTypeOfInitializer(expression));
+                    return IsUncertainExpression(At(parent, store.Expression(statement)));
                 }
                 return false;
             }

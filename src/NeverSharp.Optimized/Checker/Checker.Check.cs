@@ -111,10 +111,17 @@ internal sealed partial class Checker
     private void CheckNodeRecursive(NodeRef node)
     {
         var saveCurrentNode = currentNode;
+        var saveWithinUnreachableCode = withinUnreachableCode;
         currentNode = node;
         instantiationCount = 0;
+        // checkSourceElementWorker: the start of a region of unreachable code (module C7)
+        if (compilerOptions.AllowUnreachableCode != true && !withinUnreachableCode && CheckSourceElementUnreachable(node))
+        {
+            withinUnreachableCode = true;
+        }
         CheckNodeRecursiveWorker(node);
         currentNode = saveCurrentNode;
+        withinUnreachableCode = saveWithinUnreachableCode;
     }
 
     private void CheckNodeRecursiveWorker(NodeRef node)
@@ -333,8 +340,7 @@ internal sealed partial class Checker
         }
     }
 
-    // checker.ts checkPropertyInitialization (C1: classes without a constructor; isPropertyInitializedInConstructor needs
-    // the flow analysis of C7, so properties of classes with a constructor are taken as initialized)
+    // checker.ts checkPropertyInitialization (module C7: isPropertyInitializedInConstructor)
     private void CheckPropertyInitialization(NodeRef node)
     {
         var store = StoreOf(node);
@@ -344,11 +350,14 @@ internal sealed partial class Checker
             return;
         }
         var members = store.Nodes(store.Members(n));
+        // findConstructorDeclaration
+        var constructor = NodeRef.None;
         foreach (var member in members)
         {
             if (store.Kind(member) == SyntaxKind.Constructor && !store.Body(member).IsNone)
             {
-                return; // TODO(C7): isPropertyInitializedInConstructor
+                constructor = At(node, member);
+                break;
             }
         }
         foreach (var member in members)
@@ -370,6 +379,10 @@ internal sealed partial class Checker
                 continue;
             }
             if ((Types.Flags(type) & TypeFlags.Union) != 0 && Array.Exists(Types.Elements(Types.Union(type).Types).ToArray(), t => (Types.Flags(t) & TypeFlags.Undefined) != 0))
+            {
+                continue;
+            }
+            if (!constructor.IsNone && IsPropertyInitializedInConstructor(At(node, propName), type, constructor))
             {
                 continue;
             }
@@ -464,6 +477,17 @@ internal sealed partial class Checker
         else
         {
             CheckNodeRecursive(At(node, body));
+            // checkFunctionOrMethodDeclaration / checkAccessorDeclaration: the return paths (module C7)
+            switch (store.Kind(n))
+            {
+                case SyntaxKind.FunctionDeclaration:
+                case SyntaxKind.MethodDeclaration:
+                    CheckAllCodePathsInNonVoidFunctionReturnOrThrow(node, GetReturnTypeFromAnnotation(node));
+                    break;
+                case SyntaxKind.GetAccessor:
+                    CheckAllCodePathsInNonVoidFunctionReturnOrThrow(node, GetTypeOfAccessors(GetSymbolOfDeclaration(node)));
+                    break;
+            }
         }
     }
 
@@ -534,7 +558,7 @@ internal sealed partial class Checker
             {
                 // checkShorthandPropertyAssignment: checkExpressionForMutableLocation(node.name)
                 var name = At(node, store.Name(n));
-                GetResolvedSymbol(name);
+                CheckIdentifier(name); // (module C7: the identifier's checks and flow type)
                 var objectAssignmentInitializer = store.ObjectAssignmentInitializer(n);
                 if (!objectAssignmentInitializer.IsNone)
                 {
@@ -559,6 +583,7 @@ internal sealed partial class Checker
                 // labels are not names; visit the statement of a labeled statement
                 if (kind == SyntaxKind.LabeledStatement)
                 {
+                    CheckUnusedLabel(node); // (module C7)
                     CheckNodeRecursive(At(node, store.Statement(n)));
                 }
                 return false;

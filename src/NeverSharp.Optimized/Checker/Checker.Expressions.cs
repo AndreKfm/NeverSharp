@@ -67,8 +67,16 @@ internal sealed partial class Checker
         {
             return ExpressionLinks.Get(node).ResolvedType;
         }
-        // (flowLoopStart and flowTypeCache: C7)
+        // When computing a type that we're going to cache, we need to ignore any ongoing control flow
+        // analysis because variables may have transient types in indeterminable states. Moving flowLoopStart
+        // to the top of the stack ensures all transient types are computed from a known point.
+        var saveFlowLoopStart = flowLoopStart;
+        var saveFlowTypeCache = flowTypeCache;
+        flowLoopStart = flowLoopCount;
+        flowTypeCache = null;
         var type = CheckExpression(node, checkMode);
+        flowTypeCache = saveFlowTypeCache;
+        flowLoopStart = saveFlowLoopStart;
         ref var links = ref ExpressionLinks.Get(node);
         if (links.ResolvedType.IsNone)
         {
@@ -77,7 +85,7 @@ internal sealed partial class Checker
         return links.ResolvedType;
     }
 
-    /// <summary>checker.ts getTypeOfExpression (the flow type cache: C7).</summary>
+    /// <summary>checker.ts getTypeOfExpression.</summary>
     internal Type GetTypeOfExpression(NodeRef node)
     {
         // Don't bother caching types that require no flow analysis and are quick to compute.
@@ -86,7 +94,19 @@ internal sealed partial class Checker
         {
             return quickType;
         }
-        return CheckExpression(node, CheckMode.TypeOnly);
+        // If a type has been cached for the node, return it.
+        if (flowTypeCache is not null && flowTypeCache.TryGetValue(node, out var cachedType))
+        {
+            return cachedType;
+        }
+        var startInvocationCount = flowInvocationCount;
+        var type = CheckExpression(node, CheckMode.TypeOnly);
+        // If control flow analysis was required to determine the type, it is worth caching.
+        if (flowInvocationCount != startInvocationCount)
+        {
+            (flowTypeCache ??= [])[node] = type;
+        }
+        return type;
     }
 
     // checker.ts getQuickTypeOfExpression
@@ -1260,10 +1280,8 @@ internal sealed partial class Checker
         {
             return type;
         }
-        type = GetNarrowableTypeForReference(type, node, checkMode);
-        // TODO(C7): the declaration and flow containers, assumeInitialized and the initial type
-        var flowType = GetFlowTypeOfReference(node, type);
-        return assignmentKind != AssignmentKind.None ? GetBaseTypeOfLiteralType(flowType) : flowType;
+        // module C7: the declaration and flow containers, the initial type and the flow type (Checker.FlowCheck.cs)
+        return CheckIdentifierFlowType(node, symbol, localOrExportSymbol, declaration, type, assignmentKind, isAlias, checkMode);
     }
 
     // checker.ts checkIdentifierCalculateNodeCheckFlags (the downlevel captures do not apply to the ES2025 target)
@@ -2072,6 +2090,10 @@ internal sealed partial class Checker
     }
 
     // Whether the diagnostics derived from the type of an expression are not reported: the expression's type is an
-    // approximation of C1's mechanism (TODO(C6/C9)) or the flow type of a reference whose narrowing is pending (TODO(C7)).
-    private bool SuppressDerivedDiagnostics(NodeRef expr, Type type) => IsUncertainExpression(expr) || IsNarrowingPending(expr, type);
+    // approximation of C1's mechanism (TODO(C6/C9)).
+    private bool SuppressDerivedDiagnostics(NodeRef expr, Type type)
+    {
+        _ = type;
+        return IsUncertainExpression(expr);
+    }
 }

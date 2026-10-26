@@ -2457,8 +2457,30 @@ internal sealed partial class Checker
             {
                 return type;
             }
-            // (the origin of the filtered union: C7)
-            return GetUnionType(filtered, UnionReduction.None);
+            // module C7: the origin of the filtered union
+            var origin = Types.Union(type).Origin;
+            var newOrigin = Type.None;
+            if (!origin.IsNone && (Types.Flags(origin) & TypeFlags.Union) != 0)
+            {
+                // If the origin type is a (denormalized) union type, filter its non-union constituents. If that ends
+                // up removing a smaller number of types than in the normalized constituent set (meaning some of the
+                // filtered types are within nested unions in the origin), then we can't construct a new origin type.
+                // Otherwise, if we have exactly one type left in the origin set, return that as the filtered type.
+                // Otherwise, construct a new filtered origin type.
+                var originTypes = Types.Elements(Types.Union(origin).Types).ToArray();
+                var originFiltered = Array.FindAll(originTypes, t => (Types.Flags(t) & TypeFlags.Union) != 0 || f(t));
+                if (originTypes.Length - originFiltered.Length == types.Length - filtered.Length)
+                {
+                    if (originFiltered.Length == 1)
+                    {
+                        return originFiltered[0];
+                    }
+                    newOrigin = CreateOriginUnionOrIntersectionType(TypeFlags.Union, [.. originFiltered]);
+                }
+            }
+            // filtering could remove intersections so `ContainsIntersections` might be forwarded "incorrectly"
+            // it is purely an optimization hint so there is no harm in accidentally forwarding it
+            return GetUnionTypeFromSortedList([.. filtered], Types.ObjectFlagsOf(type) & (ObjectFlags.PrimitiveUnion | ObjectFlags.ContainsIntersections), default, default, newOrigin);
         }
         return (Types.Flags(type) & TypeFlags.Never) != 0 || f(type) ? type : neverType;
     }

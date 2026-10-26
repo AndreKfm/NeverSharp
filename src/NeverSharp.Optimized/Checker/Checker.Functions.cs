@@ -439,6 +439,7 @@ internal sealed partial class Checker
     private void CheckFunctionExpressionOrObjectLiteralMethodDeferred(NodeRef node)
     {
         var store = StoreOf(node);
+        CheckAllCodePathsInNonVoidFunctionReturnOrThrow(node, GetReturnTypeFromAnnotation(node)); // (module C7)
         var body = store.Body(node.Node);
         if (body.IsNone)
         {
@@ -701,7 +702,7 @@ internal sealed partial class Checker
                 if (!funcSymbol.IsNone && Types.Symbol(CheckExpressionCached(callee)) == funcSymbol)
                 {
                     var valueDeclaration = ValueDeclarationOf(funcSymbol);
-                    if (valueDeclaration.IsNone || !IsFunctionExpressionOrArrowFunction(StoreOf(valueDeclaration), valueDeclaration.Node) || IsConstantReferenceForBareCall(callee))
+                    if (valueDeclaration.IsNone || !IsFunctionExpressionOrArrowFunction(StoreOf(valueDeclaration), valueDeclaration.Node) || IsConstantReference(callee))
                     {
                         hasReturnOfTypeNever = true;
                         return;
@@ -743,90 +744,6 @@ internal sealed partial class Checker
             }
         }
         return aggregatedTypes;
-    }
-
-    // checker.ts isConstantReference for the callee identifier of a bare recursive call (TODO(C7): isSymbolAssigned)
-    private bool IsConstantReferenceForBareCall(NodeRef identifier)
-    {
-        var symbol = GetResolvedSymbol(identifier);
-        if (symbol.IsNone)
-        {
-            return false;
-        }
-        var valueDeclaration = ValueDeclarationOf(symbol);
-        if (!valueDeclaration.IsNone && Kind(valueDeclaration) == SyntaxKind.FunctionExpression)
-        {
-            return true;
-        }
-        // isConstantVariable || isParameterOrMutableLocalVariable && !isSymbolAssigned (TODO(C7): isSymbolAssigned; the
-        // seam looks for assignments to the name in the file)
-        if ((SymbolFlagsOf(symbol) & SymbolFlags.Variable) == 0)
-        {
-            return false;
-        }
-        var declaration = ValueDeclarationOf(symbol);
-        if (declaration.IsNone)
-        {
-            return false;
-        }
-        var store = StoreOf(declaration);
-        if ((Utilities.GetCombinedNodeFlags(store, declaration.Node) & NodeFlags.Constant) != 0)
-        {
-            return true;
-        }
-        return !IsNameAssigned(At(declaration, Utilities.RootOf(store, declaration.Node)), NameOf(symbol));
-    }
-
-    // whether the file assigns to an identifier with the name (isSymbolAssigned approximated by name)
-    // (the assigned names of a file are collected once, like markNodeAssignments marks a container once)
-    private bool IsNameAssigned(NodeRef file, string name)
-    {
-        if (!assignedNamesOfFiles.TryGetValue(file.File, out var names))
-        {
-            names = CollectAssignedNames(file);
-            assignedNamesOfFiles[file.File] = names;
-        }
-        return names.Contains(name);
-    }
-
-    private readonly Dictionary<int, HashSet<string>> assignedNamesOfFiles = [];
-
-    private HashSet<string> CollectAssignedNames(NodeRef file)
-    {
-        var store = StoreOf(file);
-        var names = new HashSet<string>(StringComparer.Ordinal);
-        Visit(file.Node);
-        return names;
-
-        void Visit(Node n)
-        {
-            switch (store.Kind(n))
-            {
-                case SyntaxKind.BinaryExpression when Utilities.IsAssignmentOperator(store.Kind(store.OperatorToken(n))):
-                {
-                    var left = Utilities.SkipParentheses(store, store.Left(n), false);
-                    if (store.Kind(left) == SyntaxKind.Identifier)
-                    {
-                        names.Add(store.Texts.GetString(store.EscapedText(left))!);
-                    }
-                    break;
-                }
-                case SyntaxKind.PrefixUnaryExpression or SyntaxKind.PostfixUnaryExpression when store.Operator(n) is SyntaxKind.PlusPlusToken or SyntaxKind.MinusMinusToken:
-                {
-                    var operand = Utilities.SkipParentheses(store, store.Operand(n), false);
-                    if (store.Kind(operand) == SyntaxKind.Identifier)
-                    {
-                        names.Add(store.Texts.GetString(store.EscapedText(operand))!);
-                    }
-                    break;
-                }
-            }
-            NodeVisitor.ForEachChild<object>(store, n, child =>
-            {
-                Visit(child);
-                return null;
-            });
-        }
     }
 
     // C1's "uncertain" mechanism: a return type inferred from an approximate return expression type (TODO(C6)) or
