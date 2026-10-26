@@ -48,14 +48,65 @@ internal sealed partial class Checker
             var tupleType = TupleTarget(restType);
             var index = pos - paramCount;
             var associatedName = tupleType.LabeledElementDeclarations is { } labels && index < labels.Length ? labels[index] : NodeRef.None;
-            if (!associatedName.IsNone)
-            {
-                return GetTupleElementLabel(associatedName);
-            }
-            // getTupleElementLabel without a declaration (getTupleElementLabelFromBindingElement for binding patterns)
-            return NameOf(restParameter) + "_" + index.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            return GetTupleElementLabel(associatedName, index, tupleType.ElementFlags![index], restParameter);
         }
         return NameOf(restParameter);
+    }
+
+    // checker.ts getTupleElementLabel(d, index, elementFlags, restSymbol)
+    private string GetTupleElementLabel(NodeRef declaration, int index, ElementFlags elementFlags, SymbolRef restSymbol)
+    {
+        if (declaration.IsNone)
+        {
+            var restParameter = restSymbol.IsNone ? NodeRef.None : ValueDeclarationOf(restSymbol);
+            return !restParameter.IsNone && Kind(restParameter) == SyntaxKind.Parameter ? GetTupleElementLabelFromBindingElement(restParameter, index, elementFlags)
+                : (restSymbol.IsNone ? "arg" : NameOf(restSymbol)) + "_" + index.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+        return GetTupleElementLabel(declaration);
+    }
+
+    // checker.ts getTupleElementLabelFromBindingElement
+    private string GetTupleElementLabelFromBindingElement(NodeRef node, int index, ElementFlags elementFlags)
+    {
+        var store = StoreOf(node);
+        var name = store.Name(node.Node);
+        switch (store.Kind(name))
+        {
+            case SyntaxKind.Identifier:
+            {
+                var text = store.Texts.GetString(store.EscapedText(name)) ?? "";
+                if (!store.DotDotDotToken(node.Node).IsNone)
+                {
+                    // (...[x, y, ...z]: [number, number, ...number[]]) => ... produces (x: number, y: number, ...z: number[])
+                    return (elementFlags & ElementFlags.Variable) != 0 ? text : text + "_" + index.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                }
+                // (...[x]: [number]) => ... produces (x: number); (...[x]: ...number[]) produces (x_0: number)
+                return (elementFlags & ElementFlags.Fixed) != 0 ? text : text + "_n";
+            }
+            case SyntaxKind.ArrayBindingPattern:
+            {
+                if (!store.DotDotDotToken(node.Node).IsNone)
+                {
+                    var elements = store.Nodes(store.Elements(name));
+                    var lastElement = elements.Length > 0 && store.Kind(elements[^1]) == SyntaxKind.BindingElement ? elements[^1] : Node.None;
+                    var elementCount = elements.Length - (!lastElement.IsNone && !store.DotDotDotToken(lastElement).IsNone ? 1 : 0);
+                    if (index < elementCount)
+                    {
+                        var element = elements[index];
+                        if (store.Kind(element) == SyntaxKind.BindingElement)
+                        {
+                            return GetTupleElementLabelFromBindingElement(At(node, element), index, elementFlags);
+                        }
+                    }
+                    else if (!lastElement.IsNone && !store.DotDotDotToken(lastElement).IsNone)
+                    {
+                        return GetTupleElementLabelFromBindingElement(At(node, lastElement), index - elementCount, elementFlags);
+                    }
+                }
+                break;
+            }
+        }
+        return "arg_" + index.ToString(System.Globalization.CultureInfo.InvariantCulture);
     }
 
     // checker.ts getNameableDeclarationAtPosition

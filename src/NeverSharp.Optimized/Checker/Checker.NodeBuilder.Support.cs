@@ -249,11 +249,84 @@ internal sealed partial class Checker
         return signature;
     }
 
-    // checker.ts getExpandedParameters (rest parameters of tuple types: C3)
+    // checker.ts getExpandedParameters (module C6)
     private SymbolRef[][] GetExpandedParameters(Signature signature, bool skipUnionExpanding)
     {
-        _ = skipUnionExpanding;
-        return [Signatures.Record(signature).Parameters ?? []];
+        var parameters = Signatures.Record(signature).Parameters ?? [];
+        if (SignatureHasRestParameter(signature))
+        {
+            var restIndex = parameters.Length - 1;
+            var restSymbol = parameters[restIndex];
+            var restType = GetTypeOfSymbol(restSymbol);
+            if (IsTupleType(restType))
+            {
+                return [ExpandSignatureParametersWithTupleMembers(restType)];
+            }
+            if (!skipUnionExpanding && (Types.Flags(restType) & TypeFlags.Union) != 0 && AllTypes(Types.Elements(Types.Union(restType).Types), IsTupleType))
+            {
+                var members = Types.Elements(Types.Union(restType).Types).ToArray();
+                return Array.ConvertAll(members, ExpandSignatureParametersWithTupleMembers);
+            }
+
+            SymbolRef[] ExpandSignatureParametersWithTupleMembers(Type tupleType)
+            {
+                var elementTypes = GetElementTypes(tupleType); // (getTypeArguments: the element types, without a this argument)
+                var associatedNames = GetUniqAssociatedNamesFromTupleType(tupleType, restSymbol);
+                var target = TupleTarget(tupleType);
+                var result = new SymbolRef[restIndex + elementTypes.Length];
+                Array.Copy(parameters, result, restIndex);
+                for (var i = 0; i < elementTypes.Length; i++)
+                {
+                    // Lookup the label from the individual tuple passed in before falling back to the signature `rest` parameter name
+                    var name = associatedNames is not null && i < associatedNames.Length && associatedNames[i] is { } associated ? associated : GetParameterNameAtPosition(signature, restIndex + i, tupleType);
+                    var flags = target.ElementFlags![i];
+                    var checkFlags = (flags & ElementFlags.Variable) != 0 ? CheckFlags.RestParameter : (flags & ElementFlags.Optional) != 0 ? CheckFlags.OptionalParameter : CheckFlags.None;
+                    var symbol = CreateSymbol(SymbolFlags.FunctionScopedVariable, name, checkFlags);
+                    var type = (flags & ElementFlags.Rest) != 0 ? CreateArrayType(elementTypes[i]) : elementTypes[i]; // (before the links are written)
+                    ValueSymbolLinks.Get(symbol).ResolvedType = type;
+                    result[restIndex + i] = symbol;
+                }
+                return result;
+            }
+        }
+        return [parameters];
+    }
+
+    // checker.ts getUniqAssociatedNamesFromTupleType
+    private string?[]? GetUniqAssociatedNamesFromTupleType(Type type, SymbolRef restSymbol)
+    {
+        var target = TupleTarget(type);
+        if (target.LabeledElementDeclarations is not { } labels)
+        {
+            return null;
+        }
+        var names = new string?[Math.Min(labels.Length, target.ElementFlags!.Length)];
+        for (var i = 0; i < names.Length; i++)
+        {
+            names[i] = GetTupleElementLabel(labels[i], i, target.ElementFlags![i], restSymbol);
+        }
+        var duplicates = new List<int>();
+        var uniqueNames = new HashSet<string>(StringComparer.Ordinal);
+        for (var i = 0; i < names.Length; i++)
+        {
+            if (!uniqueNames.Add(names[i]!))
+            {
+                duplicates.Add(i);
+            }
+        }
+        var counters = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var i in duplicates)
+        {
+            var counter = counters.TryGetValue(names[i]!, out var c) ? c : 1;
+            string name;
+            while (!uniqueNames.Add(name = names[i] + "_" + counter.ToString(System.Globalization.CultureInfo.InvariantCulture)))
+            {
+                counter++;
+            }
+            names[i] = name;
+            counters[names[i]!] = counter + 1;
+        }
+        return names;
     }
 
     // ---- instantiation (C3 seams not ported yet) ----
