@@ -230,7 +230,7 @@ internal sealed partial class Checker
                 return nullWideningType;
             case SyntaxKind.NoSubstitutionTemplateLiteral:
             case SyntaxKind.StringLiteral:
-                // (hasSkipDirectInferenceFlag: the inference of C6 sets it)
+                // (hasSkipDirectInferenceFlag: set by the language service only)
                 return GetFreshTypeOfLiteralType(GetStringLiteralType(store.Texts.GetString(store.Text(n))!));
             case SyntaxKind.NumericLiteral:
                 // (checkGrammarNumericLiteral: TODO(C8))

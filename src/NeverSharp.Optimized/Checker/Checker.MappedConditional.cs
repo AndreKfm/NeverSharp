@@ -7,9 +7,8 @@
 //   https://github.com/microsoft/TypeScript at commit 050880ce59e30b356b686bd3144efe24f875ebc8
 // Port structure follows internal/checker/checker.go
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
-// Modified: translated from TypeScript to C#; module C3. Stub: the inference of `infer` type parameters (C6); without
-// inference candidates an infer type parameter maps to its instantiated constraint or unknown, as getInferredType
-// does when nothing was inferred.
+// Modified: translated from TypeScript to C#; module C3; module C6: the inference of `infer` type parameters
+// (createInferenceContext and inferTypes in getConditionalType).
 
 using NeverSharp.Generated;
 

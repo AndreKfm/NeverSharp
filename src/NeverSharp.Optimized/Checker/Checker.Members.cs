@@ -10,7 +10,8 @@
 // Modified: translated from TypeScript to C#; module C1. Stubs: instantiation (C3: members of type references and of
 // generic declarations are taken uninstantiated from their targets, which keeps the symbols the instantiated members
 // would have; mapped, conditional, indexed and template types), return types inferred from bodies (C5), contextual
-// parameter types (C5/C6). Union and intersection properties: Checker.UnionProperties.cs (module C4).
+// parameter types (C5); module C6: reverse mapped types, outer type parameters of mapped and conditional types and of
+// context sensitive functions. Union and intersection properties: Checker.UnionProperties.cs (module C4).
 
 using NeverSharp.Generated;
 
