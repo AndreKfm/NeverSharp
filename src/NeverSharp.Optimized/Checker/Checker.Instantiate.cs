@@ -1779,9 +1779,7 @@ internal sealed partial class Checker
     }
 
     // checker.ts createSignatureInstantiation / createSignatureTypeMapper
-    private Signature CreateSignatureInstantiation(Signature signature, Type[] typeArguments)
-    {
-        var typeParameters = Types.Elements(Signatures.Record(signature).TypeParameters).ToArray();
-        return InstantiateSignature(signature, CreateTypeMapper(typeParameters, typeArguments), eraseTypeParameters: true);
-    }
+    private Signature CreateSignatureInstantiation(Signature signature, Type[] typeArguments) =>
+        // createSignatureTypeMapper: the type parameters for the mapper (getTypeParametersForMapper)
+        InstantiateSignature(signature, CreateTypeMapper(GetTypeParametersForMapper(signature), typeArguments), eraseTypeParameters: true);
 }

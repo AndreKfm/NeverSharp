@@ -1506,8 +1506,7 @@ internal sealed partial class Checker
                 var targetLen = targetSignatures.Count;
                 for (var i = 0; i < targetLen; i++)
                 {
-                    var sourceIndex = Math.Max(sourceLen - targetLen + i, 0);
-                    InferFromSignature(c.GetBaseSignature(sourceSignatures[sourceIndex]), c.GetErasedSignature(targetSignatures[i]));
+                    var sourceIndex = Math.Max(sourceLen - targetLen + i, 0);                    InferFromSignature(c.GetBaseSignature(sourceSignatures[sourceIndex]), c.GetErasedSignature(targetSignatures[i]));
                 }
             }
         }
