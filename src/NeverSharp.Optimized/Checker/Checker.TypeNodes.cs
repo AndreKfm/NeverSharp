@@ -131,9 +131,9 @@ internal sealed partial class Checker
                     return errorType;
                 }
                 var placeholder = CreateObjectType(ObjectFlags.Anonymous, SymbolRef.None);
-                ref var record = ref Types.Record(placeholder);
-                record.AliasSymbol = aliasSymbol;
-                record.AliasTypeArguments = GetTypeArgumentsForAliasSymbol(aliasSymbol);
+                Types.Record(placeholder).AliasSymbol = aliasSymbol;
+                var placeholderAliasTypeArguments = GetTypeArgumentsForAliasSymbol(aliasSymbol);
+                Types.Record(placeholder).AliasTypeArguments = placeholderAliasTypeArguments;
                 unsupportedTypes.Add(placeholder);
                 return SetCachedNodeType(node, placeholder);
             }
@@ -694,9 +694,10 @@ internal sealed partial class Checker
         else
         {
             type = CreateObjectType(ObjectFlags.Anonymous, symbol);
-            ref var record = ref Types.Record(type);
-            record.AliasSymbol = aliasSymbol;
-            record.AliasTypeArguments = GetTypeArgumentsForAliasSymbol(aliasSymbol);
+            Types.Record(type).AliasSymbol = aliasSymbol;
+            // (computed before the record is written: the call can grow the type store)
+            var aliasTypeArguments = GetTypeArgumentsForAliasSymbol(aliasSymbol);
+            Types.Record(type).AliasTypeArguments = aliasTypeArguments;
         }
         return SetCachedNodeType(node, type);
     }

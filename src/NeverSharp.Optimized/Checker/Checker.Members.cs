@@ -1471,8 +1471,7 @@ internal sealed partial class Checker
             : declaration.IsNone ? anyType : GetReturnTypeFromAnnotation(declaration);
         if (type.IsNone)
         {
-            var store = StoreOf(declaration);
-            var body = store.Body(declaration.Node);
+            var store = StoreOf(declaration);            var body = store.Body(declaration.Node);
             type = body.IsNone || Utilities.NodeIsMissing(store, body) ? anyType : GetReturnTypeFromBody(declaration);
         }
         if (!PopTypeResolution())
@@ -1495,8 +1494,7 @@ internal sealed partial class Checker
                     }
                     else
                     {
-                        Error(declaration, Diagnostics.Function_implicitly_has_return_type_any_because_it_does_not_have_a_return_type_annotation_and_is_referenced_directly_or_indirectly_in_one_of_its_return_expressions);
-                    }
+                        Error(declaration, Diagnostics.Function_implicitly_has_return_type_any_because_it_does_not_have_a_return_type_annotation_and_is_referenced_directly_or_indirectly_in_one_of_its_return_expressions);                    }
                 }
             }
             type = anyType;

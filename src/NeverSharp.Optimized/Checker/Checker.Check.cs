@@ -529,6 +529,12 @@ internal sealed partial class Checker
                 VisitList(node, store.TypeArguments(n));
                 CheckTypeReferenceTypeArguments(node); // module C4
                 return false;
+            case SyntaxKind.IndexedAccessType:
+                // checkIndexedAccessType
+                CheckNodeRecursive(At(node, store.ObjectType(n)));
+                CheckNodeRecursive(At(node, store.IndexType(n)));
+                CheckIndexedAccessIndexType(GetTypeFromTypeNode(node), node);
+                return false;
             case SyntaxKind.ExpressionWithTypeArguments:
                 return CheckExpressionWithTypeArgumentsNode(node);
             case SyntaxKind.TypeQuery:

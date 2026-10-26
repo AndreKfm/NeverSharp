@@ -303,9 +303,21 @@ internal sealed partial class Checker
         return thisParameter.IsNone ? Type.None : GetTypeOfSymbol(thisParameter);
     }
 
-    /// <summary>checker.ts isResolvingReturnTypeOfSignature (composite signatures: C5).</summary>
-    internal bool IsResolvingReturnTypeOfSignature(Signature signature) =>
-        Signatures.Record(signature).ResolvedReturnType.IsNone && FindResolutionCycleStartIndex(signature, ResolvedReturnTypeProperty) >= 0;
+    /// <summary>checker.ts isResolvingReturnTypeOfSignature.</summary>
+    internal bool IsResolvingReturnTypeOfSignature(Signature signature)
+    {
+        if (Signatures.Record(signature).CompositeSignatures is { } composites)
+        {
+            foreach (var composite in composites)
+            {
+                if (IsResolvingReturnTypeOfSignature(composite))
+                {
+                    return true;
+                }
+            }
+        }
+        return Signatures.Record(signature).ResolvedReturnType.IsNone && FindResolutionCycleStartIndex(signature, ResolvedReturnTypeProperty) >= 0;
+    }
 
     /// <summary>checker.ts getErasedSignature.</summary>
     internal Signature GetErasedSignature(Signature signature)

@@ -262,8 +262,7 @@ internal sealed partial class Checker
 
     /// <summary>checker.ts instantiateTypeWithAlias.</summary>
     internal Type InstantiateTypeWithAlias(Type type, TypeMapper mapper, SymbolRef aliasSymbol, TypeList aliasTypeArguments)
-    {
-        if (!CouldContainTypeVariables(type))
+    {        if (!CouldContainTypeVariables(type))
         {
             return type;
         }
@@ -673,8 +672,7 @@ internal sealed partial class Checker
             var newAliasSymbol = !aliasSymbol.IsNone ? aliasSymbol : Types.Record(type).AliasSymbol;
             var newAliasTypeArguments = !aliasSymbol.IsNone ? aliasTypeArguments : InstantiateTypeList(Types.Record(type).AliasTypeArguments, mapper);
             var id = GetTypeListId(typeArguments) + GetAliasId(newAliasSymbol, newAliasTypeArguments);
-            var targetData = Types.Object(target);
-            if (targetData.Instantiations is null)
+            var targetData = Types.Object(target);            if (targetData.Instantiations is null)
             {
                 targetData.Instantiations = new Dictionary<string, Type>(StringComparer.Ordinal)
                 {
@@ -866,9 +864,10 @@ internal sealed partial class Checker
         }
         resultData.Target = type;
         resultData.Mapper = mapper;
-        ref var record = ref Types.Record(result);
-        record.AliasSymbol = !aliasSymbol.IsNone ? aliasSymbol : Types.Record(type).AliasSymbol;
-        record.AliasTypeArguments = !aliasSymbol.IsNone ? aliasTypeArguments : InstantiateTypeList(Types.Record(type).AliasTypeArguments, mapper);
+        Types.Record(result).AliasSymbol = !aliasSymbol.IsNone ? aliasSymbol : Types.Record(type).AliasSymbol;
+        // (computed before the record is written: the instantiation can grow the type store)
+        var resultAliasTypeArguments = !aliasSymbol.IsNone ? aliasTypeArguments : InstantiateTypeList(Types.Record(type).AliasTypeArguments, mapper);
+        Types.Record(result).AliasTypeArguments = resultAliasTypeArguments;
         var aliasArguments = Types.Record(result).AliasTypeArguments;
         Types.Record(result).ObjectFlags |= aliasArguments.Count > 0 ? GetPropagatingFlagsOfTypes(Types.Elements(aliasArguments)) : 0;
         return result;
@@ -1287,13 +1286,11 @@ internal sealed partial class Checker
             return type;
         }
         var typeParameters = entry.TypeParameters;
-        var id = GetTypeListId(typeArguments) + GetAliasId(aliasSymbol, aliasTypeArguments);
-        if (!entry.Instantiations.TryGetValue(id, out var instantiation))
+        var id = GetTypeListId(typeArguments) + GetAliasId(aliasSymbol, aliasTypeArguments);        if (!entry.Instantiations.TryGetValue(id, out var instantiation))
         {
             var valueDeclaration = ValueDeclarationOf(symbol);
             var isJs = !valueDeclaration.IsNone && Utilities.IsInJSFile(StoreOf(valueDeclaration), valueDeclaration.Node);
-            instantiation = InstantiateTypeWithAlias(type, CreateTypeMapper(typeParameters, FillMissingTypeArguments(typeArguments, typeParameters, GetMinTypeArgumentCount(typeParameters), isJs)), aliasSymbol, aliasTypeArguments);
-            entry.Instantiations[id] = instantiation;
+            instantiation = InstantiateTypeWithAlias(type, CreateTypeMapper(typeParameters, FillMissingTypeArguments(typeArguments, typeParameters, GetMinTypeArgumentCount(typeParameters), isJs)), aliasSymbol, aliasTypeArguments);            entry.Instantiations[id] = instantiation;
         }
         return instantiation;
     }

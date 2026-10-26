@@ -1831,8 +1831,7 @@ internal sealed partial class Checker
 
     // checker.ts getArgumentArityError
     private ProgramDiagnostic GetArgumentArityError(NodeRef node, List<Signature> signatures, List<CallArg> args, DiagnosticMessage? headMessage)
-    {
-        var spreadIndex = GetSpreadArgumentIndex(args);
+    {        var spreadIndex = GetSpreadArgumentIndex(args);
         if (spreadIndex > -1)
         {
             return CreateDiagnosticAtArg(args[spreadIndex], Diagnostics.A_spread_argument_must_either_have_a_tuple_type_or_be_passed_to_a_rest_parameter);

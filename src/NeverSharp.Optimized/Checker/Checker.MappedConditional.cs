@@ -52,9 +52,10 @@ internal sealed partial class Checker
         var type = CreateObjectType(ObjectFlags.Mapped, NodeSymbol(node));
         Types.Object(type).Declaration = node;
         var aliasSymbol = GetAliasSymbolForTypeNode(node);
-        ref var record = ref Types.Record(type);
-        record.AliasSymbol = aliasSymbol;
-        record.AliasTypeArguments = GetTypeArgumentsForAliasSymbol(aliasSymbol);
+        Types.Record(type).AliasSymbol = aliasSymbol;
+        // (computed before the record is written: the call can grow the type store)
+        var aliasTypeArguments = GetTypeArgumentsForAliasSymbol(aliasSymbol);
+        Types.Record(type).AliasTypeArguments = aliasTypeArguments;
         SetCachedNodeType(node, type);
         // Eagerly resolve the constraint type which forces an error if the constraint type circularly
         // references itself through one or more type aliases.
@@ -634,8 +635,7 @@ internal sealed partial class Checker
         var typeVariable = GetHomomorphicTypeVariable(type);
         if (!typeVariable.IsNone)
         {
-            var mappedTypeVariable = InstantiateType(typeVariable, mapper);
-            if (typeVariable != mappedTypeVariable)
+            var mappedTypeVariable = InstantiateType(typeVariable, mapper);            if (typeVariable != mappedTypeVariable)
             {
                 return MapTypeWithAlias(GetReducedType(mappedTypeVariable), InstantiateConstituent, aliasSymbol, aliasTypeArguments);
             }
@@ -1012,9 +1012,10 @@ internal sealed partial class Checker
                 Mapper = mapper,
                 CombinedMapper = combinedMapper,
             });
-            ref var record = ref Types.Record(result);
-            record.AliasSymbol = !aliasSymbol.IsNone ? aliasSymbol : root.AliasSymbol;
-            record.AliasTypeArguments = !aliasSymbol.IsNone ? aliasTypeArguments : InstantiateTypeList(root.AliasTypeArguments, mapper);
+            Types.Record(result).AliasSymbol = !aliasSymbol.IsNone ? aliasSymbol : root.AliasSymbol;
+            // (computed before the record is written: the instantiation can grow the type store)
+            var resultAliasTypeArguments = !aliasSymbol.IsNone ? aliasTypeArguments : InstantiateTypeList(root.AliasTypeArguments, mapper);
+            Types.Record(result).AliasTypeArguments = resultAliasTypeArguments;
             break;
         }
         return extraTypes is not null ? GetUnionType([.. extraTypes, result]) : result;
