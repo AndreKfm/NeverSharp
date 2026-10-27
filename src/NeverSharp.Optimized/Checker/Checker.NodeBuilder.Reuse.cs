@@ -797,7 +797,11 @@ internal sealed partial class Checker
     {
         Node Visit(NodeRef node)
         {
-            var copy = CopyWithChildren(node, Visit, list => CopyListWith(node, list, Visit), markReused: true);
+            // elideInitializerAndSetEmitFlags: the initializer of a binding element is removed before its children are visited
+            var store = StoreOf(node);
+            var initializer = store.Kind(node.Node) == SyntaxKind.BindingElement ? store.Initializer(node.Node) : Node.None;
+            Node VisitChild(NodeRef child) => !initializer.IsNone && child.Node == initializer ? Node.None : Visit(child);
+            var copy = CopyWithChildren(node, VisitChild, list => CopyListWith(node, list, Visit), markReused: true);
             if (S.Kind(copy) == SyntaxKind.BindingElement)
             {
                 S.SetInitializer(copy, Node.None);
@@ -827,7 +831,8 @@ internal sealed partial class Checker
         {
             result.Add(visit(At(owner, element)));
         }
-        return SList(result);
+        // visitNodes keeps the list's hasTrailingComma
+        return S.NewList(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(result), store.HasTrailingComma(list));
     }
 
     // ---- resolver: canReuseTypeNode, trackExistingEntityName, serializeTypeName, serializeExistingTypeNode ----

@@ -881,9 +881,12 @@ internal sealed partial class Checker
             return jsxFragmentTypes[node.File] = anyType;
         }
         var shouldModuleRefErr = compilerOptions.Jsx != JsxEmit.Preserve && compilerOptions.Jsx != JsxEmit.ReactNative;
-        // (getJsxNamespaceContainerForImplicitImport: never present in Gate C, see the file header)
-        var jsxFactorySymbol = ResolveName(node, jsxFragmentFactoryName, NodeRef.None, shouldModuleRefErr ? SymbolFlags.Value : SymbolFlags.Value & ~SymbolFlags.Enum,
-            Diagnostics.Using_JSX_fragments_requires_fragment_factory_0_to_be_in_scope_but_it_could_not_be_found, isUse: true);
+        var jsxFactorySymbol = GetJsxNamespaceContainerForImplicitImport(node);
+        if (jsxFactorySymbol.IsNone)
+        {
+            jsxFactorySymbol = ResolveName(node, jsxFragmentFactoryName, NodeRef.None, shouldModuleRefErr ? SymbolFlags.Value : SymbolFlags.Value & ~SymbolFlags.Enum,
+                Diagnostics.Using_JSX_fragments_requires_fragment_factory_0_to_be_in_scope_but_it_could_not_be_found, isUse: true);
+        }
         if (jsxFactorySymbol.IsNone)
         {
             return jsxFragmentTypes[node.File] = errorType;
@@ -985,7 +988,10 @@ internal sealed partial class Checker
 
         bool CheckTagNameDoesNotExpectTooManyArguments()
         {
-            // (getJsxNamespaceContainerForImplicitImport: never present in Gate C)
+            if (!GetJsxNamespaceContainerForImplicitImport(node).IsNone)
+            {
+                return true; // factory is implicitly jsx/jsxdev - assume it fits the bill, since we don't strongly look for the jsx/jsxs/jsxDEV factory APIs anywhere else (at least not yet)
+            }
             // We assume fragments have the correct arity since the node does not have attributes
             var tagType = IsJsxOpeningLikeElement(store, node.Node) && !IsJsxIntrinsicTagName(store, store.TagName(node.Node))
                 ? CheckExpression(At(node, store.TagName(node.Node)))
@@ -1575,7 +1581,10 @@ internal sealed partial class Checker
     // checker.ts markJsxAliasReferenced
     private void MarkJsxAliasReferenced(NodeRef node)
     {
-        // (getJsxNamespaceContainerForImplicitImport: never present in Gate C, see the file header)
+        if (!GetJsxNamespaceContainerForImplicitImport(node).IsNone)
+        {
+            return;
+        }
         // The reactNamespace/jsxFactory's root symbol should be marked as 'used' so we don't incorrectly elide its import.
         // And if there is no reactNamespace/jsxFactory's symbol in scope when targeting React emit, we should issue an error.
         var store = StoreOf(node);
@@ -1672,6 +1681,72 @@ internal sealed partial class Checker
         return Array.ConvertAll(parts, Utilities.EscapeLeadingUnderscores);
     }
 
+    // sourceFileLinks.jsxImplicitImportContainer per file (unknownSymbol for false)
+    private readonly Dictionary<int, SymbolRef> jsxImplicitImportContainers = [];
+
+    // checker.ts getJsxNamespaceContainerForImplicitImport (the specifier is the location: the program's synthetic
+    // import specifier is not created)
+    private SymbolRef GetJsxNamespaceContainerForImplicitImport(NodeRef location)
+    {
+        if (location.IsNone)
+        {
+            return SymbolRef.None;
+        }
+        if (jsxImplicitImportContainers.TryGetValue(location.File, out var cached))
+        {
+            return cached == unknownSymbol ? SymbolRef.None : cached;
+        }
+        var runtimeImportSpecifier = GetJSXRuntimeImport(GetJSXImplicitImportBase(location.File));
+        if (runtimeImportSpecifier is null)
+        {
+            return SymbolRef.None;
+        }
+        // (moduleResolution classic: not used in Gate C)
+        var mod = ResolveExternalModule(location, runtimeImportSpecifier,
+            Diagnostics.This_JSX_tag_requires_the_module_path_0_to_exist_but_none_could_be_found_Make_sure_you_have_types_for_the_appropriate_package_installed, location, isForAugmentation: false);
+        var result = !mod.IsNone && mod != unknownSymbol ? GetMergedSymbol(ResolveSymbol(mod)) : SymbolRef.None;
+        jsxImplicitImportContainers[location.File] = result.IsNone ? unknownSymbol : result;
+        return result;
+    }
+
+    // utilities.ts getJSXImplicitImportBase (the jsxImportSource option: not set in Gate C)
+    private string? GetJSXImplicitImportBase(int fileNumber)
+    {
+        var file = FileAt(fileNumber);
+        var pragmas = file.Store.Pragmas(file.Root);
+        var jsxImportSourcePragma = LastPragmaFactory(pragmas, "jsximportsource", out var hasImportSource);
+        var jsxRuntimeFactory = LastPragmaFactory(pragmas, "jsxruntime", out _);
+        if (jsxRuntimeFactory == "classic")
+        {
+            return null;
+        }
+        return compilerOptions.Jsx is JsxEmit.ReactJSX or JsxEmit.ReactJSXDev || hasImportSource || jsxRuntimeFactory == "automatic"
+            ? (!string.IsNullOrEmpty(jsxImportSourcePragma) ? jsxImportSourcePragma : "react")
+            : null;
+    }
+
+    // utilities.ts getJSXRuntimeImport
+    private string? GetJSXRuntimeImport(string? importBase) =>
+        importBase is null ? null : importBase + "/" + (compilerOptions.Jsx == JsxEmit.ReactJSXDev ? "jsx-dev-runtime" : "jsx-runtime");
+
+    // the factory argument of the last pragma of the given name
+    private static string? LastPragmaFactory(PragmaMap? pragmas, string name, out bool present)
+    {
+        present = false;
+        if (pragmas is null || !pragmas.TryGetValue(name, out var value))
+        {
+            return null;
+        }
+        present = true;
+        var entry = value is List<PragmaEntry> list ? list[^1] : (PragmaEntry)value;
+        return entry.Arguments.Get("factory") switch
+        {
+            string s => s,
+            PragmaArgumentSpan span => span.Value,
+            _ => null,
+        };
+    }
+
     // checker.ts getJsxNamespaceAt
     private SymbolRef GetJsxNamespaceAt(NodeRef location)
     {
@@ -1683,9 +1758,12 @@ internal sealed partial class Checker
             }
             if (!JsxElementLinks.Has(location) || JsxElementLinks.Get(location).JsxNamespaceState != 1)
             {
-                // (getJsxNamespaceContainerForImplicitImport: never present in Gate C)
-                var namespaceName = GetJsxNamespace(location);
-                var resolvedNamespace = ResolveName(location, namespaceName, NodeRef.None, SymbolFlags.Namespace, null, isUse: false);
+                var resolvedNamespace = GetJsxNamespaceContainerForImplicitImport(location);
+                if (resolvedNamespace.IsNone || resolvedNamespace == unknownSymbol)
+                {
+                    var namespaceName = GetJsxNamespace(location);
+                    resolvedNamespace = ResolveName(location, namespaceName, NodeRef.None, SymbolFlags.Namespace, null, isUse: false);
+                }
                 if (!resolvedNamespace.IsNone)
                 {
                     var candidate = ResolveSymbol(GetSymbol(GetExportsOfSymbol(ResolveSymbol(resolvedNamespace)), JsxNamespaceName, SymbolFlags.Namespace));
