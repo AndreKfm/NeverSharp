@@ -669,9 +669,9 @@ internal sealed partial class Checker
         // moduleSpecifiers.getModuleSpecifiers for a file of the program (the specifier preferences in full: not reachable in Gate C's one-file programs)
         var fileName = FileNameOfFile(file.File);
         var withoutExtension = RemoveFileExtensionForSpecifier(fileName);
-        // tryGetModuleNameAsNodeModule: the path below the last node_modules folder, without a trailing /index (no
-        // package.json files exist in Gate C's programs)
-        var nodeModules = withoutExtension.LastIndexOf("/node_modules/", StringComparison.Ordinal);
+        // tryGetModuleNameAsNodeModule: the path below the top-level (first) node_modules folder, without a trailing /index
+        // (no package.json files exist in Gate C's programs)
+        var nodeModules = withoutExtension.IndexOf("/node_modules/", StringComparison.Ordinal);
         if (nodeModules >= 0)
         {
             var moduleName = withoutExtension[(nodeModules + "/node_modules/".Length)..];
@@ -705,6 +705,19 @@ internal sealed partial class Checker
 
     private static string RemoveFileExtensionForSpecifier(string fileName)
     {
+        // moduleSpecifiers.ts removeExtensionAndIndexPostFix / processEnding: .mjs and .cjs are kept, .mts/.cts (and their
+        // declaration files) become .mjs/.cjs
+        if (fileName.EndsWith(".mjs", StringComparison.Ordinal) || fileName.EndsWith(".cjs", StringComparison.Ordinal))
+        {
+            return fileName;
+        }
+        foreach (var (extension, jsExtension) in (ReadOnlySpan<(string, string)>)[(".d.mts", ".mjs"), (".d.cts", ".cjs"), (".mts", ".mjs"), (".cts", ".cjs")])
+        {
+            if (fileName.EndsWith(extension, StringComparison.Ordinal))
+            {
+                return fileName[..^extension.Length] + jsExtension;
+            }
+        }
         foreach (var extension in (ReadOnlySpan<string>)[".d.ts", ".d.mts", ".d.cts", ".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".json"])
         {
             if (fileName.EndsWith(extension, StringComparison.Ordinal))

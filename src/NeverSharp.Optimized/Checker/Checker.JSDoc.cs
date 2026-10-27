@@ -544,6 +544,39 @@ internal sealed partial class Checker
         return Node.None;
     }
 
+    // checker.ts getAssignedClassSymbol
+    private SymbolRef GetAssignedClassSymbol(NodeRef decl)
+    {
+        var assignmentSymbol = GetSymbolOfExpando(decl, allowDeclaration: true);
+        var exports = assignmentSymbol.IsNone ? null : ExportsOf(assignmentSymbol);
+        var prototype = exports?.Get("prototype") ?? SymbolRef.None;
+        var prototypeDeclaration = prototype.IsNone ? NodeRef.None : ValueDeclarationOf(prototype);
+        var init = prototypeDeclaration.IsNone ? Node.None : GetAssignedJSPrototype(StoreOf(prototypeDeclaration), prototypeDeclaration.Node);
+        return init.IsNone ? SymbolRef.None : GetSymbolOfDeclaration(At(prototypeDeclaration, init));
+    }
+
+    // checker.ts getAssignedJSPrototype
+    private static Node GetAssignedJSPrototype(NodeStore store, Node node)
+    {
+        var parent = store.Parent(node);
+        while (!parent.IsNone && store.Kind(parent) == SyntaxKind.PropertyAccessExpression)
+        {
+            parent = store.Parent(parent);
+        }
+        if (!parent.IsNone && store.Kind(parent) == SyntaxKind.BinaryExpression && Utilities.IsPrototypeAccess(store, store.Left(parent)) &&
+            store.Kind(store.OperatorToken(parent)) == SyntaxKind.EqualsToken)
+        {
+            // getInitializerOfBinaryExpression
+            var right = store.Right(parent);
+            while (store.Kind(right) == SyntaxKind.BinaryExpression && store.Kind(store.OperatorToken(right)) == SyntaxKind.EqualsToken)
+            {
+                right = store.Right(right);
+            }
+            return store.Kind(right) == SyntaxKind.ObjectLiteralExpression ? right : Node.None;
+        }
+        return Node.None;
+    }
+
     // checker.ts getReturnTypeOfTypeTag
     private Type GetReturnTypeOfTypeTag(NodeRef node)
     {

@@ -219,6 +219,33 @@ internal sealed partial class Checker
         return S.NewList(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(result), store.HasTrailingComma(list));
     }
 
+    // expressionToTypeNode.ts: a parameter of a reused JSDoc function type (getEffectiveDotDotDotForParameter,
+    // getNameForJSDocFunctionParameter)
+    private Node JSDocFunctionParameter(NodeBuilderContext context, NodeRef owner, Node p, int index)
+    {
+        var store = StoreOf(owner);
+        var type = store.Type(p);
+        var dotDotDot = !store.DotDotDotToken(p).IsNone || (!type.IsNone && store.Kind(type) == SyntaxKind.JSDocVariadicType);
+        var pName = store.Name(p);
+        var name = !pName.IsNone && store.Kind(pName) == SyntaxKind.Identifier && store.Texts.Equals(store.EscapedText(pName), "this") ? "this"
+            : dotDotDot ? "args"
+            : "arg" + index.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return SParameterDeclaration(NodeList.None, dotDotDot ? SToken(SyntaxKind.DotDotDotToken) : Node.None,
+            SetTextRange(context, SIdentifier(name), At(owner, p)),
+            store.QuestionToken(p).IsNone ? Node.None : SToken(SyntaxKind.QuestionToken),
+            VisitExistingNodeTreeSymbols(context, At(owner, type)));
+    }
+
+    // checker.ts getJsDocPropertyOverride
+    private Node GetJsDocPropertyOverride(NodeBuilderContext context, NodeRef jsDocTypeLiteral, NodeRef jsDocProperty, NodeRef name)
+    {
+        var store = StoreOf(jsDocProperty);
+        var typeViaParent = GetTypeOfPropertyOfType(GetTypeFromTypeNodeInContext(context, jsDocTypeLiteral), store.Texts.GetString(store.EscapedText(name.Node))!);
+        var typeExpression = store.TypeExpression(jsDocProperty.Node);
+        return !typeViaParent.IsNone && !typeExpression.IsNone && GetTypeFromTypeNodeInContext(context, At(jsDocProperty, store.Type(typeExpression))) != typeViaParent
+            ? TypeToTypeNodeHelper(typeViaParent, context) : Node.None;
+    }
+
     // expressionToTypeNode.ts visitExistingNodeTreeSymbolsWorker
     private Node VisitExistingNodeTreeSymbolsWorker(NodeBuilderContext context, NodeRef node)
     {
@@ -245,10 +272,53 @@ internal sealed partial class Checker
             case SyntaxKind.JSDocVariadicType:
                 return SArrayType(VisitExistingNodeTreeSymbols(context, At(node, store.Type(n))));
             case SyntaxKind.JSDocTypeLiteral:
+            {
+                var members = new List<Node>();
+                foreach (var t in store.JsDocPropertyTags(n) ?? [])
+                {
+                    var tagName = store.Name(t);
+                    var nameNode = store.Kind(tagName) == SyntaxKind.Identifier ? tagName : store.Right(tagName);
+                    var name = VisitExistingNodeTreeSymbols(context, At(node, nameNode));
+                    var overrideTypeNode = GetJsDocPropertyOverride(context, node, At(node, t), At(node, nameNode));
+                    var typeExpression = store.TypeExpression(t);
+                    var optional = store.IsBracketed(t) || (!typeExpression.IsNone && store.Kind(store.Type(typeExpression)) == SyntaxKind.JSDocOptionalType);
+                    var memberType = !overrideTypeNode.IsNone ? overrideTypeNode
+                        : !typeExpression.IsNone ? VisitExistingNodeTreeSymbols(context, At(node, store.Type(typeExpression))) : Node.None;
+                    members.Add(SPropertySignature(NodeList.None, name, optional ? SToken(SyntaxKind.QuestionToken) : Node.None,
+                        !memberType.IsNone ? memberType : SKeyword(SyntaxKind.AnyKeyword)));
+                }
+                return STypeLiteral(members);
+            }
             case SyntaxKind.JSDocFunctionType:
-                // (JSDoc type literals and function types in reused annotations: C9)
-                reuseUnsupported = true;
-                return Node.None;
+            {
+                var parameters = store.Nodes(store.Parameters(n));
+                var list = new List<Node>();
+                if (Utilities.IsJSDocConstructSignature(store, n))
+                {
+                    var newTypeNode = Node.None;
+                    for (var i = 0; i < parameters.Length; i++)
+                    {
+                        var p = parameters[i];
+                        var pName = store.Name(p);
+                        if (!pName.IsNone && store.Kind(pName) == SyntaxKind.Identifier && store.Texts.Equals(store.EscapedText(pName), "new"))
+                        {
+                            newTypeNode = store.Type(p);
+                            continue;
+                        }
+                        list.Add(JSDocFunctionParameter(context, node, p, i));
+                    }
+                    var constructorReturn = VisitExistingNodeTreeSymbols(context, At(node, !newTypeNode.IsNone ? newTypeNode : store.Type(n)));
+                    return SSignature(SyntaxKind.ConstructorType, NodeList.None, Node.None, Node.None, VisitExistingNodes(context, node, store.TypeParameters(n)), SList(list),
+                        !constructorReturn.IsNone ? constructorReturn : SKeyword(SyntaxKind.AnyKeyword));
+                }
+                for (var i = 0; i < parameters.Length; i++)
+                {
+                    list.Add(JSDocFunctionParameter(context, node, parameters[i], i));
+                }
+                var returnTypeNode = VisitExistingNodeTreeSymbols(context, At(node, store.Type(n)));
+                return SSignature(SyntaxKind.FunctionType, NodeList.None, Node.None, Node.None, VisitExistingNodes(context, node, store.TypeParameters(n)), SList(list),
+                    !returnTypeNode.IsNone ? returnTypeNode : SKeyword(SyntaxKind.AnyKeyword));
+            }
         }
         if (kind == SyntaxKind.TypeReference && store.Kind(store.TypeName(n)) == SyntaxKind.Identifier && string.IsNullOrEmpty(store.Texts.GetString(store.EscapedText(store.TypeName(n)))))
         {

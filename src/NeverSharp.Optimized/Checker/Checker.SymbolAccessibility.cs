@@ -371,7 +371,23 @@ internal sealed partial class Checker
                     continue;
                 }
             }
-            // (class expressions assigned to JavaScript exports: C9)
+            if (store.Kind(d.Node) == SyntaxKind.ClassExpression && !parent.IsNone && Kind(parent) == SyntaxKind.BinaryExpression &&
+                store.Kind(store.OperatorToken(parent.Node)) == SyntaxKind.EqualsToken && Utilities.IsAccessExpression(store, store.Left(parent.Node)) &&
+                Utilities.IsEntityNameExpression(store, store.Expression(store.Left(parent.Node))))
+            {
+                var left = store.Left(parent.Node);
+                if (Utilities.IsModuleExportsAccessExpression(store, left) || Utilities.IsExportsIdentifier(store, store.Expression(left)))
+                {
+                    candidates.Add(GetSymbolOfDeclaration(At(d, Utilities.RootOf(store, d.Node))));
+                    continue;
+                }
+                CheckExpressionCached(At(d, store.Expression(left)));
+                var resolved = SymbolNodeLinks.Has(At(d, store.Expression(left))) ? SymbolNodeLinks.Get(At(d, store.Expression(left))).ResolvedSymbol : SymbolRef.None;
+                if (!resolved.IsNone)
+                {
+                    candidates.Add(resolved);
+                }
+            }
         }
         if (candidates.Count == 0)
         {

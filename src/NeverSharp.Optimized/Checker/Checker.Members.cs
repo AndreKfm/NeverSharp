@@ -121,7 +121,16 @@ internal sealed partial class Checker
         if (links.DeclaredType.IsNone)
         {
             var kind = (SymbolFlagsOf(symbol) & SymbolFlags.Class) != 0 ? ObjectFlags.Class : ObjectFlags.Interface;
+            var originalSymbol = symbol;
+            var valueDeclaration = ValueDeclarationOf(symbol);
+            var merged = valueDeclaration.IsNone ? SymbolRef.None : MergeJSSymbols(symbol, GetAssignedClassSymbol(valueDeclaration));
+            if (!merged.IsNone)
+            {
+                // note:we overwrite links because we just cloned the symbol
+                symbol = merged;
+            }
             var type = CreateObjectType(kind, symbol);
+            DeclaredTypeLinks.Get(originalSymbol).DeclaredType = type;
             DeclaredTypeLinks.Get(symbol).DeclaredType = type;
             var outerTypeParameters = GetOuterTypeParametersOfClassOrInterface(symbol);
             var localTypeParameters = GetLocalTypeParametersOfClassOrInterfaceOrTypeAlias(symbol);
