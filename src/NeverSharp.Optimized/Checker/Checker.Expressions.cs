@@ -267,7 +267,7 @@ internal sealed partial class Checker
             case SyntaxKind.TaggedTemplateExpression:
                 return CheckTaggedTemplateExpression(node);
             case SyntaxKind.ParenthesizedExpression:
-                return CheckExpression(At(node, store.Expression(n)), checkMode);
+                return CheckParenthesizedExpression(node, checkMode);
             case SyntaxKind.ClassExpression:
                 return CheckClassExpression(node);
             case SyntaxKind.FunctionExpression:
@@ -913,7 +913,7 @@ internal sealed partial class Checker
     private Type CheckAssertion(NodeRef node, CheckMode checkMode)
     {
         var store = StoreOf(node);
-        var typeNode = At(node, store.Type(node.Node));
+        var typeNode = GetAssertionTypeNode(node);
         var expression = At(node, store.Expression(node.Node));
         var exprType = CheckExpression(expression, checkMode);
         if (IsConstTypeReference(store, typeNode.Node))
@@ -930,11 +930,61 @@ internal sealed partial class Checker
         return GetTypeFromTypeNode(typeNode);
     }
 
+    // checker.ts getAssertionTypeAndExpression (the type)
+    private NodeRef GetAssertionTypeNode(NodeRef node)
+    {
+        var store = StoreOf(node);
+        return store.Kind(node.Node) == SyntaxKind.ParenthesizedExpression ? GetJSDocTypeAssertionType(node) : At(node, store.Type(node.Node));
+    }
+
+    // utilities.ts getJSDocTypeAssertionType
+    private NodeRef GetJSDocTypeAssertionType(NodeRef node)
+    {
+        var store = StoreOf(node);
+        var tag = UtilitiesPublic.GetJSDocTypeTag(store, node.Node);
+        return tag.IsNone ? NodeRef.None : At(node, store.Type(store.TypeExpression(tag)));
+    }
+
+    // utilities.ts isJSDocSatisfiesExpression
+    private static bool IsJSDocSatisfiesExpression(NodeStore store, Node node) =>
+        Utilities.IsInJSFile(store, node) && store.Kind(node) == SyntaxKind.ParenthesizedExpression && UtilitiesPublic.HasJSDocNodes(store, node) &&
+        !GetJSDocSatisfiesTag(store, node).IsNone;
+
+    // utilities.ts getJSDocSatisfiesTag (a tag with a type expression)
+    private static Node GetJSDocSatisfiesTag(NodeStore store, Node node) => GetFirstJSDocTagOfKind(store, node, SyntaxKind.JSDocSatisfiesTag);
+
+    // utilities.ts getJSDocSatisfiesExpressionType
+    private NodeRef GetJSDocSatisfiesExpressionType(NodeRef node)
+    {
+        var store = StoreOf(node);
+        var tag = GetJSDocSatisfiesTag(store, node.Node);
+        return At(node, store.Type(store.TypeExpression(tag)));
+    }
+
+    // checker.ts checkParenthesizedExpression
+    private Type CheckParenthesizedExpression(NodeRef node, CheckMode checkMode)
+    {
+        var store = StoreOf(node);
+        if (UtilitiesPublic.HasJSDocNodes(store, node.Node))
+        {
+            if (IsJSDocSatisfiesExpression(store, node.Node))
+            {
+                return CheckSatisfiesExpressionWorker(At(node, store.Expression(node.Node)), GetJSDocSatisfiesExpressionType(node), checkMode);
+            }
+            if (FactoryUtilities.IsJSDocTypeAssertion(store, node.Node))
+            {
+                return CheckAssertion(node, checkMode);
+            }
+        }
+        return CheckExpression(At(node, store.Expression(node.Node)), checkMode);
+    }
+
     // checker.ts checkAssertionDeferred
     private void CheckAssertionDeferred(NodeRef node)
     {
         var store = StoreOf(node);
-        var typeNode = At(node, store.Type(node.Node));
+        var typeNode = GetAssertionTypeNode(node);
+        var errNode = store.Kind(node.Node) == SyntaxKind.ParenthesizedExpression ? typeNode : node;
         if (!ExpressionLinks.Has(node) || ExpressionLinks.Get(node).AssertionExpressionType.IsNone)
         {
             return;
@@ -948,7 +998,7 @@ internal sealed partial class Checker
                 var widenedType = GetWidenedType(exprType);
                 if (!IsTypeComparableTo(targetType, widenedType))
                 {
-                    CheckTypeComparableTo(exprType, targetType, node, Diagnostics.Conversion_of_type_0_to_type_1_may_be_a_mistake_because_neither_type_sufficiently_overlaps_with_the_other_If_this_was_intentional_convert_the_expression_to_unknown_first);
+                    CheckTypeComparableTo(exprType, targetType, errNode, Diagnostics.Conversion_of_type_0_to_type_1_may_be_a_mistake_because_neither_type_sufficiently_overlaps_with_the_other_If_this_was_intentional_convert_the_expression_to_unknown_first);
                 }
             });
         }
@@ -1004,10 +1054,20 @@ internal sealed partial class Checker
     private Type CheckSatisfiesExpression(NodeRef node)
     {
         var store = StoreOf(node);
-        var typeNode = At(node, store.Type(node.Node));
-        CheckSourceElement(typeNode);
-        var expression = At(node, store.Expression(node.Node));
-        var exprType = CheckExpression(expression);
+        CheckSourceElement(At(node, store.Type(node.Node)));
+        return CheckSatisfiesExpressionWorker(At(node, store.Expression(node.Node)), At(node, store.Type(node.Node)), CheckMode.Normal);
+    }
+
+    private Type CheckSatisfiesExpressionWorker(NodeRef expression, NodeRef typeNode, CheckMode checkMode)
+    {
+        var typeStore = StoreOf(typeNode);
+        var errorNode = typeStore.Parent(typeNode.Node);
+        while (!errorNode.IsNone && typeStore.Kind(errorNode) is not (SyntaxKind.SatisfiesExpression or SyntaxKind.JSDocSatisfiesTag))
+        {
+            errorNode = typeStore.Parent(errorNode);
+        }
+        var node = At(typeNode, errorNode);
+        var exprType = CheckExpression(expression, checkMode);
         var targetType = GetTypeFromTypeNode(typeNode);
         if (IsErrorType(targetType))
         {

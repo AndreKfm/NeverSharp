@@ -369,18 +369,33 @@ internal sealed partial class Checker
         return null;
     }
 
-    // utilities.ts getDeclaredExpandoInitializer (TODO(C9d): JavaScript expando initializers; the initializer of a
-    // TypeScript const declaration)
+    // utilities.ts getDeclaredExpandoInitializer
     private NodeRef GetDeclaredExpandoInitializer(NodeRef node)
     {
         var store = StoreOf(node);
-        var initializer = store.Initializer(node.Node);
+        var initializer = GetEffectiveInitializer(store, node.Node);
         if (initializer.IsNone)
         {
             return NodeRef.None;
         }
-        var skipped = Utilities.SkipParentheses(store, initializer);
-        return store.Kind(skipped) is SyntaxKind.FunctionExpression or SyntaxKind.ArrowFunction or SyntaxKind.ClassExpression ? At(node, skipped) : NodeRef.None;
+        var expando = Utilities.GetExpandoInitializer(store, initializer, Utilities.IsPrototypeAccess(store, store.Name(node.Node)));
+        return expando.IsNone ? NodeRef.None : At(node, expando);
+    }
+
+    // utilities.ts getEffectiveInitializer
+    internal static Node GetEffectiveInitializer(NodeStore store, Node node)
+    {
+        var initializer = store.Initializer(node);
+        if (Utilities.IsInJSFile(store, node) && !initializer.IsNone && store.Kind(initializer) == SyntaxKind.BinaryExpression &&
+            store.Kind(store.OperatorToken(initializer)) is SyntaxKind.BarBarToken or SyntaxKind.QuestionQuestionToken)
+        {
+            var name = store.Name(node);
+            if (!name.IsNone && Utilities.IsEntityNameExpression(store, name) && Utilities.IsSameEntityName(store, name, store.Left(initializer)))
+            {
+                return store.Right(initializer);
+            }
+        }
+        return initializer;
     }
 
     private Type NarrowTypeByAssertion(FlowState f, Type type, NodeRef expr)

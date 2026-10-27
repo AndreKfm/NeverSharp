@@ -2369,7 +2369,11 @@ internal sealed partial class Checker
                 return anyType;
             }
         }
-        // (JavaScript require calls: C9)
+        // In JavaScript files, calls to any identifier 'require' are treated as external module imports
+        if (Utilities.IsInJSFile(store, n) && IsCommonJsRequire(node))
+        {
+            return ResolveExternalModuleTypeByLiteral(At(node, store.Element(store.Arguments(n), 0)));
+        }
         var returnType = GetReturnTypeOfSignature(signature);
         // Treat any call to the global 'Symbol' function that is part of a const variable or readonly property
         // as a fresh unique symbol literal type.
@@ -2392,7 +2396,70 @@ internal sealed partial class Checker
                 GetTypeOfDottedName(callee, diagnostic);
             }
         }
+        if (Utilities.IsInJSFile(store, n))
+        {
+            var jsSymbol = GetSymbolOfExpando(node, allowDeclaration: false);
+            var jsExports = jsSymbol.IsNone ? null : ExportsOf(jsSymbol);
+            if (jsExports is { Count: > 0 })
+            {
+                var jsAssignmentType = CreateAnonymousType(jsSymbol, jsExports);
+                Types.Record(jsAssignmentType).ObjectFlags |= ObjectFlags.JSLiteral;
+                return GetIntersectionType([returnType, jsAssignmentType]);
+            }
+        }
         return returnType;
+    }
+
+    // checker.ts isCommonJsRequire
+    private bool IsCommonJsRequire(NodeRef node)
+    {
+        if (!IsRequireCall(node, requireStringLiteralLikeArgument: true))
+        {
+            return false;
+        }
+        // Make sure require is not a local function
+        var store = StoreOf(node);
+        var expression = store.Expression(node.Node);
+        var resolvedRequire = ResolveName(At(node, expression), store.Texts.GetString(store.EscapedText(expression))!, NodeRef.None, SymbolFlags.Value, null, isUse: true);
+        if (resolvedRequire == requireSymbol)
+        {
+            return true;
+        }
+        if (resolvedRequire.IsNone)
+        {
+            return false;
+        }
+        // project includes symbol named 'require' - make sure that it is ambient and local non-alias
+        var flags = SymbolFlagsOf(resolvedRequire);
+        if ((flags & SymbolFlags.Alias) != 0)
+        {
+            return false;
+        }
+        var targetDeclarationKind = (flags & SymbolFlags.Function) != 0 ? SyntaxKind.FunctionDeclaration
+            : (flags & SymbolFlags.Variable) != 0 ? SyntaxKind.VariableDeclaration
+            : SyntaxKind.Unknown;
+        if (targetDeclarationKind != SyntaxKind.Unknown)
+        {
+            var decl = GetDeclarationOfKind(resolvedRequire, targetDeclarationKind);
+            // function/variable declaration should be ambient
+            return !decl.IsNone && (StoreOf(decl).Flags(decl.Node) & NodeFlags.Ambient) != 0;
+        }
+        return false;
+    }
+
+    // checker.ts resolveExternalModuleTypeByLiteral
+    private Type ResolveExternalModuleTypeByLiteral(NodeRef name)
+    {
+        var moduleSym = ResolveExternalModuleName(name, name);
+        if (!moduleSym.IsNone)
+        {
+            var resolvedModuleSymbol = ResolveExternalModuleSymbol(moduleSym);
+            if (!resolvedModuleSymbol.IsNone)
+            {
+                return GetTypeOfSymbol(resolvedModuleSymbol);
+            }
+        }
+        return anyType;
     }
 
     // checker.ts isSymbolOrSymbolForCall

@@ -966,9 +966,24 @@ internal sealed partial class Checker
                 return resultType;
             }
             case SyntaxKind.EqualsToken:
-                // (assignment declarations of JavaScript files: C9)
+            {
+                var leftParent = store.Parent(left.Node);
+                var declKind = store.Kind(leftParent) == SyntaxKind.BinaryExpression ? Utilities.GetAssignmentDeclarationKind(store, leftParent) : AssignmentDeclarationKind.None;
+                // (checkAssignmentDeclaration: duplicate typedef/class exports across declarations, not reached in Gate C)
+                if (IsAssignmentDeclarationKind(declKind))
+                {
+                    if ((Types.Flags(rightType) & TypeFlags.Object) == 0 ||
+                        (declKind != AssignmentDeclarationKind.ModuleExports && declKind != AssignmentDeclarationKind.Prototype &&
+                            !IsEmptyObjectType(rightType) && !IsFunctionObjectType(rightType) && (Types.ObjectFlagsOf(rightType) & ObjectFlags.Class) == 0))
+                    {
+                        // don't check assignability of module.exports=, C.prototype=, or expando types because they will necessarily be incomplete
+                        CheckAssignmentOperator(rightType);
+                    }
+                    return leftType;
+                }
                 CheckAssignmentOperator(rightType);
                 return rightType;
+            }
             case SyntaxKind.CommaToken:
                 if (compilerOptions.AllowUnreachableCode != true && IsSideEffectFree(store, left.Node) && !IsIndirectCall(store, store.Parent(left.Node)))
                 {
@@ -991,6 +1006,27 @@ internal sealed partial class Checker
                 return rightType;
             default:
                 return errorType;
+        }
+
+        bool IsAssignmentDeclarationKind(AssignmentDeclarationKind kind)
+        {
+            switch (kind)
+            {
+                case AssignmentDeclarationKind.ModuleExports:
+                    return true;
+                case AssignmentDeclarationKind.ExportsProperty:
+                case AssignmentDeclarationKind.Property:
+                case AssignmentDeclarationKind.Prototype:
+                case AssignmentDeclarationKind.PrototypeProperty:
+                case AssignmentDeclarationKind.ThisProperty:
+                {
+                    var symbol = GetSymbolOfNode(left);
+                    var init = Utilities.GetAssignedExpandoInitializer(store, right.Node);
+                    return !init.IsNone && store.Kind(init) == SyntaxKind.ObjectLiteralExpression && !symbol.IsNone && ExportsOf(symbol) is { Count: > 0 };
+                }
+                default:
+                    return false;
+            }
         }
 
         bool BothAreBigIntLike(Type l, Type r) => IsTypeAssignableToKind(l, TypeFlags.BigIntLike) && IsTypeAssignableToKind(r, TypeFlags.BigIntLike);

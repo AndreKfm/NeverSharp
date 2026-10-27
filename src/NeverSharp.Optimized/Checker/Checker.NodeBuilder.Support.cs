@@ -146,15 +146,35 @@ internal sealed partial class Checker
         return result;
     }
 
-    // checker.ts isJSConstructor (JavaScript constructor functions: C9)
+    // checker.ts isJSConstructor
     private bool IsJSConstructor(NodeRef node)
     {
         if (node.IsNone || !Utilities.IsInJSFile(StoreOf(node), node.Node))
         {
             return false;
         }
-        // (function declarations with `this` property assignments or @class tags: C9)
-        return false;
+        var store = StoreOf(node);
+        var n = node.Node;
+        var func = store.Kind(n) is SyntaxKind.FunctionDeclaration or SyntaxKind.FunctionExpression ? n
+            : store.Kind(n) is SyntaxKind.VariableDeclaration or SyntaxKind.PropertyAssignment && !store.Initializer(n).IsNone && store.Kind(store.Initializer(n)) == SyntaxKind.FunctionExpression ? store.Initializer(n)
+            : Node.None;
+        if (func.IsNone)
+        {
+            return false;
+        }
+        // If the node has a @class or @constructor tag, treat it like a constructor.
+        if (!GetFirstJSDocTagOfKind(store, n, SyntaxKind.JSDocClassTag).IsNone)
+        {
+            return true;
+        }
+        // If the node is a property of an object literal.
+        if (store.Kind(WalkUpParenthesizedExpressions(store, store.Parent(func))) == SyntaxKind.PropertyAssignment)
+        {
+            return false;
+        }
+        // If the symbol of the node has members, treat it like a constructor.
+        var symbol = GetSymbolOfDeclaration(At(node, func));
+        return !symbol.IsNone && MembersOf(symbol) is { Count: > 0 };
     }
 
     // checker.ts getBaseTypeVariableOfClass

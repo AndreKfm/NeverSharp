@@ -209,8 +209,8 @@ internal sealed partial class Checker
         _ => store.Expression(node),
     };
 
-    /// <summary>utilities.ts getEffectiveReturnTypeNode (JSDoc return types: C9).</summary>
-    internal static Node GetEffectiveReturnTypeNode(NodeStore store, Node node) => store.Type(node);
+    /// <summary>utilities.ts getEffectiveReturnTypeNode.</summary>
+    internal static Node GetEffectiveReturnTypeNode(NodeStore store, Node node) => GetEffectiveReturnTypeNodeOf(store, node);
 
     /// <summary>utilities.ts getThisParameter.</summary>
     internal static Node GetThisParameter(NodeStore store, Node signature)

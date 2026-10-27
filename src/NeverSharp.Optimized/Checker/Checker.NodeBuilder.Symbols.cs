@@ -1463,8 +1463,14 @@ internal sealed partial class Checker
         return false;
     }
 
-    // utilities.ts hasEffectiveQuestionToken (JSDoc optional parameters: C9)
-    private bool HasEffectiveQuestionToken(NodeRef node) => !StoreOf(node).QuestionToken(node.Node).IsNone;
+    // checker.ts hasEffectiveQuestionToken
+    private bool HasEffectiveQuestionToken(NodeRef node)
+    {
+        var store = StoreOf(node);
+        return (store.Kind(node.Node) != SyntaxKind.JSDocParameterTag && store.Kind(node.Node) != SyntaxKind.JSDocPropertyTag && !store.QuestionToken(node.Node).IsNone) ||
+            IsOptionalJSDocPropertyLikeTag(store, node.Node) ||
+            (store.Kind(node.Node) == SyntaxKind.Parameter && IsJSDocOptionalParameter(store, node.Node));
+    }
 
     // checker.ts serializeReturnTypeForSignature
     private Node SerializeReturnTypeForSignature(NodeBuilderContext context, Signature signature)

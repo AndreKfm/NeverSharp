@@ -293,6 +293,61 @@ internal sealed partial class Checker
         return result == resolvingSymbol ? SymbolRef.None : result;
     }
 
+    // checker.ts getSpecialPropertyAssignmentSymbolFromEntityName
+    private SymbolRef GetSpecialPropertyAssignmentSymbolFromEntityName(NodeRef entityName)
+    {
+        var store = StoreOf(entityName);
+        var parent = store.Parent(entityName.Node);
+        var binary = store.Parent(parent);
+        switch (Utilities.GetAssignmentDeclarationKind(store, binary))
+        {
+            case AssignmentDeclarationKind.ExportsProperty:
+            case AssignmentDeclarationKind.PrototypeProperty:
+                return GetSymbolOfNode(At(entityName, parent));
+            case AssignmentDeclarationKind.Property:
+                if (store.Kind(parent) == SyntaxKind.PropertyAccessExpression && GetLeftmostAccessExpression(store, parent) == entityName.Node)
+                {
+                    return SymbolRef.None;
+                }
+                return GetSymbolOfDeclaration(At(entityName, binary));
+            case AssignmentDeclarationKind.ThisProperty:
+            case AssignmentDeclarationKind.ModuleExports:
+                return GetSymbolOfDeclaration(At(entityName, binary));
+        }
+        return SymbolRef.None;
+    }
+
+    // utilities.ts getLeftmostAccessExpression
+    internal static Node GetLeftmostAccessExpression(NodeStore store, Node expr)
+    {
+        while (store.Kind(expr) is SyntaxKind.PropertyAccessExpression or SyntaxKind.ElementAccessExpression)
+        {
+            expr = store.Expression(expr);
+        }
+        return expr;
+    }
+
+    // checker.ts isThisPropertyAndThisTyped
+    private bool IsThisPropertyAndThisTyped(NodeRef node)
+    {
+        var store = StoreOf(node);
+        if (store.Kind(store.Expression(node.Node)) == SyntaxKind.ThisKeyword)
+        {
+            var container = Utilities.GetThisContainer(store, node.Node, includeArrowFunctions: false, includeClassComputedPropertyName: false);
+            if (Utilities.IsFunctionLike(store, container))
+            {
+                var containingLiteral = GetContainingObjectLiteral(store, container);
+                if (!containingLiteral.IsNone)
+                {
+                    var contextualType = GetApparentTypeOfContextualType(At(node, containingLiteral), ContextFlags.None);
+                    var type = GetThisTypeOfObjectLiteralFromContextualType(At(node, containingLiteral), contextualType);
+                    return !type.IsNone && !IsTypeAny(type);
+                }
+            }
+        }
+        return false;
+    }
+
     /// <summary>checker.ts getSymbolOfNameOrPropertyAccessExpression.</summary>
     private SymbolRef GetSymbolOfNameOrPropertyAccessExpression(NodeRef nameRef)
     {
@@ -302,8 +357,20 @@ internal sealed partial class Checker
         {
             return GetSymbolOfNode(At(nameRef, store.Parent(name)));
         }
-        // (JavaScript special property assignments: module C9)
         var parent = store.Parent(name);
+        if (Utilities.IsInJSFile(store, name) && store.Kind(parent) == SyntaxKind.PropertyAccessExpression &&
+            store.Kind(store.Parent(parent)) == SyntaxKind.BinaryExpression && store.Left(store.Parent(parent)) == parent)
+        {
+            // Check if this is a special property assignment
+            if (store.Kind(name) is not (SyntaxKind.PrivateIdentifier or SyntaxKind.JSDocMemberName) && !IsThisPropertyAndThisTyped(At(nameRef, parent)))
+            {
+                var specialPropertyAssignmentSymbol = GetSpecialPropertyAssignmentSymbolFromEntityName(nameRef);
+                if (!specialPropertyAssignmentSymbol.IsNone)
+                {
+                    return specialPropertyAssignmentSymbol;
+                }
+            }
+        }
         var nameKind = store.Kind(name);
         var isEntityName = nameKind is SyntaxKind.Identifier or SyntaxKind.QualifiedName;
         if (store.Kind(parent) == SyntaxKind.ExportAssignment && Utilities.IsEntityNameExpression(store, name))

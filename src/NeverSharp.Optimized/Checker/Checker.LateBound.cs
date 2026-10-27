@@ -106,6 +106,14 @@ internal sealed partial class Checker
         _ => NodeList.None,
     };
 
+    // getSymbolLinks(symbol).resolvedExports = undefined; .resolvedMembers = undefined (getCommonJsExportEquals)
+    private void ResetResolvedMembersOrExports(SymbolRef symbol)
+    {
+        resolvedLateExports.Remove(symbol);
+        resolvedLateMembers.Remove(symbol);
+        resolvedModuleExports.Remove(symbol);
+    }
+
     /// <summary>checker.ts getResolvedMembersOrExportsOfSymbol.</summary>
     private SymTable GetResolvedMembersOrExportsOfSymbol(SymbolRef symbol, bool isStatic)
     {

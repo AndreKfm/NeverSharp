@@ -1805,7 +1805,14 @@ internal sealed partial class Checker
     private bool IsOptionalDeclaration(NodeRef declaration)
     {
         var store = StoreOf(declaration);
-        // (JSDoc optional parameters and property tags: C9)
+        if (store.Kind(declaration.Node) is SyntaxKind.JSDocPropertyTag or SyntaxKind.JSDocParameterTag)
+        {
+            return IsOptionalJSDocPropertyLikeTag(store, declaration.Node);
+        }
+        if (store.Kind(declaration.Node) == SyntaxKind.Parameter && IsJSDocOptionalParameter(store, declaration.Node))
+        {
+            return true;
+        }
         return store.Kind(declaration.Node) is SyntaxKind.Parameter or SyntaxKind.PropertySignature or SyntaxKind.PropertyDeclaration or SyntaxKind.MethodDeclaration or SyntaxKind.MethodSignature or SyntaxKind.PropertyAssignment or SyntaxKind.ShorthandPropertyAssignment
             && !store.QuestionToken(declaration.Node).IsNone;
     }
@@ -1950,11 +1957,15 @@ internal sealed partial class Checker
         return false;
     }
 
-    // utilities.ts getEffectiveTypeAnnotationNode (JSDoc types in JavaScript: C9)
+    // utilities.ts getEffectiveTypeAnnotationNode
     private NodeRef GetEffectiveTypeAnnotationNodeRef(NodeRef node)
     {
         var store = StoreOf(node);
         var kind = store.Kind(node.Node);
+        if (Utilities.IsInJSFile(store, node.Node))
+        {
+            return GetEffectiveTypeAnnotationNode(node);
+        }
         if (kind is SyntaxKind.Parameter or SyntaxKind.PropertySignature or SyntaxKind.PropertyDeclaration or SyntaxKind.VariableDeclaration or SyntaxKind.BindingElement or SyntaxKind.TypeAliasDeclaration or
             SyntaxKind.AsExpression or SyntaxKind.TypeAssertionExpression or SyntaxKind.SatisfiesExpression or SyntaxKind.IndexSignature or SyntaxKind.PropertyAssignment)
         {
@@ -2132,11 +2143,10 @@ internal sealed partial class Checker
     private bool IsOptionalParameter(NodeRef node)
     {
         var store = StoreOf(node);
-        if (!store.QuestionToken(node.Node).IsNone)
+        if (HasEffectiveQuestionToken(node))
         {
             return true;
         }
-        // (JSDoc optional parameters and property tags: C9)
         if (store.Kind(node.Node) == SyntaxKind.Parameter && !store.Initializer(node.Node).IsNone)
         {
             var parent = At(node, store.Parent(node.Node));

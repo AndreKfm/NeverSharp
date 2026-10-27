@@ -352,6 +352,9 @@ internal static partial class UtilitiesPublic
         return tags;
     }
 
+    /// <summary>utilitiesPublic.ts getJSDocTags (used by the checker's JavaScript and JSDoc typing, module C9d).</summary>
+    internal static IReadOnlyList<Node> GetJSDocTags(NodeStore store, Node node) => GetJSDocTagsWorker(store, node);
+
     /// <summary>utilitiesPublic.ts getJSDocDeprecatedTag.</summary>
     internal static Node GetJSDocDeprecatedTag(NodeStore store, Node node) => GetFirstJSDocTag(store, node, tag => store.Kind(tag) == SyntaxKind.JSDocDeprecatedTag);
 

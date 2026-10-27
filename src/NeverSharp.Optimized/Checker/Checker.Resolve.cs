@@ -429,7 +429,14 @@ internal sealed partial class Checker
                 result = Lookup(globals, name, meaning, forSuggestion);
             }
         }
-        // (requireSymbol for `require(...)` in JavaScript files: module C9)
+        if (result.IsNone && !originalLocation.IsNone && Utilities.IsInJSFile(StoreOf(originalLocation), originalLocation.Node))
+        {
+            var originalParent = StoreOf(originalLocation).Parent(originalLocation.Node);
+            if (!originalParent.IsNone && IsRequireCall(At(originalLocation, originalParent), requireStringLiteralLikeArgument: false))
+            {
+                return requireSymbol;
+            }
+        }
 
         if (nameNotFoundMessage is not null)
         {
@@ -2088,11 +2095,28 @@ internal sealed partial class Checker
             case SyntaxKind.ExportAssignment:
                 return Utilities.ExportAssignmentIsAlias(store, n);
             case SyntaxKind.PropertyAssignment:
-                return Utilities.IsAliasableExpression(store, store.Initializer(n));
+                return IsAliasableOrJsExpression(At(node, store.Initializer(n)));
+            case SyntaxKind.BinaryExpression:
+                return Utilities.GetAssignmentDeclarationKind(store, n) == AssignmentDeclarationKind.ModuleExports && Utilities.ExportAssignmentIsAlias(store, n);
+            case SyntaxKind.PropertyAccessExpression:
+            case SyntaxKind.ElementAccessExpression:
+            {
+                var parent = store.Parent(n);
+                return store.Kind(parent) == SyntaxKind.BinaryExpression && store.Left(parent) == n && store.Kind(store.OperatorToken(parent)) == SyntaxKind.EqualsToken &&
+                    IsAliasableOrJsExpression(At(node, store.Right(parent)));
+            }
+            case SyntaxKind.VariableDeclaration:
+                return !GetExternalModuleRequireArgument(store, n).IsNone;
+            case SyntaxKind.BindingElement:
+                return !GetExternalModuleRequireArgument(store, store.Parent(store.Parent(n))).IsNone;
             default:
                 return false;
         }
     }
+
+    // checker.ts isAliasableOrJsExpression
+    private bool IsAliasableOrJsExpression(NodeRef e) =>
+        Utilities.IsAliasableExpression(StoreOf(e), e.Node) || (Kind(e) == SyntaxKind.FunctionExpression && IsJSConstructor(e));
 
     private SymbolRef GetTargetOfAliasDeclaration(NodeRef node, bool dontRecursivelyResolve = false)
     {
@@ -2134,9 +2158,95 @@ internal sealed partial class Checker
                 return ResolveEntityName(At(node, store.Name(node.Node)), SymbolFlags.Value | SymbolFlags.Type | SymbolFlags.Namespace, ignoreErrors: true, dontRecursivelyResolve);
             case SyntaxKind.PropertyAssignment:
                 return GetTargetOfAliasLikeExpression(At(node, store.Initializer(node.Node)), dontRecursivelyResolve);
+            case SyntaxKind.BinaryExpression:
+            {
+                // getTargetOfExportAssignment
+                var resolved = GetTargetOfAliasLikeExpression(At(node, store.Right(node.Node)), dontRecursivelyResolve);
+                MarkSymbolOfAliasDeclarationIfTypeOnly(node, SymbolRef.None, resolved, overwriteEmpty: false);
+                return resolved;
+            }
+            case SyntaxKind.ElementAccessExpression:
+            case SyntaxKind.PropertyAccessExpression:
+            {
+                // getTargetOfAccessExpression
+                var parent = store.Parent(node.Node);
+                if (!(store.Kind(parent) == SyntaxKind.BinaryExpression && store.Left(parent) == node.Node && store.Kind(store.OperatorToken(parent)) == SyntaxKind.EqualsToken))
+                {
+                    return SymbolRef.None;
+                }
+                return GetTargetOfAliasLikeExpression(At(node, store.Right(parent)), dontRecursivelyResolve);
+            }
+            case SyntaxKind.VariableDeclaration:
+                return GetTargetOfRequireVariableDeclaration(node, dontRecursivelyResolve);
+            case SyntaxKind.BindingElement:
+            {
+                // getTargetOfImportSpecifier (binding elements of `const { x } = require("...")`)
+                var root = At(node, Utilities.GetRootDeclaration(store, node.Node));
+                var commonJSPropertyAccess = GetCommonJSPropertyAccess(store, root.Node);
+                var resolved = GetExternalModuleMember(root, !commonJSPropertyAccess.IsNone ? At(node, commonJSPropertyAccess) : node, dontRecursivelyResolve);
+                var name = !store.PropertyName(node.Node).IsNone ? store.PropertyName(node.Node) : store.Name(node.Node);
+                if (!commonJSPropertyAccess.IsNone && !resolved.IsNone && store.Kind(name) == SyntaxKind.Identifier)
+                {
+                    return ResolveSymbol(GetPropertyOfType(GetTypeOfSymbol(resolved), store.Texts.GetString(store.EscapedText(name))!), dontRecursivelyResolve);
+                }
+                MarkSymbolOfAliasDeclarationIfTypeOnly(node, SymbolRef.None, resolved, overwriteEmpty: false);
+                return resolved;
+            }
             default:
                 return SymbolRef.None;
         }
+    }
+
+    // checker.ts getCommonJSPropertyAccess
+    private static Node GetCommonJSPropertyAccess(NodeStore store, Node node) =>
+        store.Kind(node) == SyntaxKind.VariableDeclaration && !store.Initializer(node).IsNone && store.Kind(store.Initializer(node)) == SyntaxKind.PropertyAccessExpression
+            ? store.Initializer(node) : Node.None;
+
+    // utilities.ts getExternalModuleRequireArgument
+    private static Node GetExternalModuleRequireArgument(NodeStore store, Node node)
+    {
+        if (store.Kind(node) != SyntaxKind.VariableDeclaration || store.Initializer(node).IsNone)
+        {
+            return Node.None;
+        }
+        var call = GetLeftmostAccessExpression(store, store.Initializer(node));
+        if (store.Kind(call) != SyntaxKind.CallExpression)
+        {
+            return Node.None;
+        }
+        var expression = store.Expression(call);
+        var arguments = store.Arguments(call);
+        if (store.Kind(expression) != SyntaxKind.Identifier || !store.Texts.Equals(store.EscapedText(expression), "require") || arguments.IsNone || store.Length(arguments) != 1 ||
+            !Utilities.IsStringLiteralLike(store, store.Element(arguments, 0)))
+        {
+            return Node.None;
+        }
+        return store.Element(arguments, 0);
+    }
+
+    // checker.ts getTargetOfImportEqualsDeclaration for a JavaScript `require` variable
+    private SymbolRef GetTargetOfRequireVariableDeclaration(NodeRef node, bool dontResolveAlias)
+    {
+        var store = StoreOf(node);
+        var commonJSPropertyAccess = GetCommonJSPropertyAccess(store, node.Node);
+        if (!commonJSPropertyAccess.IsNone)
+        {
+            var call = GetLeftmostAccessExpression(store, store.Expression(commonJSPropertyAccess));
+            var name = At(node, store.Element(store.Arguments(call), 0));
+            var propertyName = store.Name(commonJSPropertyAccess);
+            return store.Kind(propertyName) == SyntaxKind.Identifier
+                ? ResolveSymbol(GetPropertyOfType(ResolveExternalModuleTypeByLiteral(name), store.Texts.GetString(store.EscapedText(propertyName))!))
+                : SymbolRef.None;
+        }
+        var argument = GetExternalModuleRequireArgument(store, node.Node);
+        if (argument.IsNone)
+        {
+            return SymbolRef.None;
+        }
+        var immediate = ResolveExternalModuleName(node, At(node, argument));
+        var resolvedModule = ResolveExternalModuleSymbol(immediate);
+        MarkSymbolOfAliasDeclarationIfTypeOnly(node, immediate, resolvedModule, overwriteEmpty: false);
+        return resolvedModule;
     }
 
     private SymbolRef GetTargetOfAliasLikeExpression(NodeRef expression, bool dontResolveAlias)
@@ -2323,9 +2433,10 @@ internal sealed partial class Checker
     private SymbolRef GetExternalModuleMember(NodeRef declaration, NodeRef specifier, bool dontResolveAlias)
     {
         var store = StoreOf(specifier);
-        var moduleSpecifier = At(declaration, store.ModuleSpecifier(declaration.Node));
+        var requireArgument = GetExternalModuleRequireArgument(store, declaration.Node);
+        var moduleSpecifier = At(declaration, !requireArgument.IsNone ? requireArgument : store.ModuleSpecifier(declaration.Node));
         var moduleSymbol = ResolveExternalModuleName(specifier, moduleSpecifier);
-        var name = !store.PropertyName(specifier.Node).IsNone ? store.PropertyName(specifier.Node) : store.Name(specifier.Node);
+        var name = store.Kind(specifier.Node) != SyntaxKind.PropertyAccessExpression && !store.PropertyName(specifier.Node).IsNone ? store.PropertyName(specifier.Node) : store.Name(specifier.Node);
         if (store.Kind(name) is not (SyntaxKind.Identifier or SyntaxKind.StringLiteral))
         {
             return SymbolRef.None;

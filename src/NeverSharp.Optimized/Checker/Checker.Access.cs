@@ -1131,13 +1131,6 @@ internal sealed partial class Checker
         return container == GetDeclaringConstructor(prop);
     }
 
-    // checker.ts isConstructorDeclaredProperty (this.x assignments in constructors: JavaScript, C9)
-    private bool IsConstructorDeclaredProperty(SymbolRef symbol)
-    {
-        var valueDeclaration = ValueDeclarationOf(symbol);
-        return !valueDeclaration.IsNone && Kind(valueDeclaration) == SyntaxKind.BinaryExpression && false;
-    }
-
     // checker.ts isAutoTypedProperty
     private bool IsAutoTypedProperty(SymbolRef symbol)
     {
@@ -1146,26 +1139,6 @@ internal sealed partial class Checker
         var declaration = ValueDeclarationOf(symbol);
         return !declaration.IsNone && Kind(declaration) == SyntaxKind.PropertyDeclaration && GetEffectiveTypeAnnotationNode(declaration).IsNone &&
             StoreOf(declaration).Initializer(declaration.Node).IsNone && (noImplicitAny || Utilities.IsInJSFile(StoreOf(declaration), declaration.Node));
-    }
-
-    // checker.ts getDeclaringConstructor
-    private NodeRef GetDeclaringConstructor(SymbolRef symbol)
-    {
-        var declarations = DeclarationsOf(symbol);
-        if (declarations is null)
-        {
-            return NodeRef.None;
-        }
-        foreach (var declaration in declarations)
-        {
-            var store = StoreOf(declaration);
-            var container = Utilities.GetThisContainer(store, declaration.Node, includeArrowFunctions: false, includeClassComputedPropertyName: false);
-            if (!container.IsNone && (store.Kind(container) == SyntaxKind.Constructor || IsJSConstructor(At(declaration, container))))
-            {
-                return At(declaration, container);
-            }
-        }
-        return NodeRef.None;
     }
 
     // ---- element access ----

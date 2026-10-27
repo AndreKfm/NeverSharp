@@ -850,17 +850,58 @@ internal sealed partial class Checker
         return symbols;
     }
 
-    /// <summary>checker.ts resolveExternalModuleSymbol (getCommonJsExportEquals: TODO(C9d), JavaScript).</summary>
+    /// <summary>checker.ts resolveExternalModuleSymbol.</summary>
     internal SymbolRef ResolveExternalModuleSymbol(SymbolRef moduleSymbol, bool dontResolveAlias = false)
     {
         var exports = moduleSymbol.IsNone ? null : ExportsOf(moduleSymbol);
         if (exports is not null)
         {
             var exportEquals = ResolveSymbol(exports.Get(InternalSymbolName.ExportEquals), dontResolveAlias);
-            var exported = GetMergedSymbol(exportEquals);
+            var exported = GetMergedSymbol(GetCommonJsExportEquals(GetMergedSymbol(exportEquals), GetMergedSymbol(moduleSymbol)));
             return !exported.IsNone ? exported : moduleSymbol;
         }
         return SymbolRef.None;
+    }
+
+    // links.cjsExportMerged
+    private readonly Dictionary<SymbolRef, SymbolRef> cjsExportMerged = [];
+
+    // checker.ts getCommonJsExportEquals
+    private SymbolRef GetCommonJsExportEquals(SymbolRef exported, SymbolRef moduleSymbol)
+    {
+        if (exported.IsNone || exported == unknownSymbol || exported == moduleSymbol || ExportsOf(moduleSymbol)!.Count == 1 || (SymbolFlagsOf(exported) & SymbolFlags.Alias) != 0)
+        {
+            return exported;
+        }
+        if (cjsExportMerged.TryGetValue(exported, out var cached))
+        {
+            return cached;
+        }
+        var merged = exported.IsTransient ? exported : CloneSymbol(exported);
+        ref var record = ref TransientSymbols.Record(merged);
+        record.Flags |= SymbolFlags.ValueModule;
+        record.Exports ??= new SymTable();
+        var mergedExports = record.Exports;
+        var moduleExports = ExportsOf(moduleSymbol)!;
+        for (var i = 0; i < moduleExports.Count; i++)
+        {
+            var name = moduleExports.NameAt(i);
+            if (name == InternalSymbolName.ExportEquals)
+            {
+                continue;
+            }
+            var s = moduleExports.ValueAt(i);
+            mergedExports.Set(name, mergedExports.Has(name) ? MergeSymbol(mergedExports.Get(name), s) : s);
+        }
+        if (merged == exported)
+        {
+            // We just mutated a symbol, reset any cached links we may have already set
+            // (Notably required to make late bound members appear)
+            ResetResolvedMembersOrExports(merged);
+        }
+        cjsExportMerged[merged] = merged;
+        cjsExportMerged[exported] = merged;
+        return merged;
     }
 
     /// <summary>checker.ts tryFindAmbientModule.</summary>

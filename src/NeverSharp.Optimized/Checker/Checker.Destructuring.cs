@@ -55,7 +55,7 @@ internal sealed partial class Checker
         {
             return GetTypeForBindingElement(declaration);
         }
-        var isProperty = (kind == SyntaxKind.PropertyDeclaration && !Utilities.HasSyntacticModifierUncached(store, node, ModifierFlags.Accessor)) || kind == SyntaxKind.PropertySignature;
+        var isProperty = (kind == SyntaxKind.PropertyDeclaration && !Utilities.HasSyntacticModifierUncached(store, node, ModifierFlags.Accessor)) || kind is SyntaxKind.PropertySignature or SyntaxKind.JSDocPropertyTag;
         var isOptional = includeOptionality && IsOptionalDeclaration(declaration);
         // Use type from type annotation if one is present
         var typeNode = GetEffectiveTypeAnnotationNode(declaration);
@@ -120,8 +120,14 @@ internal sealed partial class Checker
                     return GetReturnTypeOfSignature(getterSignature);
                 }
             }
+            var parameterTypeOfTypeTag = GetParameterTypeOfTypeTag(func, declaration);
+            if (!parameterTypeOfTypeTag.IsNone)
+            {
+                return parameterTypeOfTypeTag;
+            }
             // Use contextual parameter type if one is available
-            var type = NameOf(parameterSymbol) == "this" ? GetContextualThisParameterType(func) : GetContextuallyTypedParameterType(declaration);            if (!type.IsNone)
+            var type = NameOf(parameterSymbol) == "this" ? GetContextualThisParameterType(func) : GetContextuallyTypedParameterType(declaration);
+            if (!type.IsNone)
             {
                 return AddOptionality(type, isProperty: false, isOptional);
             }
@@ -130,6 +136,14 @@ internal sealed partial class Checker
         // not a parameter of a contextually typed function
         if (!initializer.IsNone)
         {
+            if (Utilities.IsInJSFile(store, node) && kind != SyntaxKind.Parameter)
+            {
+                var containerObjectType = GetJSContainerObjectType(declaration, GetSymbolOfDeclaration(declaration), GetDeclaredExpandoInitializer(declaration));
+                if (!containerObjectType.IsNone)
+                {
+                    return containerObjectType;
+                }
+            }
             var initializerType = CheckDeclarationInitializer(declaration, checkMode);
             var type = WidenTypeInferredFromInitializer(declaration, initializerType);
             return AddOptionality(type, isProperty, isOptional);

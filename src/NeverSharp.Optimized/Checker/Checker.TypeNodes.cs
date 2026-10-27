@@ -93,7 +93,14 @@ internal sealed partial class Checker
             case SyntaxKind.FunctionType:
             case SyntaxKind.ConstructorType:
             case SyntaxKind.TypeLiteral:
+            case SyntaxKind.JSDocTypeLiteral:
+            case SyntaxKind.JSDocFunctionType:
+            case SyntaxKind.JSDocSignature:
                 return GetTypeFromTypeLiteralOrFunctionOrConstructorTypeNode(node);
+            case SyntaxKind.JSDocOptionalType:
+                return AddOptionality(GetTypeFromTypeNode(At(node, store.Type(node.Node))), isProperty: false, isOptional: true);
+            case SyntaxKind.JSDocVariadicType:
+                return GetTypeFromJSDocVariadicType(node);
             case SyntaxKind.TypeOperator:
                 return GetTypeFromTypeOperatorNode(node);
             case SyntaxKind.IndexedAccessType:
@@ -250,9 +257,30 @@ internal sealed partial class Checker
             SymbolNodeLinks.Get(node).ResolvedSymbol = unknownSymbol;
             return SetCachedNodeType(node, CheckExpressionCached(At(node, store.Expression(parent))));
         }
-        // (JSDoc type references: module C9)
-        var symbol = ResolveTypeReferenceName(node, SymbolFlags.Type);
-        var type = GetTypeReferenceType(node, symbol);
+        var symbol = SymbolRef.None;
+        var type = Type.None;
+        if (IsJSDocTypeReference(node))
+        {
+            type = GetIntendedTypeFromJSDocTypeReference(node);
+            if (type.IsNone)
+            {
+                symbol = ResolveTypeReferenceName(node, SymbolFlags.Type, ignoreErrors: true);
+                if (symbol == unknownSymbol)
+                {
+                    symbol = ResolveTypeReferenceName(node, SymbolFlags.Type | SymbolFlags.Value);
+                }
+                else
+                {
+                    ResolveTypeReferenceName(node, SymbolFlags.Type); // Resolve again to mark errors, if any
+                }
+                type = GetTypeReferenceType(node, symbol);
+            }
+        }
+        if (type.IsNone)
+        {
+            symbol = ResolveTypeReferenceName(node, SymbolFlags.Type);
+            type = GetTypeReferenceType(node, symbol);
+        }
         // Cache both the resolved symbol and the resolved type. The resolved symbol is needed when we check the
         // type reference in checkTypeReferenceNode.
         SymbolNodeLinks.Get(node).ResolvedSymbol = symbol;
@@ -335,6 +363,11 @@ internal sealed partial class Checker
         {
             return errorType;
         }
+        var expandoSymbol = GetExpandoSymbol(symbol);
+        if (!expandoSymbol.IsNone)
+        {
+            symbol = expandoSymbol;
+        }
         var flags = SymbolFlagsOf(symbol);
         if ((flags & (SymbolFlags.Class | SymbolFlags.Interface)) != 0)
         {
@@ -350,7 +383,137 @@ internal sealed partial class Checker
         {
             return CheckNoTypeArguments(node, symbol) ? GetRegularTypeOfLiteralType(res) : errorType;
         }
+        if ((flags & SymbolFlags.Value) != 0 && IsJSDocTypeReference(node))
+        {
+            var jsdocType = GetTypeFromJSDocValueReference(node, symbol);
+            if (!jsdocType.IsNone)
+            {
+                return jsdocType;
+            }
+            // Resolve the type reference as a Type for the purpose of reporting errors.
+            ResolveTypeReferenceName(node, SymbolFlags.Type);
+            return GetTypeOfSymbol(symbol);
+        }
         return errorType;
+    }
+
+    // checker.ts isJSDocTypeReference
+    private bool IsJSDocTypeReference(NodeRef node)
+    {
+        var store = StoreOf(node);
+        return (store.Flags(node.Node) & NodeFlags.JSDoc) != 0 && store.Kind(node.Node) is SyntaxKind.TypeReference or SyntaxKind.ImportType;
+    }
+
+    // checker.ts getTypeFromJSDocValueReference (links.resolvedJSDocType)
+    private readonly Dictionary<NodeRef, Type> resolvedJSDocTypes = [];
+
+    private Type GetTypeFromJSDocValueReference(NodeRef node, SymbolRef symbol)
+    {
+        if (resolvedJSDocTypes.TryGetValue(node, out var cached))
+        {
+            return cached;
+        }
+        var valueType = GetTypeOfSymbol(symbol);
+        var typeType = valueType;
+        if (!ValueDeclarationOf(symbol).IsNone)
+        {
+            var store = StoreOf(node);
+            var isImportTypeWithQualifier = store.Kind(node.Node) == SyntaxKind.ImportType && !store.Qualifier(node.Node).IsNone;
+            // valueType might not have a symbol, eg, {import('./b').STRING_LITERAL}
+            var valueSymbol = Types.Symbol(valueType);
+            if (!valueSymbol.IsNone && valueSymbol != symbol && isImportTypeWithQualifier)
+            {
+                typeType = GetTypeReferenceType(node, valueSymbol);
+            }
+        }
+        resolvedJSDocTypes[node] = typeType;
+        return typeType;
+    }
+
+    // checker.ts getExpandoSymbol
+    private SymbolRef GetExpandoSymbol(SymbolRef symbol)
+    {
+        var decl = ValueDeclarationOf(symbol);
+        if (decl.IsNone)
+        {
+            return SymbolRef.None;
+        }
+        var store = StoreOf(decl);
+        if (!Utilities.IsInJSFile(store, decl.Node) || (SymbolFlagsOf(symbol) & SymbolFlags.TypeAlias) != 0 || !Utilities.GetExpandoInitializer(store, decl.Node, isPrototypeAssignment: false).IsNone)
+        {
+            return SymbolRef.None;
+        }
+        var init = store.Kind(decl.Node) == SyntaxKind.VariableDeclaration ? GetDeclaredExpandoInitializer(decl)
+            : Utilities.GetAssignedExpandoInitializer(store, decl.Node) is var assigned && !assigned.IsNone ? At(decl, assigned) : NodeRef.None;
+        if (!init.IsNone)
+        {
+            var initSymbol = GetSymbolOfNode(init);
+            if (!initSymbol.IsNone)
+            {
+                return MergeJSSymbols(initSymbol, symbol);
+            }
+        }
+        return SymbolRef.None;
+    }
+
+    // checker.ts getIntendedTypeFromJSDocTypeReference
+    private Type GetIntendedTypeFromJSDocTypeReference(NodeRef node)
+    {
+        var store = StoreOf(node);
+        var typeName = store.TypeName(node.Node);
+        if (store.Kind(typeName) != SyntaxKind.Identifier)
+        {
+            return Type.None;
+        }
+        var typeArgs = store.TypeArguments(node.Node);
+        var typeArgCount = typeArgs.IsNone ? 0 : store.Length(typeArgs);
+        switch (store.Texts.GetString(store.EscapedText(typeName)))
+        {
+            case "String":
+                CheckNoTypeArguments(node, SymbolRef.None);
+                return stringType;
+            case "Number":
+                CheckNoTypeArguments(node, SymbolRef.None);
+                return numberType;
+            case "BigInt":
+                CheckNoTypeArguments(node, SymbolRef.None);
+                return bigintType;
+            case "Boolean":
+                CheckNoTypeArguments(node, SymbolRef.None);
+                return booleanType;
+            case "Void":
+                CheckNoTypeArguments(node, SymbolRef.None);
+                return voidType;
+            case "Undefined":
+                CheckNoTypeArguments(node, SymbolRef.None);
+                return undefinedType;
+            case "Null":
+                CheckNoTypeArguments(node, SymbolRef.None);
+                return nullType;
+            case "Function":
+            case "function":
+                CheckNoTypeArguments(node, SymbolRef.None);
+                return globalFunctionType;
+            case "array":
+                return typeArgCount == 0 && !noImplicitAny ? anyArrayType : Type.None;
+            case "promise":
+                return typeArgCount == 0 && !noImplicitAny ? CreatePromiseType(anyType) : Type.None;
+            case "Object":
+                if (typeArgCount == 2)
+                {
+                    if (IsJSDocIndexSignature(node))
+                    {
+                        var indexed = GetTypeFromTypeNode(At(node, store.Element(typeArgs, 0)));
+                        var target = GetTypeFromTypeNode(At(node, store.Element(typeArgs, 1)));
+                        var indexInfo = indexed == stringType || indexed == numberType ? new List<IndexInfo> { new IndexInfo { KeyType = indexed, Type = target, IsReadonly = false } } : null;
+                        return CreateAnonymousType(SymbolRef.None, emptySymbols, null, null, indexInfo);
+                    }
+                    return anyType;
+                }
+                CheckNoTypeArguments(node, SymbolRef.None);
+                return !noImplicitAny ? anyType : Type.None;
+        }
+        return Type.None;
     }
 
     private NodeList TypeArgumentsOf(NodeRef node)
@@ -713,6 +876,11 @@ internal sealed partial class Checker
             // (computed before the record is written: the call can grow the type store)
             var aliasTypeArguments = GetTypeArgumentsForAliasSymbol(aliasSymbol);
             Types.Record(type).AliasTypeArguments = aliasTypeArguments;
+            var store = StoreOf(node);
+            if (store.Kind(node.Node) == SyntaxKind.JSDocTypeLiteral && store.IsArrayType(node.Node))
+            {
+                type = CreateArrayType(type);
+            }
         }
         return SetCachedNodeType(node, type);
     }

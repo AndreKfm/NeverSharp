@@ -93,7 +93,18 @@ internal sealed partial class Checker
             case SyntaxKind.TemplateSpan:
                 return GetContextualTypeForSubstitutionExpression(At(node, store.Parent(parent)), node);
             case SyntaxKind.ParenthesizedExpression:
-                // (JSDoc type assertions and satisfies tags in JavaScript: C9)
+                if (Utilities.IsInJSFile(store, parent))
+                {
+                    if (IsJSDocSatisfiesExpression(store, parent))
+                    {
+                        return GetTypeFromTypeNode(GetJSDocSatisfiesExpressionType(At(node, parent)));
+                    }
+                    var typeTag = UtilitiesPublic.GetJSDocTypeTag(store, parent);
+                    if (!typeTag.IsNone && !IsConstTypeReference(store, store.Type(store.TypeExpression(typeTag))))
+                    {
+                        return GetTypeFromTypeNode(At(node, store.Type(store.TypeExpression(typeTag))));
+                    }
+                }
                 return GetContextualType(At(node, parent), contextFlags);
             case SyntaxKind.NonNullExpression:
                 return GetContextualType(At(node, parent), contextFlags);
@@ -603,11 +614,16 @@ internal sealed partial class Checker
         }
     }
 
-    // checker.ts isDefaultedExpandoInitializer (TODO(C9d): JavaScript expando initializers)
-    private static bool IsDefaultedExpandoInitializer(NodeRef node)
+    // utilities.ts isDefaultedExpandoInitializer
+    private bool IsDefaultedExpandoInitializer(NodeRef node)
     {
-        _ = node;
-        return false;
+        var store = StoreOf(node);
+        var parent = store.Parent(node.Node);
+        var name = store.Kind(parent) == SyntaxKind.VariableDeclaration ? store.Name(parent)
+            : store.Kind(parent) == SyntaxKind.BinaryExpression && store.Kind(store.OperatorToken(parent)) == SyntaxKind.EqualsToken ? store.Left(parent)
+            : Node.None;
+        return !name.IsNone && !Utilities.GetExpandoInitializer(store, store.Right(node.Node), Utilities.IsPrototypeAccess(store, name)).IsNone &&
+            Utilities.IsEntityNameExpression(store, name) && Utilities.IsSameEntityName(store, name, store.Left(node.Node));
     }
 
     /// <summary>checker.ts getSymbolForExpression.</summary>
