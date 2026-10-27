@@ -73,8 +73,49 @@ internal sealed partial class Checker
         {
             return true;
         }
-        // (Object.defineProperty assignments: C9)
+        foreach (var d in DeclarationsOf(symbol) ?? [])
+        {
+            if (IsReadonlyAssignmentDeclaration(d))
+            {
+                return true;
+            }
+        }
         return false;
+    }
+
+    // checker.ts isReadonlyAssignmentDeclaration: Object.defineProperty assignments with writable false or no setter
+    private bool IsReadonlyAssignmentDeclaration(NodeRef d)
+    {
+        var store = StoreOf(d);
+        if (store.Kind(d.Node) != SyntaxKind.CallExpression || !Utilities.IsBindableObjectDefinePropertyCall(store, d.Node))
+        {
+            return false;
+        }
+        var objectLitType = CheckExpressionCached(At(d, store.Element(store.Arguments(d.Node), 2)));
+        var valueType = GetTypeOfPropertyOfType(objectLitType, "value");
+        if (!valueType.IsNone)
+        {
+            var writableProp = GetPropertyOfType(objectLitType, "writable");
+            var writableType = writableProp.IsNone ? Type.None : GetTypeOfSymbol(writableProp);
+            if (writableType.IsNone || writableType == falseType || writableType == regularFalseType)
+            {
+                return true;
+            }
+            // We include this definition whereupon we walk back and check the type at the declaration because
+            // The usual definition of `Object.defineProperty` will _not_ cause literal types to be preserved in the
+            // argument types, should the type be contextualized by the call itself.
+            var writableDeclaration = ValueDeclarationOf(writableProp);
+            if (!writableDeclaration.IsNone && Kind(writableDeclaration) == SyntaxKind.PropertyAssignment)
+            {
+                var rawOriginalType = CheckExpression(At(writableDeclaration, StoreOf(writableDeclaration).Initializer(writableDeclaration.Node)));
+                if (rawOriginalType == falseType || rawOriginalType == regularFalseType)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return GetPropertyOfType(objectLitType, "set").IsNone;
     }
 
     // checker.ts getNonMissingTypeOfSymbol (exactOptionalPropertyTypes: the missing type is the undefined type otherwise)

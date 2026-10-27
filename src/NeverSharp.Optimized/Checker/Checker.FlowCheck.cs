@@ -63,9 +63,18 @@ internal sealed partial class Checker
         {
             var declaration = Signatures.Record(signature).Declaration;
             var type = declaration.IsNone ? NodeRef.None : GetEffectiveReturnTypeNodeOf(declaration);
-            if (!type.IsNone)
+            TypePredicateInfo? jsdocPredicate = null;
+            if (type.IsNone && !declaration.IsNone)
             {
-                predicate = Kind(type) == SyntaxKind.TypePredicate ? CreateTypePredicateFromTypePredicateNode(type, signature) : null;
+                var jsdocSignature = GetSignatureOfTypeTag(declaration);
+                if (!jsdocSignature.IsNone && signature != jsdocSignature)
+                {
+                    jsdocPredicate = GetTypePredicateOfSignature(jsdocSignature);
+                }
+            }
+            if (!type.IsNone || jsdocPredicate is not null)
+            {
+                predicate = !type.IsNone && Kind(type) == SyntaxKind.TypePredicate ? CreateTypePredicateFromTypePredicateNode(type, signature) : jsdocPredicate;
             }
             else if (!declaration.IsNone && Utilities.IsFunctionLikeDeclaration(StoreOf(declaration), declaration.Node) &&
                 (Signatures.Record(signature).ResolvedReturnType.IsNone || (Types.Flags(Signatures.Record(signature).ResolvedReturnType) & TypeFlags.Boolean) != 0) &&
@@ -266,7 +275,7 @@ internal sealed partial class Checker
     {
         var store = StoreOf(declaration);
         return Utilities.IsFunctionLike(store, declaration.Node) || store.Kind(declaration.Node) is SyntaxKind.JSDocFunctionType or SyntaxKind.JSDocSignature
-            ? At(declaration, store.Type(declaration.Node))
+            ? At(declaration, GetEffectiveReturnTypeNodeOf(store, declaration.Node))
             : NodeRef.None;
     }
 
