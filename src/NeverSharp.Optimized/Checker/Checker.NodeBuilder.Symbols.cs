@@ -669,8 +669,29 @@ internal sealed partial class Checker
         // moduleSpecifiers.getModuleSpecifiers for a file of the program (the specifier preferences in full: not reachable in Gate C's one-file programs)
         var fileName = FileNameOfFile(file.File);
         var withoutExtension = RemoveFileExtensionForSpecifier(fileName);
+        // tryGetModuleNameAsNodeModule: the path below the last node_modules folder, without a trailing /index (no
+        // package.json files exist in Gate C's programs)
+        var nodeModules = withoutExtension.LastIndexOf("/node_modules/", StringComparison.Ordinal);
+        if (nodeModules >= 0)
+        {
+            var moduleName = withoutExtension[(nodeModules + "/node_modules/".Length)..];
+            if (moduleName.EndsWith("/index", StringComparison.Ordinal))
+            {
+                moduleName = moduleName[..^"/index".Length];
+            }
+            if (moduleName.StartsWith("@types/", StringComparison.Ordinal))
+            {
+                // getPackageNameFromTypesPackageName
+                var unscoped = moduleName["@types/".Length..];
+                var mangledScope = unscoped.IndexOf("__", StringComparison.Ordinal);
+                moduleName = mangledScope >= 0 ? "@" + unscoped[..mangledScope] + "/" + unscoped[(mangledScope + 2)..] : unscoped;
+            }
+            return moduleName;
+        }
+        // a relative specifier from the enclosing file's folder with the minimal ending (`./index` becomes `.`)
         var slash = withoutExtension.LastIndexOf('/');
-        return "./" + (slash >= 0 ? withoutExtension[(slash + 1)..] : withoutExtension);
+        var baseName = slash >= 0 ? withoutExtension[(slash + 1)..] : withoutExtension;
+        return baseName == "index" ? "." : "./" + baseName;
     }
 
     private string FileNameOfFile(int file)

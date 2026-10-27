@@ -2152,6 +2152,24 @@ internal sealed partial class Checker
             }
             return parameterIndex >= GetMinArgumentCountForBuilder(signature);
         }
+        if (store.Kind(node.Node) == SyntaxKind.Parameter)
+        {
+            var func = store.Parent(node.Node);
+            var iife = Utilities.GetImmediatelyInvokedFunctionExpression(store, func);
+            if (!iife.IsNone)
+            {
+                var parameterIndex = 0;
+                foreach (var p in store.Nodes(store.Parameters(func)))
+                {
+                    if (p == node.Node)
+                    {
+                        break;
+                    }
+                    parameterIndex++;
+                }
+                return store.Type(node.Node).IsNone && store.DotDotDotToken(node.Node).IsNone && parameterIndex >= GetEffectiveCallArguments(At(node, iife)).Count;
+            }
+        }
         return false;
     }
 }
