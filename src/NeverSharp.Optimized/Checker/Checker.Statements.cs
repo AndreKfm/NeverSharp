@@ -1245,10 +1245,10 @@ internal sealed partial class Checker
         {
             return;
         }
-        if ((SymbolFlagsOf(symbol) & SymbolFlags.Alias) != 0)
+        if ((SymbolFlagsOf(symbol) & SymbolFlags.Alias) != 0 && Utilities.IsInJSFile(store, n))
         {
-            // (isVariableDeclarationInitializedToBareOrAccessedRequire: JavaScript, module C9)
-            CheckAliasSymbol(node);
+            // (isVariableDeclarationInitializedToBareOrAccessedRequire / isBindingElementOfBareOrAccessedRequire:
+            // CommonJS require aliases of JavaScript files, TODO(C9))
             return;
         }
         if (store.Kind(name) == SyntaxKind.BigIntLiteral)

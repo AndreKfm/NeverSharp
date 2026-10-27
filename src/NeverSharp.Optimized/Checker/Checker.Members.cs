@@ -1502,6 +1502,31 @@ internal sealed partial class Checker
         return Type.None;
     }
 
+    // checker.ts getAnnotatedAccessorTypeNode !== undefined
+    private bool HasAnnotatedAccessorTypeNode(NodeRef accessor)
+    {
+        if (accessor.IsNone)
+        {
+            return false;
+        }
+        var store = StoreOf(accessor);
+        if (store.Kind(accessor.Node) != SyntaxKind.SetAccessor)
+        {
+            return !store.Type(accessor.Node).IsNone;
+        }
+        var parameters = store.Parameters(accessor.Node);
+        if (parameters.IsNone || store.Length(parameters) == 0)
+        {
+            return false;
+        }
+        var first = store.Element(parameters, 0);
+        if (store.Length(parameters) == 2 && Utilities.IsThisIdentifier(store, store.Name(first)))
+        {
+            first = store.Element(parameters, 1);
+        }
+        return !store.Type(first).IsNone;
+    }
+
     private Type GetAnnotatedAccessorType(NodeRef accessor)
     {
         if (accessor.IsNone)
@@ -1819,22 +1844,61 @@ internal sealed partial class Checker
         }
         var getter = GetDeclarationOfKind(symbol, SyntaxKind.GetAccessor);
         var setter = GetDeclarationOfKind(symbol, SyntaxKind.SetAccessor);
+        var accessor = GetDeclarationOfKind(symbol, SyntaxKind.PropertyDeclaration);
+        if (!accessor.IsNone && !Utilities.HasSyntacticModifierUncached(StoreOf(accessor), accessor.Node, ModifierFlags.Accessor))
+        {
+            accessor = NodeRef.None; // tryCast(..., isAutoAccessorPropertyDeclaration)
+        }
+        // We try to resolve a getter type annotation, a setter type annotation, or a getter function
+        // body return type inference, in that order.
+        // (the JSDoc type of a JavaScript getter: module C9)
         var type = GetAnnotatedAccessorType(getter);
         if (type.IsNone)
         {
             type = GetAnnotatedAccessorType(setter);
         }
+        if (type.IsNone)
+        {
+            type = GetAnnotatedAccessorType(accessor);
+        }
         if (type.IsNone && !getter.IsNone && !StoreOf(getter).Body(getter.Node).IsNone)
         {
             type = GetReturnTypeFromBody(getter);
         }
+        if (type.IsNone && !accessor.IsNone)
+        {
+            type = GetWidenedTypeForVariableLikeDeclaration(accessor, reportErrors: true);
+        }
         if (type.IsNone)
         {
-            // (reportImplicitAny for accessors without annotations: C8)
+            if (!setter.IsNone && !IsPrivateWithinAmbient(StoreOf(setter), setter.Node))
+            {
+                ErrorOrSuggestion(noImplicitAny, setter, Diagnostics.Property_0_implicitly_has_type_any_because_its_set_accessor_lacks_a_parameter_type_annotation, SymbolToString(symbol));
+            }
+            else if (!getter.IsNone && !IsPrivateWithinAmbient(StoreOf(getter), getter.Node))
+            {
+                ErrorOrSuggestion(noImplicitAny, getter, Diagnostics.Property_0_implicitly_has_type_any_because_its_get_accessor_lacks_a_return_type_annotation, SymbolToString(symbol));
+            }
+            else if (!accessor.IsNone && !IsPrivateWithinAmbient(StoreOf(accessor), accessor.Node))
+            {
+                ErrorOrSuggestion(noImplicitAny, accessor, Diagnostics.Member_0_implicitly_has_an_1_type, SymbolToString(symbol), "any");
+            }
             type = anyType;
         }
         if (!PopTypeResolution())
         {
+            if (HasAnnotatedAccessorTypeNode(getter))
+            {
+                Error(getter, Diagnostics._0_is_referenced_directly_or_indirectly_in_its_own_type_annotation, SymbolToString(symbol));
+            }
+            else if (HasAnnotatedAccessorTypeNode(setter) || HasAnnotatedAccessorTypeNode(accessor))
+            {
+                Error(setter, Diagnostics._0_is_referenced_directly_or_indirectly_in_its_own_type_annotation, SymbolToString(symbol));
+            }
+            else if (!getter.IsNone && noImplicitAny)
+            {
+                Error(getter, Diagnostics._0_implicitly_has_return_type_any_because_it_does_not_have_a_return_type_annotation_and_is_referenced_directly_or_indirectly_in_one_of_its_return_expressions, SymbolToString(symbol));
+            }
             type = anyType;
         }
         ref var after = ref ValueSymbolLinks.Get(symbol);
