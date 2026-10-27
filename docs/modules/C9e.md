@@ -1,0 +1,43 @@
+# C9e: decorators, lib suggestions and the rest — brief
+
+Module C9e of Phase 3 ([phase3-plan.md](../phase3-plan.md)). Track O only. Runs alone. Written by the orchestrator. Standing rules of [README.md](README.md); run only the tests and gates your change affects.
+
+C9 is split into sequential modules, one agent at a time: C9a (syntactic diagnostics of JavaScript files), C9b JSX, C9c expression and flow typing of TS/TSX, C9d JavaScript and JSDoc typing (all done), **C9e decorators, lib suggestions and the rest until Gate C passes** (this brief, the last C9 module). In the code `TODO(C9e)` means this module (8 markers in `Checker/`; `git grep "TODO(C9e)"`).
+
+## Starting point
+
+`main` after C9d (c0fb1a6) — see the C9d section of [phase1-progress.md](../phase1-progress.md): Gate C 49,905 of 50,177 identical (diagnostics 49,962, types 50,063, symbols 50,123), 1 crashed (027977, load-only timeout). 272 units differ: TS 243, TSX 9, JS 20. By section: diagnostics only 163, diagnostics with types 42, types only 53, all three 9, symbols only 4, the timeout 1.
+
+The orchestrator's grouping of the 272 units by first difference (from the C9d run's dumps; rough, a unit counts once):
+
+- decorators: 74 TS units. Missing 1240/1241 ("Unable to resolve signature of property/method decorator when called as an expression", with the `ClassFieldDecoratorContext`/`ClassMethodDecoratorContext`/`ClassGetterDecoratorContext` argument types of ES decorators and the "runtime will invoke the decorator with 2 arguments" elaboration of experimental decorators), 1329 (`'dec' accepts too few arguments ... '@dec()'`), extra 6133 on decorator parameters and extra 7006/7008/7019/2564 that follow from unresolved decorator signatures, `hadErrors` of the `decoratorMetadata*` units, decorator context types in the types section. Concerns `getDecoratorCallSignature`/`getDecoratorArgumentCount`/`getEffectiveDecoratorArguments`, `resolveDecorator`, `checkDecorator` with the return type check, the ES decorator context types (`createClassFieldDecoratorContextType` and relatives, `getESDecoratorCallSignature`), `isPotentiallyUncalledDecorator`, the `TODO(C9e)` markers in `Checker.Calls.cs` and `Checker.ExpressionRoots.cs`;
+- lib suggestions: 63 TS units: 61 with 2339 instead of 2550 ("Do you need to change your target library?", `Array.fromAsync`, `Symbol.asyncDispose`, `Date.toTemporalInstant`, `Map.getOrInsert`, ...): `getSuggestedLibForNonExistentProperty`/`getSuggestedLibForNonExistentName` and the lib feature map (`getFeatureMap` in checker.ts, `utilities.ts` scriptTarget features), the `TODO(C9e)` marker in `Checker.Access.cs`; 2591/2580-style suggestions for missing node/jest names (`Cannot find name 'module'. Do you need to install type definitions for node?`, 2 units) are the other 2;
+- other types: 38 units (31 TS, 7 TSX), each small: union member order by type id (`keyof T | "as"` printed `"as" | keyof T`, 5 TSX units, and `keyof X | "other"`); binding patterns with computed names printed from the source (`({[foo2()]: x})`, initializers kept instead of `c }?: undefined`, class expressions in computed names; 9 units); namespaces with type-alias-only exports (005946–005948) and re-export aliases (012575); narrowing of destructured declarations (`head : number` vs `string | number`, 005981, 009492); `unique symbol` (010111); `for-of` with literal `true` (010569); late-bound and literal computed names (`(typeof X)["2"]`, 005238; 016063); rest tuple parameter names from contextual types (016226); `{ a?: number | undefined }` in isomorphic mapped types (016029); `this` in object literal function members (007905, 003759); `.js` import type specifiers in transpile units (023890); divergent accessors (002486); one long object literal in 025286;
+- diagnostics, small: 38 units (37 TS, 1 TSX) with a single missing or wrong code each: 2304 vs 2503 and 2708 vs 2694 in import-equals declarations (9 units), import attributes 2322 vs 2823 (3), 2687 identical modifiers, 2389/2391, 2393/2411 duplicate implementations with computed names, private-name messages (`(anonymous)` vs `(Anonymous class)`, 2322 with "refers to a different member" vs 2741), 18060/18061 for `import defer`, 80008 huge binary/octal literals (4), 2456 circularity, 2612/2416, 2349 for `never` intersections, 18046/18048/7053 in benchmark files, `readonly` in 2322 messages of deeply nested mapped types;
+- `hadErrors` only: 14 TS units whose dump header's `hadErrors` differs while the diagnostics agree (both directions); find out what sets the flag in tsc for these units (diagnostics not dumped, e.g. global or lib diagnostics) and match it;
+- grammar leftovers: 12 TS units (1184 modifiers on object literal members, 1162 optional object members, 1064/2355 order in async functions, `related` file marker `-` vs `.` of regular expression suggestions 1369);
+- `.mts`/`.cts` 7059: 8 units (`nodeModulesForbidenSyntax.ts`);
+- symbols: 4 units where an index signature's symbol is printed `__index` instead of `A.__index` (symbol parent of index signature symbols in the printer of symbol names);
+- JavaScript: 20 units (from the C9d report): the type of `x.y || {}` for a defaulted JS container (`{}` expected, 7 units; the container type's subtype reduction against the fresh `{}`), getter/setter pairs of JS object literals, `as const` in JSDoc assertions, `unique symbol` widening through `typeof x`, element access through a JS symbol constant, unused-identifier details (6133), 1184/1014 order and 1100/2451 for `arguments`/`eval` in strict JS;
+- the timeout 027977 (see Goal);
+- pattern ambient modules (`declare module "*.css"`, the `TODO(C9e)` markers in `Checker.cs`, `Checker.Symbols.cs`, `Checker.Resolve.cs`): port them if a unit depends on them, otherwise leave the markers with a note.
+
+Use `<session scratch>/C9e/` for your own grouping scripts; the dumps are `artifacts/equivalence/dumps/ts-checker-types` (oracle) and `artifacts/dumps/cs-optimized-checker-types` (C#).
+
+## Goal
+
+Make Gate C pass: every unit identical in all three sections. Port the parts of checker.ts (structure as in checker.go) that decide the groups above, resolving the `TODO(C9e)` markers. 027977 (load-only timeout under gate load) is not a C9e target unless it also times out alone; report its time. If a difference is a parser or binder bug, do not change parser or binder; report it with the units it affects. If a difference turns out to be an oracle quirk that cannot be reproduced without code that has no counterpart in checker.ts, do not hack around it; list it with the reason.
+
+Order of work if time runs short: decorators, lib suggestions, `hadErrors`, the small diagnostics, the small types groups, JS, grammar, symbols, 7059. Commit working increments.
+
+## Gate
+
+Take a full baseline first and keep its identical-unit list. While iterating: a units file with the 272 differing units run through the C# checker dump and `harness/astdump/compare-checker.mjs --units` directly (the commands `gate.mjs --phase checker` runs), plus `gate.mjs --track optimized --phase checker --sample 2000` now and then to catch regressions; the full corpus at the end. Target: Gate C passes (all units identical, 027977 excepted if it times out only under gate load); otherwise as many identical units as possible, more identical units than at the start in every section, 0 crashed, and every unit that was identical at the start and becomes different fixed or listed with its cause. Limit: 30 gate runs (each dump-and-compare counts as one). Work economically: no broad exploration, read what the port needs.
+
+## Working
+
+One attempt: Opus 5.5, medium effort, no sub-agents. Work directly on `main` in the main checkout (no worktree, no branch); scratch `<session scratch>/C9e/`. C# with the file tools only (also renames and small edits; no sed or scripts on C# files). Changes outside `Checker/` only where the checker needs them and never in parser, scanner or binder behaviour; name each such file in the report. Do not download or install anything. Commit with `git commit -s` (noreply identity as configured); do not push. Before the final report, stop every background task you started. At the end add a C9e section to [phase1-progress.md](../phase1-progress.md) in the style of the C9d section, and state whether Gate C passes.
+
+## Report
+
+Brief: gate runs and the last full summary (identical per section, crashed); TS, TSX and JS units identical before and after; units per group above before and after; regressions; parser or binder bugs and oracle quirks found; what was ported and what is left (remaining `TODO(C9e)`, ideally none; the causes of the units that still differ); whether Gate C passes; commit hash(es).
