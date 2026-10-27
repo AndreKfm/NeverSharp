@@ -237,7 +237,7 @@ internal sealed partial class Checker
         // in order to prevent collisions with declarations that were exported from the current module (they still contribute to local names).
         var exportSymbol = ExportSymbolOf(symbol);
         symbol = GetMergedSymbol(exportSymbol.IsNone ? symbol : exportSymbol);
-        // (type-only imports and exports in JavaScript files: TODO(C9))
+        // (type-only imports and exports in JavaScript files: TODO(C9d))
         var targetFlags = GetSymbolFlags(target);
         var symbolFlags = SymbolFlagsOf(symbol);
         var excludedMeanings = ((symbolFlags & (SymbolFlags.Value | SymbolFlags.ExportValue)) != 0 ? SymbolFlags.Value : 0) |

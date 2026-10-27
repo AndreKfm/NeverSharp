@@ -17,7 +17,7 @@
 // Port structure follows internal/checker/checker.go
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
 // Modified: translated from TypeScript to C#; modules C1 (subset) and C5. TODO(C7): the flow types of references
-// (Checker.FlowSeam.cs). Module C9b: JSX expressions (Checker.Jsx.cs). TODO(C9c): JSDoc assertions.
+// (Checker.FlowSeam.cs). Module C9b: JSX expressions (Checker.Jsx.cs). TODO(C9d): JSDoc assertions.
 
 using NeverSharp.Generated;
 

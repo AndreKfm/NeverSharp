@@ -369,7 +369,7 @@ internal sealed partial class Checker
         return null;
     }
 
-    // utilities.ts getDeclaredExpandoInitializer (TODO(C9): JavaScript expando initializers; the initializer of a
+    // utilities.ts getDeclaredExpandoInitializer (TODO(C9d): JavaScript expando initializers; the initializer of a
     // TypeScript const declaration)
     private NodeRef GetDeclaredExpandoInitializer(NodeRef node)
     {

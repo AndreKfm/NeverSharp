@@ -19,7 +19,7 @@
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
 // Modified: translated from TypeScript to C#; module C5 (replaces C1's getTypeForVariableLikeDeclaration and its
 // for-of and binding element approximations). TODO(C7): getFlowTypeOfDestructuring and getFlowTypeInConstructor;
-// TODO(C9): JavaScript container object types and JSDoc types.
+// TODO(C9d): JavaScript container object types and JSDoc types.
 
 using NeverSharp.Generated;
 
@@ -136,7 +136,7 @@ internal sealed partial class Checker
         }
         if (kind == SyntaxKind.PropertyDeclaration && (noImplicitAny || Utilities.IsInJSFile(store, node)))
         {
-            // module C7: the type of a property from this.x assignments in the constructor or static blocks (TODO(C9): the
+            // module C7: the type of a property from this.x assignments in the constructor or static blocks (TODO(C9d): the
             // JavaScript forms)
             var flowType = GetTypeOfPropertyFromConstructorFlow(declaration);
             return flowType.IsNone ? Type.None : AddOptionality(flowType, isProperty: true, isOptional);

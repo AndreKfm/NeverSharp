@@ -14,7 +14,7 @@ namespace NeverSharp.Optimized;
 
 internal sealed partial class Checker
 {
-    /// <summary>checker.ts checkDecorator (TODO(C9): the decorator call signatures and the return type check).</summary>
+    /// <summary>checker.ts checkDecorator (TODO(C9e): the decorator call signatures and the return type check).</summary>
     private void CheckDecorator(NodeRef node)
     {
         // checkDecorators: the decorators of a node that cannot be decorated are not checked

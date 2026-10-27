@@ -7,9 +7,9 @@
 //   https://github.com/microsoft/TypeScript at commit 050880ce59e30b356b686bd3144efe24f875ebc8
 // Port structure follows internal/checker/services.go (GetSymbolAtLocation, GetTypeAtLocation)
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
-// Modified: translated from TypeScript to C#; module C1; module C9b: JSX intrinsic tags. TODO(C9c): JSDoc names and
-// JavaScript special property assignments; TODO(C9d): meta properties; TODO(C5): destructuring patterns, element
-// access, index symbols.
+// Modified: translated from TypeScript to C#; module C1; module C9b: JSX intrinsic tags; module C9c: meta properties,
+// index signature and private name symbols. TODO(C9d): JSDoc names and JavaScript special property assignments;
+// TODO(C5): destructuring patterns, element access.
 
 using NeverSharp.Generated;
 

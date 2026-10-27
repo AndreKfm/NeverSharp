@@ -24,7 +24,7 @@
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
 // Modified: translated from TypeScript to C#; modules C1 (subset) and C5. TODO(C7): the flow types of access
 // expressions (Checker.FlowSeam.cs); the diagnostics that depend on them are not reported while narrowing is pending.
-// Module C8: deprecation suggestions. TODO(C9): unchecked JavaScript suggestions and the lib suggestions.
+// Module C8: deprecation suggestions. TODO(C9d): unchecked JavaScript suggestions; TODO(C9e): the lib suggestions.
 
 using NeverSharp.Generated;
 
@@ -487,7 +487,7 @@ internal sealed partial class Checker
         return false;
     }
 
-    // checker.ts getFlowTypeOfAccessExpression (module C7: getFlowTypeOfProperty and the flow type; TODO(C9): JavaScript
+    // checker.ts getFlowTypeOfAccessExpression (module C7: getFlowTypeOfProperty and the flow type; TODO(C9d): JavaScript
     // assignment declarations)
     private Type GetFlowTypeOfAccessExpression(NodeRef node, SymbolRef prop, Type propType, NodeRef errorNode, CheckMode checkMode)
     {

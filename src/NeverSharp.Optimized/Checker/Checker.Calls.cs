@@ -23,7 +23,7 @@
 // Modified: translated from TypeScript to C#; module C5 (replaces C1's first-signature calls). SyntheticExpression nodes
 // are represented by CallArg values; module C6: inferTypeArguments with the inferences, getSignatureInstantiation with
 // inferred type parameters, instantiateSignatureInContextOf, applyToReturnTypes with type predicates; module C9b: JSX
-// opening-like elements and fragments as calls (Checker.Jsx.cs). TODO(C9d): decorators' call signatures; TODO(C9c):
+// opening-like elements and fragments as calls (Checker.Jsx.cs). TODO(C9e): decorators' call signatures; TODO(C9d):
 // JavaScript require calls and expando assignments.
 
 using NeverSharp.Generated;
@@ -200,7 +200,7 @@ internal sealed partial class Checker
         return args;
     }
 
-    /// <summary>checker.ts getDecoratorCallSignature. TODO(C9): the decorator context types of ES decorators.</summary>
+    /// <summary>checker.ts getDecoratorCallSignature. TODO(C9e): the decorator context types of ES decorators.</summary>
     internal static Signature GetDecoratorCallSignature(NodeRef decorator)
     {
         _ = decorator;
@@ -287,7 +287,7 @@ internal sealed partial class Checker
         return result;
     }
 
-    // checker.ts resolveSignature (decorators: TODO(C9d))
+    // checker.ts resolveSignature (decorators: TODO(C9e))
     private Signature ResolveSignature(NodeRef node, List<Signature>? candidatesOutArray, CheckMode checkMode) => Kind(node) switch
     {
         SyntaxKind.CallExpression => ResolveCallExpression(node, candidatesOutArray, checkMode),

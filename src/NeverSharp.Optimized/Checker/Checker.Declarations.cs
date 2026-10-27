@@ -368,7 +368,7 @@ internal sealed partial class Checker
         }
         // (async functions and generators prior to ES2018 need emit helpers: Gate C targets ES2025)
         CheckTypeParameters(node, store.TypeParameters(n));
-        // (checkUnmatchedJSDocParameters: TODO(C9))
+        // (checkUnmatchedJSDocParameters: TODO(C9d))
         foreach (var parameter in store.Nodes(store.Parameters(n)))
         {
             CheckParameter(At(node, parameter));
@@ -857,7 +857,7 @@ internal sealed partial class Checker
                 GetReturnTypeOfSignature(GetSignatureFromDeclaration(node));
             }
         }
-        // (the @type tag of a JavaScript function declaration: TODO(C9))
+        // (the @type tag of a JavaScript function declaration: TODO(C9d))
     }
 
     // node.localSymbol (the binder's local symbol of an exported declaration)
@@ -974,7 +974,7 @@ internal sealed partial class Checker
                         lastSeenNonAmbientDeclaration = current;
                     }
                 }
-                // (JSDoc @overload tags of JavaScript functions: TODO(C9))
+                // (JSDoc @overload tags of JavaScript functions: TODO(C9d))
             }
         }
         if (multipleConstructorImplementation)

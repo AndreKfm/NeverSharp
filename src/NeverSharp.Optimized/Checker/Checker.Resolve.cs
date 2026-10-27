@@ -2567,7 +2567,7 @@ internal sealed partial class Checker
 
     /// <summary>
     /// checker.ts resolveExternalModule. Track O's programs use noResolve (Gate C), so host.getResolvedModule finds no
-    /// module: only ambient modules (and, TODO(C9), pattern ambient modules) resolve; otherwise the not-found error.
+    /// module: only ambient modules (and, TODO(C9e), pattern ambient modules) resolve; otherwise the not-found error.
     /// </summary>
     private SymbolRef ResolveExternalModule(NodeRef location, string moduleReference, DiagnosticMessage? moduleNotFoundError, NodeRef errorNode, bool isForAugmentation)
     {

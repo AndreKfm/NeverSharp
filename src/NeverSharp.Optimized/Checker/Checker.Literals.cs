@@ -18,7 +18,7 @@
 // Port structure follows internal/checker/checker.go
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
 // Modified: translated from TypeScript to C#; module C5 (replaces C1's object and array literal subsets and C1's
-// getWidenedType). TODO(C9): JavaScript object literals with JSDoc types and enum tags.
+// getWidenedType). TODO(C9d): JavaScript object literals with JSDoc types and enum tags.
 
 using NeverSharp.Generated;
 

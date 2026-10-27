@@ -580,7 +580,7 @@ internal sealed partial class Checker
             mainModule = ResolveExternalModuleSymbol(mainModule);
             if ((SymbolFlagsOf(mainModule) & SymbolFlags.Namespace) != 0)
             {
-                // TODO(C9): pattern ambient module augmentations and `export *` targets of the augmented module.
+                // TODO(C9e): pattern ambient module augmentations and `export *` targets of the augmented module.
                 mainModule = MergeSymbol(mainModule, augmentationSymbol);
             }
             else
@@ -850,7 +850,7 @@ internal sealed partial class Checker
         return symbols;
     }
 
-    /// <summary>checker.ts resolveExternalModuleSymbol (getCommonJsExportEquals: TODO(C9), JavaScript).</summary>
+    /// <summary>checker.ts resolveExternalModuleSymbol (getCommonJsExportEquals: TODO(C9d), JavaScript).</summary>
     internal SymbolRef ResolveExternalModuleSymbol(SymbolRef moduleSymbol, bool dontResolveAlias = false)
     {
         var exports = moduleSymbol.IsNone ? null : ExportsOf(moduleSymbol);

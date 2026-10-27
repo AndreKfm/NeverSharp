@@ -8,7 +8,7 @@
 // Port structure follows internal/checker/checker.go (checkSourceFile, checkSourceElementWorker, the statement checks)
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
 // Modified: translated from TypeScript to C#; module C8 (replaces C1's resolution walk). JSDoc comments and tags of
-// JavaScript files are module C9's (TODO(C9)). Emit helpers (checkExternalEmitHelpers) are not checked: Gate C's
+// JavaScript files are module C9's (TODO(C9d)). Emit helpers (checkExternalEmitHelpers) are not checked: Gate C's
 // target (ES2025) needs none.
 
 using NeverSharp.Generated;
@@ -186,7 +186,7 @@ internal sealed partial class Checker
     {
         var store = StoreOf(node);
         var n = node.Node;
-        // (checkJSDocCommentWorker for the JSDoc comments of the node, and the JSDoc tags of JavaScript files: TODO(C9))
+        // (checkJSDocCommentWorker for the JSDoc comments of the node, and the JSDoc tags of JavaScript files: TODO(C9d))
         if (compilerOptions.AllowUnreachableCode != true && !withinUnreachableCode && CheckSourceElementUnreachable(node))
         {
             withinUnreachableCode = true;
@@ -496,7 +496,7 @@ internal sealed partial class Checker
             Error(node, Diagnostics.JSDoc_may_only_appear_in_the_last_parameter_of_a_signature);
             return;
         }
-        // (the parameter of the tag and its host signature: TODO(C9))
+        // (the parameter of the tag and its host signature: TODO(C9d))
     }
 
     // forEachChild(node, checkSourceElement)
@@ -1244,7 +1244,7 @@ internal sealed partial class Checker
         if ((SymbolFlagsOf(symbol) & SymbolFlags.Alias) != 0 && Utilities.IsInJSFile(store, n))
         {
             // (isVariableDeclarationInitializedToBareOrAccessedRequire / isBindingElementOfBareOrAccessedRequire:
-            // CommonJS require aliases of JavaScript files, TODO(C9))
+            // CommonJS require aliases of JavaScript files, TODO(C9d))
             return;
         }
         if (store.Kind(name) == SyntaxKind.BigIntLiteral)

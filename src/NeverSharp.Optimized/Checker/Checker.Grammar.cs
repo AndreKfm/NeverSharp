@@ -216,7 +216,7 @@ internal sealed partial class Checker
                     {
                         return GrammarErrorOnNode(nodeRef, Diagnostics.A_class_member_cannot_have_the_0_keyword, Scanner.TokenToString(SyntaxKind.ConstKeyword));
                     }
-                    // (JSDoc template tags: TODO(C9))
+                    // (JSDoc template tags: TODO(C9d))
                     if (kind == SyntaxKind.TypeParameter && !(Utilities.IsFunctionLikeDeclaration(store, parent) || Utilities.IsClassLike(store, parent) ||
                         store.Kind(parent) is SyntaxKind.FunctionType or SyntaxKind.ConstructorType or SyntaxKind.CallSignature or SyntaxKind.ConstructSignature or SyntaxKind.MethodSignature))
                     {
@@ -549,7 +549,7 @@ internal sealed partial class Checker
                 {
                     var inOutFlag = modifierKind == SyntaxKind.InKeyword ? ModifierFlags.In : ModifierFlags.Out;
                     var inOutText = modifierKind == SyntaxKind.InKeyword ? "in" : "out";
-                    // (JSDoc template tags: TODO(C9))
+                    // (JSDoc template tags: TODO(C9d))
                     if (kind != SyntaxKind.TypeParameter || !parent.IsNone && !(store.Kind(parent) is SyntaxKind.InterfaceDeclaration or SyntaxKind.TypeAliasDeclaration || Utilities.IsClassLike(store, parent)))
                     {
                         return GrammarErrorOnNode(modifier, Diagnostics._0_modifier_can_only_appear_on_a_type_parameter_of_a_class_interface_or_type_alias, inOutText);
@@ -1216,7 +1216,7 @@ internal sealed partial class Checker
             {
                 parent = store.Parent(parent);
             }
-            // (JSDoc type expressions of JavaScript files: TODO(C9))
+            // (JSDoc type expressions of JavaScript files: TODO(C9d))
             switch (store.Kind(parent))
             {
                 case SyntaxKind.VariableDeclaration:
