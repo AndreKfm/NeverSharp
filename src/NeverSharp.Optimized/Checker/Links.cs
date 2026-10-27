@@ -209,6 +209,7 @@ internal struct AliasSymbolLinks
     public SymbolRef AliasTarget;
     public bool Referenced;
     public NodeRef TypeOnlyDeclaration;
+    public byte TypeOnlyState; // links.typeOnlyDeclaration: 0 undefined, 1 false, 2 a declaration (module C8)
 }
 
 /// <summary>types.go DeclaredTypeLinks (declared types of type parameters, classes, interfaces, enums).</summary>

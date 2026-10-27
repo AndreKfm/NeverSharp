@@ -832,8 +832,8 @@ internal sealed partial class Checker
     }
 
     /// <summary>
-    /// checker.ts getTypeOnlyAliasDeclaration: the syntactic part (an alias declared with `import type` / `export type`).
-    /// TODO(C8): aliases that resolve to type-only aliases transitively (markSymbolOfAliasDeclarationIfTypeOnly).
+    /// checker.ts getTypeOnlyAliasDeclaration: indicates that a symbol directly or indirectly resolves to a type-only
+    /// import or export. (Type-only export stars, `export type * from`, need modules Gate C does not resolve: none.)
     /// </summary>
     private NodeRef GetTypeOnlyAliasDeclaration(SymbolRef symbol, SymbolFlags include = SymbolFlags.None)
     {
@@ -841,19 +841,75 @@ internal sealed partial class Checker
         {
             return NodeRef.None;
         }
-        foreach (var declaration in DeclarationsOf(symbol) ?? [])
+        if (AliasSymbolLinks.Get(symbol).TypeOnlyState == 0)
         {
-            if (IsTypeOnlyImportOrExportDeclaration(declaration))
-            {
-                if (include != SymbolFlags.None)
-                {
-                    var resolved = ResolveAlias(NodeSymbol(declaration));
-                    return (GetSymbolFlags(resolved) & include) != 0 ? declaration : NodeRef.None;
-                }
-                return declaration;
-            }
+            // We need to set a WIP value here to prevent reentrancy during `getImmediateAliasedSymbol` which, paradoxically, can depend on this
+            AliasSymbolLinks.Get(symbol).TypeOnlyState = 1;
+            var resolved = ResolveSymbol(symbol); // do this before the `resolveImmediate` below, as it uses a different circularity cache and we might hide a circularity error if we blindly get the immediate alias first
+            // While usually the alias will have been marked during the pass by the full typecheck, we may still need to calculate the alias declaration now
+            var declarations = DeclarationsOf(symbol);
+            var immediate = !GetDeclarationOfAliasSymbol(symbol).IsNone ? GetImmediateAliasedSymbol(symbol) : SymbolRef.None;
+            MarkSymbolOfAliasDeclarationIfTypeOnly(declarations is { Count: > 0 } ? declarations[0] : NodeRef.None, immediate, resolved, overwriteEmpty: true);
         }
-        return NodeRef.None;
+        ref var links = ref AliasSymbolLinks.Get(symbol);
+        if (links.TypeOnlyState != 2)
+        {
+            return NodeRef.None;
+        }
+        if (include == SymbolFlags.None)
+        {
+            return links.TypeOnlyDeclaration;
+        }
+        var typeOnlyDeclaration = links.TypeOnlyDeclaration;
+        var resolvedTypeOnly = ResolveAlias(GetSymbolOfDeclaration(typeOnlyDeclaration));
+        return (GetSymbolFlags(resolvedTypeOnly) & include) != 0 ? typeOnlyDeclaration : NodeRef.None;
+    }
+
+    /// <summary>checker.ts markSymbolOfAliasDeclarationIfTypeOnly: whether the alias is (or resolves to) a type-only alias.</summary>
+    private bool MarkSymbolOfAliasDeclarationIfTypeOnly(NodeRef aliasDeclaration, SymbolRef immediateTarget, SymbolRef finalTarget, bool overwriteEmpty)
+    {
+        if (aliasDeclaration.IsNone || Kind(aliasDeclaration) == SyntaxKind.PropertyAccessExpression)
+        {
+            return false;
+        }
+        // If the declaration itself is type-only, mark it and return.
+        // No need to check what it resolves to.
+        var sourceSymbol = GetSymbolOfDeclaration(aliasDeclaration);
+        if (sourceSymbol.IsNone)
+        {
+            return false;
+        }
+        if (IsTypeOnlyImportOrExportDeclaration(aliasDeclaration))
+        {
+            ref var declLinks = ref AliasSymbolLinks.Get(sourceSymbol);
+            declLinks.TypeOnlyDeclaration = aliasDeclaration;
+            declLinks.TypeOnlyState = 2;
+            return true;
+        }
+        return MarkSymbolOfAliasDeclarationIfTypeOnlyWorker(sourceSymbol, immediateTarget, overwriteEmpty) ||
+            MarkSymbolOfAliasDeclarationIfTypeOnlyWorker(sourceSymbol, finalTarget, overwriteEmpty);
+    }
+
+    private bool MarkSymbolOfAliasDeclarationIfTypeOnlyWorker(SymbolRef aliasSymbol, SymbolRef target, bool overwriteEmpty)
+    {
+        var state = AliasSymbolLinks.Get(aliasSymbol).TypeOnlyState;
+        if (!target.IsNone && (state == 0 || (overwriteEmpty && state == 1)))
+        {
+            var exportSymbol = ExportsOf(target)?.Get(InternalSymbolName.ExportEquals) ?? SymbolRef.None;
+            if (exportSymbol.IsNone)
+            {
+                exportSymbol = target;
+            }
+            var typeOnly = (DeclarationsOf(exportSymbol) ?? []).Find(IsTypeOnlyImportOrExportDeclaration);
+            if (typeOnly.IsNone && (SymbolFlagsOf(exportSymbol) & SymbolFlags.Alias) != 0 && AliasSymbolLinks.Get(exportSymbol).TypeOnlyState == 2)
+            {
+                typeOnly = AliasSymbolLinks.Get(exportSymbol).TypeOnlyDeclaration;
+            }
+            ref var links = ref AliasSymbolLinks.Get(aliasSymbol);
+            links.TypeOnlyDeclaration = typeOnly;
+            links.TypeOnlyState = typeOnly.IsNone ? (byte)1 : (byte)2;
+        }
+        return AliasSymbolLinks.Get(aliasSymbol).TypeOnlyState == 2;
     }
 
     /// <summary>utilities.ts isTypeOnlyImportOrExportDeclaration.</summary>
@@ -1863,8 +1919,42 @@ internal sealed partial class Checker
         {
             throw new InvalidOperationException("Unknown entity name kind.");
         }
-        // (markSymbolOfAliasDeclarationIfTypeOnly: TODO(C8))
+        var nameStore = StoreOf(name);
+        if ((SymbolFlagsOf(symbol) & SymbolFlags.Alias) != 0 || nameStore.Kind(nameStore.Parent(name.Node)) == SyntaxKind.ExportAssignment)
+        {
+            MarkSymbolOfAliasDeclarationIfTypeOnly(GetAliasDeclarationFromName(nameStore, name), symbol, SymbolRef.None, overwriteEmpty: true);
+        }
         return (SymbolFlagsOf(symbol) & meaning) != 0 || dontResolveAlias ? symbol : ResolveAlias(symbol);
+    }
+
+    // utilities.ts getAliasDeclarationFromName
+    private static NodeRef GetAliasDeclarationFromName(NodeStore store, NodeRef name)
+    {
+        var node = name.Node;
+        while (true)
+        {
+            var parent = store.Parent(node);
+            switch (store.Kind(parent))
+            {
+                case SyntaxKind.ImportClause:
+                case SyntaxKind.ImportSpecifier:
+                case SyntaxKind.NamespaceImport:
+                case SyntaxKind.ExportSpecifier:
+                case SyntaxKind.ExportAssignment:
+                case SyntaxKind.ImportEqualsDeclaration:
+                case SyntaxKind.NamespaceExport:
+                    return At(name, parent);
+                case SyntaxKind.QualifiedName:
+                    do
+                    {
+                        node = store.Parent(node);
+                    }
+                    while (store.Kind(store.Parent(node)) == SyntaxKind.QualifiedName);
+                    continue;
+                default:
+                    return NodeRef.None;
+            }
+        }
     }
 
     private SymbolRef TryGetQualifiedNameAsValue(NodeRef node)
@@ -2018,13 +2108,28 @@ internal sealed partial class Checker
             case SyntaxKind.NamespaceExport:
                 return GetTargetOfNamespaceExport(node, dontRecursivelyResolve);
             case SyntaxKind.ImportSpecifier:
-                return GetExternalModuleMember(At(node, store.Parent(store.Parent(store.Parent(node.Node)))), node, dontRecursivelyResolve);
+            {
+                // getTargetOfImportSpecifier
+                var resolvedSpecifier = GetExternalModuleMember(At(node, store.Parent(store.Parent(store.Parent(node.Node)))), node, dontRecursivelyResolve);
+                MarkSymbolOfAliasDeclarationIfTypeOnly(node, SymbolRef.None, resolvedSpecifier, overwriteEmpty: false);
+                return resolvedSpecifier;
+            }
             case SyntaxKind.ExportSpecifier:
                 return GetTargetOfExportSpecifier(node, SymbolFlags.Value | SymbolFlags.Type | SymbolFlags.Namespace, dontRecursivelyResolve);
             case SyntaxKind.ExportAssignment:
-                return GetTargetOfAliasLikeExpression(At(node, store.Expression(node.Node)), dontRecursivelyResolve);
+            {
+                // getTargetOfExportAssignment
+                var resolvedExpression = GetTargetOfAliasLikeExpression(At(node, store.Expression(node.Node)), dontRecursivelyResolve);
+                MarkSymbolOfAliasDeclarationIfTypeOnly(node, SymbolRef.None, resolvedExpression, overwriteEmpty: false);
+                return resolvedExpression;
+            }
             case SyntaxKind.NamespaceExportDeclaration:
-                return ResolveExternalModuleSymbol(NodeSymbol(Parent(node)), dontRecursivelyResolve);
+            {
+                // getTargetOfNamespaceExportDeclaration
+                var resolvedModule = ResolveExternalModuleSymbol(NodeSymbol(Parent(node)), dontRecursivelyResolve);
+                MarkSymbolOfAliasDeclarationIfTypeOnly(node, SymbolRef.None, resolvedModule, overwriteEmpty: false);
+                return resolvedModule;
+            }
             case SyntaxKind.ShorthandPropertyAssignment:
                 return ResolveEntityName(At(node, store.Name(node.Node)), SymbolFlags.Value | SymbolFlags.Type | SymbolFlags.Namespace, ignoreErrors: true, dontRecursivelyResolve);
             case SyntaxKind.PropertyAssignment:
@@ -2062,10 +2167,40 @@ internal sealed partial class Checker
         if (store.Kind(moduleReference) == SyntaxKind.ExternalModuleReference)
         {
             var immediate = ResolveExternalModuleName(node, At(node, store.Expression(moduleReference)));
-            return ResolveExternalModuleSymbol(immediate);
+            var resolvedModule = ResolveExternalModuleSymbol(immediate);
+            MarkSymbolOfAliasDeclarationIfTypeOnly(node, immediate, resolvedModule, overwriteEmpty: false);
+            return resolvedModule;
         }
-        return GetSymbolOfPartOfRightHandSideOfImportEquals(At(node, moduleReference), dontResolveAlias);
+        var resolved = GetSymbolOfPartOfRightHandSideOfImportEquals(At(node, moduleReference), dontResolveAlias);
+        CheckAndReportErrorForResolvingImportAliasToTypeOnlySymbol(node, resolved);
+        return resolved;
     }
+
+    // checker.ts checkAndReportErrorForResolvingImportAliasToTypeOnlySymbol
+    private void CheckAndReportErrorForResolvingImportAliasToTypeOnlySymbol(NodeRef node, SymbolRef resolved)
+    {
+        var store = StoreOf(node);
+        if (MarkSymbolOfAliasDeclarationIfTypeOnly(node, SymbolRef.None, resolved, overwriteEmpty: false) && !store.IsTypeOnly(node.Node))
+        {
+            var typeOnlyDeclaration = GetTypeOnlyAliasDeclaration(GetSymbolOfDeclaration(node));
+            if (typeOnlyDeclaration.IsNone)
+            {
+                return;
+            }
+            var isExport = Kind(typeOnlyDeclaration) is SyntaxKind.ExportSpecifier or SyntaxKind.ExportDeclaration;
+            var message = isExport
+                ? Diagnostics.An_import_alias_cannot_reference_a_declaration_that_was_exported_using_export_type
+                : Diagnostics.An_import_alias_cannot_reference_a_declaration_that_was_imported_using_import_type;
+            var relatedMessage = isExport ? Diagnostics._0_was_exported_here : Diagnostics._0_was_imported_here;
+            var typeOnlyStore = StoreOf(typeOnlyDeclaration);
+            var name = Kind(typeOnlyDeclaration) == SyntaxKind.ExportDeclaration ? "*" : ModuleExportNameTextUnescaped(typeOnlyStore, typeOnlyStore.Name(typeOnlyDeclaration.Node));
+            AddRelatedInfo(Error(At(node, store.ModuleReference(node.Node)), message), CreateRelatedForNode(typeOnlyDeclaration, relatedMessage, name));
+        }
+    }
+
+    // utilities.ts moduleExportNameTextUnescaped
+    private static string ModuleExportNameTextUnescaped(NodeStore store, Node name) =>
+        store.Kind(name) == SyntaxKind.StringLiteral ? store.Texts.GetString(store.Text(name))! : Utilities.UnescapeLeadingUnderscores(store.Texts.GetString(store.EscapedText(name))!);
 
     private SymbolRef GetSymbolOfPartOfRightHandSideOfImportEquals(NodeRef entityName, bool dontResolveAlias)
     {
@@ -2094,12 +2229,12 @@ internal sealed partial class Checker
     {
         var store = StoreOf(node);
         var moduleSymbol = ResolveExternalModuleName(node, At(node, store.ModuleSpecifier(store.Parent(node.Node))));
-        return !moduleSymbol.IsNone ? GetTargetOfModuleDefault(moduleSymbol, dontResolveAlias) : SymbolRef.None;
+        return !moduleSymbol.IsNone ? GetTargetOfModuleDefault(moduleSymbol, node, dontResolveAlias) : SymbolRef.None;
     }
 
     // checker.ts getTargetofModuleDefault, for ambient modules (Gate C resolves no files): a default export, else the
     // synthetic default of allowSyntheticDefaultImports (the module, or its export=).
-    private SymbolRef GetTargetOfModuleDefault(SymbolRef moduleSymbol, bool dontResolveAlias)
+    private SymbolRef GetTargetOfModuleDefault(SymbolRef moduleSymbol, NodeRef node, bool dontResolveAlias)
     {
         if (IsShorthandAmbientModuleSymbol(moduleSymbol))
         {
@@ -2117,9 +2252,16 @@ internal sealed partial class Checker
         }
         if (exportDefaultSymbol.IsNone && compilerOptions.GetAllowSyntheticDefaultImports())
         {
+            // per emit behavior, a synthetic default overrides a "real" .default member if `__esModule` is not present
             var resolved = ResolveExternalModuleSymbol(moduleSymbol, dontResolveAlias);
-            return !resolved.IsNone ? resolved : ResolveSymbol(moduleSymbol, dontResolveAlias);
+            if (resolved.IsNone)
+            {
+                resolved = ResolveSymbol(moduleSymbol, dontResolveAlias);
+            }
+            MarkSymbolOfAliasDeclarationIfTypeOnly(node, moduleSymbol, resolved, overwriteEmpty: false);
+            return resolved;
         }
+        MarkSymbolOfAliasDeclarationIfTypeOnly(node, exportDefaultSymbol, SymbolRef.None, overwriteEmpty: false);
         return exportDefaultSymbol;
     }
 
@@ -2140,7 +2282,9 @@ internal sealed partial class Checker
         var store = StoreOf(node);
         var moduleSpecifier = store.ModuleSpecifier(store.Parent(store.Parent(node.Node)));
         var immediate = ResolveExternalModuleName(node, At(node, moduleSpecifier));
-        return ResolveExternalModuleSymbol(immediate, dontResolveAlias);
+        var resolved = ResolveExternalModuleSymbol(immediate, dontResolveAlias);
+        MarkSymbolOfAliasDeclarationIfTypeOnly(node, immediate, resolved, overwriteEmpty: false);
+        return resolved;
     }
 
     private SymbolRef GetTargetOfNamespaceExport(NodeRef node, bool dontResolveAlias)
@@ -2148,7 +2292,9 @@ internal sealed partial class Checker
         var store = StoreOf(node);
         var moduleSpecifier = store.ModuleSpecifier(store.Parent(node.Node));
         var immediate = ResolveExternalModuleName(node, At(node, moduleSpecifier));
-        return ResolveExternalModuleSymbol(immediate, dontResolveAlias);
+        var resolved = ResolveExternalModuleSymbol(immediate, dontResolveAlias);
+        MarkSymbolOfAliasDeclarationIfTypeOnly(node, immediate, resolved, overwriteEmpty: false);
+        return resolved;
     }
 
     private SymbolRef GetTargetOfExportSpecifier(NodeRef node, SymbolFlags meaning, bool dontResolveAlias)
@@ -2162,13 +2308,15 @@ internal sealed partial class Checker
             var moduleSymbol = specifier.IsNone ? SymbolRef.None : ResolveExternalModuleName(node, At(node, specifier));
             if (!moduleSymbol.IsNone)
             {
-                return GetTargetOfModuleDefault(moduleSymbol, dontResolveAlias);
+                return GetTargetOfModuleDefault(moduleSymbol, node, dontResolveAlias);
             }
         }
-        return !store.ModuleSpecifier(declaration).IsNone
+        var resolvedSpecifier = !store.ModuleSpecifier(declaration).IsNone
             ? GetExternalModuleMember(At(node, declaration), node, dontResolveAlias)
             : store.Kind(name) == SyntaxKind.StringLiteral ? SymbolRef.None // Skip for invalid syntax like this: export { "x" }
             : ResolveEntityName(At(node, name), meaning, ignoreErrors: false, dontResolveAlias);
+        MarkSymbolOfAliasDeclarationIfTypeOnly(node, SymbolRef.None, resolvedSpecifier, overwriteEmpty: false);
+        return resolvedSpecifier;
     }
 
     // checker.ts getExternalModuleMember, for ambient modules.
@@ -2197,7 +2345,7 @@ internal sealed partial class Checker
             return moduleSymbol;
         }
         // (symbolFromVariable: properties of an export= variable, TODO(C5))
-        var symbolFromModule = GetExportOfModule(targetSymbol, nameText, dontResolveAlias);
+        var symbolFromModule = GetExportOfModule(targetSymbol, nameText, specifier, dontResolveAlias);
         if (symbolFromModule.IsNone && nameText == InternalSymbolName.Default && compilerOptions.GetAllowSyntheticDefaultImports())
         {
             var resolved = ResolveExternalModuleSymbol(moduleSymbol, dontResolveAlias);
@@ -2210,12 +2358,15 @@ internal sealed partial class Checker
         return symbolFromModule;
     }
 
-    private SymbolRef GetExportOfModule(SymbolRef symbol, string name, bool dontResolveAlias)
+    private SymbolRef GetExportOfModule(SymbolRef symbol, string name, NodeRef specifier, bool dontResolveAlias)
     {
         if ((SymbolFlagsOf(symbol) & SymbolFlags.Module) != 0)
         {
             var exportSymbol = GetExportsOfSymbol(symbol).Get(name);
-            return ResolveSymbol(exportSymbol, dontResolveAlias);
+            var resolved = ResolveSymbol(exportSymbol, dontResolveAlias);
+            // (typeOnlyExportStarMap: `export type *` re-exports need modules Gate C does not resolve)
+            MarkSymbolOfAliasDeclarationIfTypeOnly(specifier, exportSymbol, resolved, overwriteEmpty: false);
+            return resolved;
         }
         return SymbolRef.None;
     }
@@ -2308,13 +2459,18 @@ internal sealed partial class Checker
     /// <summary>checker.ts getSymbolFlags: the combined flags of a symbol and all alias targets it resolves to.</summary>
     internal SymbolFlags GetSymbolFlags(SymbolRef symbol, bool excludeTypeOnlyMeanings = false, bool excludeLocalMeanings = false)
     {
-        // (excludeTypeOnlyMeanings: the type-only resolution of getTypeOnlyAliasDeclaration, TODO(C8))
-        _ = excludeTypeOnlyMeanings;
+        // (type-only export stars: `export type *` re-exports need modules Gate C does not resolve)
+        var typeOnlyDeclaration = excludeTypeOnlyMeanings ? GetTypeOnlyAliasDeclaration(symbol) : NodeRef.None;
+        var typeOnlyResolution = typeOnlyDeclaration.IsNone ? SymbolRef.None : ResolveAlias(GetSymbolOfDeclaration(typeOnlyDeclaration));
         var flags = excludeLocalMeanings ? SymbolFlags.None : SymbolFlagsOf(symbol);
         HashSet<SymbolRef>? seenSymbols = null;
         while ((SymbolFlagsOf(symbol) & SymbolFlags.Alias) != 0)
         {
             var target = GetExportSymbolOfValueSymbolIfExported(ResolveAlias(symbol));
+            if (!typeOnlyResolution.IsNone && target == typeOnlyResolution)
+            {
+                break;
+            }
             if (target == unknownSymbol)
             {
                 return SymbolFlags.All;
