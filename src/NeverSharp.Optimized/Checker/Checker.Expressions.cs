@@ -1588,19 +1588,100 @@ internal sealed partial class Checker
         }
     }
 
-    // checker.ts tryGetThisTypeAt (JavaScript prototype methods and JSDoc this tags: C9)
+    // checker.ts getTypeForThisExpressionFromJSDoc
+    private Type GetTypeForThisExpressionFromJSDoc(NodeRef node)
+    {
+        var store = StoreOf(node);
+        var thisTag = GetFirstJSDocTagOfKind(store, node.Node, SyntaxKind.JSDocThisTag);
+        if (!thisTag.IsNone && !store.TypeExpression(thisTag).IsNone)
+        {
+            return GetTypeFromTypeNode(At(node, store.TypeExpression(thisTag)));
+        }
+        var signature = GetSignatureOfTypeTag(node);
+        return signature.IsNone ? Type.None : GetThisTypeOfSignature(signature);
+    }
+
+    // checker.ts getClassNameFromPrototypeMethod
+    private static Node GetClassNameFromPrototypeMethod(NodeStore store, Node container)
+    {
+        var parent = store.Parent(container);
+        var kind = store.Kind(container);
+        // Check if it's the RHS of a x.prototype.y = function [name]() { .... }
+        if (kind == SyntaxKind.FunctionExpression && store.Kind(parent) == SyntaxKind.BinaryExpression &&
+            Utilities.GetAssignmentDeclarationKind(store, parent) == AssignmentDeclarationKind.PrototypeProperty)
+        {
+            // Get the 'x' of 'x.prototype.y = container'
+            return store.Expression(store.Expression(store.Left(parent)));
+        }
+        // x.prototype = { method() { } }
+        if (kind == SyntaxKind.MethodDeclaration && store.Kind(parent) == SyntaxKind.ObjectLiteralExpression &&
+            store.Kind(store.Parent(parent)) == SyntaxKind.BinaryExpression && Utilities.GetAssignmentDeclarationKind(store, store.Parent(parent)) == AssignmentDeclarationKind.Prototype)
+        {
+            return store.Expression(store.Left(store.Parent(parent)));
+        }
+        // x.prototype = { method: function() { } }
+        if (kind == SyntaxKind.FunctionExpression && store.Kind(parent) == SyntaxKind.PropertyAssignment && store.Kind(store.Parent(parent)) == SyntaxKind.ObjectLiteralExpression)
+        {
+            var binary = store.Parent(store.Parent(parent));
+            if (store.Kind(binary) == SyntaxKind.BinaryExpression && Utilities.GetAssignmentDeclarationKind(store, binary) == AssignmentDeclarationKind.Prototype)
+            {
+                return store.Expression(store.Left(binary));
+            }
+        }
+        // Object.defineProperty(x, "method", { value: function() { } }) and the get/set forms
+        if (kind == SyntaxKind.FunctionExpression && store.Kind(parent) == SyntaxKind.PropertyAssignment && IsValueGetOrSetName(store, store.Name(parent)) &&
+            store.Kind(store.Parent(parent)) == SyntaxKind.ObjectLiteralExpression)
+        {
+            var call = store.Parent(store.Parent(parent));
+            if (store.Kind(call) == SyntaxKind.CallExpression && Utilities.GetAssignmentDeclarationKind(store, call) == AssignmentDeclarationKind.ObjectDefinePrototypeProperty &&
+                store.Element(store.Arguments(call), 2) == store.Parent(parent))
+            {
+                return store.Expression(store.Element(store.Arguments(call), 0));
+            }
+        }
+        // Object.defineProperty(x, "method", { value() { } }) and the get/set forms
+        if (kind == SyntaxKind.MethodDeclaration && IsValueGetOrSetName(store, store.Name(container)) && store.Kind(parent) == SyntaxKind.ObjectLiteralExpression)
+        {
+            var call = store.Parent(parent);
+            if (store.Kind(call) == SyntaxKind.CallExpression && Utilities.GetAssignmentDeclarationKind(store, call) == AssignmentDeclarationKind.ObjectDefinePrototypeProperty &&
+                store.Element(store.Arguments(call), 2) == parent)
+            {
+                return store.Expression(store.Element(store.Arguments(call), 0));
+            }
+        }
+        return Node.None;
+
+        static bool IsValueGetOrSetName(NodeStore store, Node name) => store.Kind(name) == SyntaxKind.Identifier &&
+            (store.Texts.Equals(store.EscapedText(name), "value") || store.Texts.Equals(store.EscapedText(name), "get") || store.Texts.Equals(store.EscapedText(name), "set"));
+    }
+
+    // checker.ts tryGetThisTypeAt
     private Type TryGetThisTypeAt(NodeRef node, bool includeGlobalThis, NodeRef container)
     {
         var store = StoreOf(node);
         var c = container.Node;
         if (!c.IsNone && Utilities.IsFunctionLike(store, c) && (!IsInParameterInitializerBeforeContainingFunction(node) || !GetThisParameter(store, c).IsNone))
         {
+            var isInJS = Utilities.IsInJSFile(store, node.Node);
             var thisType = GetThisTypeOfDeclaration(container);
+            if (thisType.IsNone && isInJS)
+            {
+                thisType = GetTypeForThisExpressionFromJSDoc(container);
+            }
             // Note: a parameter initializer should refer to class-this unless function-this is explicitly annotated.
             // If this is a function in a JS file, it might be a class method.
             if (thisType.IsNone)
             {
-                if (IsJSConstructor(container))
+                var className = GetClassNameFromPrototypeMethod(store, c);
+                if (isInJS && !className.IsNone)
+                {
+                    var classSymbol = Types.Symbol(CheckExpression(At(node, className)));
+                    if (!classSymbol.IsNone && MembersOf(classSymbol) is not null && (SymbolFlagsOf(classSymbol) & SymbolFlags.Function) != 0)
+                    {
+                        thisType = ThisTypeOfClassOrInterface(GetDeclaredTypeOfSymbol(classSymbol));
+                    }
+                }
+                else if (IsJSConstructor(container))
                 {
                     thisType = ThisTypeOfClassOrInterface(GetDeclaredTypeOfSymbol(GetMergedSymbol(NodeSymbol(container))));
                 }

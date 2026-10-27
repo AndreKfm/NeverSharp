@@ -524,6 +524,26 @@ internal sealed partial class Checker
         or SyntaxKind.FunctionDeclaration or SyntaxKind.ArrowFunction or SyntaxKind.MethodDeclaration or SyntaxKind.GetAccessor
         or SyntaxKind.SetAccessor or SyntaxKind.ModuleDeclaration or SyntaxKind.SourceFile;
 
+    // utilitiesPublic.ts getEffectiveConstraintOfTypeParameter
+    internal static Node GetEffectiveConstraintOfTypeParameter(NodeStore store, Node node)
+    {
+        var constraint = store.Constraint(node);
+        if (!constraint.IsNone)
+        {
+            return constraint;
+        }
+        var parent = store.Parent(node);
+        if (store.Kind(parent) == SyntaxKind.JSDocTemplateTag)
+        {
+            var typeParameters = store.TypeParameters(parent);
+            if (!typeParameters.IsNone && store.Length(typeParameters) > 0 && store.Element(typeParameters, 0) == node)
+            {
+                return store.Constraint(parent);
+            }
+        }
+        return Node.None;
+    }
+
     // checker.ts getReturnTypeOfTypeTag
     private Type GetReturnTypeOfTypeTag(NodeRef node)
     {

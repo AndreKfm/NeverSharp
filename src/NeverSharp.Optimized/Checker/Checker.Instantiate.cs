@@ -1435,7 +1435,7 @@ internal sealed partial class Checker
         {
             if (Kind(declaration) == SyntaxKind.TypeParameter)
             {
-                var constraint = StoreOf(declaration).Constraint(declaration.Node);
+                var constraint = GetEffectiveConstraintOfTypeParameter(StoreOf(declaration), declaration.Node);
                 if (!constraint.IsNone)
                 {
                     return At(declaration, constraint);

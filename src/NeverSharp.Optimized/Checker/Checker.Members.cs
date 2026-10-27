@@ -191,17 +191,81 @@ internal sealed partial class Checker
         return declaration.IsNone ? null : GetOuterTypeParameters(declaration, includeThisTypes: false);
     }
 
+    // findAncestor(descendant, d => d === ancestor) !== undefined
+    private bool IsAncestorOrSelf(NodeRef ancestor, NodeRef descendant)
+    {
+        if (ancestor.File != descendant.File)
+        {
+            return false;
+        }
+        var store = StoreOf(descendant);
+        for (var n = descendant.Node; !n.IsNone; n = store.Parent(n))
+        {
+            if (n == ancestor.Node)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private List<Type>? GetOuterTypeParameters(NodeRef node, bool includeThisTypes)
     {
         while (true)
         {
             node = Parent(node);
+            if (!node.IsNone && Kind(node) == SyntaxKind.BinaryExpression)
+            {
+                // prototype assignments get the outer type parameters of their constructor function
+                var assignmentKind = Utilities.GetAssignmentDeclarationKind(StoreOf(node), node.Node);
+                if (assignmentKind is AssignmentDeclarationKind.Prototype or AssignmentDeclarationKind.PrototypeProperty)
+                {
+                    var symbol = GetSymbolOfDeclaration(At(node, StoreOf(node).Left(node.Node)));
+                    var symbolParent = symbol.IsNone ? SymbolRef.None : ParentOf(symbol);
+                    var parentDeclaration = symbolParent.IsNone ? NodeRef.None : ValueDeclarationOf(symbolParent);
+                    if (!parentDeclaration.IsNone && !IsAncestorOrSelf(node, parentDeclaration))
+                    {
+                        node = parentDeclaration;
+                    }
+                }
+            }
             if (node.IsNone)
             {
                 return null;
             }
             switch (Kind(node))
             {
+                case SyntaxKind.JSDocParameterTag:
+                {
+                    var paramSymbol = GetParameterSymbolFromJSDoc(node);
+                    if (!paramSymbol.IsNone)
+                    {
+                        node = ValueDeclarationOf(paramSymbol);
+                    }
+                    break;
+                }
+                case SyntaxKind.JSDoc:
+                {
+                    var outer = GetOuterTypeParameters(node, includeThisTypes);
+                    var store = StoreOf(node);
+                    foreach (var tag in store.Nodes(store.Tags(node.Node)))
+                    {
+                        if (store.Kind(tag) != SyntaxKind.JSDocTemplateTag)
+                        {
+                            continue;
+                        }
+                        foreach (var tp in store.Nodes(store.TypeParameters(tag)))
+                        {
+                            var declared = GetDeclaredTypeOfTypeParameter(GetSymbolOfDeclaration(At(node, tp)));
+                            outer ??= [];
+                            if (!outer.Contains(declared))
+                            {
+                                outer.Add(declared);
+                            }
+                        }
+                    }
+                    return outer;
+                }
                 case SyntaxKind.ClassDeclaration:
                 case SyntaxKind.ClassExpression:
                 case SyntaxKind.InterfaceDeclaration:
@@ -210,11 +274,16 @@ internal sealed partial class Checker
                 case SyntaxKind.MethodSignature:
                 case SyntaxKind.FunctionType:
                 case SyntaxKind.ConstructorType:
+                case SyntaxKind.JSDocFunctionType:
                 case SyntaxKind.FunctionDeclaration:
                 case SyntaxKind.MethodDeclaration:
                 case SyntaxKind.FunctionExpression:
                 case SyntaxKind.ArrowFunction:
                 case SyntaxKind.TypeAliasDeclaration:
+                case SyntaxKind.JSDocTemplateTag:
+                case SyntaxKind.JSDocTypedefTag:
+                case SyntaxKind.JSDocEnumTag:
+                case SyntaxKind.JSDocCallbackTag:
                 case SyntaxKind.MappedType:
                 case SyntaxKind.ConditionalType:
                 {
@@ -245,11 +314,11 @@ internal sealed partial class Checker
                         }
                         return outerTypeParameters;
                     }
-                    var typeParameters = store.TypeParameters(node.Node);
-                    if (!typeParameters.IsNone && store.Length(typeParameters) > 0)
+                    var typeParameters = GetEffectiveTypeParameterDeclarations(store, node.Node);
+                    if (typeParameters.Count > 0)
                     {
                         outerTypeParameters ??= [];
-                        foreach (var tp in store.Nodes(typeParameters))
+                        foreach (var tp in typeParameters)
                         {
                             var declared = GetDeclaredTypeOfTypeParameter(GetSymbolOfDeclaration(At(node, tp)));
                             if (!outerTypeParameters.Contains(declared))
@@ -259,7 +328,7 @@ internal sealed partial class Checker
                         }
                     }
                     var kind = Kind(node);
-                    var thisType = includeThisTypes && (kind is SyntaxKind.ClassDeclaration or SyntaxKind.ClassExpression or SyntaxKind.InterfaceDeclaration)
+                    var thisType = includeThisTypes && (kind is SyntaxKind.ClassDeclaration or SyntaxKind.ClassExpression or SyntaxKind.InterfaceDeclaration || IsJSConstructor(node))
                         ? ThisTypeOfClassOrInterface(GetDeclaredTypeOfClassOrInterface(GetSymbolOfDeclaration(node)))
                         : Type.None;
                     if (!thisType.IsNone)
@@ -279,15 +348,11 @@ internal sealed partial class Checker
         foreach (var node in DeclarationsOf(symbol) ?? [])
         {
             var kind = Kind(node);
-            if (kind is SyntaxKind.InterfaceDeclaration or SyntaxKind.ClassDeclaration or SyntaxKind.ClassExpression or SyntaxKind.TypeAliasDeclaration)
+            if (kind is SyntaxKind.InterfaceDeclaration or SyntaxKind.ClassDeclaration or SyntaxKind.ClassExpression or SyntaxKind.TypeAliasDeclaration
+                or SyntaxKind.JSDocTypedefTag or SyntaxKind.JSDocCallbackTag or SyntaxKind.JSDocEnumTag || IsJSConstructor(node))
             {
                 var store = StoreOf(node);
-                var typeParameters = store.TypeParameters(node.Node);
-                if (typeParameters.IsNone)
-                {
-                    continue;
-                }
-                foreach (var tp in store.Nodes(typeParameters))
+                foreach (var tp in GetEffectiveTypeParameterDeclarations(store, node.Node))
                 {
                     var declared = GetDeclaredTypeOfTypeParameter(GetSymbolOfDeclaration(At(node, tp)));
                     result ??= [];
@@ -975,6 +1040,24 @@ internal sealed partial class Checker
             var classType = GetDeclaredTypeOfClassOrInterface(symbol);
             var members = MembersOf(symbol);
             var constructSignatures = members is not null ? GetSignaturesOfSymbol(members.Get(InternalSymbolName.Constructor)) : [];
+            if ((flags & SymbolFlags.Function) != 0)
+            {
+                constructSignatures = [.. constructSignatures];
+                foreach (var sig in data.CallSignatures!)
+                {
+                    var declaration = Signatures.Record(sig).Declaration;
+                    if (!IsJSConstructor(declaration))
+                    {
+                        continue;
+                    }
+                    ref var s = ref Signatures.Record(sig);
+                    var constructSignature = Signatures.Create(s.Flags & SignatureFlags.PropagatingFlags, declaration, s.TypeParameters, s.ThisParameter, s.MinArgumentCount);
+                    ref var c = ref Signatures.Record(constructSignature);
+                    c.Parameters = Signatures.Record(sig).Parameters;
+                    c.ResolvedReturnType = classType;
+                    constructSignatures.Add(constructSignature);
+                }
+            }
             if (constructSignatures.Count == 0)
             {
                 constructSignatures = GetDefaultConstructSignatures(classType);

@@ -138,10 +138,16 @@ internal sealed partial class Checker
                 // 4). type A = import("./f/*gotToDefinitionHere*/oo")
                 if ((Utilities.IsExternalModuleImportEqualsDeclaration(store, grandParent) && store.Expression(store.ModuleReference(grandParent)) == n) ||
                     (store.Kind(parent) is SyntaxKind.ImportDeclaration or SyntaxKind.ExportDeclaration && store.ModuleSpecifier(parent) == n) ||
+                    (Utilities.IsInJSFile(store, n) && store.Kind(parent) == SyntaxKind.JSDocImportTag && store.ModuleSpecifier(parent) == n) ||
+                    (Utilities.IsInJSFile(store, n) && IsRequireCall(At(node, parent), requireStringLiteralLikeArgument: false)) ||
                     Utilities.IsImportCall(store, parent) ||
                     (store.Kind(parent) == SyntaxKind.LiteralType && store.Kind(grandParent) == SyntaxKind.ImportType && store.Argument(grandParent) == parent))
                 {
                     return ResolveExternalModuleName(node, node, ignoreErrors);
+                }
+                if (store.Kind(parent) == SyntaxKind.CallExpression && Utilities.IsBindableObjectDefinePropertyCall(store, parent) && store.Element(store.Arguments(parent), 1) == n)
+                {
+                    return GetSymbolOfDeclaration(At(node, parent));
                 }
                 goto case SyntaxKind.NumericLiteral;
             case SyntaxKind.NumericLiteral:

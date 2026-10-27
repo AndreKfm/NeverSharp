@@ -1853,7 +1853,8 @@ internal sealed partial class Checker
     {
         var returnType = SyntacticResult.Failed;
         var store = StoreOf(fn);
-        var returnTypeNode = store.Kind(fn.Node) is SyntaxKind.JSDocSignature or SyntaxKind.JSDocFunctionType ? NodeRef.None : At(fn, store.Type(fn.Node));
+        var returnTypeNode = Utilities.IsJSDocConstructSignature(store, fn.Node) ? GetEffectiveTypeAnnotationNode(At(fn, store.Element(store.Parameters(fn.Node), 0)))
+            : At(fn, GetEffectiveReturnTypeNode(store, fn.Node));
         if (!returnTypeNode.IsNone)
         {
             returnType = Result(SerializeTypeAnnotationOfDeclaration(returnTypeNode, context, fn, symbol));
