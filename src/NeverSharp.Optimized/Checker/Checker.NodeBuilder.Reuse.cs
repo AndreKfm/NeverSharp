@@ -444,12 +444,6 @@ internal sealed partial class Checker
             (store.Flags(n) & NodeFlags.JSDoc) != 0;
     }
 
-    // checker.ts isLateBindableIndexSignature (computed names of index signature types: C3)
-    private static bool IsLateBindableIndexSignature(NodeRef name)
-    {
-        _ = name;
-        return false;
-    }
 
     // the resolver's shouldRemoveDeclaration
     private bool ShouldRemoveDeclaration(NodeBuilderContext context, NodeRef node)

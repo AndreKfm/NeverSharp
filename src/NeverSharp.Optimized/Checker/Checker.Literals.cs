@@ -185,7 +185,7 @@ internal sealed partial class Checker
     internal bool IsMutableArrayLikeType(Type type) =>
         // A type is mutable-array-like if it is a reference to the global Array type, or if it is not the
         // any, undefined or null type and if it is assignable to Array<any>
-        IsMutableArrayOrTuple(type) || ((Types.Flags(type) & TypeFlags.Nullable) == 0 && IsTypeAssignableTo(type, anyArrayType));
+        IsMutableArrayOrTuple(type) || ((Types.Flags(type) & (TypeFlags.Any | TypeFlags.Nullable)) == 0 && IsTypeAssignableTo(type, anyArrayType));
 
     // ---- object literals ----
 

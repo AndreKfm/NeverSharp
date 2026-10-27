@@ -940,9 +940,22 @@ internal sealed partial class Checker
                 exports = combined;
             }
         }
-        // (static index signatures of classes: C8; module C5: the index signatures of any-based classes and enums)
-        var hasIndexSymbol = exports.Has(InternalSymbolName.Index);
-        var anonymousIndexInfos = baseConstructorIndexInfo is not null && !hasIndexSymbol ? new List<IndexInfo> { baseConstructorIndexInfo } : null;
+        var indexSymbol = exports.Get(InternalSymbolName.Index);
+        var hasIndexSymbol = !indexSymbol.IsNone;
+        List<IndexInfo>? anonymousIndexInfos = null;
+        if (hasIndexSymbol)
+        {
+            var siblings = new List<SymbolRef>(exports.Count);
+            for (var i = 0; i < exports.Count; i++)
+            {
+                siblings.Add(exports.ValueAt(i));
+            }
+            anonymousIndexInfos = GetIndexInfosOfIndexSymbol(indexSymbol, siblings);
+        }
+        else if (baseConstructorIndexInfo is not null)
+        {
+            anonymousIndexInfos = [baseConstructorIndexInfo];
+        }
         if (!hasIndexSymbol && (flags & SymbolFlags.Enum) != 0 && ((Types.Flags(GetDeclaredTypeOfSymbol(symbol)) & TypeFlags.Enum) != 0 || HasNumberLikeProperty(exports)))
         {
             (anonymousIndexInfos ??= []).Add(enumNumberIndexInfo ??= new IndexInfo { KeyType = numberType, Type = stringType, IsReadonly = true });
@@ -1267,42 +1280,124 @@ internal sealed partial class Checker
             : [];
     }
 
-    /// <summary>checker.ts getIndexInfosOfSymbol (getIndexInfosOfIndexSymbol for the symbol's __index member).</summary>
+    /// <summary>checker.ts getIndexInfosOfSymbol.</summary>
     private List<IndexInfo> GetIndexInfosOfSymbol(SymbolRef symbol)
     {
-        var indexSymbol = GetMembersOfSymbol(symbol).Get(InternalSymbolName.Index);
+        var members = GetMembersOfSymbol(symbol);
+        var indexSymbol = members.Get(InternalSymbolName.Index);
         if (indexSymbol.IsNone)
         {
             return [];
         }
-        var result = new List<IndexInfo>();
-        foreach (var declaration in DeclarationsOf(indexSymbol) ?? [])
+        var siblings = new List<SymbolRef>(members.Count);
+        for (var i = 0; i < members.Count; i++)
+        {
+            siblings.Add(members.ValueAt(i));
+        }
+        return GetIndexInfosOfIndexSymbol(indexSymbol, siblings);
+    }
+
+    /// <summary>checker.ts getIndexInfosOfIndexSymbol (note intentional similarities to index signature building in checkObjectLiteral).</summary>
+    private List<IndexInfo> GetIndexInfosOfIndexSymbol(SymbolRef indexSymbol, List<SymbolRef>? siblingSymbols)
+    {
+        var declarations = DeclarationsOf(indexSymbol);
+        if (declarations is null)
+        {
+            return [];
+        }
+        var indexInfos = new List<IndexInfo>();
+        var hasComputedNumberProperty = false;
+        var readonlyComputedNumberProperty = true;
+        var hasComputedSymbolProperty = false;
+        var readonlyComputedSymbolProperty = true;
+        var hasComputedStringProperty = false;
+        var readonlyComputedStringProperty = true;
+        var computedPropertySymbols = new List<SymbolRef>();
+        foreach (var declaration in declarations)
         {
             var store = StoreOf(declaration);
-            var parameters = store.Parameters(declaration.Node);
-            if (parameters.IsNone || store.Length(parameters) != 1)
+            if (store.Kind(declaration.Node) == SyntaxKind.IndexSignature)
             {
-                continue;
-            }
-            var parameter = store.Element(parameters, 0);
-            var typeNode = store.Type(parameter);
-            if (typeNode.IsNone)
-            {
-                continue;
-            }
-            var keyType = GetTypeFromTypeNode(At(declaration, typeNode));
-            var valueTypeNode = store.Type(declaration.Node);
-            var valueType = valueTypeNode.IsNone ? anyType : GetTypeFromTypeNode(At(declaration, valueTypeNode));
-            var isReadonly = Utilities.HasSyntacticModifierUncached(store, declaration.Node, ModifierFlags.Readonly);
-            foreach (var k in (Types.Flags(keyType) & TypeFlags.Union) != 0 ? Types.Elements(Types.Union(keyType).Types).ToArray() : [keyType])
-            {
-                if (!result.Exists(i => i.KeyType == k))
+                var parameters = store.Parameters(declaration.Node);
+                if (!parameters.IsNone && store.Length(parameters) == 1)
                 {
-                    result.Add(new IndexInfo { KeyType = k, Type = valueType, IsReadonly = isReadonly, Declaration = declaration });
+                    var parameter = store.Element(parameters, 0);
+                    var typeNode = store.Type(parameter);
+                    if (!typeNode.IsNone)
+                    {
+                        var keyTypes = GetTypeFromTypeNode(At(declaration, typeNode));
+                        foreach (var keyType in (Types.Flags(keyTypes) & TypeFlags.Union) != 0 ? Types.Elements(Types.Union(keyTypes).Types).ToArray() : [keyTypes])
+                        {
+                            if (IsValidIndexKeyType(keyType) && !indexInfos.Exists(i => i.KeyType == keyType))
+                            {
+                                var valueTypeNode = store.Type(declaration.Node);
+                                indexInfos.Add(new IndexInfo
+                                {
+                                    KeyType = keyType,
+                                    Type = valueTypeNode.IsNone ? anyType : GetTypeFromTypeNode(At(declaration, valueTypeNode)),
+                                    IsReadonly = Utilities.HasSyntacticModifierUncached(store, declaration.Node, ModifierFlags.Readonly),
+                                    Declaration = declaration,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            else if (HasLateBindableIndexSignature(declaration))
+            {
+                var declName = store.Kind(declaration.Node) == SyntaxKind.BinaryExpression ? At(declaration, store.Left(declaration.Node)) : At(declaration, store.Name(declaration.Node));
+                var keyType = Kind(declName) == SyntaxKind.ElementAccessExpression ? CheckExpressionCached(At(declName, StoreOf(declName).ArgumentExpression(declName.Node))) : CheckComputedPropertyName(declName);
+                if (indexInfos.Exists(i => i.KeyType == keyType))
+                {
+                    continue; // Explicit index for key type takes priority
+                }
+                if (IsTypeAssignableTo(keyType, stringNumberSymbolType))
+                {
+                    var isReadonly = Utilities.HasSyntacticModifierUncached(store, declaration.Node, ModifierFlags.Readonly);
+                    if (IsTypeAssignableTo(keyType, numberType))
+                    {
+                        hasComputedNumberProperty = true;
+                        readonlyComputedNumberProperty &= isReadonly;
+                    }
+                    else if (IsTypeAssignableTo(keyType, esSymbolType))
+                    {
+                        hasComputedSymbolProperty = true;
+                        readonlyComputedSymbolProperty &= isReadonly;
+                    }
+                    else
+                    {
+                        hasComputedStringProperty = true;
+                        readonlyComputedStringProperty &= isReadonly;
+                    }
+                    computedPropertySymbols.Add(NodeSymbol(declaration));
                 }
             }
         }
-        return result;
+        var allPropertySymbols = new List<SymbolRef>(computedPropertySymbols);
+        if (siblingSymbols is not null)
+        {
+            foreach (var s in siblingSymbols)
+            {
+                if (s != indexSymbol)
+                {
+                    allPropertySymbols.Add(s);
+                }
+            }
+        }
+        // aggregate similar index infos implied to be the same key to the same combined index info
+        if (hasComputedStringProperty && !indexInfos.Exists(i => i.KeyType == stringType))
+        {
+            indexInfos.Add(GetObjectLiteralIndexInfo(readonlyComputedStringProperty, 0, allPropertySymbols, stringType));
+        }
+        if (hasComputedNumberProperty && !indexInfos.Exists(i => i.KeyType == numberType))
+        {
+            indexInfos.Add(GetObjectLiteralIndexInfo(readonlyComputedNumberProperty, 0, allPropertySymbols, numberType));
+        }
+        if (hasComputedSymbolProperty && !indexInfos.Exists(i => i.KeyType == esSymbolType))
+        {
+            indexInfos.Add(GetObjectLiteralIndexInfo(readonlyComputedSymbolProperty, 0, allPropertySymbols, esSymbolType));
+        }
+        return indexInfos;
     }
 
     // ---- signatures ----
@@ -1695,7 +1790,11 @@ internal sealed partial class Checker
                     PopTypeResolution();
                     return GetTypeOfFuncClassEnumModule(symbol);
                 }
-                type = anyType; // (assignment declarations: module C9)
+                // (JSDoc types of JavaScript declarations: C9d)
+                type = store.Kind(store.Parent(declaration.Node)) == SyntaxKind.BinaryExpression ? GetWidenedTypeForAssignmentDeclaration(symbol) : anyType;
+                break;
+            case SyntaxKind.BinaryExpression:
+                type = GetWidenedTypeForAssignmentDeclaration(symbol);
                 break;
             case SyntaxKind.PropertyAssignment:
             {
@@ -1808,10 +1907,224 @@ internal sealed partial class Checker
         ref var links = ref ValueSymbolLinks.Get(symbol);
         if (links.ResolvedType.IsNone)
         {
+            var originalSymbol = symbol;
+            var valueDeclaration = ValueDeclarationOf(symbol);
+            var expando = valueDeclaration.IsNone ? SymbolRef.None : GetSymbolOfExpando(valueDeclaration, allowDeclaration: false);
+            if (!expando.IsNone)
+            {
+                var merged = MergeJSSymbols(symbol, expando);
+                if (!merged.IsNone)
+                {
+                    // note:we overwrite links because we just cloned the symbol
+                    symbol = merged;
+                }
+            }
             var type = GetTypeOfFuncClassEnumModuleWorker(symbol);
+            ValueSymbolLinks.Get(originalSymbol).ResolvedType = type;
             ValueSymbolLinks.Get(symbol).ResolvedType = type;
         }
         return ValueSymbolLinks.Get(symbol).ResolvedType;
+    }
+
+    // checker.ts getSymbolOfExpando
+    private SymbolRef GetSymbolOfExpando(NodeRef node, bool allowDeclaration)
+    {
+        var store = StoreOf(node);
+        var n = node.Node;
+        var parent = store.Parent(n);
+        if (parent.IsNone)
+        {
+            return SymbolRef.None;
+        }
+        Node name = Node.None;
+        Node decl = Node.None;
+        if (store.Kind(parent) == SyntaxKind.VariableDeclaration && store.Initializer(parent) == n)
+        {
+            if (!Utilities.IsInJSFile(store, n) && !(IsVarConstLike(store, parent) && Utilities.IsFunctionLikeDeclaration(store, n)))
+            {
+                return SymbolRef.None;
+            }
+            name = store.Name(parent);
+            decl = parent;
+        }
+        else if (store.Kind(parent) == SyntaxKind.BinaryExpression)
+        {
+            var parentNodeOperator = store.Kind(store.OperatorToken(parent));
+            if (parentNodeOperator == SyntaxKind.EqualsToken && (allowDeclaration || store.Right(parent) == n))
+            {
+                name = store.Left(parent);
+                decl = name;
+            }
+            else if (parentNodeOperator is SyntaxKind.BarBarToken or SyntaxKind.QuestionQuestionToken)
+            {
+                var grandParent = store.Parent(parent);
+                if (store.Kind(grandParent) == SyntaxKind.VariableDeclaration && store.Initializer(grandParent) == parent)
+                {
+                    name = store.Name(grandParent);
+                    decl = grandParent;
+                }
+                else if (store.Kind(grandParent) == SyntaxKind.BinaryExpression && store.Kind(store.OperatorToken(grandParent)) == SyntaxKind.EqualsToken &&
+                    (allowDeclaration || store.Right(grandParent) == parent))
+                {
+                    name = store.Left(grandParent);
+                    decl = name;
+                }
+                if (name.IsNone || !Utilities.IsBindableStaticNameExpression(store, name) || !Utilities.IsSameEntityName(store, name, store.Left(parent)))
+                {
+                    return SymbolRef.None;
+                }
+            }
+        }
+        else if (allowDeclaration && store.Kind(n) == SyntaxKind.FunctionDeclaration)
+        {
+            name = store.Name(n);
+            decl = n;
+        }
+        if (decl.IsNone || name.IsNone || (!allowDeclaration && Utilities.GetExpandoInitializer(store, n, Utilities.IsPrototypeAccess(store, name)).IsNone))
+        {
+            return SymbolRef.None;
+        }
+        return GetSymbolOfNode(At(node, decl));
+    }
+
+    // links.inferredClassSymbol of mergeJSSymbols' sources (keyed by the source and a symbol id, as checker.ts keys it)
+    private readonly Dictionary<(SymbolRef Source, SymbolRef Key), SymbolRef> inferredClassSymbols = [];
+
+    // checker.ts mergeJSSymbols
+    private SymbolRef MergeJSSymbols(SymbolRef target, SymbolRef source)
+    {
+        if (source.IsNone)
+        {
+            return SymbolRef.None;
+        }
+        // (checker.ts looks up the target's id but records the inferred symbol's id)
+        if (inferredClassSymbols.TryGetValue((source, target), out var existing))
+        {
+            return existing;
+        }
+        var inferred = target.IsTransient ? target : CloneSymbol(target);
+        ref var record = ref TransientSymbols.Record(inferred);
+        record.Exports ??= new SymTable();
+        record.Members ??= new SymTable();
+        record.Flags |= SymbolFlagsOf(source) & SymbolFlags.Class;
+        var exports = record.Exports;
+        var members = record.Members;
+        var sourceExports = ExportsOf(source);
+        if (sourceExports is { Count: > 0 })
+        {
+            MergeSymbolTable(exports, sourceExports);
+        }
+        var sourceMembers = MembersOf(source);
+        if (sourceMembers is { Count: > 0 })
+        {
+            MergeSymbolTable(members, sourceMembers);
+        }
+        inferredClassSymbols[(source, inferred)] = inferred;
+        return inferred;
+    }
+
+    // checker.ts getWidenedTypeForAssignmentDeclaration (TypeScript files: expando assignments to functions and namespaces;
+    // the JavaScript parts — JSDoc types, `this` property assignments, CommonJS exports, Object.defineProperty — are C9d)
+    private Type GetWidenedTypeForAssignmentDeclaration(SymbolRef symbol)
+    {
+        // function/class/{} initializers are themselves containers, so they won't merge in the same way as other initializers
+        var valueDeclaration = ValueDeclarationOf(symbol);
+        var container = valueDeclaration.IsNone ? Node.None : Utilities.GetAssignedExpandoInitializer(StoreOf(valueDeclaration), valueDeclaration.Node);
+        if (!container.IsNone)
+        {
+            // (getJSDocTypeTag and getJSContainerObjectType: JavaScript files, C9d)
+            return GetWidenedLiteralType(CheckExpressionCached(At(valueDeclaration, container)));
+        }
+        // (isConstructorDeclaredProperty: JavaScript `this` property assignments, C9d)
+        Type type = Type.None;
+        List<Type>? types = null;
+        var declarations = DeclarationsOf(symbol);
+        if (declarations is not null)
+        {
+            var jsdocType = Type.None;
+            foreach (var declaration in declarations)
+            {
+                var store = StoreOf(declaration);
+                var d = declaration.Node;
+                var expression = store.Kind(d) is SyntaxKind.BinaryExpression or SyntaxKind.CallExpression ? d
+                    : Utilities.IsAccessExpression(store, d) ? store.Kind(store.Parent(d)) == SyntaxKind.BinaryExpression ? store.Parent(d) : d
+                    : Node.None;
+                if (expression.IsNone)
+                {
+                    continue; // Non-assignment declaration merged in (eg, an Identifier to mark the thing as a namespace) - skip over it and pull type info from elsewhere
+                }
+                var expressionRef = At(declaration, expression);
+                if (store.Kind(expression) != SyntaxKind.CallExpression)
+                {
+                    jsdocType = GetAnnotatedTypeForAssignmentDeclaration(jsdocType, symbol);
+                }
+                if (jsdocType.IsNone)
+                {
+                    (types ??= []).Add(store.Kind(expression) == SyntaxKind.BinaryExpression ? GetInitializerTypeFromAssignmentDeclaration(expressionRef)
+                        : store.Kind(expression) == SyntaxKind.CallExpression ? anyType // (Object.defineProperty: C9d)
+                        : neverType);
+                }
+            }
+            type = jsdocType;
+        }
+        if (type.IsNone)
+        {
+            if (types is null || types.Count == 0)
+            {
+                return errorType; // No types from any declarations :(
+            }
+            type = GetUnionType(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(types));
+        }
+        return GetWidenedType(AddOptionality(type, isProperty: false, isOptional: false));
+    }
+
+    // checker.ts getAnnotatedTypeForAssignmentDeclaration (the assignment's own annotation is JSDoc only: C9d)
+    private Type GetAnnotatedTypeForAssignmentDeclaration(Type declaredType, SymbolRef symbol)
+    {
+        var parent = ParentOf(symbol);
+        if (!parent.IsNone && !ValueDeclarationOf(parent).IsNone)
+        {
+            var possiblyAnnotatedSymbol = GetFunctionExpressionParentSymbolOrSymbol(parent);
+            var valueDeclaration = ValueDeclarationOf(possiblyAnnotatedSymbol);
+            if (!valueDeclaration.IsNone)
+            {
+                var typeNode = GetEffectiveTypeAnnotationNode(valueDeclaration);
+                if (!typeNode.IsNone)
+                {
+                    var annotationSymbol = GetPropertyOfType(GetTypeFromTypeNode(typeNode), NameOf(symbol));
+                    if (!annotationSymbol.IsNone)
+                    {
+                        return GetNonMissingTypeOfSymbol(annotationSymbol);
+                    }
+                }
+            }
+        }
+        return declaredType;
+    }
+
+    // checker.ts getFunctionExpressionParentSymbolOrSymbol
+    private SymbolRef GetFunctionExpressionParentSymbolOrSymbol(SymbolRef symbol)
+    {
+        var valueDeclaration = ValueDeclarationOf(symbol);
+        if (!valueDeclaration.IsNone && Kind(valueDeclaration) is SyntaxKind.ArrowFunction or SyntaxKind.FunctionExpression)
+        {
+            var parentSymbol = GetSymbolOfNode(Parent(valueDeclaration));
+            return parentSymbol.IsNone ? symbol : parentSymbol;
+        }
+        return symbol;
+    }
+
+    // checker.ts getInitializerTypeFromAssignmentDeclaration (TypeScript files: no resolved symbol, kind Property)
+    private Type GetInitializerTypeFromAssignmentDeclaration(NodeRef expression)
+    {
+        // (containsSameNamedThisProperty, direct CommonJS exports and module.exports: JavaScript, C9d)
+        var type = GetWidenedLiteralType(CheckExpressionCached(At(expression, StoreOf(expression).Right(expression.Node))));
+        if (IsEmptyArrayLiteralType(type))
+        {
+            ReportImplicitAny(expression, anyArrayType);
+            return anyArrayType;
+        }
+        return type;
     }
 
     private Type GetTypeOfFuncClassEnumModuleWorker(SymbolRef symbol)
@@ -1821,7 +2134,13 @@ internal sealed partial class Checker
         {
             return anyType;
         }
-        // (JavaScript assignment declarations and CommonJS modules: C9)
+        var declaration = ValueDeclarationOf(symbol);
+        if (!declaration.IsNone && (Kind(declaration) == SyntaxKind.BinaryExpression ||
+            (Utilities.IsAccessExpression(StoreOf(declaration), declaration.Node) && Kind(Parent(declaration)) == SyntaxKind.BinaryExpression)))
+        {
+            return GetWidenedTypeForAssignmentDeclaration(symbol);
+        }
+        // (CommonJS modules: C9d)
         var type = CreateObjectType(ObjectFlags.Anonymous, symbol);
         if ((flags & SymbolFlags.Class) != 0)
         {

@@ -44,6 +44,60 @@ internal sealed partial class Checker
         return !name.IsNone && IsLateBindableName(name);
     }
 
+    // checker.ts isLateBindableIndexSignature (isLateBindableAST and isTypeUsableAsIndexSignature)
+    private bool IsLateBindableIndexSignature(NodeRef name)
+    {
+        if (name.IsNone)
+        {
+            return false;
+        }
+        var store = StoreOf(name);
+        if (store.Kind(name.Node) != SyntaxKind.ComputedPropertyName && store.Kind(name.Node) != SyntaxKind.ElementAccessExpression)
+        {
+            return false;
+        }
+        var expression = store.Kind(name.Node) == SyntaxKind.ComputedPropertyName ? store.Expression(name.Node) : store.ArgumentExpression(name.Node);
+        return Utilities.IsEntityNameExpression(store, expression) &&
+            IsTypeAssignableTo(store.Kind(name.Node) == SyntaxKind.ComputedPropertyName ? CheckComputedPropertyName(name) : CheckExpressionCached(At(name, expression)), stringNumberSymbolType);
+    }
+
+    // checker.ts hasLateBindableIndexSignature
+    private bool HasLateBindableIndexSignature(NodeRef node) => IsLateBindableIndexSignature(GetNameOfDeclarationRef(node));
+
+    // checker.ts lateBindIndexSignature
+    private void LateBindIndexSignature(SymTable? earlySymbols, SymTable lateSymbols, NodeRef decl)
+    {
+        // First, late bind the index symbol itself, if needed
+        var indexSymbol = lateSymbols.Get(InternalSymbolName.Index);
+        if (indexSymbol.IsNone)
+        {
+            var early = earlySymbols?.Get(InternalSymbolName.Index) ?? SymbolRef.None;
+            if (early.IsNone)
+            {
+                indexSymbol = CreateSymbol(SymbolFlags.None, InternalSymbolName.Index, CheckFlags.Late);
+            }
+            else
+            {
+                indexSymbol = CloneSymbol(early);
+                TransientSymbols.Record(indexSymbol).CheckFlags |= CheckFlags.Late;
+            }
+            lateSymbols.Set(InternalSymbolName.Index, indexSymbol);
+        }
+        // Then just add the computed name as a late bound declaration
+        // (note: unlike `addDeclarationToLateBoundSymbol` we do not set up a `.lateSymbol` on `decl`'s links,
+        // since that would point at an index symbol and not a single property symbol, like most consumers would expect)
+        // (isReplaceableByMethod: JavaScript `this` assignments, C9d)
+        ref var record = ref TransientSymbols.Record(indexSymbol);
+        if (record.Declarations is null)
+        {
+            record.Declarations = [decl];
+        }
+        else
+        {
+            record.Declarations.Add(decl);
+        }
+    }
+
     // checker.ts getMembersOfDeclaration
     private static NodeList GetMembersOfDeclaration(NodeStore store, Node node) => store.Kind(node) switch
     {
@@ -84,10 +138,38 @@ internal sealed partial class Checker
                 {
                     LateBindMember(symbol, earlySymbols, lateSymbols, memberRef);
                 }
-                // (lateBindIndexSignature: computed names of non-literal key types, C8)
+                else if (isStatic == Utilities.HasSyntacticModifierUncached(store, member, ModifierFlags.Static) && HasLateBindableIndexSignature(memberRef))
+                {
+                    LateBindIndexSignature(earlySymbols, lateSymbols, memberRef);
+                }
             }
         }
-        // (JavaScript assignment declaration members: C9)
+        var valueDeclaration = ValueDeclarationOf(symbol);
+        var assignmentsOwner = symbol;
+        if (!valueDeclaration.IsNone && Kind(valueDeclaration) is SyntaxKind.ArrowFunction or SyntaxKind.FunctionExpression)
+        {
+            var parentSymbol = GetSymbolOfNode(Parent(valueDeclaration));
+            if (!parentSymbol.IsNone && !parentSymbol.IsTransient && !BindingOf(parentSymbol.File).AssignmentDeclarationMembers(parentSymbol.BinderSymbol).IsUndefined)
+            {
+                assignmentsOwner = parentSymbol;
+            }
+        }
+        if (!assignmentsOwner.IsTransient)
+        {
+            foreach (var member in BindingOf(assignmentsOwner.File).AssignmentDeclarationMembers(assignmentsOwner.BinderSymbol))
+            {
+                var memberRef = new NodeRef(assignmentsOwner.File, member);
+                var store = StoreOf(memberRef);
+                var assignmentKind = Utilities.GetAssignmentDeclarationKind(store, member);
+                // (isPossiblyAliasedThisProperty: JavaScript `this` aliases, C9d)
+                var isInstanceMember = assignmentKind is AssignmentDeclarationKind.PrototypeProperty or AssignmentDeclarationKind.ObjectDefinePrototypeProperty or AssignmentDeclarationKind.Prototype ||
+                    (store.Kind(member) == SyntaxKind.BinaryExpression && assignmentKind == AssignmentDeclarationKind.ThisProperty);
+                if (isStatic == !isInstanceMember && HasLateBindableName(memberRef))
+                {
+                    LateBindMember(symbol, earlySymbols, lateSymbols, memberRef);
+                }
+            }
+        }
         resolved = CombineSymbolTables(earlySymbols, lateSymbols) ?? emptySymbols;
         cache[symbol] = resolved;
         return resolved;
