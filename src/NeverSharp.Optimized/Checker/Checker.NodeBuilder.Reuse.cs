@@ -215,7 +215,8 @@ internal sealed partial class Checker
                 result.Add(visited);
             }
         }
-        return SList(result);
+        // visitNodes keeps the list's hasTrailingComma
+        return S.NewList(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(result), store.HasTrailingComma(list));
     }
 
     // expressionToTypeNode.ts visitExistingNodeTreeSymbolsWorker
@@ -565,7 +566,8 @@ internal sealed partial class Checker
         {
             result.Add(CopyExistingNode(At(owner, element), markReused));
         }
-        return SList(result);
+        // getSynthesizedDeepClone keeps the list's hasTrailingComma
+        return S.NewList(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(result), store.HasTrailingComma(list));
     }
 
     private Node CopyExistingEntityName(NodeRef name) => CopyExistingNode(name);

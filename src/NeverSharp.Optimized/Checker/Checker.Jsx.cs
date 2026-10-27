@@ -2,7 +2,13 @@
 // Portions Copyright (c) Microsoft Corporation.
 // SPDX-License-Identifier: Apache-2.0
 //
-// Ported from src/compiler/checker.ts (checkJsxElement, checkJsxElementDeferred, checkJsxSelfClosingElement,
+// Ported from src/compiler/checker.ts (JSX checking; the functions are listed below)
+//   https://github.com/microsoft/TypeScript at commit 050880ce59e30b356b686bd3144efe24f875ebc8
+// Port structure follows internal/checker/jsx.go
+//   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
+// Modified: translated from TypeScript to C#; modules C1 (preconditions) and C9b (the rest, details below).
+//
+// Functions: checkJsxElement, checkJsxElementDeferred, checkJsxSelfClosingElement,
 // checkJsxSelfClosingElementDeferred, checkJsxFragment, checkJsxExpression, checkJsxAttributes, checkJsxAttribute,
 // checkJsxChildren, checkJsxOpeningLikeElementOrOpeningFragment, checkJsxPreconditions,
 // checkJsxReturnAssignableToAppropriateBound, createJsxAttributesTypeFromAttributesProperty, createJsxAttributesType,
@@ -21,16 +27,13 @@
 // getApplicableIndexSymbol, getJsxStatelessElementTypeAt, getJsxElementClassTypeAt, getJsxElementTypeAt,
 // getJsxElementTypeTypeAt, getJsxType, getJsxNamespaceAt, getJsxNamespace, getLocalJsxNamespace,
 // getJsxFactoryEntity, getJsxNamespaceContainerForImplicitImport, markJsxAliasReferenced, checkGrammarJsxElement,
-// checkGrammarJsxName, checkGrammarJsxExpression)
-//   https://github.com/microsoft/TypeScript at commit 050880ce59e30b356b686bd3144efe24f875ebc8
-// Port structure follows internal/checker/jsx.go
-//   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
-// Modified: translated from TypeScript to C#; modules C1 (preconditions) and C9b (the rest). Factory entities
-// (jsxFactory, the jsx/jsxFrag pragmas, React.createElement) are kept as their dotted names and resolved part by
-// part instead of as synthetic entity name nodes. Gate C's programs never set the jsx option, jsxFactory,
-// jsxFragmentFactory, reactNamespace or jsxImportSource, so the implicit runtime import
-// (getJsxNamespaceContainerForImplicitImport) is never present; the fake `children` property of the attributes type has
-// no synthetic declaration node.
+// checkGrammarJsxName, checkGrammarJsxExpression, getJSXImplicitImportBase, getJSXRuntimeImport.
+// Details: factory entities (the jsx/jsxFrag pragmas, React.createElement) are kept as their dotted names and resolved
+// part by part instead of as synthetic entity name nodes. Gate C's programs never set the jsx option, jsxFactory,
+// jsxFragmentFactory, reactNamespace or jsxImportSource (the C# CompilerOptions have only jsx), so the implicit runtime
+// import comes only from the jsxImportSource/jsxRuntime pragmas and its error goes to the JSX node (no synthetic import
+// specifier); the fake `children` property of the attributes type has no synthetic declaration node;
+// markAliasSymbolAsReferenced (emit only) is not ported.
 
 using NeverSharp.Generated;
 
@@ -1530,16 +1533,52 @@ internal sealed partial class Checker
         return unknownSymbol;
     }
 
-    // checker.ts getApplicableIndexSymbol (the index symbol of the resolved members; the filtered copies of several
-    // applicable index signatures are approximated by the members' index symbol)
+    // symbolLinks.filteredIndexSymbolCache per index symbol, keyed by the declarations' node ids
+    private readonly Dictionary<(SymbolRef, string), SymbolRef> filteredIndexSymbolCache = [];
+
+    // checker.ts getApplicableIndexSymbol
     private SymbolRef GetApplicableIndexSymbol(Type type, Type keyType)
     {
-        if ((Types.Flags(type) & TypeFlags.Object) == 0 || GetApplicableIndexInfo(type, keyType) is null)
+        var allInfos = GetIndexInfosOfType(type);
+        var infos = allInfos.FindAll(info => IsApplicableIndexType(keyType, info.KeyType));
+        if (infos.Count == 0 || (Types.Flags(type) & TypeFlags.Object) == 0)
         {
             return SymbolRef.None;
         }
         var members = ResolveStructuredTypeMembers(type).Members;
-        return members is null ? SymbolRef.None : members.Get(InternalSymbolName.Index);
+        if (members is null)
+        {
+            return SymbolRef.None;
+        }
+        var symbol = members.Get(InternalSymbolName.Index);
+        if (infos.Count == allInfos.Count)
+        {
+            return symbol;
+        }
+        if (symbol.IsNone)
+        {
+            return SymbolRef.None;
+        }
+        var declarationList = new List<NodeRef>();
+        foreach (var info in infos)
+        {
+            if (!info.Declaration.IsNone)
+            {
+                declarationList.Add(info.Declaration);
+            }
+        }
+        var nodeListId = string.Join(",", declarationList.ConvertAll(d => d.File + ":" + d.Node.Index));
+        if (filteredIndexSymbolCache.TryGetValue((symbol, nodeListId), out var cached))
+        {
+            return cached;
+        }
+        var copy = CreateSymbol(SymbolFlags.Signature, InternalSymbolName.Index);
+        ref var record = ref TransientSymbols.Record(copy);
+        record.Declarations = declarationList;
+        var aliasSymbol = Types.Record(type).AliasSymbol;
+        record.Parent = !aliasSymbol.IsNone ? aliasSymbol : !Types.Symbol(type).IsNone ? Types.Symbol(type) : GetSymbolAtLocation(Parent(declarationList[0]));
+        filteredIndexSymbolCache[(symbol, nodeListId)] = copy;
+        return copy;
     }
 
     // checker.ts getJsxStatelessElementTypeAt
