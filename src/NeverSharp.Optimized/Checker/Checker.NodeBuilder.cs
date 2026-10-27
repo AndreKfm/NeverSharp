@@ -1041,7 +1041,10 @@ internal sealed partial class Checker
             {
                 return SymbolToTypeNode(record.Symbol, context, SymbolFlags.Type);
             }
-            return STypeReference("?");
+            var markerName = (type == markerSuperTypeForCheck || type == markerSubTypeForCheck) && !varianceTypeParameter.IsNone && !Types.Symbol(varianceTypeParameter).IsNone
+                ? (type == markerSubTypeForCheck ? "sub-" : "super-") + SymbolName(Types.Symbol(varianceTypeParameter))
+                : "?";
+            return STypeReference(markerName);
         }
         if ((flags & TypeFlags.Union) != 0 && !Types.Union(type).Origin.IsNone)
         {

@@ -19,7 +19,7 @@
 // Port structure follows internal/checker/checker.go
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
 // Modified: translated from TypeScript to C#; module C5 (replaces C1's getReturnTypeFromBody); module C6: the
-// inferences of inferFromAnnotatedParametersAndReturn. TODO(C8): the grammar checks of await and yield expressions and checkReturnExpression.
+// inferences of inferFromAnnotatedParametersAndReturn; module C8: the grammar checks of await and yield expressions and checkReturnExpression.
 
 using NeverSharp.Generated;
 
@@ -33,7 +33,10 @@ internal sealed partial class Checker
     internal Type CheckFunctionExpressionOrObjectLiteralMethod(NodeRef node, CheckMode checkMode)
     {
         CheckNodeDeferred(node);
-        // (checkCollisionsForDeclarationName: C8)
+        if (StoreOf(node).Kind(node.Node) == SyntaxKind.FunctionExpression)
+        {
+            CheckCollisionsForDeclarationName(node, At(node, StoreOf(node).Name(node.Node)));
+        }
         // The identityMapper object is used to indicate that function expressions are wildcards
         if ((checkMode & CheckMode.SkipContextSensitive) != 0 && IsContextSensitive(node))
         {
@@ -59,7 +62,12 @@ internal sealed partial class Checker
             }
             return anyFunctionType;
         }
-        // (checkGrammarFunctionLikeDeclaration, checkGrammarForGenerator: C8)
+        // Grammar checking
+        var hasGrammarError = CheckGrammarFunctionLikeDeclaration(node);
+        if (!hasGrammarError && StoreOf(node).Kind(node.Node) == SyntaxKind.FunctionExpression)
+        {
+            CheckGrammarForGenerator(node);
+        }
         ContextuallyCheckFunctionExpressionOrObjectLiteralMethod(node, checkMode);
         return GetTypeOfSymbol(GetSymbolOfDeclaration(node));
     }
@@ -132,8 +140,7 @@ internal sealed partial class Checker
                 record.ResolvedReturnType = returnType;
             }
         }
-        // checkSignatureDeclaration
-        CheckSignatureLikeDeclaration(node, deferBody: true);
+        CheckSignatureDeclaration(node);
     }
 
     // checker.ts inferFromAnnotatedParametersAndReturn
@@ -307,18 +314,19 @@ internal sealed partial class Checker
         }
     }
 
-    /// <summary>checker.ts checkFunctionExpressionOrObjectLiteralMethodDeferred (checkAllCodePathsInNonVoidFunctionReturnOrThrow:
-    /// C7; checkReturnExpression: C8).</summary>
+    /// <summary>checker.ts checkFunctionExpressionOrObjectLiteralMethodDeferred.</summary>
     private void CheckFunctionExpressionOrObjectLiteralMethodDeferred(NodeRef node)
     {
         var store = StoreOf(node);
-        CheckAllCodePathsInNonVoidFunctionReturnOrThrow(node, GetReturnTypeFromAnnotation(node)); // (module C7)
+        var functionFlags = GetFunctionFlagsOf(store, node.Node);
+        var returnType = GetReturnTypeFromAnnotation(node);
+        CheckAllCodePathsInNonVoidFunctionReturnOrThrow(node, returnType); // (module C7)
         var body = store.Body(node.Node);
         if (body.IsNone)
         {
             return;
         }
-        if (GetEffectiveReturnTypeNode(store, node.Node).IsNone)
+        if (store.Type(node.Node).IsNone)
         {
             // There are some checks that are only performed in getReturnTypeFromBody, that may produce errors
             // we need. An example is the noImplicitAny errors resulting from widening the return expression
@@ -329,27 +337,26 @@ internal sealed partial class Checker
         }
         if (store.Kind(body) == SyntaxKind.Block)
         {
-            CheckNodeRecursive(At(node, body));
+            CheckSourceElement(At(node, body));
         }
         else
         {
-            CheckExpression(At(node, body));
+            // From within an async function you can return either a non-promise value or a promise. Any
+            // Promise/A+ compatible implementation will always assimilate any foreign promise, so we
+            // should not be checking assignability of a promise to the return type. Instead, we need to
+            // check assignability of the awaited type of the expression body against the promised type of
+            // its return type annotation.
+            var bodyRef = At(node, body);
+            var exprType = CheckExpression(bodyRef);
+            if (!returnType.IsNone)
+            {
+                var returnOrPromisedType = UnwrapReturnType(returnType, functionFlags);
+                if (!returnOrPromisedType.IsNone)
+                {
+                    CheckReturnExpression(node, returnOrPromisedType, bodyRef, bodyRef, exprType);
+                }
+            }
         }
-    }
-
-    /// <summary>checker.ts checkClassExpression (checkClassLikeDeclaration: the class walk of Checker.Check.cs).</summary>
-    internal Type CheckClassExpression(NodeRef node)
-    {
-        if (checkedClassExpressions.Add(node))
-        {
-            var store = StoreOf(node);
-            VisitChildren(node, except: store.Members(node.Node));
-            CheckClassLikeDeclarationRelations(node); // module C4
-            CheckMembersForOverrideModifier(node);
-            CheckPropertyInitialization(node);
-        }
-        CheckNodeDeferred(node);
-        return GetTypeOfSymbol(GetSymbolOfDeclaration(node));
     }
 
     // ---- return types ----
@@ -633,6 +640,7 @@ internal sealed partial class Checker
     /// <summary>checker.ts checkYieldExpression (checkYieldExpressionGrammar: C8).</summary>
     private Type CheckYieldExpression(NodeRef node)
     {
+        CheckYieldExpressionGrammar(node); // (a lazy diagnostic)
         var store = StoreOf(node);
         var n = node.Node;
         var funcNode = Utilities.GetContainingFunctionOrNone(store, n);
@@ -720,9 +728,15 @@ internal sealed partial class Checker
     /// diagnostic of the dump).</summary>
     private Type CheckAwaitExpression(NodeRef node)
     {
+        CheckAwaitGrammar(node); // (a lazy diagnostic)
         var store = StoreOf(node);
         var operandType = CheckExpression(At(node, store.Expression(node.Node)));
-        return CheckAwaitedType(operandType, withAlias: true, node, Diagnostics.Type_of_await_operand_must_either_be_a_valid_promise_or_must_not_contain_a_callable_then_member);
+        var awaitedType = CheckAwaitedType(operandType, withAlias: true, node, Diagnostics.Type_of_await_operand_must_either_be_a_valid_promise_or_must_not_contain_a_callable_then_member);
+        if (awaitedType == operandType && !IsErrorType(awaitedType) && (Types.Flags(operandType) & TypeFlags.AnyOrUnknown) == 0)
+        {
+            ErrorOrSuggestion(isError: false, node, Diagnostics.await_has_no_effect_on_the_type_of_this_expression);
+        }
+        return awaitedType;
     }
 
     // ---- utilities ----

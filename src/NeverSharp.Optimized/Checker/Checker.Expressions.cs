@@ -925,7 +925,7 @@ internal sealed partial class Checker
             return GetRegularTypeOfLiteralType(exprType);
         }
         ExpressionLinks.Get(node).AssertionExpressionType = exprType;
-        CheckNodeRecursive(typeNode);
+        CheckSourceElement(typeNode);
         CheckNodeDeferred(node);
         return GetTypeFromTypeNode(typeNode);
     }
@@ -972,8 +972,16 @@ internal sealed partial class Checker
     private Type CheckExpressionWithTypeArguments(NodeRef node)
     {
         var store = StoreOf(node);
-        // (checkGrammarExpressionWithTypeArguments: C8)
-        VisitList(node, store.TypeArguments(node.Node));
+        // checkGrammarExpressionWithTypeArguments
+        if (store.Kind(node.Node) == SyntaxKind.ExpressionWithTypeArguments && store.Kind(store.Expression(node.Node)) == SyntaxKind.ImportKeyword && !store.TypeArguments(node.Node).IsNone)
+        {
+            GrammarErrorOnNode(node, Diagnostics.This_use_of_import_is_invalid_import_calls_can_be_written_but_they_must_have_parentheses_and_cannot_have_type_arguments);
+        }
+        else
+        {
+            CheckGrammarTypeArguments(node, store.TypeArguments(node.Node));
+        }
+        CheckSourceElements(node, store.TypeArguments(node.Node));
         Type exprType;
         if (store.Kind(node.Node) == SyntaxKind.ExpressionWithTypeArguments)
         {
@@ -997,7 +1005,7 @@ internal sealed partial class Checker
     {
         var store = StoreOf(node);
         var typeNode = At(node, store.Type(node.Node));
-        CheckNodeRecursive(typeNode);
+        CheckSourceElement(typeNode);
         var expression = At(node, store.Expression(node.Node));
         var exprType = CheckExpression(expression);
         var targetType = GetTypeFromTypeNode(typeNode);

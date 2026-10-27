@@ -22,8 +22,7 @@
 // Port structure follows internal/checker/checker.go
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
 // Modified: translated from TypeScript to C#; module C5 (replaces C1's binary operators). The binary expression
-// trampoline is a loop over the left spine. TODO(C9): JavaScript assignment declarations and expando initializers;
-// TODO(C8): the enum members of the constant evaluator.
+// trampoline is a loop over the left spine. TODO(C9): JavaScript assignment declarations and expando initializers.
 
 using NeverSharp.Generated;
 
@@ -1557,8 +1556,9 @@ internal sealed partial class Checker
                     return EvaluateEntityNameExpression(At(expr, node), location);
                 }
                 return null;
+            case SyntaxKind.ElementAccessExpression:
+                return EvaluateElementAccessExpression(At(expr, node), location);
         }
-        // (element accesses of enum members: C8)
         return null;
 
         static string ToJsString(object value) => value is double d ? JsNumber.ToString(d) : (string)value;
@@ -1583,7 +1583,7 @@ internal sealed partial class Checker
     // ECMAScript ToInt32
     private static int ToInt32(double value) => unchecked((int)ToUint32(value));
 
-    // checker.ts evaluateEntityNameExpression (enum members: C8)
+    // checker.ts evaluateEntityNameExpression
     private object? EvaluateEntityNameExpression(NodeRef expr, NodeRef location)
     {
         var symbol = ResolveEntityName(expr, SymbolFlags.Value, ignoreErrors: true);
@@ -1602,7 +1602,7 @@ internal sealed partial class Checker
         }
         if ((SymbolFlagsOf(symbol) & SymbolFlags.EnumMember) != 0)
         {
-            return null; // TODO(C8)
+            return !location.IsNone ? EvaluateEnumMember(expr, symbol, location) : GetEnumMemberValue(ValueDeclarationOf(symbol));
         }
         if ((SymbolFlagsOf(symbol) & SymbolFlags.Variable) != 0 && (GetDeclarationNodeFlagsFromSymbol(symbol) & NodeFlags.Constant) != 0)
         {

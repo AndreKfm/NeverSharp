@@ -290,7 +290,7 @@ internal sealed partial class Checker
         {
             // Check type arguments even though we will give an error that untyped calls may not accept type arguments.
             // This gets us diagnostics for the type arguments and marks them as referenced.
-            VisitList(node, store.TypeArguments(n));
+            CheckSourceElements(node, store.TypeArguments(n));
         }
         if (store.Kind(n) == SyntaxKind.TaggedTemplateExpression)
         {
@@ -1472,7 +1472,7 @@ internal sealed partial class Checker
             // We already perform checking on the type arguments on the class declaration itself.
             if (isTaggedTemplate || store.Kind(store.Expression(n)) != SyntaxKind.SuperKeyword)
             {
-                VisitList(node, typeArguments);
+                CheckSourceElements(node, typeArguments);
             }
         }
         var candidates = candidatesOutArray ?? [];

@@ -34,7 +34,7 @@ internal sealed partial class Checker
                 CheckJsxOpeningLikeElementOrOpeningFragment(opening);
                 foreach (var child in store.Nodes(store.Children(n)))
                 {
-                    CheckNodeRecursive(At(node, child));
+                    CheckJsxChild(At(node, child));
                 }
                 // checkJsxElementDeferred: the closing tag
                 var closing = At(node, store.ClosingElement(n));
@@ -56,8 +56,28 @@ internal sealed partial class Checker
                 CheckJsxOpeningLikeElementOrOpeningFragment(At(node, store.OpeningFragment(n)));
                 foreach (var child in store.Nodes(store.Children(n)))
                 {
-                    CheckNodeRecursive(At(node, child));
+                    CheckJsxChild(At(node, child));
                 }
+                break;
+        }
+    }
+
+    // a JSX child or attribute initializer: expressions are checked, nested elements are checked as JSX nodes
+    private void CheckJsxChild(NodeRef node)
+    {
+        var store = StoreOf(node);
+        switch (store.Kind(node.Node))
+        {
+            case SyntaxKind.JsxExpression:
+                if (!store.Expression(node.Node).IsNone)
+                {
+                    CheckExpression(At(node, store.Expression(node.Node)));
+                }
+                break;
+            case SyntaxKind.JsxElement:
+            case SyntaxKind.JsxSelfClosingElement:
+            case SyntaxKind.JsxFragment:
+                CheckJsxNode(node);
                 break;
         }
     }
@@ -91,10 +111,7 @@ internal sealed partial class Checker
         var typeArguments = store.TypeArguments(n);
         if (!typeArguments.IsNone)
         {
-            foreach (var t in store.Nodes(typeArguments))
-            {
-                CheckNodeRecursive(At(node, t));
-            }
+            CheckSourceElements(node, typeArguments);
         }
         // checkJsxAttributes: the attribute initializers and spread expressions
         var attributes = store.Attributes(n);
@@ -102,14 +119,14 @@ internal sealed partial class Checker
         {
             if (store.Kind(attribute) == SyntaxKind.JsxSpreadAttribute)
             {
-                CheckNodeRecursive(At(node, store.Expression(attribute)));
+                CheckExpression(At(node, store.Expression(attribute)));
             }
             else
             {
                 var initializer = store.Initializer(attribute);
                 if (!initializer.IsNone)
                 {
-                    CheckNodeRecursive(At(node, initializer));
+                    CheckJsxChild(At(node, initializer));
                 }
             }
         }
@@ -129,7 +146,6 @@ internal sealed partial class Checker
                 break;
             case SyntaxKind.PropertyAccessExpression:
                 CheckExpressionCached(tagName);
-                CheckNodeRecursive(At(tagName, store.Expression(tagName.Node)));
                 break;
         }
     }

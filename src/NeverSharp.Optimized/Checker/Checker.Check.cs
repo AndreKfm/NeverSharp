@@ -2,16 +2,15 @@
 // Portions Copyright (c) Microsoft Corporation.
 // SPDX-License-Identifier: Apache-2.0
 //
-// Ported from src/compiler/checker.ts (checkSourceFile; of checkSourceElement the parts that resolve names and modules:
-// checkIdentifier via checkExpression, checkTypeReferenceNode, checkImportDeclaration, checkImportEqualsDeclaration,
-// checkExportDeclaration, checkExportSpecifier, checkExportAssignment, checkVariableLikeDeclaration's getTypeOfSymbol)
+// Ported from src/compiler/checker.ts (checkImportDeclaration, checkImportBinding, checkImportAttributes,
+// checkExternalImportOrExportDeclaration, checkAliasSymbol, checkImportEqualsDeclaration, checkExportDeclaration,
+// checkExportSpecifier, checkExportAssignment, getDeclarationContainer, isTopLevelInExternalModuleAugmentation)
 //   https://github.com/microsoft/TypeScript at commit 050880ce59e30b356b686bd3144efe24f875ebc8
-// Port structure follows internal/checker/checker.go (checkSourceFile, checkSourceElement)
+// Port structure follows internal/checker/checker.go (checkImportDeclaration ... checkExportAssignment)
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
-// Modified: translated from TypeScript to C#; module C1. TODO(C8): the checkSourceElement family proper (statements,
-// declarations, classes and inheritance, grammar checks, unused-identifier suggestions, deferred nodes in TypeScript's
-// order); C1 walks the file once in source order and performs the name, module and declared-type resolutions that
-// report the core's diagnostics.
+// Modified: translated from TypeScript to C#; modules C1 and C8 (the checkSourceElement driver is in
+// Checker.Statements.cs). Options Gate C does not set (isolatedModules, verbatimModuleSyntax, module preserve,
+// emitDeclarations) and the emit helpers are left out where noted.
 
 using NeverSharp.Generated;
 
@@ -19,762 +18,39 @@ namespace NeverSharp.Optimized;
 
 internal sealed partial class Checker
 {
-    // checkNodeDeferred: the deferred nodes of the file being checked, in deferral order (an insertion-ordered set)
-    private readonly List<NodeRef> deferredNodes = [];
-    private readonly HashSet<NodeRef> deferredNodeSet = [];
-
-    /// <summary>checker.ts checkSourceFile (C1: the resolution walk, see the file header).</summary>
-    private void CheckSourceFile(NodeRef file)
-    {
-        var store = StoreOf(file);
-        // (skipLibCheck and isolated declaration files: Gate C checks everything)
-        foreach (var statement in store.Nodes(store.Statements(file.Node)))
-        {
-            CheckNodeRecursive(At(file, statement));
-        }
-        // checkDeferredNodes (nodes deferred while deferred nodes are checked are checked in the same pass)
-        for (var i = 0; i < deferredNodes.Count; i++)
-        {
-            CheckDeferredNode(deferredNodes[i]);
-        }
-        deferredNodes.Clear();
-        deferredNodeSet.Clear();
-        if (Utilities.IsExternalOrCommonJsModule(store, file.Node, BindingOf(file.File)))
-        {
-            RegisterForUnusedIdentifiersCheck(file);
-        }
-    }
-
-    private void CheckNodeDeferred(NodeRef node)
-    {
-        if (deferredNodeSet.Add(node))
-        {
-            deferredNodes.Add(node);
-        }
-    }
-
-    // checker.ts checkDeferredNode: function expression and object literal method bodies, object literal accessors,
-    // class expression members, assertions, void expressions, call-like expressions whose overload resolution failed
-    // and JSX elements (module C5)
-    private void CheckDeferredNode(NodeRef node)
-    {
-        var store = StoreOf(node);
-        var n = node.Node;
-        var saveCurrentNode = currentNode;
-        currentNode = node;
-        instantiationCount = 0;
-        switch (store.Kind(n))
-        {
-            case SyntaxKind.CallExpression:
-            case SyntaxKind.NewExpression:
-            case SyntaxKind.TaggedTemplateExpression:
-            case SyntaxKind.Decorator:
-            case SyntaxKind.JsxOpeningElement:
-                // These node kinds are deferred checked when overload resolution fails
-                // To save on work, we ensure the arguments are checked just once, in
-                // a deferred way
-                ResolveUntypedCall(node);
-                break;
-            case SyntaxKind.FunctionExpression:
-            case SyntaxKind.ArrowFunction:
-            case SyntaxKind.MethodDeclaration:
-                CheckFunctionExpressionOrObjectLiteralMethodDeferred(node);
-                break;
-            case SyntaxKind.GetAccessor:
-            case SyntaxKind.SetAccessor:
-                CheckSignatureLikeDeclaration(node);
-                break;
-            case SyntaxKind.TypeAssertionExpression:
-            case SyntaxKind.AsExpression:
-                CheckAssertionDeferred(node);
-                break;
-            case SyntaxKind.VoidExpression:
-                CheckExpression(At(node, store.Expression(n)));
-                break;
-            case SyntaxKind.JsxElement:
-            case SyntaxKind.JsxSelfClosingElement:
-                CheckJsxNode(node);
-                break;
-            case SyntaxKind.ClassExpression:
-                // checkClassExpressionDeferred
-                foreach (var member in store.Nodes(store.Members(n)))
-                {
-                    CheckNodeRecursive(At(node, member));
-                }
-                RegisterForUnusedIdentifiersCheck(node);
-                break;
-        }
-        currentNode = saveCurrentNode;
-    }
-
-    // checkSourceElement's currentNode and instantiationCount (module C3)
-    private void CheckNodeRecursive(NodeRef node)
-    {
-        var saveCurrentNode = currentNode;
-        var saveWithinUnreachableCode = withinUnreachableCode;
-        currentNode = node;
-        instantiationCount = 0;
-        // checkSourceElementWorker: the start of a region of unreachable code (module C7)
-        if (compilerOptions.AllowUnreachableCode != true && !withinUnreachableCode && CheckSourceElementUnreachable(node))
-        {
-            withinUnreachableCode = true;
-        }
-        CheckNodeRecursiveWorker(node);
-        currentNode = saveCurrentNode;
-        withinUnreachableCode = saveWithinUnreachableCode;
-    }
-
-    private void CheckNodeRecursiveWorker(NodeRef node)
-    {
-        var store = StoreOf(node);
-        var n = node.Node;
-        var kind = store.Kind(n);
-        switch (kind)
-        {
-            case SyntaxKind.FunctionDeclaration:
-            case SyntaxKind.Constructor:
-            case SyntaxKind.MethodSignature:
-            case SyntaxKind.CallSignature:
-            case SyntaxKind.ConstructSignature:
-            case SyntaxKind.FunctionType:
-            case SyntaxKind.ConstructorType:
-            case SyntaxKind.IndexSignature:
-                CheckSignatureLikeDeclaration(node);
-                return;
-            case SyntaxKind.MethodDeclaration:
-            case SyntaxKind.GetAccessor:
-            case SyntaxKind.SetAccessor:
-            {
-                var parent = store.Parent(n);
-                if (store.Kind(parent) == SyntaxKind.ObjectLiteralExpression)
-                {
-                    if (kind == SyntaxKind.MethodDeclaration)
-                    {
-                        // checkObjectLiteralMethod: the signature now, the body deferred
-                        CheckSignatureLikeDeclaration(node, deferBody: true);
-                    }
-                    else
-                    {
-                        CheckNodeDeferred(node);
-                    }
-                    return;
-                }
-                CheckSignatureLikeDeclaration(node);
-                return;
-            }
-            case SyntaxKind.Decorator:
-                CheckDecorator(node);
-                return;
-            case SyntaxKind.ComputedPropertyName:
-                CheckComputedPropertyName(node);
-                return;
-        }
-        if (kind != SyntaxKind.Identifier && kind != SyntaxKind.ThisKeyword && IsExpressionRootKind(kind) && Utilities.IsExpressionNode(store, n) && !Utilities.IsPartOfTypeNode(store, n))
-        {
-            // an expression of a statement or declaration: checkExpression checks the whole expression (module C5)
-            CheckExpressionRoot(node);
-            return;
-        }
-        var descend = CheckNodeWorker(node);
-        if (descend)
-        {
-            VisitChildren(node, NodeList.None);
-        }
-        switch (kind)
-        {
-            case SyntaxKind.Block:
-            case SyntaxKind.ForStatement:
-            case SyntaxKind.ForInStatement:
-            case SyntaxKind.ForOfStatement:
-                if (LocalsOf(node) is not null)
-                {
-                    RegisterForUnusedIdentifiersCheck(node);
-                }
-                break;
-            case SyntaxKind.SwitchStatement:
-            {
-                var caseBlock = At(node, store.CaseBlock(n));
-                if (LocalsOf(caseBlock) is not null)
-                {
-                    RegisterForUnusedIdentifiersCheck(caseBlock);
-                }
-                break;
-            }
-            case SyntaxKind.ClassDeclaration:
-                CheckClassLikeDeclarationRelations(node); // module C4
-                CheckMembersForOverrideModifier(node);
-                CheckPropertyInitialization(node);
-                RegisterForUnusedIdentifiersCheck(node);
-                break;
-            case SyntaxKind.InterfaceDeclaration:
-                CheckInterfaceDeclarationRelations(node); // module C4
-                RegisterForUnusedIdentifiersCheck(node);
-                break;
-            case SyntaxKind.InferType:
-                RegisterForUnusedIdentifiersCheck(node);
-                break;
-            case SyntaxKind.TypeLiteral:
-                CheckTypeLiteralRelations(node); // module C4
-                break;
-            case SyntaxKind.UnionType:
-            case SyntaxKind.IntersectionType:
-                // checkUnionOrIntersectionType
-                GetTypeFromTypeNode(node);
-                break;
-            case SyntaxKind.TypeAliasDeclaration:
-                if (store.Kind(store.Type(n)) != SyntaxKind.IntrinsicKeyword)
-                {
-                    RegisterForUnusedIdentifiersCheck(node);
-                }
-                break;
-            case SyntaxKind.ModuleDeclaration:
-                if (!store.Body(n).IsNone && !Utilities.IsGlobalScopeAugmentation(store, n))
-                {
-                    RegisterForUnusedIdentifiersCheck(node);
-                }
-                break;
-        }
-    }
-
-    // checker.ts checkMembersForOverrideModifier / checkExistingMemberForOverrideModifier / checkMemberForOverrideModifier
-    // (members with dynamic names are left to C8)
-    private void CheckMembersForOverrideModifier(NodeRef node)
-    {
-        var store = StoreOf(node);
-        var classSymbol = GetSymbolOfDeclaration(node);
-        if (classSymbol.IsNone)
-        {
-            return;
-        }
-        var declaredType = GetDeclaredTypeOfSymbol(classSymbol);
-        if ((Types.Flags(declaredType) & TypeFlags.Object) == 0)
-        {
-            return;
-        }
-        var type = GetTypeWithThisArgument(declaredType);
-        var baseTypeNode = GetBaseTypeNodeOfClass(node);
-        var baseTypes = baseTypeNode.IsNone ? [] : GetBaseTypes(declaredType);
-        var baseWithThis = baseTypes.Count > 0 ? GetTypeWithThisArgument(baseTypes[0], Types.Object(declaredType).ThisType) : Type.None;
-        var nodeInAmbientContext = (store.Flags(node.Node) & NodeFlags.Ambient) != 0;
-        foreach (var member in store.Nodes(store.Members(node.Node)))
-        {
-            if (Utilities.HasSyntacticModifierUncached(store, member, ModifierFlags.Ambient))
-            {
-                continue;
-            }
-            if (store.Kind(member) == SyntaxKind.Constructor)
-            {
-                foreach (var parameter in store.Nodes(store.Parameters(member)))
-                {
-                    if (Utilities.IsParameterPropertyDeclaration(store, parameter, member))
-                    {
-                        CheckExistingMemberForOverrideModifier(node, type, classSymbol, baseWithThis, At(node, parameter), memberIsParameterProperty: true, nodeInAmbientContext);
-                    }
-                }
-                continue;
-            }
-            if (store.Kind(member) is SyntaxKind.PropertyDeclaration or SyntaxKind.MethodDeclaration or SyntaxKind.GetAccessor or SyntaxKind.SetAccessor)
-            {
-                CheckExistingMemberForOverrideModifier(node, type, classSymbol, baseWithThis, At(node, member), memberIsParameterProperty: false, nodeInAmbientContext);
-            }
-        }
-    }
-
-    private void CheckExistingMemberForOverrideModifier(NodeRef node, Type type, SymbolRef classSymbol, Type baseWithThis, NodeRef member, bool memberIsParameterProperty, bool nodeInAmbientContext)
-    {
-        var store = StoreOf(member);
-        var nameNode = store.Name(member.Node);
-        if (nameNode.IsNone || store.Kind(nameNode) == SyntaxKind.ComputedPropertyName)
-        {
-            return;
-        }
-        var declaredProp = GetSymbolOfDeclaration(member);
-        if (declaredProp.IsNone)
-        {
-            return;
-        }
-        var memberHasOverrideModifier = Utilities.HasSyntacticModifierUncached(store, member.Node, ModifierFlags.Override);
-        var memberHasAbstractModifier = Utilities.HasSyntacticModifierUncached(store, member.Node, ModifierFlags.Abstract);
-        var memberIsStatic = !memberIsParameterProperty && Utilities.IsStatic(store, member.Node);
-        if (!baseWithThis.IsNone && (memberHasOverrideModifier || compilerOptions.NoImplicitOverride == true))
-        {
-            var thisType = memberIsStatic ? GetTypeOfSymbol(classSymbol) : type;
-            var baseType = memberIsStatic ? GetBaseConstructorTypeOfClass(GetDeclaredTypeOfSymbol(classSymbol)) : baseWithThis;
-            var name = NameOf(declaredProp);
-            var prop = GetPropertyOfType(thisType, name);
-            var baseProp = (Types.Flags(baseType) & (TypeFlags.Object | TypeFlags.Intersection)) != 0 ? GetPropertyOfType(baseType, name) : SymbolRef.None;
-            if ((Types.Flags(baseType) & TypeFlags.Any) != 0)
-            {
-                return; // (an any base: every member exists)
-            }
-            var baseClassName = TypeToString(baseWithThis);
-            if (!prop.IsNone && baseProp.IsNone && memberHasOverrideModifier)
-            {
-                var suggestion = GetSpellingSuggestionForName(SymbolName(declaredProp), GetPropertiesOfType(baseType), SymbolFlags.ClassMember);
-                if (!suggestion.IsNone)
-                {
-                    Error(member, Diagnostics.This_member_cannot_have_an_override_modifier_because_it_is_not_declared_in_the_base_class_0_Did_you_mean_1, baseClassName, SymbolToString(suggestion));
-                }
-                else
-                {
-                    Error(member, Diagnostics.This_member_cannot_have_an_override_modifier_because_it_is_not_declared_in_the_base_class_0, baseClassName);
-                }
-            }
-            else if (!prop.IsNone && !baseProp.IsNone && DeclarationsOf(baseProp) is { } baseDeclarations && compilerOptions.NoImplicitOverride == true && !nodeInAmbientContext)
-            {
-                var baseHasAbstract = baseDeclarations.Exists(d => Utilities.HasSyntacticModifierUncached(StoreOf(d), d.Node, ModifierFlags.Abstract));
-                if (memberHasOverrideModifier)
-                {
-                    return;
-                }
-                if (!baseHasAbstract)
-                {
-                    Error(member, memberIsParameterProperty
-                        ? Diagnostics.This_parameter_property_must_have_an_override_modifier_because_it_overrides_a_member_in_base_class_0
-                        : Diagnostics.This_member_must_have_an_override_modifier_because_it_overrides_a_member_in_the_base_class_0, baseClassName);
-                }
-                else if (memberHasAbstractModifier)
-                {
-                    Error(member, Diagnostics.This_member_must_have_an_override_modifier_because_it_overrides_an_abstract_method_that_is_declared_in_the_base_class_0, baseClassName);
-                }
-            }
-        }
-        else if (memberHasOverrideModifier)
-        {
-            Error(member, Diagnostics.This_member_cannot_have_an_override_modifier_because_its_containing_class_0_does_not_extend_another_class, TypeToString(GetDeclaredTypeOfSymbol(classSymbol)));
-        }
-    }
-
-    // checker.ts checkPropertyInitialization (module C7: isPropertyInitializedInConstructor)
-    private void CheckPropertyInitialization(NodeRef node)
-    {
-        var store = StoreOf(node);
-        var n = node.Node;
-        if (!strictNullChecks || !compilerOptions.GetStrictOptionValue(compilerOptions.StrictPropertyInitialization) || (store.Flags(n) & NodeFlags.Ambient) != 0)
-        {
-            return;
-        }
-        var members = store.Nodes(store.Members(n));
-        // findConstructorDeclaration
-        var constructor = NodeRef.None;
-        foreach (var member in members)
-        {
-            if (store.Kind(member) == SyntaxKind.Constructor && !store.Body(member).IsNone)
-            {
-                constructor = At(node, member);
-                break;
-            }
-        }
-        foreach (var member in members)
-        {
-            if (store.Kind(member) != SyntaxKind.PropertyDeclaration || Utilities.HasSyntacticModifierUncached(store, member, ModifierFlags.Ambient) ||
-                Utilities.IsStatic(store, member) || Utilities.HasSyntacticModifierUncached(store, member, ModifierFlags.Abstract) ||
-                !store.ExclamationToken(member).IsNone || !store.Initializer(member).IsNone)
-            {
-                continue;
-            }
-            var propName = store.Name(member);
-            if (store.Kind(propName) is not (SyntaxKind.Identifier or SyntaxKind.PrivateIdentifier or SyntaxKind.ComputedPropertyName))
-            {
-                continue;
-            }
-            var type = GetTypeOfSymbol(GetSymbolOfDeclaration(At(node, member)));
-            if ((Types.Flags(type) & (TypeFlags.AnyOrUnknown | TypeFlags.Undefined)) != 0 || IsUnsupportedType(type))
-            {
-                continue;
-            }
-            if ((Types.Flags(type) & TypeFlags.Union) != 0 && Array.Exists(Types.Elements(Types.Union(type).Types).ToArray(), t => (Types.Flags(t) & TypeFlags.Undefined) != 0))
-            {
-                continue;
-            }
-            if (!constructor.IsNone && IsPropertyInitializedInConstructor(At(node, propName), type, constructor))
-            {
-                continue;
-            }
-            Error(At(node, propName), Diagnostics.Property_0_has_no_initializer_and_is_not_definitely_assigned_in_the_constructor, Utilities.DeclarationNameToString(store, propName));
-        }
-    }
-
-    private void VisitChildren(NodeRef node, NodeList except)
-    {
-        var store = StoreOf(node);
-        var children = new List<Node>();
-        NodeVisitor.ForEachChild<object>(store, node.Node, child =>
-        {
-            children.Add(child);
-            return null;
-        });
-        var excluded = except.IsNone ? default : store.Nodes(except);
-        foreach (var child in children)
-        {
-            if (!except.IsNone && excluded.Contains(child))
-            {
-                continue;
-            }
-            CheckNodeRecursive(At(node, child));
-        }
-    }
-
-    // checkFunctionOrMethodDeclaration / checkSignatureDeclaration: decorators, type parameters, parameters and the
-    // return type, then the registration for the unused check, then the body (deferred for function expressions)
-    private void CheckSignatureLikeDeclaration(NodeRef node, bool deferBody = false)
-    {
-        var store = StoreOf(node);
-        var n = node.Node;
-        var body = store.Body(n);
-        var children = new List<Node>();
-        NodeVisitor.ForEachChild<object>(store, n, child =>
-        {
-            children.Add(child);
-            return null;
-        });
-        foreach (var child in children)
-        {
-            if (child != body)
-            {
-                CheckNodeRecursive(At(node, child));
-            }
-        }
-        // checkSignatureDeclaration / checkFunctionOrMethodDeclaration: implicit any return types of bodyless
-        // declarations (TODO(C8): the remaining signature declaration checks)
-        if (store.Type(n).IsNone)
-        {
-            switch (store.Kind(n))
-            {
-                case SyntaxKind.ConstructSignature:
-                    if (noImplicitAny)
-                    {
-                        Error(node, Diagnostics.Construct_signature_which_lacks_return_type_annotation_implicitly_has_an_any_return_type);
-                    }
-                    break;
-                case SyntaxKind.CallSignature:
-                    if (noImplicitAny)
-                    {
-                        Error(node, Diagnostics.Call_signature_which_lacks_return_type_annotation_implicitly_has_an_any_return_type);
-                    }
-                    break;
-                case SyntaxKind.FunctionDeclaration:
-                case SyntaxKind.MethodDeclaration:
-                case SyntaxKind.MethodSignature:
-                    var isPrivate = Utilities.HasSyntacticModifierUncached(store, n, ModifierFlags.Private) || (!store.Name(n).IsNone && store.Kind(store.Name(n)) == SyntaxKind.PrivateIdentifier);
-                    var privateWithinAmbient = isPrivate && ((store.Flags(n) & NodeFlags.Ambient) != 0 || Utilities.HasSyntacticModifierUncached(store, n, ModifierFlags.Ambient));
-                    // object literal methods are checked as expressions (checkObjectLiteralMethod)
-                    var isObjectLiteralMethod = store.Kind(store.Parent(n)) == SyntaxKind.ObjectLiteralExpression;
-                    if (body.IsNone && !privateWithinAmbient && !isObjectLiteralMethod)
-                    {
-                        ReportImplicitAny(node, anyType);
-                    }
-                    break;
-            }
-        }
-        if (store.Kind(n) != SyntaxKind.IndexSignature)
-        {
-            RegisterForUnusedIdentifiersCheck(node);
-        }
-        if (body.IsNone)
-        {
-            return;
-        }
-        if (deferBody)
-        {
-            CheckNodeDeferred(node);
-        }
-        else
-        {
-            CheckNodeRecursive(At(node, body));
-            // checkFunctionOrMethodDeclaration / checkAccessorDeclaration: the return paths (module C7)
-            switch (store.Kind(n))
-            {
-                case SyntaxKind.FunctionDeclaration:
-                case SyntaxKind.MethodDeclaration:
-                    CheckAllCodePathsInNonVoidFunctionReturnOrThrow(node, GetReturnTypeFromAnnotation(node));
-                    break;
-                case SyntaxKind.GetAccessor:
-                    CheckAllCodePathsInNonVoidFunctionReturnOrThrow(node, GetTypeOfAccessors(GetSymbolOfDeclaration(node)));
-                    break;
-            }
-        }
-    }
-
-    // Checks one node; returns whether its children are visited.
-    private bool CheckNodeWorker(NodeRef node)
-    {
-        var store = StoreOf(node);
-        var n = node.Node;
-        var kind = store.Kind(n);
-        switch (kind)
-        {
-            case SyntaxKind.Identifier:
-                CheckIdentifierReference(node);
-                return false;
-            case SyntaxKind.PropertyAccessExpression:
-                if (Utilities.IsExpressionNode(store, n) && !Utilities.IsPartOfTypeNode(store, n))
-                {
-                    CheckExpressionCached(node);
-                }
-                // the name is resolved as a member, the expression as an expression
-                CheckNodeRecursive(At(node, store.Expression(n)));
-                return false;
-            case SyntaxKind.QualifiedName:
-                // resolved by the type reference or type query that contains it
-                return false;
-            case SyntaxKind.ThisKeyword:
-                if (Utilities.IsExpressionNode(store, n))
-                {
-                    CheckExpressionRoot(node);
-                }
-                else if (Utilities.IsInTypeQuery(store, n))
-                {
-                    CheckThisExpression(node);
-                }
-                return false;
-            case SyntaxKind.TypeReference:
-                // checkTypeReferenceNode: the type arguments (type nodes of their own) first, then the reference; the
-                // type name is resolved
-                VisitList(node, store.TypeArguments(n));
-                GetTypeFromTypeNode(node);
-                CheckTypeReferenceTypeArguments(node); // module C4
-                return false;
-            case SyntaxKind.IndexedAccessType:
-                // checkIndexedAccessType
-                CheckNodeRecursive(At(node, store.ObjectType(n)));
-                CheckNodeRecursive(At(node, store.IndexType(n)));
-                CheckIndexedAccessIndexType(GetTypeFromTypeNode(node), node);
-                return false;
-            case SyntaxKind.ExpressionWithTypeArguments:
-                return CheckExpressionWithTypeArgumentsNode(node);
-            case SyntaxKind.TypeQuery:
-                GetTypeFromTypeQueryNode(node);
-                VisitList(node, store.TypeArguments(n));
-                return false;
-            case SyntaxKind.ImportType:
-                // checkImportType: the module reference is resolved in getTypeFromImportTypeNode (module C3)
-                GetTypeFromTypeNode(node);
-                CheckImportTypeModule(node);
-                return false;
-            case SyntaxKind.ImportDeclaration:
-                CheckImportDeclaration(node);
-                return false;
-            case SyntaxKind.ImportEqualsDeclaration:
-                CheckImportEqualsDeclaration(node);
-                return false;
-            case SyntaxKind.ExportDeclaration:
-                CheckExportDeclaration(node);
-                return false;
-            case SyntaxKind.ExportAssignment:
-                CheckExportAssignment(node);
-                return false;
-            case SyntaxKind.NamespaceExportDeclaration:
-                return false;
-            case SyntaxKind.ShorthandPropertyAssignment:
-            {
-                // checkShorthandPropertyAssignment: checkExpressionForMutableLocation(node.name)
-                var name = At(node, store.Name(n));
-                CheckIdentifier(name); // (module C7: the identifier's checks and flow type)
-                var objectAssignmentInitializer = store.ObjectAssignmentInitializer(n);
-                if (!objectAssignmentInitializer.IsNone)
-                {
-                    CheckNodeRecursive(At(node, objectAssignmentInitializer));
-                }
-                return false;
-            }
-            case SyntaxKind.Parameter:
-                CheckGrammarParameterDecorators(node);
-                CheckVariableLikeDeclarationType(node);
-                return true;
-            case SyntaxKind.VariableDeclaration:
-            case SyntaxKind.PropertyDeclaration:
-            case SyntaxKind.PropertySignature:
-            case SyntaxKind.BindingElement:
-                CheckVariableLikeDeclarationType(node);
-                return true;
-            case SyntaxKind.LabeledStatement:
-            case SyntaxKind.BreakStatement:
-            case SyntaxKind.ContinueStatement:
-            {
-                // labels are not names; visit the statement of a labeled statement
-                if (kind == SyntaxKind.LabeledStatement)
-                {
-                    CheckUnusedLabel(node); // (module C7)
-                    CheckNodeRecursive(At(node, store.Statement(n)));
-                }
-                return false;
-            }
-            case SyntaxKind.MetaProperty:
-                return false;
-            case SyntaxKind.JsxElement:
-            case SyntaxKind.JsxSelfClosingElement:
-            case SyntaxKind.JsxFragment:
-                CheckJsxNode(node);
-                return false;
-            case SyntaxKind.JsxOpeningElement:
-            case SyntaxKind.JsxClosingElement:
-                return false;
-            case SyntaxKind.ModuleDeclaration:
-                // the name of an ambient module is a string; the body is checked
-                return true;
-            default:
-                return true;
-        }
-    }
-
-    private void VisitList(NodeRef context, NodeList list)
-    {
-        if (list.IsNone)
-        {
-            return;
-        }
-        var store = StoreOf(context);
-        foreach (var element in store.Nodes(list))
-        {
-            CheckNodeRecursive(At(context, element));
-        }
-    }
-
-    // An identifier: an expression reference is resolved as a value (getResolvedSymbol reports cannot-find-name);
-    // names of declarations, members and labels are not references.
-    private void CheckIdentifierReference(NodeRef node)
-    {
-        var store = StoreOf(node);
-        var n = node.Node;
-        if (Utilities.IsDeclarationName(store, n))
-        {
-            return;
-        }
-        var parent = store.Parent(n);
-        var parentKind = store.Kind(parent);
-        if (parentKind == SyntaxKind.PropertyAccessExpression && store.Name(parent) == n)
-        {
-            return;
-        }
-        if (parentKind is SyntaxKind.ImportSpecifier or SyntaxKind.ExportSpecifier or SyntaxKind.ImportClause or SyntaxKind.NamespaceImport
-            or SyntaxKind.NamespaceExport or SyntaxKind.MetaProperty or SyntaxKind.TypePredicate or SyntaxKind.JsxAttribute)
-        {
-            return;
-        }
-        if (Utilities.IsExpressionNode(store, n))
-        {
-            if (Utilities.IsJsxTagName(store, n))
-            {
-                return; // TODO(C9)
-            }
-            CheckExpressionRoot(node);
-        }
-    }
-
-    // checkVariableLikeDeclaration: the type of the declared symbol (reports implicit any and circularities)
-    private void CheckVariableLikeDeclarationType(NodeRef node)
-    {
-        var store = StoreOf(node);
-        var n = node.Node;
-        if (Utilities.IsBindingPattern(store, store.Name(n)))
-        {
-            // the type of a binding pattern parameter (implicit any errors of its elements), the widened type of a
-            // destructuring declaration (module C5; TODO(C8): the remaining checks of checkVariableLikeDeclaration)
-            if (store.Kind(n) == SyntaxKind.Parameter)
-            {
-                var patternSymbol = GetSymbolOfDeclaration(node);
-                if (!patternSymbol.IsNone)
-                {
-                    GetTypeOfSymbol(patternSymbol);
-                }
-            }
-            else if (store.Kind(n) == SyntaxKind.VariableDeclaration && (store.Flags(n) & NodeFlags.Ambient) == 0)
-            {
-                var needCheckInitializer = !store.Initializer(n).IsNone && store.Kind(store.Parent(store.Parent(n))) != SyntaxKind.ForInStatement;
-                var needCheckWidenedType = true;
-                foreach (var element in store.Nodes(store.Elements(store.Name(n))))
-                {
-                    if (store.Kind(element) != SyntaxKind.OmittedExpression)
-                    {
-                        needCheckWidenedType = false;
-                        break;
-                    }
-                }
-                if (needCheckInitializer || needCheckWidenedType)
-                {
-                    GetWidenedTypeForVariableLikeDeclaration(node, reportErrors: false);
-                }
-            }
-            return;
-        }
-        var symbol = GetSymbolOfDeclaration(node);
-        if (symbol.IsNone)
-        {
-            return;
-        }
-        if (store.Kind(n) == SyntaxKind.Parameter)
-        {
-            // the parameter symbol (a parameter property also declares a property)
-            var parent = store.Parent(n);
-            if (store.Kind(parent) is SyntaxKind.IndexSignature)
-            {
-                return;
-            }
-            var local = NodeSymbol(node);
-            if (!local.IsNone && (SymbolFlagsOf(local) & SymbolFlags.Property) != 0)
-            {
-                local = ResolveName(node, NameOf(local), NodeRef.None, SymbolFlags.Value, null, isUse: false);
-            }
-            if (!local.IsNone)
-            {
-                GetTypeOfSymbol(local);
-                CheckVariableLikeDeclarationRelations(node, local); // module C4
-            }
-            return;
-        }
-        GetTypeOfSymbol(symbol);
-        CheckVariableLikeDeclarationRelations(node, symbol); // module C4
-    }
-
-    // ExpressionWithTypeArguments: in an interface's extends clause or a class's implements clause a type reference;
-    // in a class's extends clause the expression is checked as a value; elsewhere an expression.
-    private bool CheckExpressionWithTypeArgumentsNode(NodeRef node)
-    {
-        var store = StoreOf(node);
-        var n = node.Node;
-        if (Utilities.IsPartOfTypeNode(store, n))
-        {
-            GetTypeFromTypeNode(node);
-            VisitList(node, store.TypeArguments(n));
-            CheckTypeReferenceTypeArguments(node); // module C4
-            return false;
-        }
-        if (Utilities.IsExpressionWithTypeArgumentsInClassExtendsClause(store, n))
-        {
-            var expression = At(node, store.Expression(n));
-            CheckNodeRecursive(expression);
-            VisitList(node, store.TypeArguments(n));
-            return false;
-        }
-        return true;
-    }
-
     // checker.ts checkImportDeclaration
     private void CheckImportDeclaration(NodeRef node)
     {
         var store = StoreOf(node);
         var n = node.Node;
-        if (!IsModuleElementContext(store, n))
+        if (CheckGrammarModuleElementContext(node, Utilities.IsInJSFile(store, n)
+            ? Diagnostics.An_import_declaration_can_only_be_used_at_the_top_level_of_a_module
+            : Diagnostics.An_import_declaration_can_only_be_used_at_the_top_level_of_a_namespace_or_module))
         {
-            return; // (grammar error: checkGrammarModuleElementContext, C8)
+            // If we hit an import declaration in an illegal context, just bail out to avoid cascading errors.
+            return;
+        }
+        if (!CheckGrammarModifiers(node) && !store.Modifiers(n).IsNone)
+        {
+            GrammarErrorOnFirstToken(node, Diagnostics.An_import_declaration_cannot_have_modifiers);
         }
         if (CheckExternalImportOrExportDeclaration(node))
         {
             var importClause = store.ImportClause(n);
             var moduleSpecifier = At(node, store.ModuleSpecifier(n));
-            if (!importClause.IsNone)
+            if (!importClause.IsNone && !CheckGrammarImportClause(At(node, importClause)))
             {
                 if (!store.Name(importClause).IsNone)
                 {
-                    CheckAliasSymbol(At(node, importClause));
+                    CheckImportBinding(At(node, importClause));
                 }
                 var namedBindings = store.NamedBindings(importClause);
                 if (!namedBindings.IsNone)
                 {
                     if (store.Kind(namedBindings) == SyntaxKind.NamespaceImport)
                     {
-                        CheckAliasSymbol(At(node, namedBindings));
+                        CheckImportBinding(At(node, namedBindings));
+                        // (the __importStar helper: Gate C emits ES modules)
                     }
                     else
                     {
@@ -783,23 +59,67 @@ internal sealed partial class Checker
                         {
                             foreach (var element in store.Nodes(store.Elements(namedBindings)))
                             {
-                                CheckAliasSymbol(At(node, element));
+                                CheckImportBinding(At(node, element));
                             }
                         }
                     }
                 }
+                // (JSON imports in --module node18..nodenext: Gate C uses module ES2022)
             }
-            else if (noUncheckedSideEffectImports)
+            else if (noUncheckedSideEffectImports && importClause.IsNone)
             {
                 ResolveExternalModuleName(node, moduleSpecifier, ignoreErrors: false, Diagnostics.Cannot_find_module_or_type_declarations_for_side_effect_import_of_0);
             }
         }
-        // (checkImportAttributes: C8)
+        CheckImportAttributes(node);
     }
 
-    // checker.ts checkGrammarModuleElementContext (the context test)
-    private static bool IsModuleElementContext(NodeStore store, Node node) =>
-        store.Kind(store.Parent(node)) is SyntaxKind.SourceFile or SyntaxKind.ModuleBlock or SyntaxKind.ModuleDeclaration;
+    // checker.ts checkImportBinding
+    private void CheckImportBinding(NodeRef node)
+    {
+        var store = StoreOf(node);
+        CheckCollisionsForDeclarationName(node, At(node, store.Name(node.Node)));
+        CheckAliasSymbol(node);
+        if (store.Kind(node.Node) == SyntaxKind.ImportSpecifier)
+        {
+            CheckModuleExportName(At(node, store.PropertyName(node.Node)));
+            // (the __importDefault helper: Gate C emits ES modules)
+        }
+    }
+
+    // checker.ts checkImportAttributes (the grammar parts that apply to Gate C's module ES2022; the attribute types: when
+    // the global ImportAttributes type exists)
+    private void CheckImportAttributes(NodeRef declaration)
+    {
+        var store = StoreOf(declaration);
+        var node = store.Attributes(declaration.Node);
+        if (node.IsNone)
+        {
+            return;
+        }
+        var isImportAttributes = store.Token(node) == SyntaxKind.WithKeyword;
+        // isExclusivelyTypeOnlyImportOrExport
+        var validForTypeAttributes = store.Kind(declaration.Node) == SyntaxKind.ExportDeclaration
+            ? store.IsTypeOnly(declaration.Node)
+            : !store.ImportClause(declaration.Node).IsNone && store.PhaseModifier(store.ImportClause(declaration.Node)) == SyntaxKind.TypeKeyword;
+        if (validForTypeAttributes)
+        {
+            GetResolutionModeOverride(At(declaration, node), reportErrors: true);
+        }
+        // !moduleSupportsImportAttributes(moduleKind): ES2022 does not support them
+        if (moduleKind is not (ModuleKind.ESNext or ModuleKind.Node18 or ModuleKind.Node20 or ModuleKind.NodeNext or ModuleKind.Preserve))
+        {
+            GrammarErrorOnNode(At(declaration, node), isImportAttributes
+                ? Diagnostics.Import_attributes_are_only_supported_when_the_module_option_is_set_to_esnext_node18_node20_nodenext_or_preserve
+                : Diagnostics.Import_assertions_are_only_supported_when_the_module_option_is_set_to_esnext_node18_node20_nodenext_or_preserve);
+            return;
+        }
+        if (!isImportAttributes) // (ignoreDeprecations: not set in Gate C)
+        {
+            GrammarErrorOnFirstToken(At(declaration, node), Diagnostics.Import_assertions_have_been_replaced_by_import_attributes_Use_with_instead_of_assert);
+        }
+        // TODO(C8): the remaining import attribute checks (type-only declarations, resolution-mode) for module kinds Gate C does not use
+    }
 
     // checker.ts checkExternalImportOrExportDeclaration
     private bool CheckExternalImportOrExportDeclaration(NodeRef node)
@@ -828,9 +148,14 @@ internal sealed partial class Checker
         }
         if (inAmbientExternalModule && Utilities.IsExternalModuleNameRelative(store.Texts.GetString(store.Text(moduleName))!))
         {
-            // (isTopLevelInExternalModuleAugmentation: module augmentations of files, which Gate C's programs do not resolve)
-            if (!Utilities.IsModuleAugmentationExternal(store, store.Parent(parent)) || !IsTopLevelInExternalModuleAugmentation(store, n))
+            // we have already reported errors on top level imports/exports in external module augmentations in checkModuleDeclaration
+            // no need to do this again.
+            if (!IsTopLevelInExternalModuleAugmentation(store, n))
             {
+                // TypeScript 1.0 spec (April 2013): 12.1.6
+                // An ExternalImportDeclaration in an AmbientExternalModuleDeclaration may reference
+                // other external modules only through top - level external module names.
+                // Relative external module names are not permitted.
                 Error(node, Diagnostics.Import_or_export_declaration_in_an_ambient_module_declaration_cannot_reference_module_through_relative_module_name);
                 return false;
             }
@@ -857,13 +182,14 @@ internal sealed partial class Checker
         return true;
     }
 
+    // utilities.ts isTopLevelInExternalModuleAugmentation
     private static bool IsTopLevelInExternalModuleAugmentation(NodeStore store, Node node)
     {
         var parent = store.Parent(node);
         return !parent.IsNone && store.Kind(parent) == SyntaxKind.ModuleBlock && Utilities.IsModuleAugmentationExternal(store, store.Parent(parent));
     }
 
-    // checker.ts checkAliasSymbol: resolves the alias (reports the module and member errors of its target)
+    // checker.ts checkAliasSymbol
     private void CheckAliasSymbol(NodeRef node)
     {
         var symbol = GetSymbolOfDeclaration(node);
@@ -871,8 +197,34 @@ internal sealed partial class Checker
         {
             return;
         }
-        ResolveAlias(symbol);
-        // (the conflicts of the alias with local declarations and the type-only checks: C8)
+        var target = ResolveAlias(symbol);
+        if (target == unknownSymbol)
+        {
+            return;
+        }
+        // For external modules, `symbol` represents the local symbol for an alias.
+        // This local symbol will merge any other local declarations (excluding other aliases)
+        // and symbol.flags will contains combined representation for all merged declaration.
+        // Based on symbol.flags we can compute a set of excluded meanings (meaning that resolved alias should not have,
+        // otherwise it will conflict with some local declaration). Note that in addition to normal flags we include matching SymbolFlags.Export*
+        // in order to prevent collisions with declarations that were exported from the current module (they still contribute to local names).
+        var exportSymbol = ExportSymbolOf(symbol);
+        symbol = GetMergedSymbol(exportSymbol.IsNone ? symbol : exportSymbol);
+        // (type-only imports and exports in JavaScript files: TODO(C9))
+        var targetFlags = GetSymbolFlags(target);
+        var symbolFlags = SymbolFlagsOf(symbol);
+        var excludedMeanings = ((symbolFlags & (SymbolFlags.Value | SymbolFlags.ExportValue)) != 0 ? SymbolFlags.Value : 0) |
+            ((symbolFlags & SymbolFlags.Type) != 0 ? SymbolFlags.Type : 0) |
+            ((symbolFlags & SymbolFlags.Namespace) != 0 ? SymbolFlags.Namespace : 0);
+        if ((targetFlags & excludedMeanings) != 0)
+        {
+            var message = Kind(node) == SyntaxKind.ExportSpecifier
+                ? Diagnostics.Export_declaration_conflicts_with_exported_declaration_of_0
+                : Diagnostics.Import_declaration_conflicts_with_local_declaration_of_0;
+            Error(node, message, SymbolToString(symbol));
+        }
+        // (isolatedModules and verbatimModuleSyntax checks: Gate C sets neither; deprecations of import specifiers: not in
+        // the dumps)
     }
 
     // checker.ts checkImportEqualsDeclaration
@@ -880,13 +232,18 @@ internal sealed partial class Checker
     {
         var store = StoreOf(node);
         var n = node.Node;
-        if (!IsModuleElementContext(store, n))
+        if (CheckGrammarModuleElementContext(node, Utilities.IsInJSFile(store, n)
+            ? Diagnostics.An_import_declaration_can_only_be_used_at_the_top_level_of_a_module
+            : Diagnostics.An_import_declaration_can_only_be_used_at_the_top_level_of_a_namespace_or_module))
         {
+            // If we hit an import declaration in an illegal context, just bail out to avoid cascading errors.
             return;
         }
+        CheckGrammarModifiers(node);
+        // (erasableSyntaxOnly: not an option of Gate C)
         if (Utilities.IsInternalModuleImportEqualsDeclaration(store, n) || CheckExternalImportOrExportDeclaration(node))
         {
-            CheckAliasSymbol(node);
+            CheckImportBinding(node);
             if (store.Kind(store.ModuleReference(n)) != SyntaxKind.ExternalModuleReference)
             {
                 var target = ResolveAlias(GetSymbolOfDeclaration(node));
@@ -903,6 +260,14 @@ internal sealed partial class Checker
                             Error(moduleName, Diagnostics.Module_0_is_hidden_by_a_local_declaration_with_the_same_name, Utilities.DeclarationNameToString(store, moduleName.Node));
                         }
                     }
+                    if ((targetFlags & SymbolFlags.Type) != 0)
+                    {
+                        CheckTypeNameIsReserved(At(node, store.Name(n)), Diagnostics.Import_name_cannot_be_0);
+                    }
+                }
+                if (store.IsTypeOnly(n))
+                {
+                    GrammarErrorOnNode(node, Diagnostics.An_import_alias_cannot_use_import_type);
                 }
             }
             else if (moduleKind >= ModuleKind.ES2015 && moduleKind <= ModuleKind.ESNext && !store.IsTypeOnly(n) && (store.Flags(n) & NodeFlags.Ambient) == 0)
@@ -913,59 +278,23 @@ internal sealed partial class Checker
         }
     }
 
-    // checker.ts grammarErrorOnNode: reported only when the file has no parse errors
-    private void GrammarErrorOnNode(NodeRef node, DiagnosticMessage message, params object?[] args)
-    {
-        var file = FileAt(node.File);
-        if (file.ParseDiagnostics.Count == 0)
-        {
-            diagnostics.Add(CreateDiagnosticForNode(node, message, args));
-        }
-    }
-
-    // checker.ts grammarErrorOnFirstToken: reported only when the file has no parse errors
-    private void GrammarErrorOnFirstToken(NodeRef node, DiagnosticMessage message, params object?[] args)
-    {
-        var file = FileAt(node.File);
-        if (file.ParseDiagnostics.Count == 0)
-        {
-            var span = Utilities.GetSpanOfTokenAtPosition(file.Store, file.Root, file.Store.Pos(node.Node));
-            diagnostics.Add(ProgramDiagnostic.FromFile(file, Utilities.CreateFileDiagnostic(file.Store, file.Root, span.Start, span.Length, message, args)));
-        }
-    }
-
-    // checkGrammarModifiers, the decorator part for parameters (TODO(C8): the remaining modifier grammar): without
-    // experimentalDecorators, nodeCanBeDecorated is false for parameters
-    private void CheckGrammarParameterDecorators(NodeRef parameter)
-    {
-        var store = StoreOf(parameter);
-        var modifiers = store.Modifiers(parameter.Node);
-        if (modifiers.IsNone || compilerOptions.ExperimentalDecorators == true)
-        {
-            return;
-        }
-        var first = store.Nodes(modifiers);
-        if (first.Length == 0 || store.Kind(first[0]) != SyntaxKind.Decorator)
-        {
-            return;
-        }
-        var name = store.Name(parameter.Node);
-        if (store.Kind(name) == SyntaxKind.Identifier && store.Texts.Equals(store.EscapedText(name), "this"))
-        {
-            return; // (Neither_decorators_nor_modifiers_may_be_applied_to_this_parameters: C8)
-        }
-        GrammarErrorOnFirstToken(parameter, Diagnostics.Decorators_are_not_valid_here);
-    }
-
     // checker.ts checkExportDeclaration
     private void CheckExportDeclaration(NodeRef node)
     {
         var store = StoreOf(node);
         var n = node.Node;
-        if (!IsModuleElementContext(store, n))
+        if (CheckGrammarModuleElementContext(node, Utilities.IsInJSFile(store, n)
+            ? Diagnostics.An_export_declaration_can_only_be_used_at_the_top_level_of_a_module
+            : Diagnostics.An_export_declaration_can_only_be_used_at_the_top_level_of_a_namespace_or_module))
         {
+            // If we hit an export in an illegal context, just bail out to avoid cascading errors.
             return;
         }
+        if (!CheckGrammarModifiers(node) && Utilities.GetSyntacticModifierFlagsNoCache(store, n) != 0)
+        {
+            GrammarErrorOnFirstToken(node, Diagnostics.An_export_declaration_cannot_have_modifiers);
+        }
+        CheckGrammarExportDeclaration(node);
         var moduleSpecifier = store.ModuleSpecifier(n);
         if (moduleSpecifier.IsNone || CheckExternalImportOrExportDeclaration(node))
         {
@@ -998,9 +327,12 @@ internal sealed partial class Checker
                 else if (!exportClause.IsNone)
                 {
                     CheckAliasSymbol(At(node, exportClause));
+                    CheckModuleExportName(At(node, store.Name(exportClause)));
                 }
+                // (the __importStar and __exportStar helpers: Gate C emits ES modules)
             }
         }
+        CheckImportAttributes(node);
     }
 
     // checker.ts checkExportSpecifier
@@ -1010,6 +342,8 @@ internal sealed partial class Checker
         var store = StoreOf(node);
         var n = node.Node;
         var hasModuleSpecifier = !store.ModuleSpecifier(store.Parent(store.Parent(n))).IsNone;
+        CheckModuleExportName(At(node, store.PropertyName(n)), hasModuleSpecifier);
+        CheckModuleExportName(At(node, store.Name(n)));
         if (!hasModuleSpecifier)
         {
             var exportedName = !store.PropertyName(n).IsNone ? store.PropertyName(n) : store.Name(n);
@@ -1025,6 +359,7 @@ internal sealed partial class Checker
             {
                 Error(At(node, exportedName), Diagnostics.Cannot_export_0_Only_local_declarations_can_be_exported_from_a_module, store.Texts.GetString(Utilities.IdText(store, exportedName)));
             }
+            // (markLinkedReferences: emit only)
         }
     }
 
@@ -1044,15 +379,20 @@ internal sealed partial class Checker
         return NodeRef.None;
     }
 
-    // checker.ts checkExportAssignment (the name resolution part)
+    // checker.ts checkExportAssignment
     private void CheckExportAssignment(NodeRef node)
     {
         var store = StoreOf(node);
         var n = node.Node;
-        if (!IsModuleElementContext(store, n))
+        var illegalContextMessage = store.IsExportEquals(n)
+            ? Diagnostics.An_export_assignment_must_be_at_the_top_level_of_a_file_or_module_declaration
+            : Diagnostics.A_default_export_must_be_at_the_top_level_of_a_file_or_module_declaration;
+        if (CheckGrammarModuleElementContext(node, illegalContextMessage))
         {
+            // If we hit an export assignment in an illegal context, just bail out to avoid cascading errors.
             return;
         }
+        // (erasableSyntaxOnly: not an option of Gate C)
         var parent = store.Parent(n);
         var container = store.Kind(parent) == SyntaxKind.SourceFile ? parent : store.Parent(parent);
         if (store.Kind(container) == SyntaxKind.ModuleDeclaration && !Utilities.IsAmbientModule(store, container))
@@ -1060,6 +400,12 @@ internal sealed partial class Checker
             Error(node, store.IsExportEquals(n) ? Diagnostics.An_export_assignment_cannot_be_used_in_a_namespace : Diagnostics.A_default_export_can_only_be_used_in_an_ECMAScript_style_module);
             return;
         }
+        // Grammar checking
+        if (!CheckGrammarModifiers(node) && Utilities.GetSyntacticModifierFlagsNoCache(store, n) != 0)
+        {
+            GrammarErrorOnFirstToken(node, Diagnostics.An_export_assignment_cannot_have_modifiers);
+        }
+        // (getEffectiveTypeAnnotationNode: the JSDoc @type of a JavaScript export assignment, module C9)
         var expression = At(node, store.Expression(n));
         if (store.Kind(expression.Node) == SyntaxKind.Identifier)
         {
@@ -1080,9 +426,9 @@ internal sealed partial class Checker
         }
         else
         {
-            CheckNodeRecursive(expression);
+            CheckExpressionCached(expression);
         }
-        // (checkExternalModuleExports: C8)
+        CheckExternalModuleExports(At(node, container));
         if ((store.Flags(n) & NodeFlags.Ambient) != 0 && !Utilities.IsEntityNameExpression(store, expression.Node))
         {
             GrammarErrorOnNode(expression, Diagnostics.The_expression_of_an_export_assignment_must_be_an_identifier_or_qualified_name_in_an_ambient_context);
@@ -1131,6 +477,5 @@ internal sealed partial class Checker
         {
             ResolveExternalModuleName(node, At(node, store.Literal(argument)));
         }
-        VisitList(node, store.TypeArguments(node.Node));
     }
 }

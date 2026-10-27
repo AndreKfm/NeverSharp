@@ -423,7 +423,7 @@ internal sealed partial class Checker
 
     private CheckFlags TransientCheckFlags(SymbolRef symbol) => symbol.IsTransient ? TransientSymbols.Record(symbol).CheckFlags : CheckFlags.None;
 
-    /// <summary>checker.ts getDeclaredTypeOfEnum (member values: the evaluator's literal and auto-increment cases).</summary>
+    /// <summary>checker.ts getDeclaredTypeOfEnum (member values: computeEnumMemberValues, module C8).</summary>
     private Type GetDeclaredTypeOfEnum(SymbolRef symbol)
     {
         if (!DeclaredTypeLinks.Get(symbol).DeclaredType.IsNone)
@@ -439,19 +439,15 @@ internal sealed partial class Checker
                 continue;
             }
             var store = StoreOf(declaration);
-            object? previous = null;
-            var first = true;
             foreach (var member in store.Nodes(store.Members(declaration.Node)))
             {
                 var memberRef = At(declaration, member);
-                var memberSymbol = GetSymbolOfDeclaration(memberRef);
-                if (memberSymbol.IsNone)
+                if (!HasBindableName(memberRef))
                 {
                     continue;
                 }
-                var value = GetEnumMemberValue(memberRef, previous, first);
-                first = false;
-                previous = value;
+                var memberSymbol = GetSymbolOfDeclaration(memberRef);
+                var value = GetEnumMemberValue(memberRef);
                 var memberType = GetFreshTypeOfLiteralType(value is not null ? GetEnumLiteralType(value, enumId, memberSymbol) : CreateComputedEnumType(memberSymbol));
                 DeclaredTypeLinks.Get(memberSymbol).DeclaredType = memberType;
                 memberTypeList.Add(GetRegularTypeOfLiteralType(memberType));
@@ -480,49 +476,6 @@ internal sealed partial class Checker
             enumIds[symbol] = id = enumIds.Count + 1;
         }
         return id;
-    }
-
-    // checker.ts getEnumMemberValue / computeEnumMemberValue (TODO(C8): the full constant evaluator: references to other
-    // members, operators, template literals).
-    private object? GetEnumMemberValue(NodeRef member, object? previous, bool first)
-    {
-        var store = StoreOf(member);
-        var initializer = store.Initializer(member.Node);
-        if (initializer.IsNone)
-        {
-            if (first)
-            {
-                return 0.0;
-            }
-            return previous is double d ? d + 1 : null;
-        }
-        var expr = initializer;
-        while (store.Kind(expr) == SyntaxKind.ParenthesizedExpression)
-        {
-            expr = store.Expression(expr);
-        }
-        switch (store.Kind(expr))
-        {
-            case SyntaxKind.NumericLiteral:
-                return JsNumber.FromString(store.Texts.GetString(store.Text(expr))!);
-            case SyntaxKind.StringLiteral:
-            case SyntaxKind.NoSubstitutionTemplateLiteral:
-                return store.Texts.GetString(store.Text(expr));
-            case SyntaxKind.PrefixUnaryExpression:
-                if (store.Kind(store.Operand(expr)) == SyntaxKind.NumericLiteral)
-                {
-                    var value = JsNumber.FromString(store.Texts.GetString(store.Text(store.Operand(expr)))!);
-                    return store.Operator(expr) switch
-                    {
-                        SyntaxKind.MinusToken => -value,
-                        SyntaxKind.PlusToken => value,
-                        _ => null,
-                    };
-                }
-                return null;
-            default:
-                return null;
-        }
     }
 
     // checker.ts createComputedEnumType
