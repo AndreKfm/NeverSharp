@@ -932,12 +932,33 @@ internal sealed partial class Checker
                 continue;
             }
             var derived = symbols.Get(NameOf(b));
-            if (derived.IsNone)
+            var derivedDeclaration = derived.IsNone ? NodeRef.None : ValueDeclarationOf(derived);
+            if (derived.IsNone ||
+                // non-constructor/static-block assignment declarations are ignored here; they're not treated as overrides
+                (!derivedDeclaration.IsNone && Kind(derivedDeclaration) == SyntaxKind.BinaryExpression && !IsConstructorDeclaredProperty(derived) &&
+                    GetContainingClassStaticBlock(derivedDeclaration).IsNone))
             {
                 symbols.Set(NameOf(b), b);
             }
-            // (JavaScript assignment declarations that do not override: module C9)
         }
+    }
+
+    // utilities.ts getContainingClassStaticBlock
+    private NodeRef GetContainingClassStaticBlock(NodeRef node)
+    {
+        var store = StoreOf(node);
+        for (var n = store.Parent(node.Node); !n.IsNone; n = store.Parent(n))
+        {
+            if (Utilities.IsClassLike(store, n) || Utilities.IsFunctionLike(store, n))
+            {
+                return NodeRef.None;
+            }
+            if (store.Kind(n) == SyntaxKind.ClassStaticBlockDeclaration)
+            {
+                return At(node, n);
+            }
+        }
+        return NodeRef.None;
     }
 
     private bool IsStaticPrivateIdentifierProperty(SymbolRef s)
