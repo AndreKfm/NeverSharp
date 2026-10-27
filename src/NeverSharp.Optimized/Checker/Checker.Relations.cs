@@ -907,7 +907,7 @@ internal sealed partial class Checker
         var target = Types.Object(type).Target;
         if ((Types.ObjectFlagsOf(target) & ObjectFlags.Class) != 0)
         {
-            var declaration = ValueDeclarationOf(Types.Symbol(target));
+            var declaration = GetClassLikeDeclarationOfSymbol(Types.Symbol(target));
             var baseTypeNode = declaration.IsNone ? NodeRef.None : GetBaseTypeNodeOfClass(declaration);
             // A base type expression may circularly reference the class itself (e.g. as an argument to function call), so we only
             // check for base types specified as simple qualified names.

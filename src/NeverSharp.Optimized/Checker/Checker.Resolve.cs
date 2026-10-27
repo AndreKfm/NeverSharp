@@ -2172,10 +2172,31 @@ internal sealed partial class Checker
     }
 
     // utilities.ts entityNameToString
+    // utilities.ts entityNameToString
     private string EntityNameToString(NodeRef name)
     {
         var store = StoreOf(name);
-        return Utilities.GetSourceTextOfNodeFromSourceFile(store, Utilities.RootOf(store, name.Node), name.Node);
+        var n = name.Node;
+        switch (store.Kind(n))
+        {
+            case SyntaxKind.ThisKeyword:
+                return "this";
+            case SyntaxKind.PrivateIdentifier:
+            case SyntaxKind.Identifier:
+                return store.End(n) - store.Pos(n) == 0
+                    ? Utilities.UnescapeLeadingUnderscores(store.Texts.GetString(store.EscapedText(n)) ?? "")
+                    : Utilities.GetSourceTextOfNodeFromSourceFile(store, Utilities.RootOf(store, n), n);
+            case SyntaxKind.QualifiedName:
+                return EntityNameToString(At(name, store.Left(n))) + "." + EntityNameToString(At(name, store.Right(n)));
+            case SyntaxKind.PropertyAccessExpression:
+                return EntityNameToString(At(name, store.Expression(n))) + "." + EntityNameToString(At(name, store.Name(n)));
+            case SyntaxKind.JSDocMemberName:
+                return EntityNameToString(At(name, store.Left(n))) + "#" + EntityNameToString(At(name, store.Right(n)));
+            case SyntaxKind.JsxNamespacedName:
+                return EntityNameToString(At(name, store.Namespace(n))) + ":" + EntityNameToString(At(name, store.Name(n)));
+            default:
+                return Utilities.GetSourceTextOfNodeFromSourceFile(store, Utilities.RootOf(store, n), n);
+        }
     }
 
     private SymbolRef GetSuggestedSymbolForNonexistentModule(NodeRef name, SymbolRef targetModule)

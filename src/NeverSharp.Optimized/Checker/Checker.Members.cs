@@ -669,7 +669,7 @@ internal sealed partial class Checker
             data.ResolvedBaseTypes = [];
             return;
         }
-        var declaration = ValueDeclarationOf(Types.Symbol(type));
+        var declaration = GetClassLikeDeclarationOfSymbol(Types.Symbol(type)); // getBaseTypeNodeOfClass
         var baseTypeNode = GetBaseTypeNodeOfClass(declaration);
         Type baseType;
         var baseConstructorSymbol = Types.Symbol(baseConstructorType);
@@ -1138,7 +1138,7 @@ internal sealed partial class Checker
         var data = Types.Object(classType);
         if (data.ResolvedBaseConstructorType.IsNone)
         {
-            var declaration = ValueDeclarationOf(Types.Symbol(classType));
+            var declaration = GetClassLikeDeclarationOfSymbol(Types.Symbol(classType));
             var baseTypeNode = declaration.IsNone ? NodeRef.None : GetBaseTypeNodeOfClass(declaration);
             if (baseTypeNode.IsNone)
             {
@@ -1242,7 +1242,7 @@ internal sealed partial class Checker
     {
         var baseConstructorType = GetBaseConstructorTypeOfClass(classType);
         var baseSignatures = GetSignaturesOfType(baseConstructorType, SignatureKind.Construct);
-        var declaration = ValueDeclarationOf(Types.Symbol(classType));
+        var declaration = GetClassLikeDeclarationOfSymbol(Types.Symbol(classType));
         var isAbstract = !declaration.IsNone && Utilities.HasSyntacticModifierUncached(StoreOf(declaration), declaration.Node, ModifierFlags.Abstract);
         if (baseSignatures.Count == 0)
         {

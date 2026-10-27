@@ -956,7 +956,7 @@ internal sealed partial class Checker
     // checker.ts addEvolvingArrayElementType (TODO(C5): getContextFreeTypeOfExpression; the type of the expression)
     private Type AddEvolvingArrayElementType(Type evolvingArrayType, NodeRef node)
     {
-        var elementType = GetBaseTypeOfLiteralType(GetTypeOfExpression(node));
+        var elementType = GetRegularTypeOfObjectLiteral(GetBaseTypeOfLiteralType(GetContextFreeTypeOfExpression(node)));
         var current = evolvingArrayElementTypes[evolvingArrayType];
         return IsTypeSubsetOf(elementType, current) ? evolvingArrayType : GetEvolvingArrayType(GetUnionType([current, elementType]));
     }
@@ -1062,7 +1062,10 @@ internal sealed partial class Checker
         {
             if ((GetCheckFlags(symbol) & CheckFlags.Mapped) != 0)
             {
-                // (MappedSymbol.links.syntheticOrigin: the origin's explicit type; module C3 does not keep the origin)
+                if (mappedSymbolLinks.TryGetValue(symbol, out var mapped) && !mapped.SyntheticOrigin.IsNone && !GetExplicitTypeOfSymbol(mapped.SyntheticOrigin, null).IsNone)
+                {
+                    return GetTypeOfSymbol(symbol);
+                }
             }
             var declaration = ValueDeclarationOf(symbol);
             if (!declaration.IsNone)

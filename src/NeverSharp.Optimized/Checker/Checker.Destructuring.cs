@@ -241,7 +241,7 @@ internal sealed partial class Checker
     // checker.ts isGlobalSymbolConstructor
     private bool IsGlobalSymbolConstructor(NodeRef node)
     {
-        var symbol = NodeSymbol(node);
+        var symbol = GetSymbolOfNode(node); // getMergedSymbol(node.symbol)
         var globalSymbol = GetGlobalESSymbolConstructorTypeSymbol();
         return !globalSymbol.IsNone && !symbol.IsNone && symbol == globalSymbol;
     }

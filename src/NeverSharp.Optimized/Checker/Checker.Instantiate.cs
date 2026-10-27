@@ -983,9 +983,9 @@ internal sealed partial class Checker
                 {
                     return true;
                 }
-                if (kind == SyntaxKind.ModuleDeclaration)
+                if (kind != SyntaxKind.ModuleDeclaration)
                 {
-                    return false;
+                    return false; // findAncestor's "quit"
                 }
             }
         }
