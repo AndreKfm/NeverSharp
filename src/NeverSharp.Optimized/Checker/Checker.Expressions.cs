@@ -549,6 +549,7 @@ internal sealed partial class Checker
         var parent = store.Parent(node.Node);
         var parentKind = store.Kind(parent);
         return (parentKind is SyntaxKind.AsExpression or SyntaxKind.TypeAssertionExpression && IsConstTypeReference(store, store.Type(parent))) ||
+            (FactoryUtilities.IsJSDocTypeAssertion(store, parent) && IsConstTypeReference(store, GetJSDocTypeAssertionType(At(node, parent)).Node)) ||
             (IsValidConstAssertionArgument(node) && IsConstTypeVariable(GetContextualType(node, ContextFlags.None))) ||
             (parentKind is SyntaxKind.ParenthesizedExpression or SyntaxKind.ArrayLiteralExpression or SyntaxKind.SpreadElement && IsConstContext(At(node, parent))) ||
             (parentKind is SyntaxKind.PropertyAssignment or SyntaxKind.ShorthandPropertyAssignment or SyntaxKind.TemplateSpan && IsConstContext(At(node, store.Parent(parent))));

@@ -373,7 +373,8 @@ internal sealed partial class Checker
         var targetDeclarations = DeclarationsOf(target);
         var sourceSymbolFile = sourceDeclarations is { Count: > 0 } ? sourceDeclarations[0].File : 0;
         var targetSymbolFile = targetDeclarations is { Count: > 0 } ? targetDeclarations[0].File : 0;
-        // (isPlainJsFile: JavaScript files are not in Track O's programs yet, module C9)
+        var isSourcePlainJs = sourceSymbolFile != 0 && Program.IsPlainJsFile(FileAt(sourceSymbolFile), compilerOptions.CheckJs);
+        var isTargetPlainJs = targetSymbolFile != 0 && Program.IsPlainJsFile(FileAt(targetSymbolFile), compilerOptions.CheckJs);
         var symbolName = SymbolToString(source);
 
         // Collect top-level duplicate identifier errors into one mapping, so we can then merge their diagnostics if there are a bunch
@@ -396,13 +397,25 @@ internal sealed partial class Checker
                 conflictingSymbolInfo = new DuplicateInfoForSymbol(symbolName, isEitherBlockScoped);
                 filesDuplicates.ConflictingSymbols.Add(conflictingSymbolInfo);
             }
-            AddDuplicateLocations(conflictingSymbolInfo.FirstFileLocations, source);
-            AddDuplicateLocations(conflictingSymbolInfo.SecondFileLocations, target);
+            if (!isSourcePlainJs)
+            {
+                AddDuplicateLocations(conflictingSymbolInfo.FirstFileLocations, source);
+            }
+            if (!isTargetPlainJs)
+            {
+                AddDuplicateLocations(conflictingSymbolInfo.SecondFileLocations, target);
+            }
         }
         else
         {
-            AddDuplicateDeclarationErrorsForSymbols(source, message, symbolName, target);
-            AddDuplicateDeclarationErrorsForSymbols(target, message, symbolName, source);
+            if (!isSourcePlainJs)
+            {
+                AddDuplicateDeclarationErrorsForSymbols(source, message, symbolName, target);
+            }
+            if (!isTargetPlainJs)
+            {
+                AddDuplicateDeclarationErrorsForSymbols(target, message, symbolName, source);
+            }
         }
     }
 

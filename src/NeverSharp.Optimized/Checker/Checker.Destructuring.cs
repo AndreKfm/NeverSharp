@@ -221,7 +221,7 @@ internal sealed partial class Checker
                 ReportErrorsFromWidening(declaration, type);
             }
             // always widen a 'unique symbol' type if the type was created for a different declaration.
-            if ((Types.Flags(type) & TypeFlags.UniqueESSymbol) != 0 && (store.Kind(declaration.Node) == SyntaxKind.BindingElement || store.Type(declaration.Node).IsNone) &&
+            if ((Types.Flags(type) & TypeFlags.UniqueESSymbol) != 0 && (store.Kind(declaration.Node) == SyntaxKind.BindingElement || TryGetTypeFromEffectiveTypeNode(declaration).IsNone) &&
                 Types.Symbol(type) != GetSymbolOfDeclaration(declaration))
             {
                 type = esSymbolType;
