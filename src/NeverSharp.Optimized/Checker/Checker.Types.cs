@@ -721,12 +721,12 @@ internal sealed partial class Checker
             return false;
         }
         var data = Types.Object(type);
-        if (data.MembersResolved)
+        if (data.MembersResolved && IsEmptyResolvedType(data))
         {
-            return IsEmptyResolvedType(data);
+            return true;
         }
         var symbol = Types.Symbol(type);
-        return !symbol.IsNone && (SymbolFlagsOf(symbol) & SymbolFlags.TypeLiteral) != 0 && (MembersOf(symbol)?.Count ?? 0) == 0;
+        return !symbol.IsNone && (SymbolFlagsOf(symbol) & SymbolFlags.TypeLiteral) != 0 && GetMembersOfSymbol(symbol).Count == 0;
     }
 
     private static bool IsEmptyResolvedType(ObjectTypeData data) =>

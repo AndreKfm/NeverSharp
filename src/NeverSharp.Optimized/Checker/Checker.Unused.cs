@@ -201,7 +201,7 @@ internal sealed partial class Checker
                     var symbol = GetSymbolOfDeclaration(member);
                     var name = store.Name(memberNode);
                     if (!symbol.IsNone && IsReferenced(symbol) == 0
-                        && (Utilities.HasSyntacticModifierUncached(store, memberNode, ModifierFlags.Private) || (!name.IsNone && store.Kind(name) == SyntaxKind.PrivateIdentifier))
+                        && ((Utilities.GetEffectiveModifierFlags(store, memberNode) & ModifierFlags.Private) != 0 || (!name.IsNone && store.Kind(name) == SyntaxKind.PrivateIdentifier)) // hasEffectiveModifier
                         && (store.Flags(memberNode) & NodeFlags.Ambient) == 0)
                     {
                         addDiagnostic(member, false, CreateDiagnosticForNode(At(node, name), Diagnostics._0_is_declared_but_its_value_is_never_read, SymbolToString(symbol)));

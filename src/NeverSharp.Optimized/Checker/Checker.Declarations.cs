@@ -704,6 +704,18 @@ internal sealed partial class Checker
     private static List<Node> GetImplementsTypeNodes(NodeStore store, Node node)
     {
         var result = new List<Node>();
+        if (Utilities.IsInJSFile(store, node))
+        {
+            // getJSDocImplementsTags(node).map(n => n.class)
+            foreach (var tag in UtilitiesPublic.GetJSDocTags(store, node))
+            {
+                if (store.Kind(tag) == SyntaxKind.JSDocImplementsTag)
+                {
+                    result.Add(store.Class(tag));
+                }
+            }
+            return result;
+        }
         var clauses = store.HeritageClauses(node);
         if (!clauses.IsNone)
         {
