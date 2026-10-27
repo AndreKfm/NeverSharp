@@ -77,7 +77,12 @@ internal sealed partial class Checker
             }
             else if (store.Kind(parent) == SyntaxKind.MetaProperty && store.Name(parent) == n)
             {
-                // the `meta` of import.meta: the transient member of getGlobalImportMetaExpressionType (TODO(C5): new.target)
+                if (store.KeywordToken(parent) == SyntaxKind.NewKeyword && store.Texts.Equals(store.EscapedText(n), "target"))
+                {
+                    // `target` in `new.target`
+                    return Types.Symbol(CheckNewTargetMetaProperty(At(node, parent)));
+                }
+                // the `meta` of import.meta: the transient member of getGlobalImportMetaExpressionType
                 if (store.KeywordToken(parent) == SyntaxKind.ImportKeyword && store.Texts.Equals(store.EscapedText(n), "meta"))
                 {
                     return GetImportMetaExpressionMetaSymbol();
@@ -386,8 +391,7 @@ internal sealed partial class Checker
             }
             if (nameKind == SyntaxKind.PrivateIdentifier)
             {
-                // TODO(C5): getSymbolForPrivateIdentifierExpression
-                return SymbolRef.None;
+                return GetSymbolForPrivateIdentifierExpression(nameRef);
             }
             if (nameKind is SyntaxKind.PropertyAccessExpression or SyntaxKind.QualifiedName)
             {
@@ -398,6 +402,11 @@ internal sealed partial class Checker
                 if (nameKind == SyntaxKind.PropertyAccessExpression)
                 {
                     CheckPropertyAccessExpression(nameRef);
+                    if (!SymbolNodeLinks.Has(nameRef) || SymbolNodeLinks.Get(nameRef).ResolvedSymbol.IsNone)
+                    {
+                        var indexSymbol = GetApplicableIndexSymbol(CheckExpressionCached(At(nameRef, store.Expression(nameRef.Node))), GetLiteralTypeFromPropertyName(At(nameRef, store.Name(nameRef.Node))));
+                        SymbolNodeLinks.Get(nameRef).ResolvedSymbol = indexSymbol;
+                    }
                 }
                 else
                 {

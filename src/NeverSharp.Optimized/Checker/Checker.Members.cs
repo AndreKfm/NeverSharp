@@ -1791,9 +1791,10 @@ internal sealed partial class Checker
                     return GetTypeOfFuncClassEnumModule(symbol);
                 }
                 // (JSDoc types of JavaScript declarations: C9d)
-                type = store.Kind(store.Parent(declaration.Node)) == SyntaxKind.BinaryExpression ? GetWidenedTypeForAssignmentDeclaration(symbol) : anyType;
+                type = store.Kind(store.Parent(declaration.Node)) == SyntaxKind.BinaryExpression && !Utilities.IsInJSFile(store, declaration.Node) ? GetWidenedTypeForAssignmentDeclaration(symbol)
+                    : anyType; // TODO(C9d): JavaScript assignment declarations (`this.x =` in constructors, CommonJS exports)
                 break;
-            case SyntaxKind.BinaryExpression:
+            case SyntaxKind.BinaryExpression when !Utilities.IsInJSFile(store, declaration.Node):
                 type = GetWidenedTypeForAssignmentDeclaration(symbol);
                 break;
             case SyntaxKind.PropertyAssignment:
@@ -1909,7 +1910,8 @@ internal sealed partial class Checker
         {
             var originalSymbol = symbol;
             var valueDeclaration = ValueDeclarationOf(symbol);
-            var expando = valueDeclaration.IsNone ? SymbolRef.None : GetSymbolOfExpando(valueDeclaration, allowDeclaration: false);
+            // TODO(C9d): the expandos of JavaScript files
+            var expando = valueDeclaration.IsNone || Utilities.IsInJSFile(StoreOf(valueDeclaration), valueDeclaration.Node) ? SymbolRef.None : GetSymbolOfExpando(valueDeclaration, allowDeclaration: false);
             if (!expando.IsNone)
             {
                 var merged = MergeJSSymbols(symbol, expando);
@@ -2135,7 +2137,8 @@ internal sealed partial class Checker
             return anyType;
         }
         var declaration = ValueDeclarationOf(symbol);
-        if (!declaration.IsNone && (Kind(declaration) == SyntaxKind.BinaryExpression ||
+        // TODO(C9d): JavaScript assignment declarations
+        if (!declaration.IsNone && !Utilities.IsInJSFile(StoreOf(declaration), declaration.Node) && (Kind(declaration) == SyntaxKind.BinaryExpression ||
             (Utilities.IsAccessExpression(StoreOf(declaration), declaration.Node) && Kind(Parent(declaration)) == SyntaxKind.BinaryExpression)))
         {
             return GetWidenedTypeForAssignmentDeclaration(symbol);

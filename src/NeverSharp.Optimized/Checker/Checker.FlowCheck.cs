@@ -303,11 +303,94 @@ internal sealed partial class Checker
             Type = predicate.Type.IsNone ? Type.None : InstantiateType(predicate.Type, (TypeMapper)mapper),
         };
 
+    // getNodeLinks(parent).flags & NodeCheckFlags.InCheckIdentifier of binding patterns' parents
+    private readonly HashSet<NodeRef> inCheckIdentifier = [];
+
+    // checker.ts getNarrowedTypeOfSymbol
+    internal Type GetNarrowedTypeOfSymbol(SymbolRef symbol, NodeRef location)
+    {
+        var type = GetTypeOfSymbol(symbol);
+        var declaration = ValueDeclarationOf(symbol);
+        if (declaration.IsNone)
+        {
+            return type;
+        }
+        var store = StoreOf(declaration);
+        var d = declaration.Node;
+        // If we have a non-rest binding element with no initializer declared as a const variable or a const-like
+        // parameter (a parameter for which there are no assignments in the function body), and if the parent type
+        // for the destructuring is a union type, one or more of the binding elements may represent discriminant
+        // properties, and we want the effects of conditional checks on such discriminants to affect the types of
+        // other binding elements from the same destructuring. We use the binding pattern as a pseudo-reference.
+        if (store.Kind(d) == SyntaxKind.BindingElement && store.Initializer(d).IsNone && store.DotDotDotToken(d).IsNone && store.Length(store.Elements(store.Parent(d))) >= 2)
+        {
+            var parent = At(declaration, store.Parent(store.Parent(d)));
+            var rootDeclaration = At(declaration, Utilities.GetRootDeclaration(store, parent.Node));
+            if ((store.Kind(rootDeclaration.Node) == SyntaxKind.VariableDeclaration && (Utilities.GetCombinedNodeFlags(store, rootDeclaration.Node) & NodeFlags.Constant) != 0) ||
+                store.Kind(rootDeclaration.Node) == SyntaxKind.Parameter)
+            {
+                if (inCheckIdentifier.Add(parent))
+                {
+                    var parentType = GetTypeForBindingElementParent(parent, CheckMode.Normal);
+                    var parentTypeConstraint = parentType.IsNone ? Type.None : MapType(parentType, GetBaseConstraintOrType);
+                    inCheckIdentifier.Remove(parent);
+                    if (!parentTypeConstraint.IsNone && (Types.Flags(parentTypeConstraint) & TypeFlags.Union) != 0 &&
+                        !(store.Kind(rootDeclaration.Node) == SyntaxKind.Parameter && IsSomeSymbolAssigned(rootDeclaration)))
+                    {
+                        var pattern = At(declaration, store.Parent(d));
+                        var narrowedType = GetFlowTypeOfReference(pattern, parentTypeConstraint, parentTypeConstraint, NodeRef.None, new FlowRef(location.File, FlowNodeOf(location)));
+                        if ((Types.Flags(narrowedType) & TypeFlags.Never) != 0)
+                        {
+                            return neverType;
+                        }
+                        // Destructurings are validated against the parent type elsewhere. Here we disable tuple bounds
+                        // checks because the narrowed type may have lower arity than the full parent type.
+                        return GetBindingElementTypeFromParentType(declaration, narrowedType, noTupleBoundsCheck: true);
+                    }
+                }
+            }
+        }
+        // If we have a const-like parameter with no type annotation or initializer, and if the parameter is contextually
+        // typed by a signature with a single rest parameter of a union of tuple types, one or more of the parameters may
+        // represent discriminant tuple elements. We use the function as a pseudo-reference.
+        if (store.Kind(d) == SyntaxKind.Parameter && store.Type(d).IsNone && store.Initializer(d).IsNone && store.DotDotDotToken(d).IsNone)
+        {
+            var func = At(declaration, store.Parent(d));
+            var parameters = store.Parameters(func.Node);
+            if (store.Length(parameters) >= 2 && IsContextSensitiveFunctionOrObjectLiteralMethod(store, func.Node))
+            {
+                var contextualSignature = GetContextualSignature(func);
+                if (!contextualSignature.IsNone && Signatures.Record(contextualSignature).Parameters.Length == 1 && SignatureHasRestParameter(contextualSignature))
+                {
+                    var restType = GetReducedApparentType(InstantiateType(GetTypeOfSymbol(Signatures.Record(contextualSignature).Parameters[0]), GetInferenceContext(func)?.NonFixingMapper));
+                    var anyAssigned = false;
+                    var position = 0;
+                    var index = -1;
+                    foreach (var p in store.Nodes(parameters))
+                    {
+                        anyAssigned |= IsSomeSymbolAssigned(At(func, p));
+                        if (p == d)
+                        {
+                            index = position;
+                        }
+                        position++;
+                    }
+                    if ((Types.Flags(restType) & TypeFlags.Union) != 0 && EveryType(restType, IsTupleType) && !anyAssigned)
+                    {
+                        var narrowedType = GetFlowTypeOfReference(func, restType, restType, NodeRef.None, new FlowRef(location.File, FlowNodeOf(location)));
+                        index -= GetThisParameter(store, func.Node).IsNone ? 0 : 1;
+                        return GetIndexedAccessType(narrowedType, GetNumberLiteralType(index));
+                    }
+                }
+            }
+        }
+        return type;
+    }
+
     // ---- checkIdentifier ----
 
     // checker.ts checkIdentifier from getNarrowableTypeForReference on: the declared and initial types and the flow type
     // of a variable, parameter or alias reference, definite assignment (2454), auto-typed variables (7005/7034)
-    // (TODO(C7 follow-up): the pseudo-references of getNarrowedTypeOfSymbol for destructured discriminants)
     internal Type CheckIdentifierFlowType(NodeRef node, SymbolRef symbol, SymbolRef localOrExportSymbol, NodeRef declaration, Type type, AssignmentKind assignmentKind, bool isAlias, CheckMode checkMode)
     {
         // A cycle through approximate expression checks would overflow the stack and end the process; it fails the check

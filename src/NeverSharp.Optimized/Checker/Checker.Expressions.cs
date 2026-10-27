@@ -1167,7 +1167,7 @@ internal sealed partial class Checker
 
     // ---- identifiers ----
 
-    /// <summary>checker.ts checkIdentifier (the flow part: Checker.FlowCheck.cs; TODO(C7 follow-up): getNarrowedTypeOfSymbol's destructured discriminants).</summary>
+    /// <summary>checker.ts checkIdentifier (the flow part and getNarrowedTypeOfSymbol: Checker.FlowCheck.cs).</summary>
     internal Type CheckIdentifier(NodeRef node, CheckMode checkMode = CheckMode.Normal)
     {
         var store = StoreOf(node);
@@ -1205,7 +1205,7 @@ internal sealed partial class Checker
         {
             return nonInferrableAnyType;
         }
-        var type = GetTypeOfSymbol(localOrExportSymbol);
+        var type = GetNarrowedTypeOfSymbol(localOrExportSymbol, node);
         var assignmentKind = GetAssignmentTargetKind(node);
         var flags = SymbolFlagsOf(localOrExportSymbol);
         if (assignmentKind != AssignmentKind.None)
