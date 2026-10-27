@@ -586,6 +586,74 @@ internal sealed class DiagnosticCollection
         DiagnosticCode(a) == DiagnosticCode(b) &&
         string.Equals(DiagnosticHeadMessage(a), DiagnosticHeadMessage(b), StringComparison.Ordinal);
 
+    /// <summary>
+    /// utilitiesPublic.ts sortAndDeduplicateDiagnostics (sortAndDeduplicate with compareDiagnostics and
+    /// diagnosticsEqualityComparer): a stable sort, then runs of equal diagnostics are reduced to their first.
+    /// </summary>
+    internal static List<ProgramDiagnostic> SortAndDeduplicate(List<ProgramDiagnostic> diagnostics)
+    {
+        if (diagnostics.Count < 2)
+        {
+            return diagnostics;
+        }
+        var indexed = new (ProgramDiagnostic Diagnostic, int Index)[diagnostics.Count];
+        for (var i = 0; i < indexed.Length; i++)
+        {
+            indexed[i] = (diagnostics[i], i);
+        }
+        Array.Sort(indexed, (a, b) =>
+        {
+            var c = CompareDiagnostics(a.Diagnostic, b.Diagnostic);
+            return c != 0 ? c : a.Index.CompareTo(b.Index);
+        });
+        var result = new List<ProgramDiagnostic>(indexed.Length) { indexed[0].Diagnostic };
+        for (var i = 1; i < indexed.Length; i++)
+        {
+            if (!EqualityComparer(result[^1], indexed[i].Diagnostic))
+            {
+                result.Add(indexed[i].Diagnostic);
+            }
+        }
+        return result;
+    }
+
+    // utilities.ts compareDiagnostics
+    private static int CompareDiagnostics(DiagnosticRelatedInformation d1, DiagnosticRelatedInformation d2)
+    {
+        var c = CompareSkipRelatedInformation(d1, d2);
+        return c != 0 ? c : CompareRelatedInformation(d1, d2);
+    }
+
+    // utilities.ts compareRelatedInformation: a diagnostic with more elaboration is *less than* one with less elaboration
+    // that is otherwise similar.
+    private static int CompareRelatedInformation(DiagnosticRelatedInformation d1, DiagnosticRelatedInformation d2)
+    {
+        var r1 = (d1 as Diagnostic)?.RelatedInformation;
+        var r2 = (d2 as Diagnostic)?.RelatedInformation;
+        if (r1 is null && r2 is null)
+        {
+            return 0;
+        }
+        if (r1 is not null && r2 is not null)
+        {
+            var c = r2.Count.CompareTo(r1.Count);
+            if (c != 0)
+            {
+                return Math.Sign(c);
+            }
+            for (var i = 0; i < r1.Count; i++)
+            {
+                c = CompareDiagnostics(r1[i], r2[i]);
+                if (c != 0)
+                {
+                    return c;
+                }
+            }
+            return 0;
+        }
+        return r1 is not null ? -1 : 1;
+    }
+
     /// <summary>utilities.ts compareDiagnosticsSkipRelatedInformation.</summary>
     internal static int CompareSkipRelatedInformation(DiagnosticRelatedInformation d1, DiagnosticRelatedInformation d2)
     {

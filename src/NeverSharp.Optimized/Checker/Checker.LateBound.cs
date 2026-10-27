@@ -33,11 +33,9 @@ internal sealed partial class Checker
             return false;
         }
         var expression = store.Kind(name.Node) == SyntaxKind.ComputedPropertyName ? store.Expression(name.Node) : store.ArgumentExpression(name.Node);
-        return Utilities.IsEntityNameExpression(store, expression) && IsTypeUsableAsPropertyName(CheckLateBoundNameExpression(At(name, expression)));
+        return Utilities.IsEntityNameExpression(store, expression) &&
+            IsTypeUsableAsPropertyName(store.Kind(name.Node) == SyntaxKind.ComputedPropertyName ? CheckComputedPropertyName(name) : CheckExpressionCached(At(name, expression)));
     }
-
-    // checkComputedPropertyName / checkExpressionCached of the name's expression (the computed name checks: C8)
-    private Type CheckLateBoundNameExpression(NodeRef expression) => CheckExpressionCached(expression);
 
     // checker.ts hasLateBindableName
     private bool HasLateBindableName(NodeRef node)
@@ -122,7 +120,7 @@ internal sealed partial class Checker
             lateBoundMemberSymbols[decl] = declSymbol;
             var declName = GetNameOfDeclarationRef(decl);
             var store = StoreOf(declName);
-            var type = CheckLateBoundNameExpression(At(declName, store.Kind(declName.Node) == SyntaxKind.ElementAccessExpression ? store.ArgumentExpression(declName.Node) : store.Expression(declName.Node)));
+            var type = store.Kind(declName.Node) == SyntaxKind.ElementAccessExpression ? CheckExpressionCached(At(declName, store.ArgumentExpression(declName.Node))) : CheckComputedPropertyName(declName);
             if (IsTypeUsableAsPropertyName(type))
             {
                 var memberName = GetPropertyNameFromType(type);

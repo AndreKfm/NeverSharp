@@ -2082,7 +2082,12 @@ internal sealed partial class Checker
         // We should test against `getTextOfNode(node)` rather than `node.text`, because `node.text` for large numeric literals can contain "."
         // e.g. `node.text` for numeric literal `1100000000000000000000` is `1.1e21`.
         var store = StoreOf(node);
-        var isFractional = GetTextOfNode(node).Contains('.', StringComparison.Ordinal);
+        var text = FileTextOf(node.File);
+        var isFractional = false;
+        for (var i = Scanner.SkipTrivia(text, store.Pos(node.Node)); i < store.End(node.Node); i++)
+        {
+            isFractional |= text[i] == '.';
+        }
         var isScientific = (store.NumericLiteralFlags(node.Node) & TokenFlags.Scientific) != 0;
         // Scientific notation (e.g. 2e54 and 1e00000000010) can't be converted to bigint
         // Fractional numbers (e.g. 9000000000000000.001) are inherently imprecise anyway

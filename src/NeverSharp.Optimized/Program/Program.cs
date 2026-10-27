@@ -225,8 +225,7 @@ internal sealed class Program
     /// program.getOptionsDiagnostics(): the diagnostics of file processing without a file (e.g. TS6504 for a JavaScript
     /// root file without allowJs) and the emit-path check of verifyCompilerOptions (TS5055 for a JavaScript root file
     /// whose output would overwrite it; the rest of option validation finds nothing for the options C0 supports).
-    /// (TypeScript sorts and deduplicates these, sortAndDeduplicateDiagnostics: not needed while at most one
-    /// exists per program, C8 ports it.)
+    /// Sorted and deduplicated (sortAndDeduplicateDiagnostics, module C8).
     /// </summary>
     internal List<ProgramDiagnostic> GetOptionsDiagnostics()
     {
@@ -240,7 +239,7 @@ internal sealed class Program
         }
         // the configuration diagnostics of verifyCompilerOptions (TS5055/TS5056 of the emit paths; module C9a)
         result.AddRange(configDiagnostics);
-        return result;
+        return DiagnosticCollection.SortAndDeduplicate(result);
     }
 
     /// <summary>program.getGlobalDiagnostics(): the checker's global diagnostics.</summary>
@@ -274,7 +273,8 @@ internal sealed class Program
         {
             result.Add(ProgramDiagnostic.FromFile(file, d));
         }
-        return result;
+        // getDiagnosticsHelper: sortAndDeduplicateDiagnostics (module C8)
+        return DiagnosticCollection.SortAndDeduplicate(result);
     }
 
     /// <summary>
@@ -324,9 +324,10 @@ internal sealed class Program
         var commentDirectives = store.CommentDirectives(file.Root);
         if (isPlainJs || commentDirectives is not { Count: > 0 })
         {
-            return result;
+            return DiagnosticCollection.SortAndDeduplicate(result);
         }
-        return GetDiagnosticsWithPrecedingDirectives(file, commentDirectives, result);
+        // getDiagnosticsHelper: sortAndDeduplicateDiagnostics (module C8)
+        return DiagnosticCollection.SortAndDeduplicate(GetDiagnosticsWithPrecedingDirectives(file, commentDirectives, result));
     }
 
     // utilities.ts isPlainJsFile

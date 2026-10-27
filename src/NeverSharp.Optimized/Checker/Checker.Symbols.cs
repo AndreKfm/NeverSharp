@@ -773,7 +773,8 @@ internal sealed partial class Checker
         return exports;
     }
 
-    // getExportsOfModuleWorker's visit (type-only export stars: TODO(C8)).
+    // getExportsOfModuleWorker's visit (typeOnlyExportStarMap: `export type *` re-exports name other files, which Gate C
+    // programs do not resolve; not ported).
     private SymTable? VisitModuleExports(SymbolRef symbol, List<SymbolRef> visitedSymbols)
     {
         var symbolExports = symbol.IsNone ? null : ExportsOf(symbol);
