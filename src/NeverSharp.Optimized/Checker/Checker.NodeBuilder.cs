@@ -1754,7 +1754,7 @@ internal sealed partial class Checker
                 var store = StoreOf(e);
                 var name = store.Name(e.Node);
                 return !name.IsNone && store.Kind(name) == SyntaxKind.ComputedPropertyName && Utilities.IsEntityNameExpression(store, store.Expression(name)) &&
-                    !context.EnclosingDeclaration.IsNone && IsEntityNameVisible(At(e, store.Expression(name)), context.EnclosingDeclaration, null) == SymbolAccessibility.Accessible;
+                    !context.EnclosingDeclaration.IsNone && IsEntityNameVisible(At(e, store.Expression(name)), context.EnclosingDeclaration, context.FakeScope) == SymbolAccessibility.Accessible;
             });
             if (allComponentComputedNamesSerializable)
             {

@@ -86,13 +86,13 @@ internal sealed partial class Checker
         // Then just add the computed name as a late bound declaration
         // (note: unlike `addDeclarationToLateBoundSymbol` we do not set up a `.lateSymbol` on `decl`'s links,
         // since that would point at an index symbol and not a single property symbol, like most consumers would expect)
-        // (isReplaceableByMethod: JavaScript `this` assignments, C9d)
+        var declSymbol = NodeSymbol(decl);
         ref var record = ref TransientSymbols.Record(indexSymbol);
         if (record.Declarations is null)
         {
             record.Declarations = [decl];
         }
-        else
+        else if (declSymbol.IsNone || declSymbol.IsTransient || BindingOf(declSymbol.File).IsReplaceableByMethod(declSymbol.BinderSymbol) != true)
         {
             record.Declarations.Add(decl);
         }
@@ -260,9 +260,8 @@ internal sealed partial class Checker
         {
             record.Declarations = [member];
         }
-        else
+        else if (memberSymbol.IsNone || memberSymbol.IsTransient || BindingOf(memberSymbol.File).IsReplaceableByMethod(memberSymbol.BinderSymbol) != true)
         {
-            // (isReplaceableByMethod members of JavaScript: C9)
             record.Declarations.Add(member);
         }
         if ((symbolFlags & SymbolFlags.Value) != 0)
