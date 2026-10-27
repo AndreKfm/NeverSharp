@@ -237,7 +237,39 @@ internal sealed partial class Checker
         // in order to prevent collisions with declarations that were exported from the current module (they still contribute to local names).
         var exportSymbol = ExportSymbolOf(symbol);
         symbol = GetMergedSymbol(exportSymbol.IsNone ? symbol : exportSymbol);
-        // (type-only imports and exports in JavaScript files: TODO(C9d))
+        // A type-only import/export will already have a grammar error in a JS file, so no need to issue more errors within
+        var aliasStore = StoreOf(node);
+        if (Utilities.IsInJSFile(aliasStore, node.Node) && (GetSymbolFlags(target) & SymbolFlags.Value) == 0 && !IsTypeOnlyImportOrExportDeclaration(node))
+        {
+            var aliasKind = aliasStore.Kind(node.Node);
+            var errorNode = aliasKind is SyntaxKind.ImportSpecifier or SyntaxKind.ExportSpecifier
+                ? (!aliasStore.PropertyName(node.Node).IsNone ? aliasStore.PropertyName(node.Node) : aliasStore.Name(node.Node))
+                : !aliasStore.Name(node.Node).IsNone ? aliasStore.Name(node.Node) : node.Node;
+            if (aliasKind == SyntaxKind.ExportSpecifier)
+            {
+                // (the related "automatically exported here" information names a JSDoc declaration of another file's
+                // symbol: not reached in Gate C's one-file programs)
+                Error(At(node, errorNode), Diagnostics.Types_cannot_appear_in_export_declarations_in_JavaScript_files);
+            }
+            else
+            {
+                var importDeclaration = node.Node;
+                while (!importDeclaration.IsNone && aliasStore.Kind(importDeclaration) is not (SyntaxKind.ImportDeclaration or SyntaxKind.ImportEqualsDeclaration))
+                {
+                    importDeclaration = aliasStore.Parent(importDeclaration);
+                }
+                var specifierNode = importDeclaration.IsNone ? Node.None
+                    : aliasStore.Kind(importDeclaration) == SyntaxKind.ImportDeclaration ? aliasStore.ModuleSpecifier(importDeclaration)
+                    : aliasStore.Kind(aliasStore.ModuleReference(importDeclaration)) == SyntaxKind.ExternalModuleReference ? aliasStore.Expression(aliasStore.ModuleReference(importDeclaration))
+                    : Node.None;
+                var moduleSpecifier = !specifierNode.IsNone && Utilities.IsStringLiteralLike(aliasStore, specifierNode) ? aliasStore.Texts.GetString(aliasStore.Text(specifierNode))! : "...";
+                var importedIdentifier = aliasStore.Kind(errorNode) == SyntaxKind.Identifier ? aliasStore.Texts.GetString(aliasStore.EscapedText(errorNode))! : NameOf(GetMergedSymbol(ExportSymbolOf(symbol).IsNone ? symbol : ExportSymbolOf(symbol)));
+                importedIdentifier = Utilities.UnescapeLeadingUnderscores(importedIdentifier);
+                Error(At(node, errorNode), Diagnostics._0_is_a_type_and_cannot_be_imported_in_JavaScript_files_Use_1_in_a_JSDoc_type_annotation,
+                    importedIdentifier, "import(\"" + moduleSpecifier + "\")." + importedIdentifier);
+            }
+            return;
+        }
         var targetFlags = GetSymbolFlags(target);
         var symbolFlags = SymbolFlagsOf(symbol);
         var excludedMeanings = ((symbolFlags & (SymbolFlags.Value | SymbolFlags.ExportValue)) != 0 ? SymbolFlags.Value : 0) |

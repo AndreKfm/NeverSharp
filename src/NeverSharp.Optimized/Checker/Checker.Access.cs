@@ -487,8 +487,8 @@ internal sealed partial class Checker
         return false;
     }
 
-    // checker.ts getFlowTypeOfAccessExpression (module C7: getFlowTypeOfProperty and the flow type; TODO(C9d): JavaScript
-    // assignment declarations)
+    // checker.ts getFlowTypeOfAccessExpression (module C7: getFlowTypeOfProperty and the flow type; module C9d: duplicated
+    // CommonJS exports and JavaScript assignment declarations)
     private Type GetFlowTypeOfAccessExpression(NodeRef node, SymbolRef prop, Type propType, NodeRef errorNode, CheckMode checkMode)
     {
         // Only compute control flow type if this is a property access expression that isn't an
@@ -500,7 +500,8 @@ internal sealed partial class Checker
             return RemoveMissingType(propType, !prop.IsNone && (SymbolFlagsOf(prop) & SymbolFlags.Optional) != 0);
         }
         if (!prop.IsNone && (SymbolFlagsOf(prop) & (SymbolFlags.Variable | SymbolFlags.Property | SymbolFlags.Accessor)) == 0 &&
-            !((SymbolFlagsOf(prop) & SymbolFlags.Method) != 0 && (Types.Flags(propType) & TypeFlags.Union) != 0))
+            !((SymbolFlagsOf(prop) & SymbolFlags.Method) != 0 && (Types.Flags(propType) & TypeFlags.Union) != 0) &&
+            !IsDuplicatedCommonJSExport(DeclarationsOf(prop)))
         {
             return propType;
         }

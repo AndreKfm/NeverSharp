@@ -216,9 +216,17 @@ internal sealed partial class Checker
                     {
                         return GrammarErrorOnNode(nodeRef, Diagnostics.A_class_member_cannot_have_the_0_keyword, Scanner.TokenToString(SyntaxKind.ConstKeyword));
                     }
-                    // (JSDoc template tags: TODO(C9d))
-                    if (kind == SyntaxKind.TypeParameter && !(Utilities.IsFunctionLikeDeclaration(store, parent) || Utilities.IsClassLike(store, parent) ||
-                        store.Kind(parent) is SyntaxKind.FunctionType or SyntaxKind.ConstructorType or SyntaxKind.CallSignature or SyntaxKind.ConstructSignature or SyntaxKind.MethodSignature))
+                    var constParent = parent;
+                    if (store.Kind(parent) == SyntaxKind.JSDocTemplateTag)
+                    {
+                        var jsDocHost = Utilities.GetEffectiveJSDocHost(store, parent);
+                        if (!jsDocHost.IsNone)
+                        {
+                            constParent = jsDocHost;
+                        }
+                    }
+                    if (kind == SyntaxKind.TypeParameter && !(Utilities.IsFunctionLikeDeclaration(store, constParent) || Utilities.IsClassLike(store, constParent) ||
+                        store.Kind(constParent) is SyntaxKind.FunctionType or SyntaxKind.ConstructorType or SyntaxKind.CallSignature or SyntaxKind.ConstructSignature or SyntaxKind.MethodSignature))
                     {
                         return GrammarErrorOnNode(modifier, Diagnostics._0_modifier_can_only_appear_on_a_type_parameter_of_a_function_method_or_class, tokenText);
                     }
@@ -549,8 +557,29 @@ internal sealed partial class Checker
                 {
                     var inOutFlag = modifierKind == SyntaxKind.InKeyword ? ModifierFlags.In : ModifierFlags.Out;
                     var inOutText = modifierKind == SyntaxKind.InKeyword ? "in" : "out";
-                    // (JSDoc template tags: TODO(C9d))
-                    if (kind != SyntaxKind.TypeParameter || !parent.IsNone && !(store.Kind(parent) is SyntaxKind.InterfaceDeclaration or SyntaxKind.TypeAliasDeclaration || Utilities.IsClassLike(store, parent)))
+                    var inOutParent = parent;
+                    if (store.Kind(parent) == SyntaxKind.JSDocTemplateTag)
+                    {
+                        var jsDocHost = Utilities.GetEffectiveJSDocHost(store, parent);
+                        if (jsDocHost.IsNone)
+                        {
+                            var root = GetJSDocRoot(store, parent);
+                            ReadOnlySpan<Node> rootTags = root.IsNone ? default : store.Nodes(store.Tags(root));
+                            foreach (var tag in rootTags)
+                            {
+                                if (store.Kind(tag) == SyntaxKind.JSDocTypedefTag)
+                                {
+                                    jsDocHost = tag;
+                                    break;
+                                }
+                            }
+                        }
+                        if (!jsDocHost.IsNone)
+                        {
+                            inOutParent = jsDocHost;
+                        }
+                    }
+                    if (kind != SyntaxKind.TypeParameter || !inOutParent.IsNone && !(store.Kind(inOutParent) is SyntaxKind.InterfaceDeclaration or SyntaxKind.TypeAliasDeclaration or SyntaxKind.JSDocTypedefTag || Utilities.IsClassLike(store, inOutParent)))
                     {
                         return GrammarErrorOnNode(modifier, Diagnostics._0_modifier_can_only_appear_on_a_type_parameter_of_a_class_interface_or_type_alias, inOutText);
                     }
@@ -1216,7 +1245,15 @@ internal sealed partial class Checker
             {
                 parent = store.Parent(parent);
             }
-            // (JSDoc type expressions of JavaScript files: TODO(C9d))
+            if (Utilities.IsInJSFile(store, parent) && store.Kind(parent) == SyntaxKind.JSDocTypeExpression)
+            {
+                var host = Utilities.GetJSDocHost(store, parent);
+                if (!host.IsNone)
+                {
+                    var single = GetSingleVariableOfVariableStatement(store, host);
+                    parent = !single.IsNone ? single : host;
+                }
+            }
             switch (store.Kind(parent))
             {
                 case SyntaxKind.VariableDeclaration:

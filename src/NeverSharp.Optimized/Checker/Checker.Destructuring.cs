@@ -250,7 +250,19 @@ internal sealed partial class Checker
     {
         var store = StoreOf(declaration);
         var widened = (Utilities.GetCombinedNodeFlags(store, declaration.Node) & NodeFlags.Constant) != 0 || IsDeclarationReadonly(store, declaration.Node) ? type : GetWidenedLiteralType(type);
-        // (JSDoc enum tags: C9)
+        if (Utilities.IsInJSFile(store, declaration.Node))
+        {
+            if (IsEmptyLiteralType(widened))
+            {
+                ReportImplicitAny(declaration, anyType);
+                return anyType;
+            }
+            if (IsEmptyArrayLiteralType(widened))
+            {
+                ReportImplicitAny(declaration, anyArrayType);
+                return anyArrayType;
+            }
+        }
         return widened;
     }
 

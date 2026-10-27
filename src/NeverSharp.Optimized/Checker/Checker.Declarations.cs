@@ -861,7 +861,16 @@ internal sealed partial class Checker
                 GetReturnTypeOfSignature(GetSignatureFromDeclaration(node));
             }
         }
-        // (the @type tag of a JavaScript function declaration: TODO(C9d))
+        // A js function declaration can have a @type tag instead of a return type node, but that type must have a call signature
+        if (Utilities.IsInJSFile(store, n))
+        {
+            var typeTag = UtilitiesPublic.GetJSDocTypeTag(store, n);
+            if (!typeTag.IsNone && !store.TypeExpression(typeTag).IsNone &&
+                GetContextualCallSignature(GetTypeFromTypeNode(At(node, store.TypeExpression(typeTag))), node).IsNone)
+            {
+                Error(At(node, store.Type(store.TypeExpression(typeTag))), Diagnostics.The_type_of_a_function_declaration_must_match_the_function_s_signature);
+            }
+        }
     }
 
     // node.localSymbol (the binder's local symbol of an exported declaration)

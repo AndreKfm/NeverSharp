@@ -323,7 +323,8 @@ internal sealed partial class Checker
         var inConstContext = IsConstContext(node);
         var checkFlags = inConstContext ? CheckFlags.Readonly : CheckFlags.None;
         var isInJavascript = Utilities.IsInJSFile(store, n) && !store.IsDeclarationFile(Utilities.RootOf(store, n)) && !IsInJsonFile(node);
-        var isJSObjectLiteral = contextualType.IsNone && isInJavascript;
+        var enumTag = isInJavascript ? GetFirstJSDocTagOfKind(store, n, SyntaxKind.JSDocEnumTag) : Node.None;
+        var isJSObjectLiteral = contextualType.IsNone && isInJavascript && enumTag.IsNone;
         var objectFlags = ObjectFlags.FreshLiteral;
         var patternWithComputedProperties = false;
         var hasComputedStringProperty = false;
@@ -367,6 +368,19 @@ internal sealed partial class Checker
                 else
                 {
                     type = CheckObjectLiteralMethod(memberDecl, checkMode);
+                }
+                if (isInJavascript)
+                {
+                    var jsDocType = GetTypeForDeclarationFromJSDocComment(memberDecl);
+                    if (!jsDocType.IsNone)
+                    {
+                        CheckTypeAssignableTo(type, jsDocType, memberDecl);
+                        type = jsDocType;
+                    }
+                    else if (!enumTag.IsNone && !store.TypeExpression(enumTag).IsNone)
+                    {
+                        CheckTypeAssignableTo(type, GetTypeFromTypeNode(At(node, store.TypeExpression(enumTag))), memberDecl);
+                    }
                 }
                 objectFlags |= Types.ObjectFlagsOf(type) & ObjectFlags.PropagatingFlags;
                 var nameType = !computedNameType.IsNone && IsTypeUsableAsPropertyName(computedNameType) ? computedNameType : Type.None;
