@@ -925,11 +925,18 @@ internal sealed partial class Checker
         return !baseConstraint.IsNone && MaybeTypeOfKind(baseConstraint, kind);
     }
 
-    // checker.ts checkAssertion / checkAssertionWorker (the .mts/.cts and erasableSyntaxOnly checks are not reached in
-    // Gate C)
+    // checker.ts checkAssertion / checkAssertionWorker (erasableSyntaxOnly is not an option of Gate C)
     private Type CheckAssertion(NodeRef node, CheckMode checkMode)
     {
         var store = StoreOf(node);
+        if (store.Kind(node.Node) == SyntaxKind.TypeAssertionExpression)
+        {
+            var fileName = FileNameOf(node.File);
+            if (fileName.EndsWith(".cts", StringComparison.Ordinal) || fileName.EndsWith(".mts", StringComparison.Ordinal))
+            {
+                GrammarErrorOnNode(node, Diagnostics.This_syntax_is_reserved_in_files_with_the_mts_or_cts_extension_Use_an_as_expression_instead);
+            }
+        }
         var typeNode = GetAssertionTypeNode(node);
         var expression = At(node, store.Expression(node.Node));
         var exprType = CheckExpression(expression, checkMode);

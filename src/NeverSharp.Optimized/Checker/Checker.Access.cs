@@ -491,7 +491,7 @@ internal sealed partial class Checker
             }
             var typeClassName = StoreOf(typeClass).Name(typeClass.Node);
             Error(right, Diagnostics.Property_0_is_not_accessible_outside_class_1_because_it_has_a_private_identifier, diagName,
-                typeClassName.IsNone ? "(Anonymous class)" : DiagnosticName("", At(typeClass, typeClassName)));
+                typeClassName.IsNone ? "(anonymous)" : DiagnosticName("", At(typeClass, typeClassName))); // checker.ts anon
             return true;
         }
         return false;

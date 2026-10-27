@@ -586,6 +586,8 @@ internal sealed partial class Checker
     private Type CheckObjectLiteralMethod(NodeRef node, CheckMode checkMode)
     {
         var store = StoreOf(node);
+        // Grammar checking
+        CheckGrammarMethod(node);
         // Do not use hasDynamicName here, because that returns false for well known symbols.
         // We want to perform checkComputedPropertyName for all computed properties, including
         // well known symbols.
@@ -937,6 +939,10 @@ internal sealed partial class Checker
                     if (!store.QuestionToken(prop).IsNone)
                     {
                         GrammarErrorOnNode(At(node, store.QuestionToken(prop)), Diagnostics.An_object_member_cannot_be_declared_optional);
+                    }
+                    if (store.Kind(name) == SyntaxKind.NumericLiteral)
+                    {
+                        CheckGrammarNumericLiteral(At(node, name));
                     }
                     if (store.Kind(name) == SyntaxKind.BigIntLiteral)
                     {

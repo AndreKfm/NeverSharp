@@ -87,9 +87,54 @@ internal sealed partial class Checker
         }
     }
 
-    // checker.ts checkImportAttributes. The relation of the attributes' object type to the global ImportAttributes type
-    // ({ [key: string]: string }) is not checked: attribute values that are not string literals are reported by
-    // checkExternalImportOrExportDeclaration already.
+    // checker.ts getGlobalImportAttributesType
+    private Type deferredGlobalImportAttributesType;
+
+    private Type GetGlobalImportAttributesType(bool reportErrors)
+    {
+        if (deferredGlobalImportAttributesType.IsNone)
+        {
+            deferredGlobalImportAttributesType = GetGlobalType("ImportAttributes", 0, reportErrors);
+        }
+        return deferredGlobalImportAttributesType.IsNone ? emptyObjectType : deferredGlobalImportAttributesType;
+    }
+
+    // checker.ts getTypeFromImportAttributes
+    private Type GetTypeFromImportAttributes(NodeRef node)
+    {
+        if (TypeNodeLinks.Has(node) && !TypeNodeLinks.Get(node).ResolvedType.IsNone)
+        {
+            return TypeNodeLinks.Get(node).ResolvedType;
+        }
+        var store = StoreOf(node);
+        var symbol = CreateSymbol(SymbolFlags.ObjectLiteral, InternalSymbolName.ImportAttributes);
+        var members = new SymTable();
+        foreach (var attr in store.Nodes(store.Elements(node.Node)))
+        {
+            var member = CreateSymbol(SymbolFlags.Property, GetNameFromImportAttribute(store, attr));
+            TransientSymbols.Record(member).Parent = symbol;
+            var memberType = CheckImportAttribute(At(node, attr));
+            ValueSymbolLinks.Get(member).ResolvedType = memberType;
+            ValueSymbolLinks.Get(member).Target = member;
+            members.Set(NameOf(member), member);
+        }
+        var type = CreateAnonymousType(symbol, members, [], [], []);
+        Types.Record(type).ObjectFlags |= ObjectFlags.ObjectLiteral | ObjectFlags.NonInferrableType;
+        TypeNodeLinks.Get(node).ResolvedType = type;
+        return type;
+    }
+
+    // utilities.ts getNameFromImportAttribute
+    private static string GetNameFromImportAttribute(NodeStore store, Node node)
+    {
+        var name = store.Name(node);
+        return store.Kind(name) == SyntaxKind.Identifier ? store.Texts.GetString(store.EscapedText(name))! : Utilities.EscapeLeadingUnderscores(store.Texts.GetString(store.Text(name))!);
+    }
+
+    // checker.ts checkImportAttribute
+    private Type CheckImportAttribute(NodeRef node) => GetRegularTypeOfLiteralType(CheckExpressionCached(At(node, StoreOf(node).Value(node.Node))));
+
+    // checker.ts checkImportAttributes
     private void CheckImportAttributes(NodeRef declaration)
     {
         var store = StoreOf(declaration);
@@ -99,6 +144,11 @@ internal sealed partial class Checker
             return;
         }
         var attributes = At(declaration, node);
+        var importAttributesType = GetGlobalImportAttributesType(reportErrors: true);
+        if (importAttributesType != emptyObjectType)
+        {
+            CheckTypeAssignableTo(GetTypeFromImportAttributes(attributes), GetNullableType(importAttributesType, TypeFlags.Undefined), attributes);
+        }
         var isImportAttributes = store.Token(node) == SyntaxKind.WithKeyword;
         // isExclusivelyTypeOnlyImportOrExport
         var isTypeOnly = store.Kind(declaration.Node) == SyntaxKind.ExportDeclaration

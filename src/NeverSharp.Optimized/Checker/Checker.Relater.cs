@@ -2435,6 +2435,18 @@ internal sealed partial class Checker
             return related;
         }
 
+        // diagnosticName(factory.getDeclarationName(declaration)) with anon for a declaration without an identifier name
+        private string DeclarationNameForDiagnostic(NodeRef declaration)
+        {
+            if (declaration.IsNone)
+            {
+                return "(anonymous)";
+            }
+            var store = c.StoreOf(declaration);
+            var name = Utilities.GetNameOfDeclaration(store, declaration.Node);
+            return !name.IsNone && store.Kind(name) == SyntaxKind.Identifier ? Utilities.DeclarationNameToString(store, name) : "(anonymous)";
+        }
+
         private void ReportUnmatchedProperty(Type source, Type target, SymbolRef unmatchedProperty, bool requireOptionalProperties)
         {
             var shouldSkipElaboration = false;
@@ -2447,7 +2459,31 @@ internal sealed partial class Checker
                 if (!unmatchedName.IsNone && c.StoreOf(unmatchedDeclaration).Kind(unmatchedName) == SyntaxKind.PrivateIdentifier && !sourceSymbol.IsNone &&
                     (c.SymbolFlagsOf(sourceSymbol) & SymbolFlags.Class) != 0)
                 {
-                    // (Property_0_in_type_1_refers_to_a_different_member_that_cannot_be_accessed_from_within_type_2: private names, module C8)
+                    var ustore = c.StoreOf(unmatchedDeclaration);
+                    var privateIdentifierDescription = ustore.Texts.GetString(ustore.EscapedText(unmatchedName))!;
+                    // getSymbolNameForPrivateIdentifier(source.symbol, description): the member of the source class
+                    // declared with that private name (its symbol table key carries the class symbol's id)
+                    string? symbolTableKey = null;
+                    if (c.MembersOf(sourceSymbol) is { } members)
+                    {
+                        for (var i = 0; i < members.Count; i++)
+                        {
+                            var key = members.NameAt(i);
+                            if (key.StartsWith("__#", StringComparison.Ordinal) && key.EndsWith("@" + privateIdentifierDescription, StringComparison.Ordinal))
+                            {
+                                symbolTableKey = key;
+                                break;
+                            }
+                        }
+                    }
+                    if (symbolTableKey is not null && !c.GetPropertyOfType(source, symbolTableKey).IsNone)
+                    {
+                        var targetSymbol = c.Types.Symbol(target);
+                        ReportError(Diagnostics.Property_0_in_type_1_refers_to_a_different_member_that_cannot_be_accessed_from_within_type_2,
+                            privateIdentifierDescription, DeclarationNameForDiagnostic(c.ValueDeclarationOf(sourceSymbol)),
+                            DeclarationNameForDiagnostic(targetSymbol.IsNone ? NodeRef.None : c.ValueDeclarationOf(targetSymbol)));
+                        return;
+                    }
                 }
             }
             var props = c.GetUnmatchedProperties(source, target, requireOptionalProperties, false);

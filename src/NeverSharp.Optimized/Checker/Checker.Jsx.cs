@@ -1551,10 +1551,8 @@ internal sealed partial class Checker
             return SymbolRef.None;
         }
         var symbol = members.Get(InternalSymbolName.Index);
-        if (infos.Count == allInfos.Count)
-        {
-            return symbol;
-        }
+        // (`infos === getIndexInfosOfType(type)` in checker.ts compares a fresh filtered array by reference: never true,
+        // so the filtered copy below is always made)
         if (symbol.IsNone)
         {
             return SymbolRef.None;

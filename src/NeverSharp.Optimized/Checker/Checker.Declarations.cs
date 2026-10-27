@@ -1567,7 +1567,9 @@ internal sealed partial class Checker
         {
             if (reportErrors)
             {
-                GrammarErrorOnNode(node, Diagnostics.Type_import_attributes_should_have_exactly_one_key_resolution_mode_with_value_import_or_require);
+                GrammarErrorOnNode(node, store.Token(node.Node) == SyntaxKind.WithKeyword
+                    ? Diagnostics.Type_import_attributes_should_have_exactly_one_key_resolution_mode_with_value_import_or_require
+                    : Diagnostics.Type_import_assertions_should_have_exactly_one_key_resolution_mode_with_value_import_or_require);
             }
             return false;
         }
@@ -1581,7 +1583,9 @@ internal sealed partial class Checker
         {
             if (reportErrors)
             {
-                GrammarErrorOnNode(At(node, name), Diagnostics.resolution_mode_is_the_only_valid_key_for_type_import_attributes);
+                GrammarErrorOnNode(At(node, name), store.Token(node.Node) == SyntaxKind.WithKeyword
+                    ? Diagnostics.resolution_mode_is_the_only_valid_key_for_type_import_attributes
+                    : Diagnostics.resolution_mode_is_the_only_valid_key_for_type_import_assertions);
             }
             return false;
         }

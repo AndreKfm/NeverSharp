@@ -121,8 +121,8 @@ internal sealed partial class Checker
             case SyntaxKind.JsxSelfClosingElement:
                 return GetContextualJsxElementAttributesType(At(node, parent), contextFlags);
             case SyntaxKind.ImportAttribute:
-                // (getContextualImportAttributeType: C8)
-                return Type.None;
+                // checker.ts getContextualImportAttributeType
+                return GetTypeOfPropertyOfContextualType(GetGlobalImportAttributesType(reportErrors: false), GetNameFromImportAttribute(StoreOf(node), parent));
         }
         return Type.None;
     }
