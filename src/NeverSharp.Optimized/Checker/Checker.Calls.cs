@@ -629,7 +629,7 @@ internal sealed partial class Checker
             return true;
         }
         var dstore = StoreOf(declaration);
-        var modifiers = Utilities.GetCombinedModifierFlags(dstore, declaration.Node) & ModifierFlags.NonPublicAccessibilityModifier;
+        var modifiers = GetCombinedEffectiveModifierFlags(dstore, declaration.Node) & ModifierFlags.NonPublicAccessibilityModifier;
         // (1) Public constructors and (2) constructor functions are always accessible.
         if (modifiers == ModifierFlags.None || dstore.Kind(declaration.Node) != SyntaxKind.Constructor)
         {

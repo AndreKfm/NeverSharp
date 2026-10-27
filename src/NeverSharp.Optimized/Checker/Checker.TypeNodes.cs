@@ -204,6 +204,25 @@ internal sealed partial class Checker
                 return ThisTypeOfClassOrInterface(GetDeclaredTypeOfClassOrInterface(GetSymbolOfDeclaration(At(node, parent))));
             }
         }
+        // inside x.prototype = { ... }
+        if (!parent.IsNone && store.Kind(parent) == SyntaxKind.ObjectLiteralExpression && store.Kind(store.Parent(parent)) == SyntaxKind.BinaryExpression &&
+            Utilities.GetAssignmentDeclarationKind(store, store.Parent(parent)) == AssignmentDeclarationKind.Prototype)
+        {
+            return ThisTypeOfClassOrInterface(GetDeclaredTypeOfClassOrInterface(ParentOf(GetSymbolOfNode(At(node, store.Left(store.Parent(parent)))))));
+        }
+        // /** @return {this} */
+        // x.prototype.m = function() { ... }
+        var host = (store.Flags(node.Node) & NodeFlags.JSDoc) != 0 ? Utilities.GetHostSignatureFromJSDoc(store, node.Node) : Node.None;
+        if (!host.IsNone && store.Kind(host) == SyntaxKind.FunctionExpression && store.Kind(store.Parent(host)) == SyntaxKind.BinaryExpression &&
+            Utilities.GetAssignmentDeclarationKind(store, store.Parent(host)) == AssignmentDeclarationKind.PrototypeProperty)
+        {
+            return ThisTypeOfClassOrInterface(GetDeclaredTypeOfClassOrInterface(ParentOf(GetSymbolOfNode(At(node, store.Left(store.Parent(host)))))));
+        }
+        // inside constructor function C() { ... }
+        if (!container.IsNone && IsJSConstructor(At(node, container)) && IsNodeDescendantOf(store, node.Node, store.Body(container)))
+        {
+            return ThisTypeOfClassOrInterface(GetDeclaredTypeOfClassOrInterface(GetSymbolOfDeclaration(At(node, container))));
+        }
         Error(node, Diagnostics.A_this_type_is_available_only_in_a_non_static_member_of_a_class_or_interface);
         return errorType;
     }

@@ -958,7 +958,23 @@ internal sealed partial class Checker
         }
         var store = StoreOf(existing);
         var n = existing.Node;
-        // (JavaScript import types autofilled by the JSDoc fallback: C9)
+        if (Utilities.IsInJSFile(store, n) && store.Kind(n) == SyntaxKind.ImportType && store.Kind(store.Argument(n)) == SyntaxKind.LiteralType &&
+            store.Kind(store.Literal(store.Argument(n))) == SyntaxKind.StringLiteral)
+        {
+            // isLiteralImportTypeNode: ensure resolvedSymbol is present
+            GetTypeFromTypeNode(existing);
+            var nodeSymbol = SymbolNodeLinks.Has(existing) ? SymbolNodeLinks.Get(existing).ResolvedSymbol : SymbolRef.None;
+            if (nodeSymbol.IsNone)
+            {
+                return true;
+            }
+            var typeArguments = store.TypeArguments(n);
+            return !(
+                // The import type resolved using jsdoc fallback logic
+                (!store.IsTypeOf(n) && (SymbolFlagsOf(nodeSymbol) & SymbolFlags.Type) == 0) ||
+                // The import type had type arguments autofilled by js fallback logic
+                !((typeArguments.IsNone ? 0 : store.Length(typeArguments)) >= GetMinTypeArgumentCount(GetLocalTypeParametersOfClassOrInterfaceOrTypeAlias(nodeSymbol)?.ToArray() ?? [])));
+        }
         if (store.Kind(n) == SyntaxKind.TypeReference)
         {
             if (IsConstTypeReference(store, n))
@@ -1034,9 +1050,10 @@ internal sealed partial class Checker
         var leftmost = At(node, Utilities.GetFirstIdentifier(store, node.Node));
         if (Utilities.IsInJSFile(store, node.Node))
         {
-            // (exports / module.exports in JavaScript: C9)
-            var leftmostText = store.Texts.GetString(store.EscapedText(leftmost.Node)) ?? "";
-            if (leftmostText == "exports")
+            var leftmostParent = store.Parent(leftmost.Node);
+            if (Utilities.IsExportsIdentifier(store, leftmost.Node) || Utilities.IsModuleExportsAccessExpression(store, leftmostParent) ||
+                (store.Kind(leftmostParent) == SyntaxKind.QualifiedName && Utilities.IsModuleIdentifier(store, store.Left(leftmostParent)) &&
+                    Utilities.IsExportsIdentifier(store, store.Right(leftmostParent))))
             {
                 return (true, CopyExistingNode(node));
             }
@@ -1296,11 +1313,14 @@ internal sealed partial class Checker
             var store = StoreOf(node);
             var initializer = store.Initializer(node.Node);
             var assertionNode = NodeRef.None;
-            if (store.Kind(initializer) is SyntaxKind.AsExpression or SyntaxKind.TypeAssertionExpression)
+            if (FactoryUtilities.IsJSDocTypeAssertion(store, initializer))
+            {
+                assertionNode = GetJSDocTypeAssertionType(At(node, initializer));
+            }
+            else if (store.Kind(initializer) is SyntaxKind.AsExpression or SyntaxKind.TypeAssertionExpression)
             {
                 assertionNode = At(node, store.Type(initializer));
             }
-            // (JSDoc type assertions: C9)
             if (!assertionNode.IsNone && !IsConstTypeReference(store, assertionNode.Node) && CanReuseTypeNodeAnnotation(context, node, assertionNode, symbol, false))
             {
                 result = SerializeExistingTypeNodeSyntactic(assertionNode, context);
@@ -1481,7 +1501,7 @@ internal sealed partial class Checker
     private bool IsDeclarationReadonly(NodeRef declaration)
     {
         var store = StoreOf(declaration);
-        return (Utilities.GetCombinedModifierFlags(store, declaration.Node) & ModifierFlags.Readonly) != 0 &&
+        return (GetCombinedEffectiveModifierFlags(store, declaration.Node) & ModifierFlags.Readonly) != 0 &&
             !(store.Kind(declaration.Node) == SyntaxKind.Parameter && Utilities.IsFunctionLike(store, store.Parent(declaration.Node)) && store.Kind(store.Parent(declaration.Node)) != SyntaxKind.Constructor);
     }
 
@@ -1553,7 +1573,10 @@ internal sealed partial class Checker
         switch (store.Kind(n))
         {
             case SyntaxKind.ParenthesizedExpression:
-                // (JSDoc type assertions: C9)
+                if (FactoryUtilities.IsJSDocTypeAssertion(store, n))
+                {
+                    return TypeFromTypeAssertion(At(node, store.Expression(n)), GetJSDocTypeAssertionType(node), context, requiresAddingUndefined);
+                }
                 return TypeFromExpression(At(node, store.Expression(n)), context, isConstContext, requiresAddingUndefined);
             case SyntaxKind.Identifier:
                 if (GetSymbolAtLocation(node) == undefinedSymbol)
@@ -1994,7 +2017,8 @@ internal sealed partial class Checker
             if (IsContextuallyTyped(candidate))
             {
                 var kind = store.Kind(candidateExpr);
-                var type = kind is SyntaxKind.AsExpression or SyntaxKind.TypeAssertionExpression ? At(declaration, store.Type(candidateExpr)) : NodeRef.None;
+                var type = FactoryUtilities.IsJSDocTypeAssertion(store, candidateExpr) ? GetJSDocTypeAssertionType(candidate)
+                    : kind is SyntaxKind.AsExpression or SyntaxKind.TypeAssertionExpression ? At(declaration, store.Type(candidateExpr)) : NodeRef.None;
                 if (!type.IsNone && !IsConstTypeReference(store, type.Node))
                 {
                     return Result(SerializeExistingTypeNodeSyntactic(type, context));

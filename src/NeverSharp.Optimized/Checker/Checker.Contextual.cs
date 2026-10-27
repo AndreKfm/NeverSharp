@@ -111,8 +111,7 @@ internal sealed partial class Checker
             case SyntaxKind.SatisfiesExpression:
                 return GetTypeFromTypeNode(At(node, store.Type(parent)));
             case SyntaxKind.ExportAssignment:
-                // tryGetTypeFromEffectiveTypeNode (JSDoc type tags: C9)
-                return Type.None;
+                return TryGetTypeFromEffectiveTypeNode(At(node, parent));
             case SyntaxKind.JsxExpression:
                 return GetContextualTypeForJsxExpression(At(node, parent), contextFlags);
             case SyntaxKind.JsxAttribute:
@@ -704,6 +703,10 @@ internal sealed partial class Checker
             }
             case AssignmentDeclarationKind.Property:
             {
+                if (IsPossiblyAliasedThisProperty(binaryExpression, kind))
+                {
+                    return GetContextualTypeForThisPropertyAssignment(binaryExpression);
+                }
                 // If `binaryExpression.left` was assigned a symbol, then this is a new declaration; otherwise it is an assignment to an existing declaration.
                 // See `bindStaticPropertyAssignment` in `binder.ts`.
                 var leftSymbol = Utilities.CanHaveSymbol(store, left.Node) ? NodeSymbol(left) : SymbolRef.None;
@@ -740,8 +743,26 @@ internal sealed partial class Checker
                 }
                 return Utilities.IsInJSFile(StoreOf(decl), decl.Node) || decl == left ? Type.None : GetTypeOfExpression(left);
             }
+            case AssignmentDeclarationKind.ExportsProperty:
+            case AssignmentDeclarationKind.Prototype:
+            case AssignmentDeclarationKind.PrototypeProperty:
+            case AssignmentDeclarationKind.ModuleExports:
+            {
+                var valueDeclaration = NodeRef.None;
+                if (kind != AssignmentDeclarationKind.ModuleExports)
+                {
+                    var leftSymbol = Utilities.CanHaveSymbol(store, left.Node) ? NodeSymbol(left) : SymbolRef.None;
+                    valueDeclaration = leftSymbol.IsNone ? NodeRef.None : ValueDeclarationOf(leftSymbol);
+                }
+                if (valueDeclaration.IsNone)
+                {
+                    var binarySymbol = NodeSymbol(binaryExpression);
+                    valueDeclaration = binarySymbol.IsNone ? NodeRef.None : ValueDeclarationOf(binarySymbol);
+                }
+                var annotated = valueDeclaration.IsNone ? NodeRef.None : GetEffectiveTypeAnnotationNode(valueDeclaration);
+                return annotated.IsNone ? Type.None : GetTypeFromTypeNode(annotated);
+            }
             default:
-                // (exports, prototype and module.exports assignments in JavaScript: C9)
                 return Type.None;
         }
     }
@@ -1330,6 +1351,11 @@ internal sealed partial class Checker
     /// <summary>checker.ts getContextualSignature (JSDoc type tags: C9).</summary>
     internal Signature GetContextualSignature(NodeRef node)
     {
+        var typeTagSignature = GetSignatureOfTypeTag(node);
+        if (!typeTagSignature.IsNone)
+        {
+            return typeTagSignature;
+        }
         var type = GetApparentTypeOfContextualType(node, ContextFlags.Signature);
         if (type.IsNone)
         {

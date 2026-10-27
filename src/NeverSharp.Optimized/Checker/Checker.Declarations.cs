@@ -978,7 +978,7 @@ internal sealed partial class Checker
                         lastSeenNonAmbientDeclaration = current;
                     }
                 }
-                if (Utilities.IsInJSFile(store, node) && Utilities.IsFunctionLike(store, node) && store.JsDoc(node) is { Count: > 0 })
+                if (Utilities.IsInJSFile(store, node) && Utilities.IsFunctionLike(store, node) && store.JsDoc(node) is not null)
                 {
                     hasOverloads = !GetFirstJSDocTagOfKind(store, node, SyntaxKind.JSDocOverloadTag).IsNone;
                 }

@@ -1555,7 +1555,8 @@ internal sealed partial class Checker
                     continue;
                 }
             }
-            if (Utilities.IsInJSFile(store, decl.Node) && store.JsDoc(decl.Node) is { Count: > 0 })
+            // (node.jsDoc: also the empty array getJSDocTags caches on a node without its own comments)
+            if (Utilities.IsInJSFile(store, decl.Node) && store.JsDoc(decl.Node) is not null)
             {
                 var hasOverloadTags = false;
                 foreach (var tag in UtilitiesPublic.GetJSDocTags(store, decl.Node))
@@ -2964,7 +2965,7 @@ internal sealed partial class Checker
     }
 
     private static bool IsDeclarationReadonly(NodeStore store, Node declaration) =>
-        (Utilities.GetCombinedModifierFlags(store, declaration) & ModifierFlags.Readonly) != 0 && !Utilities.IsParameterPropertyDeclaration(store, declaration, store.Parent(declaration));
+        (GetCombinedEffectiveModifierFlags(store, declaration) & ModifierFlags.Readonly) != 0 && !Utilities.IsParameterPropertyDeclaration(store, declaration, store.Parent(declaration));
 
     // (getWidenedType: Checker.Literals.cs, module C5)
 

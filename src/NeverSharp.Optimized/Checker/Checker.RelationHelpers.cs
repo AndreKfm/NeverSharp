@@ -142,7 +142,8 @@ internal sealed partial class Checker
             var parameters = store.Nodes(store.Parameters(node));
             foreach (var p in parameters)
             {
-                if (store.Type(p).IsNone)
+                // !getEffectiveTypeAnnotationNode(p) (JSDoc types of JavaScript parameters count)
+                if (store.Type(p).IsNone && (!Utilities.IsInJSFile(store, p) || GetJSDocType(store, p).IsNone))
                 {
                     return true;
                 }

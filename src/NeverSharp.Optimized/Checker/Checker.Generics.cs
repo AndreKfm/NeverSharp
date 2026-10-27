@@ -741,7 +741,7 @@ internal sealed partial class Checker
                 declaration = accessor;
             }
             var store = StoreOf(declaration);
-            var flags = Utilities.GetCombinedModifierFlags(store, declaration.Node);
+            var flags = GetCombinedEffectiveModifierFlags(store, declaration.Node);
             var parent = ParentOf(symbol);
             return !parent.IsNone && (SymbolFlagsOf(parent) & SymbolFlags.Class) != 0 ? flags : flags & ~ModifierFlags.AccessibilityModifier;
         }

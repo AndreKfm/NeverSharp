@@ -92,11 +92,17 @@ internal sealed partial class Checker
             CheckClassForStaticPropertyNameConflicts(node);
         }
         var nameOrNode = !nameNode.IsNone ? At(node, nameNode) : node;
-        var baseTypeNodeRaw = GetClassExtendsHeritageElement(store, n);
+        var baseTypeNode = GetBaseTypeNodeOfClass(node); // getEffectiveBaseTypeNode
+        var baseTypeNodeRaw = baseTypeNode.Node;
         if (!baseTypeNodeRaw.IsNone)
         {
-            var baseTypeNode = At(node, baseTypeNodeRaw);
             CheckSourceElements(node, store.TypeArguments(baseTypeNodeRaw));
+            // check both @extends and extends if both are specified.
+            var extendsNode = GetClassExtendsHeritageElement(store, n);
+            if (!extendsNode.IsNone && extendsNode != baseTypeNodeRaw)
+            {
+                CheckExpression(At(node, store.Expression(extendsNode)));
+            }
             var baseTypes = GetBaseTypes(type);
             if (baseTypes.Count > 0)
             {

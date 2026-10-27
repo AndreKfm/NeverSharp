@@ -779,6 +779,19 @@ internal sealed partial class Checker
         return At(node, store.Type(store.TypeExpression(tag)));
     }
 
+    // utilities.ts getCombinedModifierFlags with getEffectiveModifierFlags: in JavaScript files the JSDoc modifier tags
+    // (@public, @private, @protected, @readonly, @override, @deprecated) of the node count as modifiers
+    internal static ModifierFlags GetCombinedEffectiveModifierFlags(NodeStore store, Node node)
+    {
+        var flags = Utilities.GetCombinedModifierFlags(store, node);
+        if (Utilities.IsInJSFile(store, node))
+        {
+            var n = store.Kind(node) == SyntaxKind.BindingElement ? Utilities.WalkUpBindingElementsAndPatterns(store, node) : node;
+            flags |= Utilities.GetEffectiveModifierFlags(store, n);
+        }
+        return flags;
+    }
+
     // checker.ts getReturnTypeOfTypeTag
     private Type GetReturnTypeOfTypeTag(NodeRef node)
     {

@@ -2357,7 +2357,7 @@ internal sealed partial class Checker
         {
             return aliasLike;
         }
-        // TODO(C5): checkExpressionCached(expression); getNodeLinks(expression).resolvedSymbol
+        CheckExpressionCached(expression);
         return SymbolNodeLinks.Has(expression) ? SymbolNodeLinks.Get(expression).ResolvedSymbol : SymbolRef.None;
     }
 
