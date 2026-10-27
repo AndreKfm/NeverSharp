@@ -292,6 +292,10 @@ internal sealed partial class Checker
     private Type GetContextualTypeForVariableLikeDeclaration(NodeRef declaration, ContextFlags contextFlags)
     {
         var typeNode = GetEffectiveTypeAnnotationNode(declaration);
+        if (typeNode.IsNone && Utilities.IsInJSFile(StoreOf(declaration), declaration.Node))
+        {
+            typeNode = TryGetJSDocSatisfiesTypeNode(declaration);
+        }
         if (!typeNode.IsNone)
         {
             return GetTypeFromTypeNode(typeNode);

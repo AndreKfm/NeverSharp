@@ -369,7 +369,15 @@ internal sealed partial class Checker
     internal Type CheckDeclarationInitializer(NodeRef declaration, CheckMode checkMode, Type contextualType = default)
     {
         var store = StoreOf(declaration);
-        var initializer = At(declaration, store.Initializer(declaration.Node));
+        var initializer = At(declaration, GetEffectiveInitializer(store, declaration.Node));
+        if (Utilities.IsInJSFile(store, declaration.Node))
+        {
+            var satisfiesTypeNode = TryGetJSDocSatisfiesTypeNode(declaration);
+            if (!satisfiesTypeNode.IsNone)
+            {
+                return CheckSatisfiesExpressionWorker(initializer, satisfiesTypeNode, checkMode);
+            }
+        }
         var quick = GetQuickTypeOfExpression(initializer);
         var type = !quick.IsNone ? quick
             : !contextualType.IsNone ? CheckExpressionWithContextualType(initializer, contextualType, null, checkMode)

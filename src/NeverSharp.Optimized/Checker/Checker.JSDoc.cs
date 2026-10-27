@@ -767,6 +767,18 @@ internal sealed partial class Checker
         }
     }
 
+    // utilities.ts tryGetJSDocSatisfiesTypeNode
+    private NodeRef TryGetJSDocSatisfiesTypeNode(NodeRef node)
+    {
+        var store = StoreOf(node);
+        var tag = GetJSDocSatisfiesTag(store, node.Node);
+        if (tag.IsNone || store.TypeExpression(tag).IsNone)
+        {
+            return NodeRef.None;
+        }
+        return At(node, store.Type(store.TypeExpression(tag)));
+    }
+
     // checker.ts getReturnTypeOfTypeTag
     private Type GetReturnTypeOfTypeTag(NodeRef node)
     {
