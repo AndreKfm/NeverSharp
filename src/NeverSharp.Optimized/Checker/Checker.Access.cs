@@ -25,7 +25,7 @@
 // Modified: translated from TypeScript to C#; modules C1 (subset) and C5. TODO(C7): the flow types of access
 // expressions (Checker.FlowSeam.cs); the diagnostics that depend on them are not reported while narrowing is pending.
 // Module C8: deprecation suggestions. Module C9d: unchecked JavaScript suggestions (isUncheckedJSSuggestion), private
-// names of plain JavaScript files. TODO(C9e): the lib suggestions.
+// names of plain JavaScript files. Module C9e: the lib suggestions (getSuggestedLibForNonExistentProperty).
 
 using NeverSharp.Generated;
 
@@ -258,12 +258,16 @@ internal sealed partial class Checker
             rightName = store.Texts.GetString(store.EscapedText(right.Node))!;
             if (isAnyLike)
             {
-                // (markLinkedReferences: emit details)
+                if (store.Kind(left.Node) == SyntaxKind.Identifier && !parentSymbol.IsNone)
+                {
+                    MarkPropertyAliasReferenced(node, SymbolRef.None, leftType);
+                }
                 return IsErrorType(apparentType) ? errorType : apparentType;
             }
             prop = GetPropertyOfType(apparentType, rightName, skipObjectFunctionPropertyAugment: IsConstEnumObjectType(apparentType));
             // (includeTypeOnlyMembers for qualified names: the binder's type-only members are found the same way)
         }
+        MarkPropertyAliasReferenced(node, prop, leftType);
         Type propType;
         if (prop.IsNone)
         {
@@ -659,8 +663,13 @@ internal sealed partial class Checker
             {
                 var missingProperty = Utilities.DeclarationNameToString(store, propNode.Node);
                 var container = TypeToString(containingType);
-                var suggestion = GetSuggestedSymbolForNonexistentProperty(propNode, containingType);
-                if (!suggestion.IsNone)
+                var libSuggestion = GetSuggestedLibForNonExistentProperty(missingProperty, containingType);
+                var suggestion = libSuggestion is not null ? SymbolRef.None : GetSuggestedSymbolForNonexistentProperty(propNode, containingType);
+                if (libSuggestion is not null)
+                {
+                    errorInfo = ChainDiagnosticMessages(errorInfo, Diagnostics.Property_0_does_not_exist_on_type_1_Do_you_need_to_change_your_target_library_Try_changing_the_lib_compiler_option_to_2_or_later, missingProperty, container, libSuggestion);
+                }
+                else if (!suggestion.IsNone)
                 {
                     var suggestedName = SymbolName(suggestion);
                     var message = isUncheckedJS ? Diagnostics.Property_0_may_not_exist_on_type_1_Did_you_mean_2 : Diagnostics.Property_0_does_not_exist_on_type_1_Did_you_mean_2;

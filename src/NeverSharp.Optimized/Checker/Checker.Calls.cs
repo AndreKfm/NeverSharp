@@ -23,8 +23,16 @@
 // Modified: translated from TypeScript to C#; module C5 (replaces C1's first-signature calls). SyntheticExpression nodes
 // are represented by CallArg values; module C6: inferTypeArguments with the inferences, getSignatureInstantiation with
 // inferred type parameters, instantiateSignatureInContextOf, applyToReturnTypes with type predicates; module C9b: JSX
-// opening-like elements and fragments as calls (Checker.Jsx.cs). TODO(C9e): decorators' call signatures. Module
-// C9d: JavaScript require calls (isCommonJsRequire, resolveExternalModuleTypeByLiteral) and expando assignments of calls.
+// opening-like elements and fragments as calls (Checker.Jsx.cs). Module C9d: JavaScript require calls
+// (isCommonJsRequire, resolveExternalModuleTypeByLiteral) and expando assignments of calls. Module C9e: decorators as
+// calls (resolveDecorator, isPotentiallyUncalledDecorator, getDiagnosticHeadMessageForDecoratorResolution,
+// getDecoratorCallSignature, getESDecoratorCallSignature, getLegacyDecoratorCallSignature, the decorator context types
+// createClassDecoratorContextType and relatives, getClassMemberDecoratorContextOverrideType,
+// createClassMemberDecoratorContextTypeForNode, createClassFieldDecoratorInitializerMutatorType,
+// createESDecoratorCallSignature, createCallSignature, createFunctionType, createGetterFunctionType,
+// createSetterFunctionType, createParameter, createProperty, tryCreateTypeReference, createTypedPropertyDescriptorType,
+// getParentTypeOfClassElement, getClassElementPropertyKeyType); createCallSignature's synthetic function type node is
+// the SyntheticFunctionTypeDeclaration mark of the signature record.
 
 using NeverSharp.Generated;
 
@@ -200,11 +208,341 @@ internal sealed partial class Checker
         return args;
     }
 
-    /// <summary>checker.ts getDecoratorCallSignature. TODO(C9e): the decorator context types of ES decorators.</summary>
-    internal static Signature GetDecoratorCallSignature(NodeRef decorator)
+    /// <summary>checker.ts getDecoratorCallSignature.</summary>
+    internal Signature GetDecoratorCallSignature(NodeRef decorator) =>
+        compilerOptions.ExperimentalDecorators == true ? GetLegacyDecoratorCallSignature(decorator) : GetESDecoratorCallSignature(decorator);
+
+    // checker.ts createParameter
+    private SymbolRef CreateParameter(string name, Type type)
     {
-        _ = decorator;
-        return Signature.None;
+        var symbol = CreateSymbol(SymbolFlags.FunctionScopedVariable, name);
+        ValueSymbolLinks.Get(symbol).ResolvedType = type;
+        return symbol;
+    }
+
+    // checker.ts createProperty
+    private SymbolRef CreateProperty(string name, Type type)
+    {
+        var symbol = CreateSymbol(SymbolFlags.Property, name);
+        ValueSymbolLinks.Get(symbol).ResolvedType = type;
+        return symbol;
+    }
+
+    // checker.ts createCallSignature (the declaration is a synthetic function type node)
+    private Signature CreateCallSignature(SymbolRef[] parameters, Type returnType, int minArgumentCount = -1)
+    {
+        var signature = CreateSignature(NodeRef.None, TypeList.Empty, SymbolRef.None, parameters, returnType, minArgumentCount < 0 ? parameters.Length : minArgumentCount, SignatureFlags.None);
+        Signatures.Record(signature).SyntheticFunctionTypeDeclaration = true;
+        return signature;
+    }
+
+    // checker.ts createFunctionType
+    private Type CreateFunctionType(SymbolRef[] parameters, Type returnType, int minArgumentCount = -1, SymbolRef thisParameter = default)
+    {
+        var signature = CreateCallSignature(parameters, returnType, minArgumentCount);
+        Signatures.Record(signature).ThisParameter = thisParameter;
+        return GetOrCreateTypeFromSignature(signature);
+    }
+
+    // checker.ts createGetterFunctionType, createSetterFunctionType
+    private Type CreateGetterFunctionType(Type type) => CreateFunctionType([], type);
+
+    private Type CreateSetterFunctionType(Type type) => CreateFunctionType([CreateParameter("value", type)], voidType);
+
+    // checker.ts tryCreateTypeReference
+    private Type TryCreateTypeReference(Type target, ReadOnlySpan<Type> typeArguments) =>
+        typeArguments.Length > 0 && target == emptyGenericType ? unknownType : CreateTypeReference(target, typeArguments);
+
+    // checker.ts getGlobalClassDecoratorContextType and relatives, getGlobalTypedPropertyDescriptorType
+    private Type deferredGlobalClassDecoratorContextType;
+    private Type deferredGlobalClassMethodDecoratorContextType;
+    private Type deferredGlobalClassGetterDecoratorContextType;
+    private Type deferredGlobalClassSetterDecoratorContextType;
+    private Type deferredGlobalClassAccessorDecoratorContextType;
+    private Type deferredGlobalClassAccessorDecoratorTargetType;
+    private Type deferredGlobalClassAccessorDecoratorResultType;
+    private Type deferredGlobalClassFieldDecoratorContextType;
+    private Type deferredGlobalTypedPropertyDescriptorType;
+
+    private Type GetGlobalDecoratorType(ref Type cache, string name, int arity)
+    {
+        if (cache.IsNone)
+        {
+            cache = GetGlobalType(name, arity, reportErrors: true);
+        }
+        return cache.IsNone ? emptyGenericType : cache;
+    }
+
+    private Type GetGlobalTypedPropertyDescriptorType()
+    {
+        if (deferredGlobalTypedPropertyDescriptorType.IsNone)
+        {
+            var t = GetGlobalType("TypedPropertyDescriptor", 1, reportErrors: true);
+            deferredGlobalTypedPropertyDescriptorType = t.IsNone ? emptyGenericType : t;
+        }
+        return deferredGlobalTypedPropertyDescriptorType;
+    }
+
+    // checker.ts createTypedPropertyDescriptorType
+    private Type CreateTypedPropertyDescriptorType(Type propertyType) => CreateTypeFromGenericGlobalType(GetGlobalTypedPropertyDescriptorType(), [propertyType]);
+
+    // checker.ts createClassDecoratorContextType and relatives
+    private Type CreateClassDecoratorContextType(Type classType) =>
+        TryCreateTypeReference(GetGlobalDecoratorType(ref deferredGlobalClassDecoratorContextType, "ClassDecoratorContext", 1), [classType]);
+
+    private Type CreateClassMemberDecoratorType(ref Type cache, string name, Type thisType, Type valueType) =>
+        TryCreateTypeReference(GetGlobalDecoratorType(ref cache, name, 2), [thisType, valueType]);
+
+    // checker.ts getClassMemberDecoratorContextOverrideType
+    private readonly Dictionary<(bool IsPrivate, bool IsStatic, Type NameType), Type> decoratorContextOverrideTypeCache = [];
+
+    private Type GetClassMemberDecoratorContextOverrideType(Type nameType, bool isPrivate, bool isStatic)
+    {
+        if (!decoratorContextOverrideTypeCache.TryGetValue((isPrivate, isStatic, nameType), out var overrideType))
+        {
+            var members = new SymTable();
+            members.Set("name", CreateProperty("name", nameType));
+            members.Set("private", CreateProperty("private", isPrivate ? trueType : falseType));
+            members.Set("static", CreateProperty("static", isStatic ? trueType : falseType));
+            overrideType = CreateAnonymousType(SymbolRef.None, members, [], [], []);
+            decoratorContextOverrideTypeCache[(isPrivate, isStatic, nameType)] = overrideType;
+        }
+        return overrideType;
+    }
+
+    // checker.ts createClassMemberDecoratorContextTypeForNode
+    private Type CreateClassMemberDecoratorContextTypeForNode(NodeRef node, Type thisType, Type valueType)
+    {
+        var store = StoreOf(node);
+        var n = node.Node;
+        var isStatic = Utilities.HasSyntacticModifierUncached(store, n, ModifierFlags.Static);
+        var name = store.Name(n);
+        var isPrivate = store.Kind(name) == SyntaxKind.PrivateIdentifier;
+        var nameType = isPrivate ? GetStringLiteralType(store.Texts.GetString(UtilitiesPublic.IdText(store, name)) ?? "") : GetLiteralTypeFromPropertyName(At(node, name));
+        var contextType = store.Kind(n) switch
+        {
+            SyntaxKind.MethodDeclaration => CreateClassMemberDecoratorType(ref deferredGlobalClassMethodDecoratorContextType, "ClassMethodDecoratorContext", thisType, valueType),
+            SyntaxKind.GetAccessor => CreateClassMemberDecoratorType(ref deferredGlobalClassGetterDecoratorContextType, "ClassGetterDecoratorContext", thisType, valueType),
+            SyntaxKind.SetAccessor => CreateClassMemberDecoratorType(ref deferredGlobalClassSetterDecoratorContextType, "ClassSetterDecoratorContext", thisType, valueType),
+            _ => Utilities.IsAutoAccessorPropertyDeclaration(store, n)
+                ? CreateClassMemberDecoratorType(ref deferredGlobalClassAccessorDecoratorContextType, "ClassAccessorDecoratorContext", thisType, valueType)
+                : CreateClassMemberDecoratorType(ref deferredGlobalClassFieldDecoratorContextType, "ClassFieldDecoratorContext", thisType, valueType),
+        };
+        var overrideType = GetClassMemberDecoratorContextOverrideType(nameType, isPrivate, isStatic);
+        return GetIntersectionType([contextType, overrideType]);
+    }
+
+    // checker.ts createClassFieldDecoratorInitializerMutatorType
+    private Type CreateClassFieldDecoratorInitializerMutatorType(Type thisType, Type valueType)
+    {
+        var thisParam = CreateParameter("this", thisType);
+        var valueParam = CreateParameter("value", valueType);
+        return CreateFunctionType([valueParam], valueType, 1, thisParam);
+    }
+
+    // checker.ts createESDecoratorCallSignature
+    private Signature CreateESDecoratorCallSignature(Type targetType, Type contextType, Type nonOptionalReturnType)
+    {
+        var targetParam = CreateParameter("target", targetType);
+        var contextParam = CreateParameter("context", contextType);
+        var returnType = GetUnionType([nonOptionalReturnType, voidType]);
+        return CreateCallSignature([targetParam, contextParam], returnType);
+    }
+
+    // the "this" type of a class member decorator: the class constructor type or the instance type
+    private Type GetDecoratedMemberThisType(NodeRef node)
+    {
+        var store = StoreOf(node);
+        var classSymbol = GetSymbolOfDeclaration(At(node, store.Parent(node.Node)));
+        return Utilities.HasSyntacticModifierUncached(store, node.Node, ModifierFlags.Static) ? GetTypeOfSymbol(classSymbol) : GetDeclaredTypeOfClassOrInterface(classSymbol);
+    }
+
+    // checker.ts getESDecoratorCallSignature
+    private Signature GetESDecoratorCallSignature(NodeRef decorator)
+    {
+        var parent = Parent(decorator);
+        ref var links = ref SignatureLinks.Get(parent);
+        if (links.DecoratorSignature.IsNone)
+        {
+            links.DecoratorSignature = anySignature;
+            var store = StoreOf(parent);
+            var n = parent.Node;
+            Signature result = anySignature;
+            switch (store.Kind(n))
+            {
+                case SyntaxKind.ClassDeclaration:
+                case SyntaxKind.ClassExpression:
+                {
+                    // Class decorators have a `context` of `ClassDecoratorContext<Class>`, where the `Class` type
+                    // argument will be the "final type" of the class after all decorators are applied.
+                    var targetType = GetTypeOfSymbol(GetSymbolOfDeclaration(parent));
+                    var contextType = CreateClassDecoratorContextType(targetType);
+                    result = CreateESDecoratorCallSignature(targetType, contextType, targetType);
+                    break;
+                }
+                case SyntaxKind.MethodDeclaration:
+                case SyntaxKind.GetAccessor:
+                case SyntaxKind.SetAccessor:
+                {
+                    if (!Utilities.IsClassLike(store, store.Parent(n)))
+                    {
+                        break;
+                    }
+                    var kind = store.Kind(n);
+                    var valueType = kind == SyntaxKind.MethodDeclaration ? GetOrCreateTypeFromSignature(GetSignatureFromDeclaration(parent)) : GetTypeOfNode(parent);
+                    var thisType = GetDecoratedMemberThisType(parent);
+                    // We wrap the "input type", if necessary, to match the decoration target. For getters this is
+                    // something like `() => inputType`, for setters it's `(value: inputType) => void` and for
+                    // methods it is just the input type.
+                    var targetType = kind == SyntaxKind.GetAccessor ? CreateGetterFunctionType(valueType)
+                        : kind == SyntaxKind.SetAccessor ? CreateSetterFunctionType(valueType)
+                        : valueType;
+                    var contextType = CreateClassMemberDecoratorContextTypeForNode(parent, thisType, valueType);
+                    // We also wrap the "output type", as needed.
+                    var returnType = kind == SyntaxKind.GetAccessor ? CreateGetterFunctionType(valueType)
+                        : kind == SyntaxKind.SetAccessor ? CreateSetterFunctionType(valueType)
+                        : valueType;
+                    result = CreateESDecoratorCallSignature(targetType, contextType, returnType);
+                    break;
+                }
+                case SyntaxKind.PropertyDeclaration:
+                {
+                    if (!Utilities.IsClassLike(store, store.Parent(n)))
+                    {
+                        break;
+                    }
+                    var valueType = GetTypeOfNode(parent);
+                    var thisType = GetDecoratedMemberThisType(parent);
+                    var hasAccessor = HasAccessorModifier(parent);
+                    // The `target` of an auto-accessor decorator is a `{ get, set }` object; the `target` of a regular
+                    // field decorator is always `undefined`.
+                    var targetType = hasAccessor
+                        ? CreateClassMemberDecoratorType(ref deferredGlobalClassAccessorDecoratorTargetType, "ClassAccessorDecoratorTarget", thisType, valueType)
+                        : undefinedType;
+                    var contextType = CreateClassMemberDecoratorContextTypeForNode(parent, thisType, valueType);
+                    var returnType = hasAccessor
+                        ? CreateClassMemberDecoratorType(ref deferredGlobalClassAccessorDecoratorResultType, "ClassAccessorDecoratorResult", thisType, valueType)
+                        : CreateClassFieldDecoratorInitializerMutatorType(thisType, valueType);
+                    result = CreateESDecoratorCallSignature(targetType, contextType, returnType);
+                    break;
+                }
+            }
+            SignatureLinks.Get(parent).DecoratorSignature = result;
+        }
+        var signature = SignatureLinks.Get(parent).DecoratorSignature;
+        return signature == anySignature ? Signature.None : signature;
+    }
+
+    // checker.ts getLegacyDecoratorCallSignature
+    private Signature GetLegacyDecoratorCallSignature(NodeRef decorator)
+    {
+        var parent = Parent(decorator);
+        ref var links = ref SignatureLinks.Get(parent);
+        if (links.DecoratorSignature.IsNone)
+        {
+            links.DecoratorSignature = anySignature;
+            var store = StoreOf(parent);
+            var n = parent.Node;
+            Signature result = anySignature;
+            switch (store.Kind(n))
+            {
+                case SyntaxKind.ClassDeclaration:
+                case SyntaxKind.ClassExpression:
+                {
+                    // For a class decorator, the `target` is the type of the class (e.g. the
+                    // "static" or "constructor" side of the class).
+                    var targetType = GetTypeOfSymbol(GetSymbolOfDeclaration(parent));
+                    var targetParam = CreateParameter("target", targetType);
+                    result = CreateCallSignature([targetParam], GetUnionType([targetType, voidType]));
+                    break;
+                }
+                case SyntaxKind.Parameter:
+                {
+                    var func = store.Parent(n);
+                    var funcKind = store.Kind(func);
+                    if (funcKind != SyntaxKind.Constructor &&
+                        !(funcKind == SyntaxKind.MethodDeclaration || funcKind == SyntaxKind.SetAccessor && Utilities.IsClassLike(store, store.Parent(func))))
+                    {
+                        break;
+                    }
+                    var thisParameter = GetThisParameter(store, func);
+                    if (thisParameter == n)
+                    {
+                        break;
+                    }
+                    var index = Array.IndexOf(store.Nodes(store.Parameters(func)).ToArray(), n);
+                    if (!thisParameter.IsNone)
+                    {
+                        index--;
+                    }
+                    // A parameter declaration decorator will have three arguments (see `ParameterDecorator` in
+                    // core.d.ts).
+                    var targetType = funcKind == SyntaxKind.Constructor ? GetTypeOfSymbol(GetSymbolOfDeclaration(At(parent, store.Parent(func))))
+                        : GetParentTypeOfClassElement(At(parent, func));
+                    var keyType = funcKind == SyntaxKind.Constructor ? undefinedType : GetClassElementPropertyKeyType(At(parent, func));
+                    var indexType = GetNumberLiteralType(index);
+                    result = CreateCallSignature([CreateParameter("target", targetType), CreateParameter("propertyKey", keyType), CreateParameter("parameterIndex", indexType)], voidType);
+                    break;
+                }
+                case SyntaxKind.MethodDeclaration:
+                case SyntaxKind.GetAccessor:
+                case SyntaxKind.SetAccessor:
+                case SyntaxKind.PropertyDeclaration:
+                {
+                    if (!Utilities.IsClassLike(store, store.Parent(n)))
+                    {
+                        break;
+                    }
+                    // A method or accessor declaration decorator will have either two or three arguments (see
+                    // `PropertyDecorator` and `MethodDecorator` in core.d.ts).
+                    var targetParam = CreateParameter("target", GetParentTypeOfClassElement(parent));
+                    var keyParam = CreateParameter("propertyKey", GetClassElementPropertyKeyType(parent));
+                    var isProperty = store.Kind(n) == SyntaxKind.PropertyDeclaration;
+                    var returnType = isProperty ? voidType : CreateTypedPropertyDescriptorType(GetTypeOfNode(parent));
+                    var hasPropDesc = !isProperty || HasAccessorModifier(parent);
+                    if (hasPropDesc)
+                    {
+                        var descriptorParam = CreateParameter("descriptor", CreateTypedPropertyDescriptorType(GetTypeOfNode(parent)));
+                        result = CreateCallSignature([targetParam, keyParam, descriptorParam], GetUnionType([returnType, voidType]));
+                    }
+                    else
+                    {
+                        result = CreateCallSignature([targetParam, keyParam], GetUnionType([returnType, voidType]));
+                    }
+                    break;
+                }
+            }
+            SignatureLinks.Get(parent).DecoratorSignature = result;
+        }
+        var signature = SignatureLinks.Get(parent).DecoratorSignature;
+        return signature == anySignature ? Signature.None : signature;
+    }
+
+    // checker.ts getParentTypeOfClassElement
+    private Type GetParentTypeOfClassElement(NodeRef node)
+    {
+        var classSymbol = GetSymbolOfNode(At(node, StoreOf(node).Parent(node.Node)));
+        return Utilities.IsStatic(StoreOf(node), node.Node) ? GetTypeOfSymbol(classSymbol) : GetDeclaredTypeOfSymbol(classSymbol);
+    }
+
+    // checker.ts getClassElementPropertyKeyType
+    private Type GetClassElementPropertyKeyType(NodeRef element)
+    {
+        var store = StoreOf(element);
+        var name = store.Name(element.Node);
+        switch (store.Kind(name))
+        {
+            case SyntaxKind.Identifier:
+                return GetStringLiteralType(store.Texts.GetString(UtilitiesPublic.IdText(store, name)) ?? "");
+            case SyntaxKind.NumericLiteral:
+            case SyntaxKind.StringLiteral:
+                return GetStringLiteralType(store.Texts.GetString(store.Text(name)) ?? "");
+            case SyntaxKind.ComputedPropertyName:
+                var nameType = CheckComputedPropertyName(At(element, name));
+                return IsTypeAssignableToKind(nameType, TypeFlags.ESSymbolLike) ? nameType : stringType;
+            default:
+                return errorType; // Debug.fail("Unsupported property name.")
+        }
     }
 
     // checker.ts getGlobalTemplateStringsArrayType
@@ -287,12 +625,68 @@ internal sealed partial class Checker
         return result;
     }
 
-    // checker.ts resolveSignature (decorators: TODO(C9e))
+    // checker.ts getDiagnosticHeadMessageForDecoratorResolution
+    private DiagnosticMessage GetDiagnosticHeadMessageForDecoratorResolution(NodeRef node) => Kind(Parent(node)) switch
+    {
+        SyntaxKind.ClassDeclaration or SyntaxKind.ClassExpression => Diagnostics.Unable_to_resolve_signature_of_class_decorator_when_called_as_an_expression,
+        SyntaxKind.Parameter => Diagnostics.Unable_to_resolve_signature_of_parameter_decorator_when_called_as_an_expression,
+        SyntaxKind.PropertyDeclaration => Diagnostics.Unable_to_resolve_signature_of_property_decorator_when_called_as_an_expression,
+        _ => Diagnostics.Unable_to_resolve_signature_of_method_decorator_when_called_as_an_expression,
+    };
+
+    // checker.ts resolveDecorator
+    private Signature ResolveDecorator(NodeRef node, List<Signature>? candidatesOutArray, CheckMode checkMode)
+    {
+        var store = StoreOf(node);
+        var expression = At(node, store.Expression(node.Node));
+        var funcType = CheckExpression(expression);
+        var apparentType = GetApparentType(funcType);
+        if (IsErrorType(apparentType))
+        {
+            return ResolveErrorCall(node);
+        }
+        var callSignatures = GetSignaturesOfType(apparentType, SignatureKind.Call);
+        var numConstructSignatures = GetSignaturesOfType(apparentType, SignatureKind.Construct).Count;
+        if (IsUntypedFunctionCall(funcType, apparentType, callSignatures.Count, numConstructSignatures))
+        {
+            return ResolveUntypedCall(node);
+        }
+        if (IsPotentiallyUncalledDecorator(node, callSignatures) && store.Kind(expression.Node) != SyntaxKind.ParenthesizedExpression)
+        {
+            var nodeStr = GetTextOfNode(expression);
+            Error(node, Diagnostics._0_accepts_too_few_arguments_to_be_used_as_a_decorator_here_Did_you_mean_to_call_it_first_and_write_0, nodeStr);
+            return ResolveErrorCall(node);
+        }
+        var headMessage = GetDiagnosticHeadMessageForDecoratorResolution(node);
+        if (callSignatures.Count == 0)
+        {
+            var (errorChain, relatedMessage) = InvocationErrorDetails(expression, apparentType, SignatureKind.Call);
+            var messageChain = ChainDiagnosticMessages(errorChain, headMessage);
+            var diag = CreateDiagnosticForNodeFromMessageChain(expression, messageChain);
+            if (relatedMessage is not null)
+            {
+                AddRelatedInfo(diag, CreateRelatedForNode(expression, relatedMessage));
+            }
+            diagnostics.Add(diag);
+            return ResolveErrorCall(node);
+        }
+        return ResolveCall(node, callSignatures, candidatesOutArray, checkMode, SignatureFlags.None, headMessage);
+    }
+
+    // checker.ts isPotentiallyUncalledDecorator
+    private bool IsPotentiallyUncalledDecorator(NodeRef decorator, List<Signature> signatures) =>
+        signatures.Count > 0 && signatures.TrueForAll(signature =>
+            Signatures.Record(signature).MinArgumentCount == 0 &&
+            !SignatureHasRestParameter(signature) &&
+            ParametersOf(signature).Length < GetDecoratorArgumentCount(decorator, signature));
+
+    // checker.ts resolveSignature
     private Signature ResolveSignature(NodeRef node, List<Signature>? candidatesOutArray, CheckMode checkMode) => Kind(node) switch
     {
         SyntaxKind.CallExpression => ResolveCallExpression(node, candidatesOutArray, checkMode),
         SyntaxKind.NewExpression => ResolveNewExpression(node, candidatesOutArray, checkMode),
         SyntaxKind.TaggedTemplateExpression => ResolveTaggedTemplateExpression(node, candidatesOutArray, checkMode),
+        SyntaxKind.Decorator => ResolveDecorator(node, candidatesOutArray, checkMode),
         SyntaxKind.BinaryExpression => ResolveInstanceofExpression(node, candidatesOutArray, checkMode),
         SyntaxKind.JsxOpeningFragment or SyntaxKind.JsxOpeningElement or SyntaxKind.JsxSelfClosingElement => ResolveJsxOpeningLikeElement(node, candidatesOutArray, checkMode),
         _ => ResolveUntypedCall(node),
@@ -2169,8 +2563,10 @@ internal sealed partial class Checker
         {
             flags |= SignatureFlags.HasLiteralTypes;
         }
-        return CreateSignature(Signatures.Record(candidates[0]).Declaration, TypeList.Empty, thisParameter, [.. parameters],
+        var result = CreateSignature(Signatures.Record(candidates[0]).Declaration, TypeList.Empty, thisParameter, [.. parameters],
             GetIntersectionType(candidates.ConvertAll(GetReturnTypeOfSignature).ToArray()), minArgumentCount, flags);
+        Signatures.Record(result).SyntheticFunctionTypeDeclaration = Signatures.Record(candidates[0]).SyntheticFunctionTypeDeclaration;
+        return result;
     }
 
     // checker.ts getNumNonRestParameters

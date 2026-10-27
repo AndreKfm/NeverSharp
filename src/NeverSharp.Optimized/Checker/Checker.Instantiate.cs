@@ -500,6 +500,7 @@ internal sealed partial class Checker
         var result = Signatures.Create(source.Flags & SignatureFlags.PropagatingFlags, source.Declaration, freshTypeParameters, thisParameter, source.MinArgumentCount);
         ref var record = ref Signatures.Record(result);
         record.Parameters = changed ? newParameters : parameters;
+        record.SyntheticFunctionTypeDeclaration = source.SyntheticFunctionTypeDeclaration;
         record.Target = signature;
         record.Mapper = MapperHandle(mapper);
         return result;

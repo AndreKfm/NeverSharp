@@ -169,13 +169,9 @@ internal sealed partial class Checker
         }
     }
 
-    // utilities.ts hasBindableName for a class member: its name is not a computed property name, or is a late-bindable one
-    private bool HasBindableName(NodeRef member)
-    {
-        var store = StoreOf(member);
-        var name = store.Name(member.Node);
-        return name.IsNone || store.Kind(name) != SyntaxKind.ComputedPropertyName || IsLateBindableName(At(member, name));
-    }
+    // checker.ts hasBindableName
+    private bool HasBindableName(NodeRef member) =>
+        !Utilities.HasDynamicName(StoreOf(member), member.Node) || HasLateBindableName(member);
 
     // checker.ts checkIndexConstraintForProperty
     private void CheckIndexConstraintForProperty(Type type, SymbolRef prop, Type propNameType, Type propType)

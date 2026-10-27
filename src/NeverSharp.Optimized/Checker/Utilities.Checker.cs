@@ -342,8 +342,16 @@ internal static partial class Utilities
     }
 
     /// <summary>utilities.ts isImportCall.</summary>
-    internal static bool IsImportCall(NodeStore store, Node node) =>
-        !node.IsNone && store.Kind(node) == SyntaxKind.CallExpression && store.Kind(store.Expression(node)) == SyntaxKind.ImportKeyword;
+    internal static bool IsImportCall(NodeStore store, Node node)
+    {
+        if (node.IsNone || store.Kind(node) != SyntaxKind.CallExpression)
+        {
+            return false;
+        }
+        var e = store.Expression(node);
+        return store.Kind(e) == SyntaxKind.ImportKeyword ||
+            store.Kind(e) == SyntaxKind.MetaProperty && store.KeywordToken(e) == SyntaxKind.ImportKeyword && store.Texts.Equals(store.EscapedText(store.Name(e)), "defer");
+    }
 
     /// <summary>utilities.ts isIntrinsicJsxName (lower-case first letter or a dash).</summary>
     internal static bool IsIntrinsicJsxName(string name)

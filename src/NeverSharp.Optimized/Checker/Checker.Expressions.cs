@@ -1140,19 +1140,26 @@ internal sealed partial class Checker
                 }
                 break;
             case SyntaxKind.ImportKeyword:
-                if (nameText is not ("meta" or "defer"))
+                if (nameText != "meta")
                 {
                     var isCallee = store.Kind(store.Parent(n)) == SyntaxKind.CallExpression && store.Expression(store.Parent(n)) == n;
                     if (nameText == "defer")
                     {
                         if (!isCallee)
                         {
-                            GrammarErrorOnNode(node, Diagnostics._0_is_not_a_valid_meta_property_for_keyword_1_Did_you_mean_2, nameText, TokenText(store.KeywordToken(n)), "meta");
+                            GrammarErrorAtPos(node, store.End(n), 0, Diagnostics._0_expected, "(");
                         }
                     }
                     else
                     {
-                        GrammarErrorOnNode(At(node, store.Name(n)), Diagnostics._0_is_not_a_valid_meta_property_for_keyword_1_Did_you_mean_2, nameText, TokenText(store.KeywordToken(n)), "meta");
+                        if (isCallee)
+                        {
+                            GrammarErrorOnNode(At(node, store.Name(n)), Diagnostics._0_is_not_a_valid_meta_property_for_keyword_import_Did_you_mean_meta_or_defer, nameText);
+                        }
+                        else
+                        {
+                            GrammarErrorOnNode(At(node, store.Name(n)), Diagnostics._0_is_not_a_valid_meta_property_for_keyword_1_Did_you_mean_2, nameText, TokenText(store.KeywordToken(n)), "meta");
+                        }
                     }
                 }
                 break;
@@ -1265,6 +1272,10 @@ internal sealed partial class Checker
                 return errorType;
             }
             return GetTypeOfSymbol(symbol);
+        }
+        if (ShouldMarkIdentifierAliasReferenced(store, node.Node))
+        {
+            MarkIdentifierAliasReferenced(node);
         }
         var localOrExportSymbol = GetExportSymbolOfValueSymbolIfExported(symbol);
         var targetSymbol = ResolveAliasWithDeprecationCheck(localOrExportSymbol, node); // (module C8)

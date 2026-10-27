@@ -63,6 +63,7 @@ internal sealed partial class Checker
         record.Mapper = source.Mapper;
         record.CompositeSignatures = source.CompositeSignatures;
         record.CompositeKind = source.CompositeKind;
+        record.SyntheticFunctionTypeDeclaration = source.SyntheticFunctionTypeDeclaration;
         return result;
     }
 
@@ -114,7 +115,7 @@ internal sealed partial class Checker
             var declaration = Signatures.Record(signature).Declaration;
             var kind = declaration.IsNone ? SyntaxKind.Unknown : Kind(declaration);
             // If declaration is undefined, it is likely to be the signature of the default constructor.
-            var isConstructor = declaration.IsNone || kind is SyntaxKind.Constructor or SyntaxKind.ConstructSignature or SyntaxKind.ConstructorType;
+            var isConstructor = declaration.IsNone && !Signatures.Record(signature).SyntheticFunctionTypeDeclaration || kind is SyntaxKind.Constructor or SyntaxKind.ConstructSignature or SyntaxKind.ConstructorType;
             type = CreateObjectType(ObjectFlags.Anonymous | ObjectFlags.SingleSignatureType, declaration.IsNone ? SymbolRef.None : NodeSymbol(declaration));
             SetStructuredTypeMembers(type, emptySymbols, !isConstructor ? [signature] : [], isConstructor ? [signature] : [], []);
             isolatedSignatureTypes[signature] = type;

@@ -1277,6 +1277,7 @@ internal sealed partial class Checker
                     c.Parameters = Signatures.Record(baseSignature).Parameters;
                     c.Target = Signatures.Record(baseSignature).Target;
                     c.Mapper = Signatures.Record(baseSignature).Mapper;
+                    c.SyntheticFunctionTypeDeclaration = Signatures.Record(baseSignature).SyntheticFunctionTypeDeclaration;
                 }
                 ref var r = ref Signatures.Record(sig);
                 r.TypeParameters = Types.Object(classType).LocalTypeParameters;

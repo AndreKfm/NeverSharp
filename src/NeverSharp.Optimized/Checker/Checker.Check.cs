@@ -310,6 +310,7 @@ internal sealed partial class Checker
         if (Utilities.IsInternalModuleImportEqualsDeclaration(store, n) || CheckExternalImportOrExportDeclaration(node))
         {
             CheckImportBinding(node);
+            MarkImportEqualsAliasReferenced(node);
             if (store.Kind(store.ModuleReference(n)) != SyntaxKind.ExternalModuleReference)
             {
                 var target = ResolveAlias(GetSymbolOfDeclaration(node));
@@ -425,7 +426,10 @@ internal sealed partial class Checker
             {
                 Error(At(node, exportedName), Diagnostics.Cannot_export_0_Only_local_declarations_can_be_exported_from_a_module, store.Texts.GetString(Utilities.IdText(store, exportedName)));
             }
-            // (markLinkedReferences: emit only)
+            else
+            {
+                MarkExportSpecifierAliasReferenced(node);
+            }
         }
     }
 
@@ -478,6 +482,7 @@ internal sealed partial class Checker
             var sym = GetExportSymbolOfValueSymbolIfExported(ResolveEntityName(expression, SymbolFlags.All, ignoreErrors: true, dontResolveAlias: true, node));
             if (!sym.IsNone)
             {
+                MarkExportAssignmentAliasReferenced(node);
                 // If not a value, we're interpreting the identifier as a type export, along the lines of (`export { Id as default }`)
                 if ((GetSymbolFlags(sym) & SymbolFlags.Value) != 0)
                 {

@@ -364,6 +364,9 @@ internal sealed class SignatureStore
         public int Mapper;              // type mapper handle (C3)
         public Signature[]? CompositeSignatures; // union and intersection signatures (C5)
         public TypeFlags CompositeKind;
+        // checker.ts createCallSignature: the declaration is a synthetic FunctionTypeNode (no node here; Declaration
+        // stays None and this marks it, copied wherever the declaration is copied) (C9e)
+        public bool SyntheticFunctionTypeDeclaration;
     }
 
     private SignatureRecord[] signatures = new SignatureRecord[64];
