@@ -1043,7 +1043,26 @@ internal sealed partial class Checker
             }
             if ((Types.Flags(baseConstructorType) & TypeFlags.Any) == 0 && baseConstructorType != nullWideningType && !IsConstructorType(baseConstructorType))
             {
-                // (Type_0_is_not_a_constructor_function_type and its related information: C8)
+                var err = Error(At(baseTypeNode, StoreOf(baseTypeNode).Expression(baseTypeNode.Node)), Diagnostics.Type_0_is_not_a_constructor_function_type, TypeToString(baseConstructorType));
+                if ((Types.Flags(baseConstructorType) & TypeFlags.TypeParameter) != 0)
+                {
+                    var constraint = GetConstraintFromTypeParameter(baseConstructorType);
+                    var ctorReturn = unknownType;
+                    if (!constraint.IsNone)
+                    {
+                        var ctorSig = GetSignaturesOfType(constraint, SignatureKind.Construct);
+                        if (ctorSig.Count > 0)
+                        {
+                            ctorReturn = GetReturnTypeOfSignature(ctorSig[0]);
+                        }
+                    }
+                    var typeParameterDeclarations = DeclarationsOf(Types.Symbol(baseConstructorType));
+                    if (err is not null && typeParameterDeclarations is { Count: > 0 })
+                    {
+                        AddRelatedInfo(err, CreateRelatedForNode(typeParameterDeclarations[0], Diagnostics.Did_you_mean_for_0_to_be_constrained_to_type_new_args_Colon_any_1,
+                            SymbolToString(Types.Symbol(baseConstructorType)), TypeToString(ctorReturn)));
+                    }
+                }
                 if (Types.Object(classType).ResolvedBaseConstructorType.IsNone)
                 {
                     Types.Object(classType).ResolvedBaseConstructorType = errorType;
