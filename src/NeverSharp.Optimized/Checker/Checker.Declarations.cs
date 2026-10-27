@@ -275,7 +275,7 @@ internal sealed partial class Checker
                 CheckAsyncFunctionReturnType(node, returnTypeRef);
             }
         }
-        if (kind != SyntaxKind.IndexSignature)
+        if (kind is not (SyntaxKind.IndexSignature or SyntaxKind.JSDocFunctionType))
         {
             RegisterForUnusedIdentifiersCheck(node);
         }

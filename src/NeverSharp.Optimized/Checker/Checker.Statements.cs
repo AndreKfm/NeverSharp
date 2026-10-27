@@ -281,6 +281,25 @@ internal sealed partial class Checker
             case SyntaxKind.NamedTupleMember:
                 CheckNamedTupleMember(node);
                 return;
+            case SyntaxKind.JSDocFunctionType:
+                // checkJSDocFunctionType
+                if (store.Type(n).IsNone && !Utilities.IsJSDocConstructSignature(store, n))
+                {
+                    ReportImplicitAny(node, anyType);
+                }
+                CheckSignatureDeclaration(node);
+                goto case SyntaxKind.JSDocTypeLiteral;
+            case SyntaxKind.JSDocNonNullableType:
+            case SyntaxKind.JSDocNullableType:
+            case SyntaxKind.JSDocAllType:
+            case SyntaxKind.JSDocUnknownType:
+            case SyntaxKind.JSDocTypeLiteral:
+                CheckJSDocTypeIsInJsFile(node);
+                ForEachChildCheckSourceElement(node);
+                return;
+            case SyntaxKind.JSDocVariadicType:
+                CheckJSDocVariadicType(node);
+                return;
             case SyntaxKind.JSDocTypeExpression:
                 CheckSourceElement(At(node, store.Type(n)));
                 return;
@@ -420,6 +439,68 @@ internal sealed partial class Checker
                 CheckDecorators(node);
                 return;
         }
+    }
+
+    // checker.ts checkJSDocTypeIsInJsFile: JSDoc type syntax in TypeScript code
+    private void CheckJSDocTypeIsInJsFile(NodeRef node)
+    {
+        var store = StoreOf(node);
+        var n = node.Node;
+        if (Utilities.IsInJSFile(store, n))
+        {
+            return;
+        }
+        var kind = store.Kind(n);
+        if (kind is SyntaxKind.JSDocNonNullableType or SyntaxKind.JSDocNullableType)
+        {
+            var token = Scanner.TokenToString(kind == SyntaxKind.JSDocNonNullableType ? SyntaxKind.ExclamationToken : SyntaxKind.QuestionToken);
+            var postfix = store.Postfix(n);
+            var diagnostic = postfix
+                ? Diagnostics._0_at_the_end_of_a_type_is_not_valid_TypeScript_syntax_Did_you_mean_to_write_1
+                : Diagnostics._0_at_the_start_of_a_type_is_not_valid_TypeScript_syntax_Did_you_mean_to_write_1;
+            var type = GetTypeFromTypeNode(At(node, store.Type(n)));
+            var shown = type;
+            if (kind == SyntaxKind.JSDocNullableType && !(type == neverType || type == voidType))
+            {
+                shown = postfix ? GetUnionType([type, undefinedType]) : GetUnionType([type, undefinedType, nullType]);
+            }
+            GrammarErrorOnNode(node, diagnostic, token, TypeToString(shown));
+        }
+        else
+        {
+            GrammarErrorOnNode(node, Diagnostics.JSDoc_types_can_only_be_used_inside_documentation_comments);
+        }
+    }
+
+    // checker.ts checkJSDocVariadicType (the JSDoc parameter tag cases are module C9's)
+    private void CheckJSDocVariadicType(NodeRef node)
+    {
+        var store = StoreOf(node);
+        var n = node.Node;
+        CheckJSDocTypeIsInJsFile(node);
+        CheckSourceElement(At(node, store.Type(n)));
+        // Only legal location is in the *last* parameter tag or last parameter of a JSDoc function.
+        var parent = store.Parent(n);
+        if (store.Kind(parent) == SyntaxKind.Parameter && store.Kind(store.Parent(parent)) == SyntaxKind.JSDocFunctionType)
+        {
+            var parameters = store.Nodes(store.Parameters(store.Parent(parent)));
+            if (parameters[^1] != parent)
+            {
+                Error(node, Diagnostics.A_rest_parameter_must_be_last_in_a_parameter_list);
+            }
+            return;
+        }
+        if (store.Kind(parent) != SyntaxKind.JSDocTypeExpression)
+        {
+            Error(node, Diagnostics.JSDoc_may_only_appear_in_the_last_parameter_of_a_signature);
+        }
+        var paramTag = store.Parent(parent);
+        if (store.Kind(paramTag) != SyntaxKind.JSDocParameterTag)
+        {
+            Error(node, Diagnostics.JSDoc_may_only_appear_in_the_last_parameter_of_a_signature);
+            return;
+        }
+        // (the parameter of the tag and its host signature: TODO(C9))
     }
 
     // forEachChild(node, checkSourceElement)

@@ -233,7 +233,7 @@ internal sealed partial class Checker
                 // (hasSkipDirectInferenceFlag: set by the language service only)
                 return GetFreshTypeOfLiteralType(GetStringLiteralType(store.Texts.GetString(store.Text(n))!));
             case SyntaxKind.NumericLiteral:
-                // (checkGrammarNumericLiteral: TODO(C8))
+                CheckGrammarNumericLiteral(node);
                 return GetFreshTypeOfLiteralType(GetNumberLiteralType(JsNumber.FromString(store.Texts.GetString(store.Text(n))!)));
             case SyntaxKind.BigIntLiteral:
                 return GetFreshTypeOfLiteralType(GetBigIntLiteralType(Utilities.ParsePseudoBigInt(store.Texts.GetString(store.Text(n))!)));
@@ -244,6 +244,7 @@ internal sealed partial class Checker
             case SyntaxKind.TemplateExpression:
                 return CheckTemplateExpression(node);
             case SyntaxKind.RegularExpressionLiteral:
+                CheckRegularExpressionLiteral(node); // checkRegularExpressionLiteral (module C8)
                 return globalRegExpType;
             case SyntaxKind.ArrayLiteralExpression:
                 return CheckArrayLiteral(node, checkMode, forceTuple);

@@ -2118,6 +2118,42 @@ internal sealed partial class Checker
         ErrorOrSuggestion(isError: false, node, Diagnostics.Numeric_literals_with_absolute_values_equal_to_2_53_or_greater_are_too_large_to_be_represented_accurately_as_integers);
     }
 
+    private readonly HashSet<NodeRef> checkedRegularExpressions = [];
+
+    // checker.ts checkRegularExpressionLiteral / checkGrammarRegularExpressionLiteral: the regular expression is rescanned
+    // with error reporting (once per node, a lazy diagnostic)
+    internal void CheckRegularExpressionLiteral(NodeRef node)
+    {
+        if (!checkedRegularExpressions.Add(node))
+        {
+            return;
+        }
+        var store = StoreOf(node);
+        if (HasParseDiagnostics(node.File) || store.IsUnterminated(node.Node))
+        {
+            return;
+        }
+        var root = FileAt(node.File).Root;
+        ProgramDiagnostic? lastError = null;
+        Scanner? scanner = null;
+        scanner = Scanner.CreateScanner(store.LanguageVersion(root), skipTrivia: true, store.LanguageVariant(root), store.SourceFileText(root), (message, length, arg0) =>
+        {
+            // For providing spelling suggestions
+            var start = scanner!.GetTokenEnd();
+            if (message.Category == DiagnosticCategory.Message && lastError is not null && start == lastError.StartOrUndefined && length == lastError.LengthOrUndefined)
+            {
+                AddRelatedInfo(lastError, CreateRelatedForSpan(node.File, start, length, message, arg0));
+            }
+            else if (lastError is null || start != lastError.StartOrUndefined)
+            {
+                lastError = CreateFileDiagnosticAt(node.File, start, length, message, arg0);
+                diagnostics.Add(lastError);
+            }
+        }, store.Pos(node.Node), store.End(node.Node) - store.Pos(node.Node));
+        scanner.Scan();
+        scanner.ReScanSlashToken(reportErrors: true);
+    }
+
     // ---- imports and exports ----
 
     // checker.ts checkGrammarModuleElementContext

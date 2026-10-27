@@ -1963,6 +1963,12 @@ internal sealed partial class Checker
                     : wideningKind == WideningKind.GeneratorYield ? Diagnostics._0_which_lacks_return_type_annotation_implicitly_has_an_1_yield_type
                     : Diagnostics._0_which_lacks_return_type_annotation_implicitly_has_an_1_return_type;
                 break;
+            case SyntaxKind.MappedType:
+                if (noImplicitAny)
+                {
+                    Error(declaration, Diagnostics.Mapped_object_type_implicitly_has_an_any_template_type);
+                }
+                return;
             case SyntaxKind.VariableDeclaration:
             default:
                 diagnostic = noImplicitAny ? Diagnostics.Variable_0_implicitly_has_an_1_type : Diagnostics.Variable_0_implicitly_has_an_1_type_but_a_better_type_may_be_inferred_from_usage;

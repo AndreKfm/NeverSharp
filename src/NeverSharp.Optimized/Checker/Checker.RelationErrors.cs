@@ -7,8 +7,8 @@
 // Port structure follows internal/checker/relater.go (elaborateError and the elaboration functions)
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
 // Modified: translated from TypeScript to C#; module C4. The elaboration iterators are C# iterators (lazily evaluated
-// like TypeScript's generators). TODO(C5): the contextual typing of the re-checked expressions
-// (checkExpressionForMutableLocationWithContextualType, the tuple re-check of array literals); TODO(C9): JSX elaboration.
+// like TypeScript's generators). Module C8: the contextual typing of the re-checked expressions
+// (checkExpressionForMutableLocationWithContextualType, the tuple re-check of array literals). TODO(C9): JSX elaboration.
 
 using NeverSharp.Generated;
 
@@ -174,8 +174,14 @@ internal sealed partial class Checker
         return Type.None;
     }
 
-    // checker.ts checkExpressionForMutableLocationWithContextualType (TODO(C5): pushContextualType(next, sourcePropType))
-    private Type CheckExpressionForMutableLocationWithContextualType(NodeRef next, Type sourcePropType) => CheckExpressionForMutableLocation(next);
+    // checker.ts checkExpressionForMutableLocationWithContextualType
+    private Type CheckExpressionForMutableLocationWithContextualType(NodeRef next, Type sourcePropType)
+    {
+        PushContextualType(next, sourcePropType, isCache: false);
+        var result = CheckExpressionForMutableLocation(next, CheckMode.Contextual);
+        PopContextualType();
+        return result;
+    }
 
     // checker.ts elaborateElementwise: for every element, checks that element to issue an error on a property of that
     // element's type. If that element would issue an error, we first attempt to dive into that element's inner
@@ -310,8 +316,15 @@ internal sealed partial class Checker
         {
             return ElaborateElementwise(GenerateLimitedTupleElements(node, target), source, target, relation, containingMessageChain, errorOutputContainer);
         }
-        // TODO(C5): recreate a tuple from the elements (checkArrayLiteral(node, CheckMode.Contextual, forceTuple) with the
-        // target as contextual type) and elaborate elementwise when it is tuple-like.
+        // recreate a tuple from the elements, if possible
+        // Since we're re-doing the expression type, we need to reapply the contextual type
+        PushContextualType(node, target, isCache: false);
+        var tupleizedType = CheckArrayLiteral(node, CheckMode.Contextual, forceTuple: true);
+        PopContextualType();
+        if (IsTupleLikeType(tupleizedType))
+        {
+            return ElaborateElementwise(GenerateLimitedTupleElements(node, target), tupleizedType, target, relation, containingMessageChain, errorOutputContainer);
+        }
         return false;
     }
 
