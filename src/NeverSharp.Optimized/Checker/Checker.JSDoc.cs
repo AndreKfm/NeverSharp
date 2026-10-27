@@ -142,7 +142,7 @@ internal sealed partial class Checker
         }
         foreach (var t in store.Nodes(store.Tags(jsDoc)))
         {
-            if (Utilities.IsJSDocTypeAlias(store, t))
+            if (Utilities.IsJSDocTypeAlias(store, t) || store.Kind(t) == SyntaxKind.JSDocOverloadTag)
             {
                 return false;
             }
@@ -692,6 +692,77 @@ internal sealed partial class Checker
                     var tagName = store.TagName(tag);
                     Error(At(node, tagName), Diagnostics._0_tag_already_specified, store.Texts.GetString(store.EscapedText(tagName))!);
                 }
+            }
+        }
+    }
+
+    // checker.ts checkUnmatchedJSDocParameters
+    private void CheckUnmatchedJSDocParameters(NodeRef node)
+    {
+        var store = StoreOf(node);
+        var jsdocParameters = new List<Node>();
+        foreach (var tag in UtilitiesPublic.GetJSDocTags(store, node.Node))
+        {
+            if (store.Kind(tag) == SyntaxKind.JSDocParameterTag)
+            {
+                jsdocParameters.Add(tag);
+            }
+        }
+        if (jsdocParameters.Count == 0)
+        {
+            return;
+        }
+        var isJs = Utilities.IsInJSFile(store, node.Node);
+        var parameters = new HashSet<string>(StringComparer.Ordinal);
+        var excludedParameters = new HashSet<int>();
+        var declParameters = store.Nodes(store.Parameters(node.Node));
+        for (var index = 0; index < declParameters.Length; index++)
+        {
+            var name = store.Name(declParameters[index]);
+            if (store.Kind(name) == SyntaxKind.Identifier)
+            {
+                parameters.Add(store.Texts.GetString(store.EscapedText(name))!);
+            }
+            if (Utilities.IsBindingPattern(store, name))
+            {
+                excludedParameters.Add(index);
+            }
+        }
+        var containsArguments = store.Kind(node.Node) != SyntaxKind.JSDocSignature && !store.Body(node.Node).IsNone && ContainsArgumentsReference(node);
+        if (containsArguments)
+        {
+            var lastJSDocParamIndex = jsdocParameters.Count - 1;
+            var lastJSDocParam = jsdocParameters[lastJSDocParamIndex];
+            var lastName = store.Name(lastJSDocParam);
+            var typeExpression = store.TypeExpression(lastJSDocParam);
+            if (isJs && store.Kind(lastName) == SyntaxKind.Identifier && !typeExpression.IsNone && !store.Type(typeExpression).IsNone &&
+                !parameters.Contains(store.Texts.GetString(store.EscapedText(lastName))!) && !excludedParameters.Contains(lastJSDocParamIndex) &&
+                !IsArrayType(GetTypeFromTypeNode(At(node, store.Type(typeExpression)))))
+            {
+                Error(At(node, lastName), Diagnostics.JSDoc_param_tag_has_name_0_but_there_is_no_parameter_with_that_name_It_would_match_arguments_if_it_had_an_array_type,
+                    store.Texts.GetString(Utilities.IdText(store, lastName))!);
+            }
+            return;
+        }
+        for (var index = 0; index < jsdocParameters.Count; index++)
+        {
+            var tag = jsdocParameters[index];
+            var name = store.Name(tag);
+            if (excludedParameters.Contains(index) || (store.Kind(name) == SyntaxKind.Identifier && parameters.Contains(store.Texts.GetString(store.EscapedText(name))!)))
+            {
+                continue;
+            }
+            if (store.Kind(name) == SyntaxKind.QualifiedName)
+            {
+                if (isJs)
+                {
+                    Error(At(node, name), Diagnostics.Qualified_name_0_is_not_allowed_without_a_leading_param_object_1,
+                        PrinterUtilities.EntityNameToString(store, name), PrinterUtilities.EntityNameToString(store, store.Left(name)));
+                }
+            }
+            else if (!store.IsNameFirst(tag))
+            {
+                ErrorOrSuggestion(isJs, At(node, name), Diagnostics.JSDoc_param_tag_has_name_0_but_there_is_no_parameter_with_that_name, store.Texts.GetString(Utilities.IdText(store, name))!);
             }
         }
     }

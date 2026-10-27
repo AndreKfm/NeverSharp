@@ -371,8 +371,8 @@ internal sealed partial class Checker
             CheckGrammarFunctionLikeDeclaration(node);
         }
         // (async functions and generators prior to ES2018 need emit helpers: Gate C targets ES2025)
-        CheckTypeParameters(node, store.TypeParameters(n));
-        // (checkUnmatchedJSDocParameters: TODO(C9d))
+        CheckTypeParameters(node, [.. GetEffectiveTypeParameterDeclarations(store, n)]);
+        CheckUnmatchedJSDocParameters(node);
         foreach (var parameter in store.Nodes(store.Parameters(n)))
         {
             CheckParameter(At(node, parameter));
@@ -978,7 +978,10 @@ internal sealed partial class Checker
                         lastSeenNonAmbientDeclaration = current;
                     }
                 }
-                // (JSDoc @overload tags of JavaScript functions: TODO(C9d))
+                if (Utilities.IsInJSFile(store, node) && Utilities.IsFunctionLike(store, node) && store.JsDoc(node) is { Count: > 0 })
+                {
+                    hasOverloads = !GetFirstJSDocTagOfKind(store, node, SyntaxKind.JSDocOverloadTag).IsNone;
+                }
             }
         }
         if (multipleConstructorImplementation)
@@ -1046,6 +1049,10 @@ internal sealed partial class Checker
                     if (!IsImplementationCompatibleWithOverload(bodySignature, signature))
                     {
                         var errorNode = Signatures.Record(signature).Declaration;
+                        if (!errorNode.IsNone && Kind(errorNode) == SyntaxKind.JSDocSignature)
+                        {
+                            errorNode = At(errorNode, StoreOf(errorNode).TagName(StoreOf(errorNode).Parent(errorNode.Node)));
+                        }
                         AddRelatedInfo(Error(errorNode, Diagnostics.This_overload_signature_is_not_compatible_with_its_implementation_signature),
                             CreateRelatedForNode(bodyDeclaration, Diagnostics.The_implementation_signature_is_declared_here));
                         break;
