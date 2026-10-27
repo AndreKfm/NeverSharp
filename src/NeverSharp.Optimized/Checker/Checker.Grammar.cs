@@ -2169,7 +2169,10 @@ internal sealed partial class Checker
             var start = scanner!.GetTokenEnd();
             if (message.Category == DiagnosticCategory.Message && lastError is not null && start == lastError.StartOrUndefined && length == lastError.LengthOrUndefined)
             {
-                AddRelatedInfo(lastError, CreateRelatedForSpan(node.File, start, length, message, arg0));
+                // createDetachedDiagnostic: a location without a source file
+                var related = CreateRelatedForSpan(node.File, start, length, message, arg0);
+                related.SourceFile = null;
+                AddRelatedInfo(lastError, related);
             }
             else if (lastError is null || start != lastError.StartOrUndefined)
             {

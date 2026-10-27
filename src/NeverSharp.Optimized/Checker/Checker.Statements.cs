@@ -1355,15 +1355,6 @@ internal sealed partial class Checker
         {
             Error(At(node, name), Diagnostics.A_bigint_literal_cannot_be_used_as_a_property_name);
         }
-        if (kind == SyntaxKind.Parameter && (SymbolFlagsOf(symbol) & SymbolFlags.Property) != 0)
-        {
-            // the parameter symbol of a parameter property (getSymbolOfDeclaration returns the parameter's own symbol)
-            var local = ResolveName(node, NameOf(symbol), NodeRef.None, SymbolFlags.Value, null, isUse: false);
-            if (!local.IsNone)
-            {
-                symbol = local;
-            }
-        }
         var type = ConvertAutoToAny(GetTypeOfSymbol(symbol));
         if (node == ValueDeclarationOf(symbol))
         {

@@ -873,6 +873,40 @@ internal sealed partial class Checker
             case SyntaxKind.ArrayBindingPattern:
                 S.SetElements(copy, visitList(store.Elements(n)));
                 break;
+            // (module C9e: expressions of computed names in binding patterns, visitEachChild of cloneBindingName)
+            case SyntaxKind.CallExpression:
+                S.SetExpression(copy, V(store.Expression(n)));
+                S.SetQuestionDotToken(copy, V(store.QuestionDotToken(n)));
+                S.SetTypeArguments(copy, visitList(store.TypeArguments(n)));
+                S.SetArguments(copy, visitList(store.Arguments(n)));
+                break;
+            case SyntaxKind.BinaryExpression:
+                S.SetLeft(copy, V(store.Left(n)));
+                S.SetOperatorToken(copy, V(store.OperatorToken(n)));
+                S.SetRight(copy, V(store.Right(n)));
+                break;
+            case SyntaxKind.ParenthesizedExpression:
+                S.SetExpression(copy, V(store.Expression(n)));
+                break;
+            case SyntaxKind.ClassExpression:
+                S.SetModifiers(copy, visitList(store.Modifiers(n)));
+                S.SetName(copy, V(store.Name(n)));
+                S.SetTypeParameters(copy, visitList(store.TypeParameters(n)));
+                S.SetHeritageClauses(copy, visitList(store.HeritageClauses(n)));
+                S.SetMembers(copy, visitList(store.Members(n)));
+                break;
+            case SyntaxKind.HeritageClause:
+                S.SetToken(copy, store.Token(n));
+                S.SetTypes(copy, visitList(store.Types(n)));
+                break;
+            case SyntaxKind.PropertyDeclaration:
+                S.SetModifiers(copy, visitList(store.Modifiers(n)));
+                S.SetName(copy, V(store.Name(n)));
+                S.SetQuestionToken(copy, V(store.QuestionToken(n)));
+                S.SetExclamationToken(copy, V(store.ExclamationToken(n)));
+                S.SetType(copy, V(store.Type(n)));
+                S.SetInitializer(copy, V(store.Initializer(n)));
+                break;
             case SyntaxKind.BindingElement:
                 S.SetDotDotDotToken(copy, V(store.DotDotDotToken(n)));
                 S.SetPropertyName(copy, V(store.PropertyName(n)));
