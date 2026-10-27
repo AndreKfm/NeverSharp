@@ -414,7 +414,7 @@ internal sealed partial class Checker
             }
             modifiers = copied.Count > 0 ? SList(copied) : NodeList.None;
         }
-        var isRest = (!parameterDeclaration.IsNone && Kind(parameterDeclaration) == SyntaxKind.Parameter && !StoreOf(parameterDeclaration).DotDotDotToken(parameterDeclaration.Node).IsNone) ||
+        var isRest = (!parameterDeclaration.IsNone && IsRestParameterOrTag(StoreOf(parameterDeclaration), parameterDeclaration.Node)) ||
             (GetCheckFlags(parameterSymbol) & CheckFlags.RestParameter) != 0;
         var dotDotDotToken = isRest ? SToken(SyntaxKind.DotDotDotToken) : Node.None;
         var name = ParameterToParameterDeclarationName(parameterSymbol, parameterDeclaration, context);

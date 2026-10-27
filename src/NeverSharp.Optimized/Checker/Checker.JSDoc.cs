@@ -577,6 +577,125 @@ internal sealed partial class Checker
         return Node.None;
     }
 
+    // checker.ts checkJSDocCommentWorker: the links of a JSDoc comment
+    private void CheckJSDocCommentWorker(NodeRef owner, TextOrList comment)
+    {
+        if (!comment.IsList)
+        {
+            return;
+        }
+        var store = StoreOf(owner);
+        foreach (var part in store.Nodes(comment.List))
+        {
+            if (store.Kind(part) is SyntaxKind.JSDocLink or SyntaxKind.JSDocLinkCode or SyntaxKind.JSDocLinkPlain)
+            {
+                CheckSourceElement(At(owner, part));
+            }
+        }
+    }
+
+    // checker.ts resolveJSDocMemberName
+    private SymbolRef ResolveJSDocMemberName(NodeRef name, bool ignoreErrors, SymbolRef container = default)
+    {
+        var store = StoreOf(name);
+        var kind = store.Kind(name.Node);
+        if (kind is SyntaxKind.Identifier or SyntaxKind.QualifiedName)
+        {
+            // resolve static values first
+            var meaning = SymbolFlags.Type | SymbolFlags.Namespace | SymbolFlags.Value;
+            var host = Utilities.GetHostSignatureFromJSDoc(store, name.Node);
+            var symbol = ResolveEntityName(name, meaning, ignoreErrors, dontResolveAlias: true, host.IsNone ? NodeRef.None : At(name, host));
+            if (symbol.IsNone && kind == SyntaxKind.Identifier && !container.IsNone)
+            {
+                symbol = GetMergedSymbol(GetSymbol(GetExportsOfSymbol(container), store.Texts.GetString(store.EscapedText(name.Node))!, meaning));
+            }
+            if (!symbol.IsNone)
+            {
+                return symbol;
+            }
+        }
+        if (kind is not (SyntaxKind.Identifier or SyntaxKind.QualifiedName or SyntaxKind.JSDocMemberName))
+        {
+            return SymbolRef.None;
+        }
+        var left = kind == SyntaxKind.Identifier ? container : ResolveJSDocMemberName(At(name, store.Left(name.Node)), ignoreErrors, container);
+        var right = kind == SyntaxKind.Identifier ? store.EscapedText(name.Node) : store.EscapedText(store.Right(name.Node));
+        if (!left.IsNone)
+        {
+            var proto = (SymbolFlagsOf(left) & SymbolFlags.Value) != 0 ? GetPropertyOfType(GetTypeOfSymbol(left), "prototype") : SymbolRef.None;
+            var t = !proto.IsNone ? GetTypeOfSymbol(proto) : GetDeclaredTypeOfSymbol(left);
+            return GetPropertyOfType(t, store.Texts.GetString(right)!);
+        }
+        return SymbolRef.None;
+    }
+
+    // checker.ts checkJSDocAugmentsTag
+    private void CheckJSDocAugmentsTag(NodeRef node)
+    {
+        var store = StoreOf(node);
+        var classLike = Utilities.GetEffectiveJSDocHost(store, node.Node);
+        if (classLike.IsNone || store.Kind(classLike) is not (SyntaxKind.ClassDeclaration or SyntaxKind.ClassExpression))
+        {
+            Error(At(node, classLike), Diagnostics.JSDoc_0_is_not_attached_to_a_class, store.Texts.GetString(store.EscapedText(store.TagName(node.Node)))!);
+            return;
+        }
+        var augmentsTags = new List<Node>();
+        foreach (var tag in UtilitiesPublic.GetJSDocTags(store, classLike))
+        {
+            if (store.Kind(tag) == SyntaxKind.JSDocAugmentsTag)
+            {
+                augmentsTags.Add(tag);
+            }
+        }
+        if (augmentsTags.Count > 1)
+        {
+            Error(At(node, augmentsTags[1]), Diagnostics.Class_declarations_cannot_have_more_than_one_augments_or_extends_tag);
+        }
+        var name = GetIdentifierFromEntityNameExpression(store, store.Expression(store.Class(node.Node)));
+        var extend = GetClassExtendsHeritageElement(store, classLike);
+        if (!extend.IsNone)
+        {
+            var className = GetIdentifierFromEntityNameExpression(store, store.Expression(extend));
+            if (!className.IsNone && !name.IsNone && !store.Texts.Equals(store.EscapedText(name), store.EscapedText(className)))
+            {
+                Error(At(node, name), Diagnostics.JSDoc_0_1_does_not_match_the_extends_2_clause, store.Texts.GetString(store.EscapedText(store.TagName(node.Node)))!,
+                    store.Texts.GetString(store.EscapedText(name))!, store.Texts.GetString(store.EscapedText(className))!);
+            }
+        }
+
+        static Node GetIdentifierFromEntityNameExpression(NodeStore store, Node node) => store.Kind(node) switch
+        {
+            SyntaxKind.Identifier => node,
+            SyntaxKind.PropertyAccessExpression => store.Name(node),
+            _ => Node.None,
+        };
+    }
+
+    // checker.ts checkJSDocSatisfiesTag
+    private void CheckJSDocSatisfiesTag(NodeRef node)
+    {
+        var store = StoreOf(node);
+        CheckSourceElement(At(node, store.TypeExpression(node.Node)));
+        var host = Utilities.GetEffectiveJSDocHost(store, node.Node);
+        if (!host.IsNone)
+        {
+            // getAllJSDocTags(host, isJSDocSatisfiesTag)
+            var count = 0;
+            foreach (var tag in UtilitiesPublic.GetJSDocTags(store, host))
+            {
+                if (store.Kind(tag) != SyntaxKind.JSDocSatisfiesTag)
+                {
+                    continue;
+                }
+                if (count++ > 0)
+                {
+                    var tagName = store.TagName(tag);
+                    Error(At(node, tagName), Diagnostics._0_tag_already_specified, store.Texts.GetString(store.EscapedText(tagName))!);
+                }
+            }
+        }
+    }
+
     // checker.ts getReturnTypeOfTypeTag
     private Type GetReturnTypeOfTypeTag(NodeRef node)
     {

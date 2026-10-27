@@ -233,14 +233,8 @@ internal sealed partial class Checker
             return;
         }
         var store = StoreOf(node);
-        var typeParameters = store.TypeParameters(node.Node);
-        if (typeParameters.IsNone)
-        {
-            return;
-        }
         var seenParentsWithEveryUnused = new HashSet<Node>();
-        var typeParameterNodes = store.Nodes(typeParameters).ToArray();
-        foreach (var typeParameterNode in typeParameterNodes)
+        foreach (var typeParameterNode in GetEffectiveTypeParameterDeclarations(store, node.Node))
         {
             var typeParameter = At(node, typeParameterNode);
             if (!IsTypeParameterUnused(typeParameter))
@@ -249,14 +243,26 @@ internal sealed partial class Checker
             }
             var name = store.Texts.GetString(Utilities.IdText(store, store.Name(typeParameterNode)))!;
             var parent = store.Parent(typeParameterNode);
+            var parentTypeParameters = store.TypeParameters(parent);
+            var typeParameterNodes = store.Nodes(parentTypeParameters).ToArray();
             if (store.Kind(parent) != SyntaxKind.InferType && Array.TrueForAll(typeParameterNodes, t => IsTypeParameterUnused(At(node, t))))
             {
                 if (seenParentsWithEveryUnused.Add(parent))
                 {
-                    // Include the `<>` in the error message (rangeOfTypeParameters)
                     var file = FileAt(node.File);
-                    var pos = store.Pos(typeParameters) - 1;
-                    var end = Scanner.SkipTrivia(store.SourceFileText(file.Root).Chars, store.End(typeParameters)) + 1;
+                    int pos, end;
+                    if (store.Kind(parent) == SyntaxKind.JSDocTemplateTag)
+                    {
+                        // Whole @template tag (rangeOfNode)
+                        pos = Scanner.SkipTrivia(store.SourceFileText(file.Root).Chars, store.Pos(parent));
+                        end = store.End(parent);
+                    }
+                    else
+                    {
+                        // Include the `<>` in the error message (rangeOfTypeParameters)
+                        pos = store.Pos(parentTypeParameters) - 1;
+                        end = Scanner.SkipTrivia(store.SourceFileText(file.Root).Chars, store.End(parentTypeParameters)) + 1;
+                    }
                     var only = typeParameterNodes.Length == 1;
                     var d = only
                         ? Utilities.CreateFileDiagnostic(store, file.Root, pos, end - pos, Diagnostics._0_is_declared_but_its_value_is_never_read, name)

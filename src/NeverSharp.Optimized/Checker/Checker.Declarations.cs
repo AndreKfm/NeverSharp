@@ -258,8 +258,12 @@ internal sealed partial class Checker
         {
             return;
         }
+        CheckTypeParameters(context, StoreOf(context).Nodes(typeParameterDeclarations).ToArray());
+    }
+
+    private void CheckTypeParameters(NodeRef context, Node[] declarations)
+    {
         var store = StoreOf(context);
-        var declarations = store.Nodes(typeParameterDeclarations).ToArray();
         var seenDefault = false;
         for (var i = 0; i < declarations.Length; i++)
         {

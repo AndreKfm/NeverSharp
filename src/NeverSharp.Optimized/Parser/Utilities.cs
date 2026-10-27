@@ -1584,6 +1584,12 @@ internal static partial class Utilities
         return GetModifierFlagsWorker(store, node, /*includeJSDoc*/ false);
     }
 
+    /// <summary>utilities.ts getEffectiveModifierFlags (syntactic modifiers and, in JavaScript files, JSDoc modifier tags; used by the checker, module C9d).</summary>
+    internal static ModifierFlags GetEffectiveModifierFlags(NodeStore store, Node node)
+    {
+        return GetModifierFlagsWorker(store, node, /*includeJSDoc*/ true);
+    }
+
     private static ModifierFlags GetRawJSDocModifierFlagsNoCache(NodeStore store, Node node)
     {
         var flags = ModifierFlags.None;

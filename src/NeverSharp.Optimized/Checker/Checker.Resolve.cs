@@ -1830,6 +1830,96 @@ internal sealed partial class Checker
     // ---- entity names and aliases ----
 
     /// <summary>checker.ts resolveEntityName: resolves a qualified name and any involved aliases.</summary>
+    // checker.ts resolveEntityNameFromAssignmentDeclaration
+    private SymbolRef ResolveEntityNameFromAssignmentDeclaration(NodeRef name, SymbolFlags meaning)
+    {
+        var store = StoreOf(name);
+        var parent = At(name, store.Parent(name.Node));
+        if (IsJSDocTypeReference(parent))
+        {
+            var secondaryLocation = GetAssignmentDeclarationLocation(parent);
+            if (!secondaryLocation.IsNone)
+            {
+                return ResolveName(secondaryLocation, store.Texts.GetString(store.EscapedText(name.Node))!, name, meaning, null, isUse: true);
+            }
+        }
+        return SymbolRef.None;
+    }
+
+    // checker.ts getAssignmentDeclarationLocation
+    private NodeRef GetAssignmentDeclarationLocation(NodeRef node)
+    {
+        var store = StoreOf(node);
+        for (var n = node.Node; !n.IsNone; n = store.Parent(n))
+        {
+            if (!(Utilities.IsJSDocNode(store, n) || (store.Flags(n) & NodeFlags.JSDoc) != 0))
+            {
+                break;
+            }
+            if (Utilities.IsJSDocTypeAlias(store, n))
+            {
+                return NodeRef.None;
+            }
+        }
+        var host = Utilities.GetJSDocHost(store, node.Node);
+        if (!host.IsNone && store.Kind(host) == SyntaxKind.ExpressionStatement && IsPrototypePropertyAssignment(store, store.Expression(host)))
+        {
+            // /** @param {K} p */ X.prototype.m = function () { } <-- look for K on X's declaration
+            var symbol = GetSymbolOfDeclaration(At(node, store.Left(store.Expression(host))));
+            if (!symbol.IsNone)
+            {
+                return GetDeclarationOfJSPrototypeContainer(symbol);
+            }
+        }
+        if (!host.IsNone && store.Kind(host) == SyntaxKind.FunctionExpression && IsPrototypePropertyAssignment(store, store.Parent(host)) &&
+            store.Kind(store.Parent(store.Parent(host))) == SyntaxKind.ExpressionStatement)
+        {
+            // X.prototype.m = /** @param {K} p */ function () { } <-- look for K on X's declaration
+            var symbol = GetSymbolOfDeclaration(At(node, store.Left(store.Parent(host))));
+            if (!symbol.IsNone)
+            {
+                return GetDeclarationOfJSPrototypeContainer(symbol);
+            }
+        }
+        if (!host.IsNone && (Utilities.IsObjectLiteralMethod(store, host) || store.Kind(host) == SyntaxKind.PropertyAssignment) &&
+            store.Kind(store.Parent(store.Parent(host))) == SyntaxKind.BinaryExpression &&
+            Utilities.GetAssignmentDeclarationKind(store, store.Parent(store.Parent(host))) == AssignmentDeclarationKind.Prototype)
+        {
+            // X.prototype = { /** @param {K} p */m() { } } <-- look for K on X's declaration
+            var symbol = GetSymbolOfDeclaration(At(node, store.Left(store.Parent(store.Parent(host)))));
+            if (!symbol.IsNone)
+            {
+                return GetDeclarationOfJSPrototypeContainer(symbol);
+            }
+        }
+        var sig = Utilities.GetEffectiveJSDocHost(store, node.Node);
+        if (!sig.IsNone && Utilities.IsFunctionLike(store, sig))
+        {
+            var symbol = GetSymbolOfDeclaration(At(node, sig));
+            return symbol.IsNone ? NodeRef.None : ValueDeclarationOf(symbol);
+        }
+        return NodeRef.None;
+    }
+
+    // checker.ts getDeclarationOfJSPrototypeContainer
+    private NodeRef GetDeclarationOfJSPrototypeContainer(SymbolRef symbol)
+    {
+        var parent = ParentOf(symbol);
+        var decl = parent.IsNone ? NodeRef.None : ValueDeclarationOf(parent);
+        if (decl.IsNone)
+        {
+            return NodeRef.None;
+        }
+        var store = StoreOf(decl);
+        // isAssignmentDeclaration: a binary expression, an access expression or an identifier in a JavaScript file
+        var initializer = store.Kind(decl.Node) is SyntaxKind.BinaryExpression or SyntaxKind.PropertyAccessExpression or SyntaxKind.ElementAccessExpression or SyntaxKind.Identifier
+            ? (Utilities.GetAssignedExpandoInitializer(store, decl.Node) is var assigned && !assigned.IsNone ? At(decl, assigned) : NodeRef.None)
+            : store.Kind(decl.Node) is SyntaxKind.VariableDeclaration or SyntaxKind.PropertyDeclaration or SyntaxKind.Parameter or SyntaxKind.BindingElement or SyntaxKind.PropertyAssignment
+                ? GetDeclaredExpandoInitializer(decl)
+                : NodeRef.None;
+        return !initializer.IsNone ? initializer : decl;
+    }
+
     internal SymbolRef ResolveEntityName(NodeRef name, SymbolFlags meaning, bool ignoreErrors = false, bool dontResolveAlias = false, NodeRef location = default)
     {
         var store = StoreOf(name);
@@ -1843,11 +1933,12 @@ internal sealed partial class Checker
         if (kind == SyntaxKind.Identifier)
         {
             var message = meaning == namespaceMeaning ? Diagnostics.Cannot_find_namespace_0 : GetCannotFindNameDiagnosticForName(At(name, Utilities.GetFirstIdentifier(store, name.Node)));
-            // (resolveEntityNameFromAssignmentDeclaration: JavaScript, module C9)
-            symbol = GetMergedSymbol(ResolveName(location.IsNone ? name : location, store.Texts.GetString(store.EscapedText(name.Node))!, name, meaning, ignoreErrors ? null : message, isUse: true));
+            var symbolFromJSPrototype = Utilities.IsInJSFile(store, name.Node) ? ResolveEntityNameFromAssignmentDeclaration(name, meaning) : SymbolRef.None;
+            symbol = GetMergedSymbol(ResolveName(location.IsNone ? name : location, store.Texts.GetString(store.EscapedText(name.Node))!, name, meaning,
+                ignoreErrors || !symbolFromJSPrototype.IsNone ? null : message, isUse: true));
             if (symbol.IsNone)
             {
-                return SymbolRef.None;
+                return GetMergedSymbol(symbolFromJSPrototype);
             }
         }
         else if (kind is SyntaxKind.QualifiedName or SyntaxKind.PropertyAccessExpression)

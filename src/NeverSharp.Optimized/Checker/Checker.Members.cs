@@ -439,7 +439,20 @@ internal sealed partial class Checker
             if (store.Token(clause) == SyntaxKind.ExtendsKeyword)
             {
                 var types = store.Types(clause);
-                return store.Length(types) > 0 ? At(declaration, store.Element(types, 0)) : NodeRef.None;
+                if (store.Length(types) == 0)
+                {
+                    return NodeRef.None;
+                }
+                if (Utilities.IsInJSFile(store, declaration.Node))
+                {
+                    // Prefer an @augments tag because it may have type parameters.
+                    var tag = GetFirstJSDocTagOfKind(store, declaration.Node, SyntaxKind.JSDocAugmentsTag);
+                    if (!tag.IsNone)
+                    {
+                        return At(declaration, store.Class(tag));
+                    }
+                }
+                return At(declaration, store.Element(types, 0));
             }
         }
         return NodeRef.None;
@@ -2859,7 +2872,26 @@ internal sealed partial class Checker
             return errorType;
         }
         var targetSymbol = ResolveAlias(symbol);
-        var type = (GetSymbolFlags(targetSymbol) & SymbolFlags.Value) != 0 ? GetTypeOfSymbol(targetSymbol) : errorType;
+        var aliasDeclaration = DeclarationsOf(symbol) is { Count: > 0 } ? GetDeclarationOfAliasSymbol(symbol) : NodeRef.None;
+        var exportSymbol = aliasDeclaration.IsNone ? SymbolRef.None : GetTargetOfAliasDeclaration(aliasDeclaration, dontRecursivelyResolve: true);
+        var declaredType = Type.None;
+        foreach (var d in exportSymbol.IsNone ? [] : DeclarationsOf(exportSymbol) ?? [])
+        {
+            if (Kind(d) == SyntaxKind.ExportAssignment)
+            {
+                declaredType = TryGetTypeFromEffectiveTypeNode(d);
+                if (!declaredType.IsNone)
+                {
+                    break;
+                }
+            }
+        }
+        // (getFlowTypeFromCommonJSExport for an alias of a duplicated CommonJS export of another file: Gate C's programs
+        // have one file)
+        var type = IsDuplicatedCommonJSExport(DeclarationsOf(symbol)) ? autoType
+            : !declaredType.IsNone ? declaredType
+            : (GetSymbolFlags(targetSymbol) & SymbolFlags.Value) != 0 ? GetTypeOfSymbol(targetSymbol)
+            : errorType;
         if (!PopTypeResolution())
         {
             ReportCircularityError(symbol);
@@ -2871,6 +2903,25 @@ internal sealed partial class Checker
             after.ResolvedType = type;
         }
         return after.ResolvedType;
+    }
+
+    // checker.ts isDuplicatedCommonJSExport
+    private bool IsDuplicatedCommonJSExport(List<NodeRef>? declarations)
+    {
+        if (declarations is not { Count: > 1 })
+        {
+            return false;
+        }
+        foreach (var d in declarations)
+        {
+            var store = StoreOf(d);
+            if (!Utilities.IsInJSFile(store, d.Node) || !Utilities.IsAccessExpression(store, d.Node) ||
+                !(Utilities.IsExportsIdentifier(store, store.Expression(d.Node)) || Utilities.IsModuleExportsAccessExpression(store, store.Expression(d.Node))))
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
     /// <summary>checker.ts getOptionalType.</summary>
@@ -2923,9 +2974,23 @@ internal sealed partial class Checker
         var store = StoreOf(declaration);
         var node = declaration.Node;
         var typeAsString = TypeToString(GetWidenedType(type));
+        if (Utilities.IsInJSFile(store, node) && Program.IsCheckJsEnabledForFile(FileAt(declaration.File), compilerOptions) != true)
+        {
+            // Only report implicit any errors/suggestions in TS and ts-check JS files
+            return;
+        }
         DiagnosticMessage diagnostic;
         switch (store.Kind(node))
         {
+            case SyntaxKind.JSDocFunctionType:
+                Error(declaration, Diagnostics.Function_type_which_lacks_return_type_annotation_implicitly_has_an_0_return_type, typeAsString);
+                return;
+            case SyntaxKind.JSDocSignature:
+                if (noImplicitAny && store.Kind(store.Parent(node)) == SyntaxKind.JSDocOverloadTag)
+                {
+                    Error(At(declaration, store.TagName(store.Parent(node))), Diagnostics.This_overload_implicitly_returns_the_type_0_because_it_lacks_a_return_type_annotation, typeAsString);
+                }
+                return;
             case SyntaxKind.BinaryExpression:
             case SyntaxKind.PropertyDeclaration:
             case SyntaxKind.PropertySignature:

@@ -186,7 +186,22 @@ internal sealed partial class Checker
     {
         var store = StoreOf(node);
         var n = node.Node;
-        // (checkJSDocCommentWorker for the JSDoc comments of the node, and the JSDoc tags of JavaScript files: TODO(C9d))
+        if (Utilities.CanHaveJSDoc(store, n) && store.JsDoc(n) is { Count: > 0 } jsDocs)
+        {
+            var isJs = Utilities.IsInJSFile(store, n);
+            foreach (var jsDoc in jsDocs.ToArray())
+            {
+                CheckJSDocCommentWorker(node, store.Comment(jsDoc));
+                foreach (var tag in store.Nodes(store.Tags(jsDoc)))
+                {
+                    CheckJSDocCommentWorker(node, store.Comment(tag));
+                    if (isJs)
+                    {
+                        CheckSourceElement(At(node, tag));
+                    }
+                }
+            }
+        }
         if (compilerOptions.AllowUnreachableCode != true && !withinUnreachableCode && CheckSourceElementUnreachable(node))
         {
             withinUnreachableCode = true;
@@ -298,6 +313,83 @@ internal sealed partial class Checker
                 return;
             case SyntaxKind.JSDocTypeExpression:
                 CheckSourceElement(At(node, store.Type(n)));
+                return;
+            case SyntaxKind.JSDocAugmentsTag:
+                CheckJSDocAugmentsTag(node);
+                return;
+            case SyntaxKind.JSDocImplementsTag:
+            {
+                var classLike = Utilities.GetEffectiveJSDocHost(store, n);
+                if (classLike.IsNone || store.Kind(classLike) is not (SyntaxKind.ClassDeclaration or SyntaxKind.ClassExpression))
+                {
+                    Error(At(node, classLike), Diagnostics.JSDoc_0_is_not_attached_to_a_class, store.Texts.GetString(store.EscapedText(store.TagName(n)))!);
+                }
+                return;
+            }
+            case SyntaxKind.JSDocTypedefTag:
+            case SyntaxKind.JSDocCallbackTag:
+            case SyntaxKind.JSDocEnumTag:
+            {
+                // checkJSDocTypeAliasTag
+                if (store.TypeExpression(n).IsNone)
+                {
+                    // If the node had `@property` tags, `typeExpression` would have been set to the first property tag.
+                    Error(At(node, store.Name(n)), Diagnostics.JSDoc_typedef_tag_should_either_have_a_type_annotation_or_be_followed_by_property_or_member_tags);
+                }
+                if (store.Kind(n) != SyntaxKind.JSDocEnumTag && !store.Name(n).IsNone)
+                {
+                    CheckTypeNameIsReserved(At(node, store.Name(n)), Diagnostics.Type_alias_name_cannot_be_0);
+                }
+                CheckSourceElement(At(node, store.TypeExpression(n)));
+                CheckTypeParameters(node, [.. GetEffectiveTypeParameterDeclarations(store, n)]);
+                return;
+            }
+            case SyntaxKind.JSDocTemplateTag:
+                CheckSourceElement(At(node, store.Constraint(n)));
+                foreach (var tp in store.Nodes(store.TypeParameters(n)))
+                {
+                    CheckSourceElement(At(node, tp));
+                }
+                return;
+            case SyntaxKind.JSDocTypeTag:
+            case SyntaxKind.JSDocParameterTag:
+            case SyntaxKind.JSDocPropertyTag:
+                CheckSourceElement(At(node, store.TypeExpression(n)));
+                return;
+            case SyntaxKind.JSDocLink:
+            case SyntaxKind.JSDocLinkCode:
+            case SyntaxKind.JSDocLinkPlain:
+                if (!store.Name(n).IsNone)
+                {
+                    ResolveJSDocMemberName(At(node, store.Name(n)), ignoreErrors: true);
+                }
+                return;
+            case SyntaxKind.JSDocPublicTag:
+            case SyntaxKind.JSDocProtectedTag:
+            case SyntaxKind.JSDocPrivateTag:
+            {
+                // checkJSDocAccessibilityModifiers
+                var host = Utilities.GetJSDocHost(store, n);
+                if (!host.IsNone && Utilities.IsClassElement(store, host) && store.Kind(store.Name(host)) == SyntaxKind.PrivateIdentifier)
+                {
+                    Error(node, Diagnostics.An_accessibility_modifier_cannot_be_used_with_a_private_identifier);
+                }
+                return;
+            }
+            case SyntaxKind.JSDocSatisfiesTag:
+                CheckJSDocSatisfiesTag(node);
+                return;
+            case SyntaxKind.JSDocThisTag:
+            {
+                var host = Utilities.GetEffectiveJSDocHost(store, n);
+                if (!host.IsNone && store.Kind(host) == SyntaxKind.ArrowFunction)
+                {
+                    Error(At(node, store.TagName(n)), Diagnostics.An_arrow_function_cannot_have_a_this_parameter);
+                }
+                return;
+            }
+            case SyntaxKind.JSDocImportTag:
+                CheckImportAttributes(node);
                 return;
             case SyntaxKind.IndexedAccessType:
                 // checkIndexedAccessType
@@ -496,7 +588,18 @@ internal sealed partial class Checker
             Error(node, Diagnostics.JSDoc_may_only_appear_in_the_last_parameter_of_a_signature);
             return;
         }
-        // (the parameter of the tag and its host signature: TODO(C9d))
+        var param = GetParameterSymbolFromJSDoc(At(node, paramTag));
+        if (param.IsNone)
+        {
+            // We will error in `checkJSDocParameterTag`.
+            return;
+        }
+        var host = Utilities.GetHostSignatureFromJSDoc(store, paramTag);
+        var hostParameters = host.IsNone ? default : ParametersOfSignature(store, host);
+        if (host.IsNone || hostParameters.Length == 0 || NodeSymbol(At(node, hostParameters[^1])) != param)
+        {
+            Error(node, Diagnostics.A_rest_parameter_must_be_last_in_a_parameter_list);
+        }
     }
 
     // forEachChild(node, checkSourceElement)

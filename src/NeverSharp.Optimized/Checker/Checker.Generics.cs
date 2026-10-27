@@ -825,9 +825,19 @@ internal sealed partial class Checker
     // checker.ts getESSymbolLikeTypeForNode (JavaScript: C9)
     private Type GetESSymbolLikeTypeForNode(NodeRef node)
     {
+        var nodeStore = StoreOf(node);
+        if (Utilities.IsInJSFile(nodeStore, node.Node) && nodeStore.Kind(node.Node) == SyntaxKind.JSDocTypeExpression)
+        {
+            var host = Utilities.GetJSDocHost(nodeStore, node.Node);
+            if (!host.IsNone)
+            {
+                var single = GetSingleVariableOfVariableStatement(nodeStore, host);
+                node = At(node, !single.IsNone ? single : host);
+            }
+        }
         if (IsValidESSymbolDeclaration(node))
         {
-            var symbol = NodeSymbol(node);
+            var symbol = IsCommonJsExportPropertyAssignment(StoreOf(node), node.Node) ? GetSymbolOfNode(At(node, StoreOf(node).Left(node.Node))) : NodeSymbol(node);
             if (!symbol.IsNone)
             {
                 if (!uniqueESSymbolTypes.TryGetValue(symbol, out var type))
@@ -850,11 +860,32 @@ internal sealed partial class Checker
             case SyntaxKind.VariableDeclaration:
                 return IsVarConstLike(store, n) && store.Kind(store.Name(n)) == SyntaxKind.Identifier && IsVariableDeclarationInVariableStatement(store, n);
             case SyntaxKind.PropertyDeclaration:
-                return Utilities.HasSyntacticModifierUncached(store, n, ModifierFlags.Readonly) && Utilities.HasSyntacticModifierUncached(store, n, ModifierFlags.Static);
+                return HasEffectiveReadonlyModifier(store, n) && Utilities.HasSyntacticModifierUncached(store, n, ModifierFlags.Static);
             case SyntaxKind.PropertySignature:
-                return Utilities.HasSyntacticModifierUncached(store, n, ModifierFlags.Readonly);
+                return HasEffectiveReadonlyModifier(store, n);
         }
-        return false;
+        return IsCommonJsExportPropertyAssignment(store, n);
+    }
+
+    // utilities.ts hasEffectiveReadonlyModifier
+    private static bool HasEffectiveReadonlyModifier(NodeStore store, Node node) =>
+        Utilities.IsInJSFile(store, node) ? (Utilities.GetEffectiveModifierFlags(store, node) & ModifierFlags.Readonly) != 0
+            : Utilities.HasSyntacticModifierUncached(store, node, ModifierFlags.Readonly);
+
+    // utilities.ts isCommonJsExportPropertyAssignment
+    private static bool IsCommonJsExportPropertyAssignment(NodeStore store, Node node) =>
+        Utilities.IsInJSFile(store, node) && store.Kind(node) == SyntaxKind.BinaryExpression &&
+        Utilities.GetAssignmentDeclarationKind(store, node) == AssignmentDeclarationKind.ExportsProperty;
+
+    // utilities.ts getSingleVariableOfVariableStatement
+    private static Node GetSingleVariableOfVariableStatement(NodeStore store, Node node)
+    {
+        if (store.Kind(node) != SyntaxKind.VariableStatement)
+        {
+            return Node.None;
+        }
+        var declarations = store.Declarations(store.DeclarationList(node));
+        return !declarations.IsNone && store.Length(declarations) > 0 ? store.Element(declarations, 0) : Node.None;
     }
 
     // utilities.ts isVarConstLike: const, using and await using declarations
