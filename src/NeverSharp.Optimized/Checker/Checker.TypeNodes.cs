@@ -108,6 +108,13 @@ internal sealed partial class Checker
                 return GetTypeFromTemplateTypeNode(node);
             case SyntaxKind.ImportType:
                 return GetTypeFromImportTypeNode(node);
+            case SyntaxKind.JSDocNullableType:
+            {
+                // getTypeFromJSDocNullableTypeNode (module C8: JSDoc type syntax in TypeScript code is reported by
+                // checkJSDocTypeIsInJsFile with this type)
+                var type = GetTypeFromTypeNode(At(node, store.Type(node.Node)));
+                return strictNullChecks ? GetNullableType(type, TypeFlags.Null) : type;
+            }
             case SyntaxKind.Identifier:
             case SyntaxKind.QualifiedName:
             case SyntaxKind.PropertyAccessExpression:
