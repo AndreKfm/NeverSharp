@@ -17,7 +17,7 @@
 // Port structure follows internal/checker/checker.go
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
 // Modified: translated from TypeScript to C#; modules C1 (subset) and C5. TODO(C7): the flow types of references
-// (Checker.FlowSeam.cs). TODO(C9): JSX expressions (C1's walk checks them), JSDoc assertions.
+// (Checker.FlowSeam.cs). Module C9b: JSX expressions (Checker.Jsx.cs). TODO(C9c): JSDoc assertions.
 
 using NeverSharp.Generated;
 
@@ -309,17 +309,16 @@ internal sealed partial class Checker
                 return undefinedWideningType;
             case SyntaxKind.YieldExpression:
                 return CheckYieldExpression(node);
+            case SyntaxKind.JsxExpression:
+                return CheckJsxExpression(node, checkMode);
             case SyntaxKind.JsxElement:
             case SyntaxKind.JsxSelfClosingElement:
-                // checkJsxElement / checkJsxSelfClosingElement: the element is checked deferred (TODO(C9): the JSX element type)
-                CheckNodeDeferred(node);
-                return errorType;
+                return CheckJsxElement(node);
             case SyntaxKind.JsxFragment:
-                // checkJsxFragment (TODO(C9): the JSX element type)
-                CheckJsxNode(node);
-                return errorType;
+                return CheckJsxFragment(node);
+            case SyntaxKind.JsxAttributes:
+                return CheckJsxAttributes(node, checkMode);
             default:
-                // (JsxExpression, JsxAttributes, synthetic expressions: C9)
                 return errorType;
         }
     }

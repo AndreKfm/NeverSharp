@@ -142,8 +142,10 @@ internal sealed partial class Checker
                 CheckTypeParameterDeferred(node);
                 break;
             case SyntaxKind.JsxSelfClosingElement:
+                CheckJsxSelfClosingElementDeferred(node);
+                break;
             case SyntaxKind.JsxElement:
-                CheckJsxNode(node);
+                CheckJsxElementDeferred(node);
                 break;
             case SyntaxKind.TypeAssertionExpression:
             case SyntaxKind.AsExpression:

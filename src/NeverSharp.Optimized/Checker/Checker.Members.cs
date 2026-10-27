@@ -1714,6 +1714,9 @@ internal sealed partial class Checker
             case SyntaxKind.EnumMember:
                 type = GetTypeOfEnumMember(symbol);
                 break;
+            case SyntaxKind.JsxAttribute:
+                type = CheckJsxAttribute(declaration);
+                break;
             default:
                 type = errorType;
                 break;

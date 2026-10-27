@@ -20,9 +20,9 @@
 //   https://github.com/microsoft/TypeScript at commit 050880ce59e30b356b686bd3144efe24f875ebc8
 // Port structure follows internal/checker/checker.go
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
-// Modified: translated from TypeScript to C#; module C5 (replaces C1's approximate contextual typing). TODO(C9): the
-// contextual types of JSX attributes and children (C1's marker: the parameters of functions in a JSX context are any),
-// JavaScript assignment declarations and JSDoc type tags.
+// Modified: translated from TypeScript to C#; module C5 (replaces C1's approximate contextual typing); module C9b: the
+// contextual types of JSX attributes and children (Checker.Jsx.cs). TODO(C9c): JavaScript assignment declarations and
+// JSDoc type tags.
 
 using NeverSharp.Generated;
 
@@ -30,11 +30,7 @@ namespace NeverSharp.Optimized;
 
 internal sealed partial class Checker
 {
-    private Type jsxContextualTypeMarkerValue;
     private readonly Dictionary<(NodeRef, Type), Type> discriminatedContextualTypes = [];
-
-    // TODO(C9): the contextual type of an expression in a JSX attribute or child until C9 computes it
-    private Type JsxContextualTypeMarker => jsxContextualTypeMarkerValue.IsNone ? jsxContextualTypeMarkerValue = CreateAnonymousType(SymbolRef.None, emptySymbols) : jsxContextualTypeMarkerValue;
 
     /// <summary>checker.ts getContextualType.</summary>
     internal Type GetContextualType(NodeRef node, ContextFlags contextFlags)
@@ -107,12 +103,13 @@ internal sealed partial class Checker
                 // tryGetTypeFromEffectiveTypeNode (JSDoc type tags: C9)
                 return Type.None;
             case SyntaxKind.JsxExpression:
+                return GetContextualTypeForJsxExpression(At(node, parent), contextFlags);
             case SyntaxKind.JsxAttribute:
             case SyntaxKind.JsxSpreadAttribute:
+                return GetContextualTypeForJsxAttribute(At(node, parent), contextFlags);
             case SyntaxKind.JsxOpeningElement:
             case SyntaxKind.JsxSelfClosingElement:
-                // TODO(C9): getContextualTypeForJsxExpression / getContextualTypeForJsxAttribute
-                return HasJsxContext(node) ? JsxContextualTypeMarker : Type.None;
+                return GetContextualJsxElementAttributesType(At(node, parent), contextFlags);
             case SyntaxKind.ImportAttribute:
                 // (getContextualImportAttributeType: C8)
                 return Type.None;
@@ -168,7 +165,10 @@ internal sealed partial class Checker
             {
                 return DiscriminateContextualTypeByObjectMembers(node, apparentType);
             }
-            // (discriminateContextualTypeByJSXAttributes: C9)
+            if ((Types.Flags(apparentType) & TypeFlags.Union) != 0 && store.Kind(node.Node) == SyntaxKind.JsxAttributes)
+            {
+                return DiscriminateContextualTypeByJSXAttributes(node, apparentType);
+            }
             return apparentType;
         }
         return Type.None;
@@ -264,11 +264,6 @@ internal sealed partial class Checker
                 : !store.Initializer(parameter.Node).IsNone ? Type.None : undefinedWideningType;
             SignatureLinks.Get(iifeRef).ResolvedSignature = cached;
             return type;
-        }
-        if (GetApparentTypeOfContextualType(func, ContextFlags.Signature) == JsxContextualTypeMarker)
-        {
-            // TODO(C9): the parameter types of functions in JSX attributes (C1's approximation)
-            return anyType;
         }
         var contextualSignature = GetContextualSignature(func);
         if (!contextualSignature.IsNone)
@@ -544,7 +539,10 @@ internal sealed partial class Checker
         // If we're already in the process of resolving the given signature, don't resolve again as
         // that could cause infinite recursion. Instead, return anySignature.
         var signature = SignatureLinks.Has(callTarget) && SignatureLinks.Get(callTarget).ResolvedSignature == resolvingSignature ? resolvingSignature : GetResolvedSignature(callTarget);
-        // (JSX opening elements: C9)
+        if (IsJsxOpeningLikeElement(store, callTarget.Node) && argIndex == 0)
+        {
+            return GetEffectiveFirstArgumentForJsxSignature(signature, callTarget);
+        }
         var parameters = ParametersOf(signature);
         var restIndex = parameters.Length - 1;
         return SignatureHasRestParameter(signature) && argIndex >= restIndex

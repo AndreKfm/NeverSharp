@@ -684,8 +684,16 @@ internal sealed partial class Checker
                                     errorNode = At(valueDeclaration, c.StoreOf(valueDeclaration).Name(valueDeclaration.Node));
                                 }
                                 var propName = c.SymbolToString(prop);
-                                // (getSuggestedSymbolForNonexistentJSXAttribute: module C9)
-                                ReportError(Diagnostics.Property_0_does_not_exist_on_type_1, propName, c.TypeToString(errorTarget));
+                                var suggestionSymbol = c.GetSuggestedSymbolForNonexistentJSXAttribute(propName, errorTarget);
+                                var suggestion = suggestionSymbol.IsNone ? null : c.SymbolToString(suggestionSymbol);
+                                if (!string.IsNullOrEmpty(suggestion))
+                                {
+                                    ReportError(Diagnostics.Property_0_does_not_exist_on_type_1_Did_you_mean_2, propName, c.TypeToString(errorTarget), suggestion);
+                                }
+                                else
+                                {
+                                    ReportError(Diagnostics.Property_0_does_not_exist_on_type_1, propName, c.TypeToString(errorTarget));
+                                }
                             }
                             else
                             {

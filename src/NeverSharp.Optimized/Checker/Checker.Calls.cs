@@ -22,8 +22,9 @@
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
 // Modified: translated from TypeScript to C#; module C5 (replaces C1's first-signature calls). SyntheticExpression nodes
 // are represented by CallArg values; module C6: inferTypeArguments with the inferences, getSignatureInstantiation with
-// inferred type parameters, instantiateSignatureInContextOf, applyToReturnTypes with type predicates. TODO(C9): JSX
-// elements, decorators' call signatures, JavaScript require calls and expando assignments.
+// inferred type parameters, instantiateSignatureInContextOf, applyToReturnTypes with type predicates; module C9b: JSX
+// opening-like elements and fragments as calls (Checker.Jsx.cs). TODO(C9d): decorators' call signatures; TODO(C9c):
+// JavaScript require calls and expando assignments.
 
 using NeverSharp.Generated;
 
@@ -86,7 +87,7 @@ internal sealed partial class Checker
         return MaybeTypeOfKind(type, TypeFlags.Literal) && IsLiteralOfContextualType(type, contextualType) ? GetRegularTypeOfLiteralType(type) : type;
     }
 
-    /// <summary>checker.ts getEffectiveCallArguments (JSX: C9).</summary>
+    /// <summary>checker.ts getEffectiveCallArguments.</summary>
     internal List<CallArg> GetEffectiveCallArguments(NodeRef node)
     {
         var store = StoreOf(node);
@@ -94,6 +95,21 @@ internal sealed partial class Checker
         var result = new List<CallArg>();
         switch (store.Kind(n))
         {
+            case SyntaxKind.JsxOpeningFragment:
+                // This attributes Type does not include a children property yet, the same way a fragment created with <React.Fragment> does not at this stage
+                result.Add(CreateSyntheticArg(node, emptyFreshJsxObjectType));
+                return result;
+            case SyntaxKind.JsxOpeningElement:
+            case SyntaxKind.JsxSelfClosingElement:
+            {
+                var attributes = store.Attributes(n);
+                if (store.Length(store.Properties(attributes)) > 0 ||
+                    (store.Kind(n) == SyntaxKind.JsxOpeningElement && store.Length(store.Children(store.Parent(n))) > 0))
+                {
+                    result.Add(RealArg(At(node, attributes)));
+                }
+                return result;
+            }
             case SyntaxKind.TaggedTemplateExpression:
             {
                 var template = At(node, store.Template(n));
@@ -271,13 +287,14 @@ internal sealed partial class Checker
         return result;
     }
 
-    // checker.ts resolveSignature (JSX: C9)
+    // checker.ts resolveSignature (decorators: TODO(C9d))
     private Signature ResolveSignature(NodeRef node, List<Signature>? candidatesOutArray, CheckMode checkMode) => Kind(node) switch
     {
         SyntaxKind.CallExpression => ResolveCallExpression(node, candidatesOutArray, checkMode),
         SyntaxKind.NewExpression => ResolveNewExpression(node, candidatesOutArray, checkMode),
         SyntaxKind.TaggedTemplateExpression => ResolveTaggedTemplateExpression(node, candidatesOutArray, checkMode),
         SyntaxKind.BinaryExpression => ResolveInstanceofExpression(node, candidatesOutArray, checkMode),
+        SyntaxKind.JsxOpeningFragment or SyntaxKind.JsxOpeningElement or SyntaxKind.JsxSelfClosingElement => ResolveJsxOpeningLikeElement(node, candidatesOutArray, checkMode),
         _ => ResolveUntypedCall(node),
     };
 
@@ -286,7 +303,7 @@ internal sealed partial class Checker
     {
         var store = StoreOf(node);
         var n = node.Node;
-        if (store.Kind(n) is SyntaxKind.CallExpression or SyntaxKind.NewExpression or SyntaxKind.TaggedTemplateExpression)
+        if (store.Kind(n) is SyntaxKind.CallExpression or SyntaxKind.NewExpression or SyntaxKind.TaggedTemplateExpression or SyntaxKind.JsxOpeningElement or SyntaxKind.JsxSelfClosingElement)
         {
             // Check type arguments even though we will give an error that untyped calls may not accept type arguments.
             // This gets us diagnostics for the type arguments and marks them as referenced.
@@ -295,6 +312,10 @@ internal sealed partial class Checker
         if (store.Kind(n) == SyntaxKind.TaggedTemplateExpression)
         {
             CheckExpression(At(node, store.Template(n)));
+        }
+        else if (IsJsxOpeningLikeElement(store, n))
+        {
+            CheckExpression(At(node, store.Attributes(n)));
         }
         else if (store.Kind(n) == SyntaxKind.BinaryExpression)
         {
@@ -769,6 +790,9 @@ internal sealed partial class Checker
                 var tag = store.Tag(callLike.Node);
                 return At(callLike, store.Kind(tag) == SyntaxKind.PropertyAccessExpression ? store.Name(tag) : tag);
             }
+            case SyntaxKind.JsxOpeningElement:
+            case SyntaxKind.JsxSelfClosingElement:
+                return At(callLike, store.TagName(callLike.Node));
         }
         return callLike;
     }
@@ -954,6 +978,10 @@ internal sealed partial class Checker
     {
         var store = StoreOf(node);
         var n = node.Node;
+        if (store.Kind(n) == SyntaxKind.JsxOpeningFragment)
+        {
+            return true;
+        }
         int argCount;
         var callIsIncomplete = false; // In incomplete call we want to be lenient when we have too few arguments
         var effectiveParameterCount = GetParameterCount(signature);
@@ -986,6 +1014,17 @@ internal sealed partial class Checker
         else if (store.Kind(n) == SyntaxKind.BinaryExpression)
         {
             argCount = 1;
+        }
+        else if (IsJsxOpeningLikeElement(store, n))
+        {
+            callIsIncomplete = store.End(store.Attributes(n)) == store.End(n);
+            if (callIsIncomplete)
+            {
+                return true;
+            }
+            argCount = effectiveMinimumArguments == 0 ? args.Count : 1;
+            effectiveParameterCount = args.Count == 0 ? effectiveParameterCount : 1; // class may have argumentless ctor functions - still resolve ctor and compare vs props member type
+            effectiveMinimumArguments = Math.Min(effectiveMinimumArguments, 1); // sfc may specify context argument - handled by framework and not typechecked
         }
         else if (store.Arguments(n).IsNone)
         {
@@ -1099,12 +1138,20 @@ internal sealed partial class Checker
         }
     }
 
-    // checker.ts getSignatureApplicabilityError (JSX: C9)
+    // checker.ts getSignatureApplicabilityError
     private List<ProgramDiagnostic>? GetSignatureApplicabilityError(NodeRef node, List<CallArg> args, Signature signature, Relation relation, CheckMode checkMode, bool reportErrors,
         Func<DiagnosticMessageChain?>? containingMessageChain)
     {
         var errorOutputContainer = new ErrorOutputContainer { SkipLogging = true };
         var store = StoreOf(node);
+        if (IsJsxCallLike(store, node.Node))
+        {
+            if (!CheckApplicableSignatureForJsxCallLikeElement(node, signature, relation, checkMode, reportErrors, containingMessageChain, errorOutputContainer))
+            {
+                return errorOutputContainer.Errors ?? [];
+            }
+            return null;
+        }
         var thisType = GetThisTypeOfSignature(signature);
         if (!thisType.IsNone && thisType != voidType &&
             !(store.Kind(node.Node) == SyntaxKind.NewExpression || (store.Kind(node.Node) == SyntaxKind.CallExpression && Utilities.IsSuperProperty(store, store.Expression(node.Node)))))
@@ -1251,10 +1298,14 @@ internal sealed partial class Checker
         return store.Kind(parent) == SyntaxKind.BinaryExpression && store.Kind(store.OperatorToken(parent)) == SyntaxKind.InstanceOfKeyword && store.Right(parent) == node;
     }
 
-    // checker.ts inferTypeArguments (JSX: C9)
+    // checker.ts inferTypeArguments
     private Type[] InferTypeArguments(NodeRef node, Signature signature, List<CallArg> args, CheckMode checkMode, InferenceContext context)
     {
         var store = StoreOf(node);
+        if (IsJsxOpeningLikeElement(store, node.Node))
+        {
+            return InferJsxTypeArguments(node, signature, checkMode, context);
+        }
         var typeParameters = Types.Elements(Signatures.Record(signature).TypeParameters).ToArray();
         // If a contextual type is available, infer from that type to the return type of the call expression. For
         // example, given a 'function wrap<T, U>(cb: (x: T) => U): (x: T) => U' and a call expression
@@ -1466,11 +1517,13 @@ internal sealed partial class Checker
         var result = Signature.None;
         var argCheckMode = CheckMode.Normal;
         var typeArguments = NodeList.None;
-        if (!isDecorator && !isInstanceof && !IsSuperCall(store, n))
+        var isJsxOpeningOrSelfClosingElement = IsJsxOpeningLikeElement(store, n);
+        var isJsxOpeningFragment = store.Kind(n) == SyntaxKind.JsxOpeningFragment;
+        if (!isDecorator && !isInstanceof && !isJsxOpeningFragment && !IsSuperCall(store, n))
         {
             typeArguments = store.TypeArguments(n);
             // We already perform checking on the type arguments on the class declaration itself.
-            if (isTaggedTemplate || store.Kind(store.Expression(n)) != SyntaxKind.SuperKeyword)
+            if (isTaggedTemplate || isJsxOpeningOrSelfClosingElement || store.Kind(store.Expression(n)) != SyntaxKind.SuperKeyword)
             {
                 CheckSourceElements(node, typeArguments);
             }
@@ -1685,7 +1738,7 @@ internal sealed partial class Checker
             {
                 CheckTypeArguments(candidateForTypeArgumentError, node, store.TypeArguments(n), reportErrors: true, headMessage);
             }
-            else
+            else if (!isJsxOpeningFragment)
             {
                 var signaturesWithCorrectTypeArgumentArity = signatures.FindAll(s => HasCorrectTypeArgumentArity(s, node, typeArguments));
                 if (signaturesWithCorrectTypeArgumentArity.Count == 0)

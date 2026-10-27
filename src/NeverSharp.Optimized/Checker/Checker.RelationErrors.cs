@@ -8,7 +8,8 @@
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
 // Modified: translated from TypeScript to C#; module C4. The elaboration iterators are C# iterators (lazily evaluated
 // like TypeScript's generators). Module C8: the contextual typing of the re-checked expressions
-// (checkExpressionForMutableLocationWithContextualType, the tuple re-check of array literals). TODO(C9): JSX elaboration.
+// (checkExpressionForMutableLocationWithContextualType, the tuple re-check of array literals). Module C9b: JSX
+// elaboration (elaborateJsxComponents, Checker.Jsx.cs).
 
 using NeverSharp.Generated;
 
@@ -61,8 +62,7 @@ internal sealed partial class Checker
             case SyntaxKind.ArrayLiteralExpression:
                 return ElaborateArrayLiteral(node, source, target, relation, containingMessageChain, errorOutputContainer);
             case SyntaxKind.JsxAttributes:
-                // TODO(C9): elaborateJsxComponents
-                return false;
+                return ElaborateJsxComponents(node, source, target, relation, containingMessageChain, errorOutputContainer);
             case SyntaxKind.ArrowFunction:
                 return ElaborateArrowFunction(node, source, target, relation, containingMessageChain, errorOutputContainer);
         }

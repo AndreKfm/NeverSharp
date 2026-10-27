@@ -7,8 +7,9 @@
 //   https://github.com/microsoft/TypeScript at commit 050880ce59e30b356b686bd3144efe24f875ebc8
 // Port structure follows internal/checker/services.go (GetSymbolAtLocation, GetTypeAtLocation)
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
-// Modified: translated from TypeScript to C#; module C1. TODO(C9): JSDoc names and JavaScript special property
-// assignments, JSX intrinsic tags, meta properties; TODO(C5): destructuring patterns, element access, index symbols.
+// Modified: translated from TypeScript to C#; module C1; module C9b: JSX intrinsic tags. TODO(C9c): JSDoc names and
+// JavaScript special property assignments; TODO(C9d): meta properties; TODO(C5): destructuring patterns, element
+// access, index symbols.
 
 using NeverSharp.Generated;
 
@@ -174,8 +175,15 @@ internal sealed partial class Checker
                 var metaType = CheckExpressionCached(node);
                 return IsErrorType(metaType) || (Types.Flags(metaType) & TypeFlags.Object) == 0 ? SymbolRef.None : Types.Symbol(metaType);
             }
+            case SyntaxKind.JsxNamespacedName:
+                if (Utilities.IsJsxTagName(store, n) && IsJsxIntrinsicTagName(store, n))
+                {
+                    var symbol = GetIntrinsicTagSymbol(At(node, parent));
+                    return symbol == unknownSymbol ? SymbolRef.None : symbol;
+                }
+                return SymbolRef.None;
             default:
-                // (instanceof, JSX namespaced names: C5/C9)
+                // (instanceof: C5)
                 return SymbolRef.None;
         }
     }
@@ -371,8 +379,8 @@ internal sealed partial class Checker
             {
                 if (Utilities.IsJsxTagName(store, name) && IsJsxIntrinsicTagName(store, name))
                 {
-                    // TODO(C9): getIntrinsicTagSymbol
-                    return SymbolRef.None;
+                    var symbol = GetIntrinsicTagSymbol(At(nameRef, store.Parent(name)));
+                    return symbol == unknownSymbol ? SymbolRef.None : symbol;
                 }
                 return ResolveEntityName(nameRef, meaning, ignoreErrors: true, dontResolveAlias: true);
             }
