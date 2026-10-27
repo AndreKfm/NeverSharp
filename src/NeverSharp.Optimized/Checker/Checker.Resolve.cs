@@ -702,14 +702,17 @@ internal sealed partial class Checker
                     if (!suggestion.IsNone)
                     {
                         var suggestionName = SymbolToString(suggestion);
-                        // (isUncheckedJSSuggestion: JavaScript files, module C9)
-                        var message = meaning == SymbolFlags.Namespace ? Diagnostics.Cannot_find_namespace_0_Did_you_mean_1 : Diagnostics.Cannot_find_name_0_Did_you_mean_1;
+                        var isUncheckedJS = IsUncheckedJSSuggestion(errorLocation, suggestion, excludeClasses: false);
+                        var message = meaning == SymbolFlags.Namespace ? Diagnostics.Cannot_find_namespace_0_Did_you_mean_1
+                            : isUncheckedJS ? Diagnostics.Could_not_find_name_0_Did_you_mean_1
+                            : Diagnostics.Cannot_find_name_0_Did_you_mean_1;
                         var diagnostic = CreateDiagnosticForNode(errorLocation, message, DiagnosticName(name, nameNode), suggestionName);
-                        if (!suggestionValueDeclaration.IsNone)
+                        // (addErrorOrSuggestion copies a suggestion before the related information is added to the error)
+                        if (!suggestionValueDeclaration.IsNone && !isUncheckedJS)
                         {
                             diagnostic.RelatedInformation = [CreateRelatedForNode(suggestionValueDeclaration, Diagnostics._0_is_declared_here, suggestionName)];
                         }
-                        diagnostics.Add(diagnostic);
+                        AddErrorOrSuggestion(!isUncheckedJS, diagnostic);
                     }
                 }
                 // And then fall back to unspecified "not found"

@@ -24,7 +24,8 @@
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
 // Modified: translated from TypeScript to C#; modules C1 (subset) and C5. TODO(C7): the flow types of access
 // expressions (Checker.FlowSeam.cs); the diagnostics that depend on them are not reported while narrowing is pending.
-// Module C8: deprecation suggestions. TODO(C9d): unchecked JavaScript suggestions; TODO(C9e): the lib suggestions.
+// Module C8: deprecation suggestions. Module C9d: unchecked JavaScript suggestions (isUncheckedJSSuggestion), private
+// names of plain JavaScript files. TODO(C9e): the lib suggestions.
 
 using NeverSharp.Generated;
 
@@ -236,7 +237,11 @@ internal sealed partial class Checker
                 {
                     return errorType;
                 }
-                // (plain JavaScript files: C9)
+                var containingClass = GetContainingClassExcludingClassDecorators(right);
+                if (!containingClass.IsNone && Program.IsPlainJsFile(FileAt(containingClass.File), compilerOptions.CheckJs))
+                {
+                    GrammarErrorOnNode(right, Diagnostics.Private_field_0_must_be_declared_in_an_enclosing_class, rightName);
+                }
             }
             else
             {
@@ -267,7 +272,8 @@ internal sealed partial class Checker
                 : null;
             if (indexInfo is null || indexInfo.Type.IsNone)
             {
-                if (IsJSLiteralType(leftType))
+                var isUncheckedJS = IsUncheckedJSSuggestion(node, Types.Symbol(leftType), excludeClasses: true);
+                if (!isUncheckedJS && IsJSLiteralType(leftType))
                 {
                     return anyType;
                 }
@@ -286,7 +292,7 @@ internal sealed partial class Checker
                 }
                 if (rightName.Length > 0 && !CheckAndReportErrorForExtendingInterface(node))
                 {
-                    ReportNonexistentProperty(right, IsThisTypeParameter(leftType) ? apparentType : leftType);
+                    ReportNonexistentProperty(right, IsThisTypeParameter(leftType) ? apparentType : leftType, isUncheckedJS);
                 }
                 return errorType;
             }
@@ -611,11 +617,11 @@ internal sealed partial class Checker
 
     // checker.ts reportNonexistentProperty (unchecked JavaScript, the lib suggestions and elaborateNeverIntersection:
     // C9/C4)
-    private void ReportNonexistentProperty(NodeRef propNode, Type containingType)
+    private void ReportNonexistentProperty(NodeRef propNode, Type containingType, bool isUncheckedJS = false)
     {
         ref var links = ref ExpressionLinks.Get(propNode);
         links.NonExistentPropCheckCache ??= new HashSet<string>(StringComparer.Ordinal);
-        var key = containingType.Id.ToString(System.Globalization.CultureInfo.InvariantCulture) + "|false";
+        var key = containingType.Id.ToString(System.Globalization.CultureInfo.InvariantCulture) + (isUncheckedJS ? "|true" : "|false");
         if (!links.NonExistentPropCheckCache.Add(key))
         {
             return;
@@ -657,7 +663,8 @@ internal sealed partial class Checker
                 if (!suggestion.IsNone)
                 {
                     var suggestedName = SymbolName(suggestion);
-                    errorInfo = ChainDiagnosticMessages(errorInfo, Diagnostics.Property_0_does_not_exist_on_type_1_Did_you_mean_2, missingProperty, container, suggestedName);
+                    var message = isUncheckedJS ? Diagnostics.Property_0_may_not_exist_on_type_1_Did_you_mean_2 : Diagnostics.Property_0_does_not_exist_on_type_1_Did_you_mean_2;
+                    errorInfo = ChainDiagnosticMessages(errorInfo, message, missingProperty, container, suggestedName);
                     var suggestionValueDeclaration = ValueDeclarationOf(suggestion);
                     if (!suggestionValueDeclaration.IsNone)
                     {
@@ -676,7 +683,7 @@ internal sealed partial class Checker
         {
             AddRelatedInfo(resultDiagnostic, relatedInfo);
         }
-        diagnostics.Add(resultDiagnostic);
+        AddErrorOrSuggestion(!isUncheckedJS || errorInfo!.Code != Diagnostics.Property_0_may_not_exist_on_type_1_Did_you_mean_2.Code, resultDiagnostic);
     }
 
     // checker.ts typeHasStaticProperty

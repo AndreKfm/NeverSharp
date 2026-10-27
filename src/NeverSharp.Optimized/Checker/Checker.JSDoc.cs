@@ -792,6 +792,45 @@ internal sealed partial class Checker
         return flags;
     }
 
+    // checker.ts addErrorOrSuggestion
+    private void AddErrorOrSuggestion(bool isError, ProgramDiagnostic diagnostic)
+    {
+        if (isError)
+        {
+            diagnostics.Add(diagnostic);
+        }
+        else
+        {
+            diagnostic.Category = DiagnosticCategory.Suggestion;
+            suggestionDiagnostics.Add(diagnostic);
+        }
+    }
+
+    // checker.ts isUncheckedJSSuggestion
+    private bool IsUncheckedJSSuggestion(NodeRef node, SymbolRef suggestion, bool excludeClasses)
+    {
+        if (node.IsNone)
+        {
+            return false;
+        }
+        var file = FileAt(node.File);
+        var store = file.Store;
+        if (compilerOptions.CheckJs is not null || store.CheckJsDirective(file.Root) is not null || store.ScriptKind(file.Root) is not (ScriptKind.JS or ScriptKind.JSX))
+        {
+            return false;
+        }
+        var declarations = suggestion.IsNone ? null : DeclarationsOf(suggestion);
+        var declarationFile = declarations is { Count: > 0 } ? At(declarations[0], Utilities.RootOf(StoreOf(declarations[0]), declarations[0].Node)) : NodeRef.None;
+        var valueDeclaration = suggestion.IsNone ? NodeRef.None : ValueDeclarationOf(suggestion);
+        var suggestionHasNoExtendsOrDecorators = valueDeclaration.IsNone || !Utilities.IsClassLike(StoreOf(valueDeclaration), valueDeclaration.Node) ||
+            StoreOf(valueDeclaration).HeritageClauses(valueDeclaration.Node) is { IsNone: false } heritage && StoreOf(valueDeclaration).Length(heritage) > 0 ||
+            HasDecorators(valueDeclaration); // classOrConstructorParameterIsDecorated(useLegacyDecorators: false): only the class itself
+
+        return !(node.File != declarationFile.File && !declarationFile.IsNone && IsGlobalSourceFile(declarationFile))
+            && !(excludeClasses && !suggestion.IsNone && (SymbolFlagsOf(suggestion) & SymbolFlags.Class) != 0 && suggestionHasNoExtendsOrDecorators)
+            && !(excludeClasses && store.Kind(node.Node) == SyntaxKind.PropertyAccessExpression && store.Kind(store.Expression(node.Node)) == SyntaxKind.ThisKeyword && suggestionHasNoExtendsOrDecorators);
+    }
+
     // checker.ts getReturnTypeOfTypeTag
     private Type GetReturnTypeOfTypeTag(NodeRef node)
     {

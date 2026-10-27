@@ -22,7 +22,8 @@
 // Port structure follows internal/checker/checker.go
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
 // Modified: translated from TypeScript to C#; module C5 (replaces C1's binary operators). The binary expression
-// trampoline is a loop over the left spine. TODO(C9d): JavaScript assignment declarations and expando initializers.
+// trampoline is a loop over the left spine. Module C9d: JavaScript assignment declarations
+// (isAssignmentDeclaration in the = case).
 
 using NeverSharp.Generated;
 
@@ -234,7 +235,7 @@ internal sealed partial class Checker
             var resolved = SymbolNodeLinks.Has(left) ? SymbolNodeLinks.Get(left).ResolvedSymbol : SymbolRef.None;
             if (resolved.IsNone && !Utilities.GetContainingClass(store, left.Node).IsNone)
             {
-                ReportNonexistentProperty(left, rightType);
+                ReportNonexistentProperty(left, rightType, IsUncheckedJSSuggestion(left, Types.Symbol(rightType), excludeClasses: true));
             }
         }
         else

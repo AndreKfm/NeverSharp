@@ -7,8 +7,8 @@
 //   https://github.com/microsoft/TypeScript at commit 050880ce59e30b356b686bd3144efe24f875ebc8
 // Port structure follows internal/checker/checker.go (checkSourceFile, checkSourceElementWorker, the statement checks)
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
-// Modified: translated from TypeScript to C#; module C8 (replaces C1's resolution walk). JSDoc comments and tags of
-// JavaScript files are module C9's (TODO(C9d)). Emit helpers (checkExternalEmitHelpers) are not checked: Gate C's
+// Modified: translated from TypeScript to C#; module C8 (replaces C1's resolution walk). Module C9d: JSDoc comments
+// (links) and the JSDoc tags of JavaScript files, CommonJS require aliases. Emit helpers (checkExternalEmitHelpers) are not checked: Gate C's
 // target (ES2025) needs none.
 
 using NeverSharp.Generated;

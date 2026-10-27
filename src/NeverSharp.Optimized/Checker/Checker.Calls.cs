@@ -23,8 +23,8 @@
 // Modified: translated from TypeScript to C#; module C5 (replaces C1's first-signature calls). SyntheticExpression nodes
 // are represented by CallArg values; module C6: inferTypeArguments with the inferences, getSignatureInstantiation with
 // inferred type parameters, instantiateSignatureInContextOf, applyToReturnTypes with type predicates; module C9b: JSX
-// opening-like elements and fragments as calls (Checker.Jsx.cs). TODO(C9e): decorators' call signatures; TODO(C9d):
-// JavaScript require calls and expando assignments.
+// opening-like elements and fragments as calls (Checker.Jsx.cs). TODO(C9e): decorators' call signatures. Module
+// C9d: JavaScript require calls (isCommonJsRequire, resolveExternalModuleTypeByLiteral) and expando assignments of calls.
 
 using NeverSharp.Generated;
 

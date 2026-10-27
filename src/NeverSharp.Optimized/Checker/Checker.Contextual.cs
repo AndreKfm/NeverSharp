@@ -21,8 +21,8 @@
 // Port structure follows internal/checker/checker.go
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
 // Modified: translated from TypeScript to C#; module C5 (replaces C1's approximate contextual typing); module C9b: the
-// contextual types of JSX attributes and children (Checker.Jsx.cs). TODO(C9d): JavaScript assignment declarations and
-// JSDoc type tags.
+// contextual types of JSX attributes and children (Checker.Jsx.cs). Module C9d: JavaScript assignment declarations,
+// JSDoc type and satisfies tags, type tag signatures as contextual signatures.
 
 using NeverSharp.Generated;
 
