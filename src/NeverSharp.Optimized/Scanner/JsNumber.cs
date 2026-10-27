@@ -196,9 +196,14 @@ internal static class JsNumber
     /// </summary>
     internal static double FromString(string value)
     {
-        if (value.Length == 0)
+        switch (value)
         {
-            return 0;
+            case "":
+                return 0;
+            case "Infinity" or "+Infinity":
+                return double.PositiveInfinity;
+            case "-Infinity":
+                return double.NegativeInfinity;
         }
         // Fast path for integers (as jsnum's tryParseInt): up to 15 decimal digits are exact in a double.
         if (value.Length <= 15 && IsAllDigits(value))
@@ -224,6 +229,19 @@ internal static class JsNumber
                 case 'O':
                     return ParseInt(value.Substring(2), 8);
             }
+        }
+
+        // A sign (jsnum: cut off first so that -0 stays -0); a signed hexadecimal, binary or octal literal is NaN.
+        if (value[0] is '-' or '+')
+        {
+            var unsigned = value.Substring(1);
+            if (unsigned.Length == 0 || !(char.IsAsciiDigit(unsigned[0]) || unsigned[0] == '.') ||
+                (unsigned.Length > 2 && unsigned[0] == '0' && unsigned[1] is 'x' or 'X' or 'b' or 'B' or 'o' or 'O'))
+            {
+                return double.NaN;
+            }
+            var magnitude = FromString(unsigned);
+            return value[0] == '-' ? -magnitude : magnitude;
         }
 
         // <a>.<b>e<c>, each part optional (as jsnum's parseFloatString).

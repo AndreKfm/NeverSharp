@@ -533,8 +533,13 @@ internal sealed partial class Checker
 
     // ---- entry points ----
 
-    private static NodeBuilderContext CreateNodeBuilderContext(NodeRef enclosingDeclaration, NodeBuilderFlags flags, InternalNodeBuilderFlags internalFlags, int maximumLength = 0)
+    // The store of the enclosing file of the latest node builder context: reused literals keep their source text only when
+    // they come from that file (the node builder's setTextRange copies positions within the enclosing file only).
+    private NodeStore? builderEnclosingStore;
+
+    private NodeBuilderContext CreateNodeBuilderContext(NodeRef enclosingDeclaration, NodeBuilderFlags flags, InternalNodeBuilderFlags internalFlags, int maximumLength = 0)
     {
+        builderEnclosingStore = enclosingDeclaration.IsNone ? null : StoreOf(enclosingDeclaration);
         return new NodeBuilderContext
         {
             EnclosingDeclaration = enclosingDeclaration,
@@ -1738,9 +1743,45 @@ internal sealed partial class Checker
         return ids;
     }
 
-    // checker.ts indexInfoToObjectComputedNamesOrSignatureDeclaration (index infos with components: C3)
-    private List<Node> IndexInfoToObjectComputedNamesOrSignatureDeclaration(IndexInfo indexInfo, NodeBuilderContext context, Node typeNode) =>
-        [IndexInfoToIndexSignatureDeclarationHelper(indexInfo, context, typeNode)];
+    // checker.ts indexInfoToObjectComputedNamesOrSignatureDeclaration (the trackers are not used by typeToString)
+    private List<Node> IndexInfoToObjectComputedNamesOrSignatureDeclaration(IndexInfo indexInfo, NodeBuilderContext context, Node typeNode)
+    {
+        if (indexInfo.Components is { } components)
+        {
+            // Index info is derived from object or class computed property names (plus explicit named members) - we can clone those instead of writing out the result computed index signature
+            var allComponentComputedNamesSerializable = components.TrueForAll(e =>
+            {
+                var store = StoreOf(e);
+                var name = store.Name(e.Node);
+                return !name.IsNone && store.Kind(name) == SyntaxKind.ComputedPropertyName && Utilities.IsEntityNameExpression(store, store.Expression(name)) &&
+                    !context.EnclosingDeclaration.IsNone && IsEntityNameVisible(At(e, store.Expression(name)), context.EnclosingDeclaration, null) == SymbolAccessibility.Accessible;
+            });
+            if (allComponentComputedNamesSerializable)
+            {
+                // Only use computed name serialization form if all components are visible and take the `a.b.c` form
+                var result = new List<Node>();
+                foreach (var e in components)
+                {
+                    // skip late bound props that contribute to the index signature - they'll be created by property creation anyway
+                    if (HasLateBindableName(e))
+                    {
+                        continue;
+                    }
+                    var store = StoreOf(e);
+                    var kind = store.Kind(e.Node);
+                    var hasQuestion = kind is SyntaxKind.PropertySignature or SyntaxKind.PropertyDeclaration or SyntaxKind.MethodSignature or SyntaxKind.MethodDeclaration or SyntaxKind.GetAccessor or SyntaxKind.SetAccessor &&
+                        !store.QuestionToken(e.Node).IsNone;
+                    result.Add(SetTextRange(context, SPropertySignature(
+                        indexInfo.IsReadonly ? SList([SToken(SyntaxKind.ReadonlyKeyword)]) : NodeList.None,
+                        CopyExistingNode(At(e, store.Name(e.Node))),
+                        hasQuestion ? SToken(SyntaxKind.QuestionToken) : Node.None,
+                        !typeNode.IsNone ? typeNode : TypeToTypeNodeHelper(GetTypeOfSymbol(NodeSymbol(e)), context)), e));
+                }
+                return result;
+            }
+        }
+        return [IndexInfoToIndexSignatureDeclarationHelper(indexInfo, context, typeNode)];
+    }
 
     // checker.ts indexInfoToIndexSignatureDeclarationHelper
     private Node IndexInfoToIndexSignatureDeclarationHelper(IndexInfo indexInfo, NodeBuilderContext context, Node typeNode)

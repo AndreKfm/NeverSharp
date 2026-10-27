@@ -157,8 +157,26 @@ internal sealed partial class Checker
         return false;
     }
 
-    // checker.ts getBaseTypeVariableOfClass (mixin classes: the base constructor type's type variable; C3)
-    private Type GetBaseTypeVariableOfClass(SymbolRef symbol) => Type.None;
+    // checker.ts getBaseTypeVariableOfClass
+    private Type GetBaseTypeVariableOfClass(SymbolRef symbol)
+    {
+        var baseConstructorType = GetBaseConstructorTypeOfClass(GetDeclaredTypeOfClassOrInterface(symbol));
+        if ((Types.Flags(baseConstructorType) & TypeFlags.TypeVariable) != 0)
+        {
+            return baseConstructorType;
+        }
+        if ((Types.Flags(baseConstructorType) & TypeFlags.Intersection) != 0)
+        {
+            foreach (var t in Types.Elements(Types.Union(baseConstructorType).Types))
+            {
+                if ((Types.Flags(t) & TypeFlags.TypeVariable) != 0)
+                {
+                    return t;
+                }
+            }
+        }
+        return Type.None;
+    }
 
     // utilities.ts isLateBoundName: "__@" prefix
     private static bool IsLateBoundName(string name) =>
@@ -337,7 +355,12 @@ internal sealed partial class Checker
 
     // ---- type kinds (C3 seams not ported yet) ----
 
-    private bool IsReferenceToGlobalIterableLikeType(Type type) => false;
+    // checker.ts typeReferenceToTypeNode: isReferenceToSomeType(type, [Iterable, IterableIterator, AsyncIterable, AsyncIterableIterator])
+    private bool IsReferenceToGlobalIterableLikeType(Type type) =>
+        IsReferenceToType(type, GetGlobalIterableType(reportErrors: false)) ||
+        IsReferenceToType(type, GetGlobalTypeCached(ref deferredGlobalIterableIteratorType, "IterableIterator", 3, false)) ||
+        IsReferenceToType(type, GetGlobalAsyncIterableType(reportErrors: false)) ||
+        IsReferenceToType(type, GetGlobalTypeCached(ref deferredGlobalAsyncIterableIteratorType, "AsyncIterableIterator", 3, false));
 
     // (GetReverseMappedPropertyType, GetReverseMappedMappedType: Checker.Inference.cs, module C6)
 

@@ -460,7 +460,7 @@ internal sealed partial class Checker
 
     /// <summary>checker.ts instantiateIndexInfo.</summary>
     internal IndexInfo InstantiateIndexInfo(IndexInfo info, TypeMapper mapper) =>
-        new() { KeyType = info.KeyType, Type = InstantiateType(info.Type, mapper), IsReadonly = info.IsReadonly, Declaration = info.Declaration };
+        new() { KeyType = info.KeyType, Type = InstantiateType(info.Type, mapper), IsReadonly = info.IsReadonly, Declaration = info.Declaration, Components = info.Components };
 
     /// <summary>checker.ts instantiateSignature.</summary>
     internal Signature InstantiateSignature(Signature signature, TypeMapper mapper, bool eraseTypeParameters = false)

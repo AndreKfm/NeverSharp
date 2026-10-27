@@ -1445,6 +1445,15 @@ internal sealed partial class Checker
             var store = StoreOf(declaration);            var body = store.Body(declaration.Node);
             type = body.IsNone || Utilities.NodeIsMissing(store, body) ? anyType : GetReturnTypeFromBody(declaration);
         }
+        var signatureFlags = Signatures.Record(signature).Flags;
+        if ((signatureFlags & SignatureFlags.IsInnerCallChain) != 0)
+        {
+            type = AddOptionalTypeMarker(type);
+        }
+        else if ((signatureFlags & SignatureFlags.IsOuterCallChain) != 0)
+        {
+            type = GetOptionalType(type);
+        }
         if (!PopTypeResolution())
         {
             if (!declaration.IsNone)
@@ -1816,8 +1825,8 @@ internal sealed partial class Checker
         var type = CreateObjectType(ObjectFlags.Anonymous, symbol);
         if ((flags & SymbolFlags.Class) != 0)
         {
-            // (getBaseTypeVariableOfClass: mixins, C5)
-            return type;
+            var baseTypeVariable = GetBaseTypeVariableOfClass(symbol);
+            return !baseTypeVariable.IsNone ? GetIntersectionType([type, baseTypeVariable]) : type;
         }
         return strictNullChecks && (flags & SymbolFlags.Optional) != 0 ? GetOptionalType(type, isProperty: true) : type;
     }

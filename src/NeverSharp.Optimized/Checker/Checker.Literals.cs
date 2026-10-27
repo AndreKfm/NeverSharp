@@ -285,6 +285,7 @@ internal sealed partial class Checker
     private IndexInfo GetObjectLiteralIndexInfo(bool isReadonly, int offset, List<SymbolRef> properties, Type keyType)
     {
         var propTypes = new List<Type>();
+        List<NodeRef>? components = null;
         for (var i = offset; i < properties.Count; i++)
         {
             var prop = properties[i];
@@ -293,10 +294,14 @@ internal sealed partial class Checker
                 (keyType == esSymbolType && IsSymbolWithSymbolName(prop)))
             {
                 propTypes.Add(GetTypeOfSymbol(properties[i]));
+                if (IsSymbolWithComputedName(properties[i]))
+                {
+                    (components ??= []).Add(DeclarationsOf(properties[i])![0]);
+                }
             }
         }
         var unionType = propTypes.Count > 0 ? GetUnionType(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(propTypes), UnionReduction.Subtype) : undefinedType;
-        return new IndexInfo { KeyType = keyType, Type = unionType, IsReadonly = isReadonly };
+        return new IndexInfo { KeyType = keyType, Type = unionType, IsReadonly = isReadonly, Components = components };
     }
 
     // checker.ts checkObjectLiteral (JavaScript object literals: C9)
@@ -849,7 +854,7 @@ internal sealed partial class Checker
 
     // checker.ts getIndexInfoWithReadonly
     private static IndexInfo GetIndexInfoWithReadonly(IndexInfo info, bool isReadonly) =>
-        info.IsReadonly != isReadonly ? new IndexInfo { KeyType = info.KeyType, Type = info.Type, IsReadonly = isReadonly, Declaration = info.Declaration } : info;
+        info.IsReadonly != isReadonly ? new IndexInfo { KeyType = info.KeyType, Type = info.Type, IsReadonly = isReadonly, Declaration = info.Declaration, Components = info.Components } : info;
 
     // checker.ts checkGrammarObjectLiteralExpression (DeclarationMeaning: 1 get, 2 set, 4 property assignment, 8 method)
     private void CheckGrammarObjectLiteralExpression(NodeRef node, bool inDestructuring)
@@ -1163,7 +1168,7 @@ internal sealed partial class Checker
                 }
             }
         }
-        var indexInfos = GetIndexInfosOfType(type).ConvertAll(info => new IndexInfo { KeyType = info.KeyType, Type = GetWidenedType(info.Type), IsReadonly = info.IsReadonly, Declaration = info.Declaration });
+        var indexInfos = GetIndexInfosOfType(type).ConvertAll(info => new IndexInfo { KeyType = info.KeyType, Type = GetWidenedType(info.Type), IsReadonly = info.IsReadonly, Declaration = info.Declaration, Components = info.Components });
         var result = CreateAnonymousType(Types.Symbol(type), members, [], [], indexInfos);
         Types.Record(result).ObjectFlags |= Types.ObjectFlagsOf(type) & (ObjectFlags.JSLiteral | ObjectFlags.NonInferrableType); // Retain js literal flag through widening
         return result;

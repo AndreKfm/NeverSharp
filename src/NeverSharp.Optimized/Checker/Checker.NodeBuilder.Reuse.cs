@@ -498,9 +498,10 @@ internal sealed partial class Checker
                 break;
             case SyntaxKind.NumericLiteral:
             {
-                // TypeScript's printer writes a reused literal of the enclosing file from the source text
+                // TypeScript's printer writes a reused literal of the enclosing file from the source text (setTextRange keeps
+                // positions only within the enclosing file; a literal of another file prints its canonical text)
                 var text = store.Texts.GetString(store.Text(n)) ?? "";
-                if (store.Pos(n) >= 0 && !store.Parent(n).IsNone)
+                if (store.Pos(n) >= 0 && !store.Parent(n).IsNone && ReferenceEquals(store, builderEnclosingStore))
                 {
                     text = Utilities.GetSourceTextOfNodeFromSourceFile(store, Utilities.RootOf(store, n), n);
                 }

@@ -341,6 +341,7 @@ internal sealed class IndexInfo
     public Type Type;
     public bool IsReadonly;
     public NodeRef Declaration;
+    public List<NodeRef>? Components; // the declarations with computed property names the index info is derived from
 }
 
 /// <summary>

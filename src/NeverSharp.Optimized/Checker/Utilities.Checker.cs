@@ -658,7 +658,7 @@ internal static partial class Utilities
         {
             SyntaxKind.QualifiedName => store.Right(parent) == node,
             SyntaxKind.PropertyAccessExpression => store.Name(parent) == node,
-            SyntaxKind.JSDocMemberName => store.Right(parent) == node,
+            SyntaxKind.MetaProperty => store.Name(parent) == node,
             _ => false,
         };
     }
