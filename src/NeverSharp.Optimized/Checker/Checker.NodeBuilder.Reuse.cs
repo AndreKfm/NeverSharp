@@ -593,6 +593,8 @@ internal sealed partial class Checker
         return clone;
     }
 
+    private static Node ParenthesizeIfPresent(Node node, Func<Node, Node> parenthesize) => node.IsNone ? node : parenthesize(node);
+
     private Node CopyWithChildrenFrom(NodeStore store, Node n, Func<Node, Node> V, Func<NodeList, NodeList> visitList, bool markReused)
     {
         var copy = CopyShellFrom(store, n, markReused);
@@ -616,7 +618,7 @@ internal sealed partial class Checker
                 break;
             case SyntaxKind.TypeReference:
                 S.SetTypeName(copy, V(store.TypeName(n)));
-                S.SetTypeArguments(copy, visitList(store.TypeArguments(n)));
+                S.SetTypeArguments(copy, ParenthesizeTypeArguments(visitList(store.TypeArguments(n))));
                 break;
             case SyntaxKind.ExpressionWithTypeArguments:
                 S.SetExpression(copy, V(store.Expression(n)));
@@ -627,8 +629,11 @@ internal sealed partial class Checker
                 S.SetTypeArguments(copy, visitList(store.TypeArguments(n)));
                 break;
             case SyntaxKind.ArrayType:
-                S.SetElementType(copy, V(store.ElementType(n)));
+            {
+                var elementType = V(store.ElementType(n));
+                S.SetElementType(copy, elementType.IsNone ? elementType : ParenthesizeNonArrayTypeOfPostfixType(elementType));
                 break;
+            }
             case SyntaxKind.TupleType:
                 S.SetElements(copy, visitList(store.Elements(n)));
                 break;
@@ -638,17 +643,41 @@ internal sealed partial class Checker
                 S.SetQuestionToken(copy, V(store.QuestionToken(n)));
                 S.SetType(copy, V(store.Type(n)));
                 break;
+            // (the factory's update functions apply the parenthesizer rules to the visited children)
             case SyntaxKind.OptionalType:
+            {
+                var type = V(store.Type(n));
+                S.SetType(copy, type.IsNone ? type : HasJSDocPostfixQuestion(type) ? SParenthesizedType(type) : ParenthesizeNonArrayTypeOfPostfixType(type));
+                break;
+            }
+            case SyntaxKind.TypeOperator:
+            {
+                var type = V(store.Type(n));
+                S.SetType(copy, type.IsNone ? type : store.Operator(n) == SyntaxKind.ReadonlyKeyword ? ParenthesizeOperandOfReadonlyTypeOperator(type) : ParenthesizeOperandOfTypeOperator(type));
+                break;
+            }
             case SyntaxKind.RestType:
             case SyntaxKind.ParenthesizedType:
-            case SyntaxKind.TypeOperator:
             case SyntaxKind.JSDocTypeExpression:
                 S.SetType(copy, V(store.Type(n)));
                 break;
             case SyntaxKind.UnionType:
             case SyntaxKind.IntersectionType:
-                S.SetTypes(copy, visitList(store.Types(n)));
+            {
+                var types = visitList(store.Types(n));
+                if (!types.IsNone)
+                {
+                    var parenthesized = new Node[S.Length(types)];
+                    for (var i = 0; i < parenthesized.Length; i++)
+                    {
+                        var member = S.Element(types, i);
+                        parenthesized[i] = store.Kind(n) == SyntaxKind.UnionType ? ParenthesizeConstituentTypeOfUnionType(member) : ParenthesizeConstituentTypeOfIntersectionType(member);
+                    }
+                    types = S.NewList(parenthesized, S.HasTrailingComma(types));
+                }
+                S.SetTypes(copy, types);
                 break;
+            }
             case SyntaxKind.FunctionType:
             case SyntaxKind.ConstructorType:
             case SyntaxKind.CallSignature:
@@ -708,9 +737,12 @@ internal sealed partial class Checker
                 S.SetDefault(copy, V(store.Default(n)));
                 break;
             case SyntaxKind.IndexedAccessType:
-                S.SetObjectType(copy, V(store.ObjectType(n)));
+            {
+                var objectType = V(store.ObjectType(n));
+                S.SetObjectType(copy, objectType.IsNone ? objectType : ParenthesizeNonArrayTypeOfPostfixType(objectType));
                 S.SetIndexType(copy, V(store.IndexType(n)));
                 break;
+            }
             case SyntaxKind.MappedType:
                 S.SetReadonlyToken(copy, V(store.ReadonlyToken(n)));
                 S.SetTypeParameter(copy, V(store.TypeParameter(n)));
@@ -734,8 +766,8 @@ internal sealed partial class Checker
                 S.SetLiteral(copy, V(store.Literal(n)));
                 break;
             case SyntaxKind.ConditionalType:
-                S.SetCheckType(copy, V(store.CheckType(n)));
-                S.SetExtendsType(copy, V(store.ExtendsType(n)));
+                S.SetCheckType(copy, ParenthesizeIfPresent(V(store.CheckType(n)), ParenthesizeCheckTypeOfConditionalType));
+                S.SetExtendsType(copy, ParenthesizeIfPresent(V(store.ExtendsType(n)), ParenthesizeExtendsTypeOfConditionalType));
                 S.SetTrueType(copy, V(store.TrueType(n)));
                 S.SetFalseType(copy, V(store.FalseType(n)));
                 break;
