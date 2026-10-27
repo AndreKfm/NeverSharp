@@ -114,8 +114,16 @@ internal sealed partial class Checker
     private Type GetQuickTypeOfExpression(NodeRef node)
     {
         var store = StoreOf(node);
-        // (JSDoc type assertions: C9)
-        var expr = At(node, Utilities.SkipParentheses(store, node.Node));
+        var expr = At(node, Utilities.SkipParentheses(store, node.Node, true));
+        if (FactoryUtilities.IsJSDocTypeAssertion(store, expr.Node))
+        {
+            var assertionType = GetJSDocTypeAssertionType(expr);
+            if (!IsConstTypeReference(store, assertionType.Node))
+            {
+                return GetTypeFromTypeNode(assertionType);
+            }
+        }
+        expr = At(node, Utilities.SkipParentheses(store, node.Node));
         var kind = store.Kind(expr.Node);
         if (kind == SyntaxKind.AwaitExpression)
         {
@@ -363,7 +371,7 @@ internal sealed partial class Checker
     private static bool IsTypeAssertion(NodeStore store, Node node)
     {
         node = Utilities.SkipParentheses(store, node, true);
-        return store.Kind(node) is SyntaxKind.TypeAssertionExpression or SyntaxKind.AsExpression;
+        return store.Kind(node) is SyntaxKind.TypeAssertionExpression or SyntaxKind.AsExpression || FactoryUtilities.IsJSDocTypeAssertion(store, node);
     }
 
     /// <summary>checker.ts checkDeclarationInitializer (JSDoc satisfies: C9).</summary>

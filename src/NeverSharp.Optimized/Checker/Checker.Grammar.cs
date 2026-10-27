@@ -824,10 +824,10 @@ internal sealed partial class Checker
                     return GrammarErrorOnNode(At(context, store.Name(parameter)), Diagnostics.A_rest_parameter_cannot_have_an_initializer);
                 }
             }
-            else if (!store.QuestionToken(parameter).IsNone) // (hasEffectiveQuestionToken: JSDoc optionality in JavaScript, module C9)
+            else if (HasEffectiveQuestionToken(At(context, parameter)))
             {
                 seenOptionalParameter = true;
-                if (!store.Initializer(parameter).IsNone)
+                if (!store.QuestionToken(parameter).IsNone && !store.Initializer(parameter).IsNone)
                 {
                     return GrammarErrorOnNode(At(context, store.Name(parameter)), Diagnostics.Parameter_cannot_have_question_mark_and_initializer);
                 }

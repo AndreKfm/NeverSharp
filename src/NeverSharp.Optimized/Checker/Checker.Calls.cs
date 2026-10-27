@@ -2359,7 +2359,9 @@ internal sealed partial class Checker
         if (store.Kind(n) == SyntaxKind.NewExpression)
         {
             var declaration = Signatures.Record(signature).Declaration;
-            if (!declaration.IsNone && Kind(declaration) is not (SyntaxKind.Constructor or SyntaxKind.ConstructSignature or SyntaxKind.ConstructorType) && !IsJSConstructor(declaration))
+            if (!declaration.IsNone && Kind(declaration) is not (SyntaxKind.Constructor or SyntaxKind.ConstructSignature or SyntaxKind.ConstructorType) &&
+                !IsJSDocSignatureOfConstructor(declaration) &&
+                !Utilities.IsJSDocConstructSignature(StoreOf(declaration), declaration.Node) && !IsJSConstructor(declaration))
             {
                 // When resolved signature is a call signature (and not a construct signature) the result type is any
                 if (noImplicitAny)
@@ -2408,6 +2410,18 @@ internal sealed partial class Checker
             }
         }
         return returnType;
+    }
+
+    // isJSDocSignature(declaration) && getJSDocRoot(declaration)?.parent?.kind === SyntaxKind.Constructor
+    private bool IsJSDocSignatureOfConstructor(NodeRef declaration)
+    {
+        var store = StoreOf(declaration);
+        if (store.Kind(declaration.Node) != SyntaxKind.JSDocSignature)
+        {
+            return false;
+        }
+        var root = GetJSDocRoot(store, declaration.Node);
+        return !root.IsNone && store.Kind(store.Parent(root)) == SyntaxKind.Constructor;
     }
 
     // checker.ts isCommonJsRequire
