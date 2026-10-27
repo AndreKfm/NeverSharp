@@ -163,7 +163,8 @@ internal sealed partial class Checker
             {
                 MergeSymbolTable(globals, TableOf(f, binding.JsGlobalAugmentations));
             }
-            // TODO(C9e): pattern ambient modules (`declare module "*.css"`) are collected here.
+            // TODO(C9e): pattern ambient modules (`declare module "*.css"`) are collected here (left in C9e: no Gate C unit
+            // depends on them; the units that declare them are identical).
             var moduleAugmentations = CollectModuleAugmentations(store, file.Root, binding);
             if (moduleAugmentations.Count > 0)
             {

@@ -593,7 +593,8 @@ internal sealed partial class Checker
             mainModule = ResolveExternalModuleSymbol(mainModule);
             if ((SymbolFlagsOf(mainModule) & SymbolFlags.Namespace) != 0)
             {
-                // TODO(C9e): pattern ambient module augmentations and `export *` targets of the augmented module.
+                // TODO(C9e): pattern ambient module augmentations and `export *` targets of the augmented module (left in
+                // C9e: no Gate C unit depends on them).
                 mainModule = MergeSymbol(mainModule, augmentationSymbol);
             }
             else

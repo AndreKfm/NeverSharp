@@ -41,7 +41,7 @@ internal sealed partial class Checker
             return;
         }
         var store = StoreOf(valueDeclaration);
-        var hasPrivateModifier = Utilities.HasSyntacticModifierUncached(store, valueDeclaration.Node, ModifierFlags.Private);
+        var hasPrivateModifier = (Utilities.GetEffectiveModifierFlags(store, valueDeclaration.Node) & ModifierFlags.Private) != 0; // hasEffectiveModifier
         var name = Utilities.DeclarationNameField(store, valueDeclaration.Node);
         var hasPrivateIdentifier = !name.IsNone && store.Kind(name) == SyntaxKind.PrivateIdentifier;
         if (!hasPrivateModifier && !hasPrivateIdentifier)
