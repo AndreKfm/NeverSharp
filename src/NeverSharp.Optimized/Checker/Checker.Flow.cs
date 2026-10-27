@@ -725,7 +725,7 @@ internal sealed partial class Checker
             case SyntaxKind.ForInStatement:
                 return stringType;
             case SyntaxKind.ForOfStatement:
-                return CheckRightHandSideOfForOfForFlow(parent);
+                return CheckRightHandSideOfForOf(parent);
             case SyntaxKind.BinaryExpression:
                 return GetAssignedTypeOfBinaryExpression(parent);
             case SyntaxKind.DeleteExpression:
@@ -733,8 +733,8 @@ internal sealed partial class Checker
             case SyntaxKind.ArrayLiteralExpression:
                 return GetTypeOfDestructuredArrayElement(GetAssignedType(parent), store.Nodes(store.Elements(parent.Node)).IndexOf(node.Node));
             case SyntaxKind.SpreadElement:
-                // getTypeOfDestructuredSpreadExpression (TODO(C5): iteration types)
-                return CreateArrayType(errorType);
+                // getAssignedTypeOfSpreadExpression
+                return GetTypeOfDestructuredSpreadExpression(GetAssignedType(Parent(parent)));
             case SyntaxKind.PropertyAssignment:
                 return GetTypeOfDestructuredProperty(GetAssignedType(Parent(parent)), At(parent, store.Name(parent.Node)));
             case SyntaxKind.ShorthandPropertyAssignment:
@@ -744,34 +744,35 @@ internal sealed partial class Checker
         return errorType;
     }
 
-    // checker.ts checkRightHandSideOfForOf (TODO(C5): iteration types; the element type of arrays and tuples, string
-    // characters, the error type otherwise)
-    private Type CheckRightHandSideOfForOfForFlow(NodeRef statement)
+    // checker.ts getTypeOfDestructuredSpreadExpression
+    private Type GetTypeOfDestructuredSpreadExpression(Type type)
     {
-        var store = StoreOf(statement);
-        var expressionType = CheckExpressionCached(At(statement, store.Expression(statement.Node)));
-        if (IsArrayType(expressionType))
-        {
-            return GetElementTypeOfArrayType(expressionType);
-        }
-        if (IsTupleType(expressionType))
-        {
-            var element = GetIndexedAccessTypeOrUndefined(expressionType, numberType);
-            return element.IsNone ? errorType : element;
-        }
-        if ((Types.Flags(expressionType) & TypeFlags.StringLike) != 0)
-        {
-            return stringType;
-        }
-        return (Types.Flags(expressionType) & TypeFlags.Any) != 0 ? expressionType : errorType;
+        var elementType = CheckIteratedTypeOrElementType(IterationUse.Destructuring, type, undefinedType, NodeRef.None);
+        return CreateArrayType(elementType.IsNone ? errorType : elementType);
     }
 
-    // checker.ts getInitialTypeOfBindingElement (TODO(C5): getTypeForBindingElement; C7 uses the declared type of the
-    // element's symbol, which the C1 approximation computes)
+    // checker.ts getInitialTypeOfBindingElement
     private Type GetInitialTypeOfBindingElement(NodeRef node)
     {
-        var symbol = GetSymbolOfDeclaration(node);
-        return symbol.IsNone ? errorType : GetTypeOfSymbol(symbol);
+        var store = StoreOf(node);
+        var pattern = store.Parent(node.Node);
+        var parentType = GetInitialType(At(node, store.Parent(pattern)));
+        Type type;
+        if (store.Kind(pattern) == SyntaxKind.ObjectBindingPattern)
+        {
+            var propertyName = store.PropertyName(node.Node);
+            type = GetTypeOfDestructuredProperty(parentType, At(node, propertyName.IsNone ? store.Name(node.Node) : propertyName));
+        }
+        else if (store.DotDotDotToken(node.Node).IsNone)
+        {
+            type = GetTypeOfDestructuredArrayElement(parentType, store.Nodes(store.Elements(pattern)).IndexOf(node.Node));
+        }
+        else
+        {
+            type = GetTypeOfDestructuredSpreadExpression(parentType);
+        }
+        var initializer = store.Initializer(node.Node);
+        return GetTypeWithDefault(type, initializer.IsNone ? NodeRef.None : At(node, initializer));
     }
 
     // checker.ts getInitialTypeOfVariableDeclaration
@@ -790,7 +791,8 @@ internal sealed partial class Checker
         }
         if (store.Kind(statement) == SyntaxKind.ForOfStatement)
         {
-            return CheckRightHandSideOfForOfForFlow(At(node, statement));
+            var iterated = CheckRightHandSideOfForOf(At(node, statement));
+            return iterated.IsNone ? errorType : iterated;
         }
         return errorType;
     }

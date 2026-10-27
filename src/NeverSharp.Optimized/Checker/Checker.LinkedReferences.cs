@@ -3,9 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // Ported from src/compiler/checker.ts (markLinkedReferences with the hints Identifier, Property, ExportAssignment,
-// ExportImportEquals and ExportSpecifier; markIdentifierAliasReferenced, markPropertyAliasReferenced,
-// markExportAssignmentAliasReferenced, markImportEqualsAliasReferenced, markExportSpecifierAliasReferenced,
-// markAliasReferenced, markAliasSymbolAsReferenced, markExportAsReferenced, shouldMarkIdentifierAliasReferenced,
+// ExportImportEquals and ExportSpecifier, and the mark* functions they call; shouldMarkIdentifierAliasReferenced,
 // isConstEnumOrConstEnumOnlyModule)
 //   https://github.com/microsoft/TypeScript at commit 050880ce59e30b356b686bd3144efe24f875ebc8
 // Port structure follows internal/checker/checker.go

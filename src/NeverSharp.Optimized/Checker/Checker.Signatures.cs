@@ -183,7 +183,6 @@ internal sealed partial class Checker
         var types = new List<Type>();
         var flags = new List<ElementFlags>();
         var names = new List<NodeRef>();
-        var hasNames = true;
         for (var i = pos; i < parameterCount; i++)
         {
             if (restType.IsNone || i < parameterCount - 1)
@@ -196,11 +195,9 @@ internal sealed partial class Checker
                 types.Add(restType);
                 flags.Add(ElementFlags.Variadic);
             }
-            var name = GetNameableDeclarationAtPosition(source, i);
-            names.Add(name);
-            hasNames &= !name.IsNone;
+            names.Add(GetNameableDeclarationAtPosition(source, i));
         }
-        return CreateTupleType([.. types], [.. flags], isReadonly, hasNames ? [.. names] : null);
+        return CreateTupleType([.. types], [.. flags], isReadonly, [.. names]);
     }
 
     /// <summary>
