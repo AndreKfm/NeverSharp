@@ -29,7 +29,6 @@ internal sealed partial class Checker
     private readonly Dictionary<SourceFile, int> fileIndex = new(ReferenceEqualityComparer.Instance);
     private readonly DiagnosticCollection diagnostics = new();
     private readonly DiagnosticCollection suggestionDiagnostics = new();
-    private readonly List<Action> deferredDiagnostics = [];
 
     // compiler options the checker reads (createTypeChecker's vars)
     private readonly ScriptTarget languageVersion;
@@ -395,20 +394,12 @@ internal sealed partial class Checker
         };
     }
 
-    /// <summary>checker.ts addLazyDiagnostic: run when the file's check completes (ensurePendingDiagnosticWorkComplete).</summary>
-    private void AddLazyDiagnostic(Action diagnostic)
-    {
-        if (checkingFile)
-        {
-            deferredDiagnostics.Add(diagnostic);
-        }
-        else
-        {
-            diagnostic();
-        }
-    }
+    /// <summary>
+    /// checker.ts addLazyDiagnostic. Files are only checked for their diagnostics (checkSourceFileWithEagerDiagnostics),
+    /// which run lazy diagnostics immediately; deferring them would change the order types are created in.
+    /// </summary>
+    private static void AddLazyDiagnostic(Action diagnostic) => diagnostic();
 
-    private bool checkingFile;
     private readonly HashSet<int> checkedFiles = [];
 
     /// <summary>checker.ts getDiagnostics(sourceFile): checks the file (once) and returns its diagnostics.</summary>
@@ -443,21 +434,7 @@ internal sealed partial class Checker
         {
             return;
         }
-        checkingFile = true;
-        try
-        {
-            CheckSourceFile(new NodeRef(file, FileAt(file).Root));
-        }
-        finally
-        {
-            checkingFile = false;
-        }
-        // ensurePendingDiagnosticWorkComplete
-        for (var i = 0; i < deferredDiagnostics.Count; i++)
-        {
-            deferredDiagnostics[i]();
-        }
-        deferredDiagnostics.Clear();
+        CheckSourceFile(new NodeRef(file, FileAt(file).Root));
     }
 
     // utilities.ts canIncludeBindAndCheckDiagnostics (plain and checked JavaScript files included since module C9a)

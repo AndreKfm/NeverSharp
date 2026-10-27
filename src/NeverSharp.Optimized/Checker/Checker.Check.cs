@@ -216,6 +216,11 @@ internal sealed partial class Checker
             case SyntaxKind.TypeLiteral:
                 CheckTypeLiteralRelations(node); // module C4
                 break;
+            case SyntaxKind.UnionType:
+            case SyntaxKind.IntersectionType:
+                // checkUnionOrIntersectionType
+                GetTypeFromTypeNode(node);
+                break;
             case SyntaxKind.TypeAliasDeclaration:
                 if (store.Kind(store.Type(n)) != SyntaxKind.IntrinsicKeyword)
                 {
@@ -524,9 +529,10 @@ internal sealed partial class Checker
                 }
                 return false;
             case SyntaxKind.TypeReference:
-                GetTypeFromTypeNode(node);
-                // type arguments are type nodes of their own; the type name is resolved
+                // checkTypeReferenceNode: the type arguments (type nodes of their own) first, then the reference; the
+                // type name is resolved
                 VisitList(node, store.TypeArguments(n));
+                GetTypeFromTypeNode(node);
                 CheckTypeReferenceTypeArguments(node); // module C4
                 return false;
             case SyntaxKind.IndexedAccessType:
