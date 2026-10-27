@@ -533,6 +533,17 @@ internal sealed partial class Checker
                 }
             }
         }
+        else if (strictNullChecks && !prop.IsNone && !ValueDeclarationOf(prop).IsNone)
+        {
+            var valueDeclaration = ValueDeclarationOf(prop);
+            var vs = StoreOf(valueDeclaration);
+            if (vs.Kind(valueDeclaration.Node) == SyntaxKind.PropertyAccessExpression &&
+                Utilities.GetAssignmentDeclarationPropertyAccessKind(vs, valueDeclaration.Node) != AssignmentDeclarationKind.None &&
+                GetControlFlowContainer(node) == GetControlFlowContainer(valueDeclaration))
+            {
+                assumeUninitialized = true;
+            }
+        }
         var flowType = GetFlowTypeOfReference(node, propType, assumeUninitialized ? GetOptionalType(propType) : propType);
         if (assumeUninitialized && !ContainsUndefinedType(propType) && ContainsUndefinedType(flowType))
         {
@@ -654,7 +665,8 @@ internal sealed partial class Checker
                 }
                 else
                 {
-                    errorInfo = ChainDiagnosticMessages(errorInfo, Diagnostics.Property_0_does_not_exist_on_type_1, missingProperty, container);
+                    // (containerSeemsToBeEmptyDomElement needs the lib option, which Gate C does not set)
+                    errorInfo = ChainDiagnosticMessages(ElaborateNeverIntersection(errorInfo, containingType), Diagnostics.Property_0_does_not_exist_on_type_1, missingProperty, container);
                 }
             }
         }

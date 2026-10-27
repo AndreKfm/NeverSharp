@@ -719,14 +719,9 @@ internal sealed partial class Checker
     // checker.ts isNonBindableDynamicName
     private bool IsNonBindableDynamicName(NodeRef node)
     {
-        var store = StoreOf(node);
-        return store.Kind(node.Node) == SyntaxKind.ComputedPropertyName && !Utilities.IsEntityNameExpression(store, store.Expression(node.Node)) &&
-            !Utilities.IsStringOrNumericLiteralLike(store, store.Expression(node.Node)) && !IsSignedNumericLiteral(store, store.Expression(node.Node));
+        // checker.ts isNonBindableDynamicName: isDynamicName(node) && !isLateBindableName(node)
+        return Utilities.IsDynamicName(StoreOf(node), node.Node) && !IsLateBindableName(node);
     }
-
-    private static bool IsSignedNumericLiteral(NodeStore store, Node node) =>
-        store.Kind(node) == SyntaxKind.PrefixUnaryExpression && store.Operator(node) is SyntaxKind.PlusToken or SyntaxKind.MinusToken &&
-        store.Kind(store.Operand(node)) == SyntaxKind.NumericLiteral;
 
     // checker.ts checkPropertyInitialization
     private void CheckPropertyInitialization(NodeRef node)
