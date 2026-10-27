@@ -1036,7 +1036,7 @@ internal sealed partial class Checker
                 // foo = this.bar is illegal in emitStandardClassFields when bar is a parameter property
                 return !(EmitStandardClassFields
                     && Utilities.GetContainingClass(store, d) == Utilities.GetContainingClass(store, u)
-                    && IsUsedInFunctionOrInstanceProperty(store, u, d, declContainer.Node));
+                    && IsUsedInFunctionOrInstanceProperty(store, usage.File, u, d, declContainer.Node));
             }
             return true;
         }
@@ -1053,7 +1053,7 @@ internal sealed partial class Checker
         {
             return true;
         }
-        if (IsUsedInFunctionOrInstanceProperty(store, u, d, declContainer.Node))
+        if (IsUsedInFunctionOrInstanceProperty(store, usage.File, u, d, declContainer.Node))
         {
             if (EmitStandardClassFields && !Utilities.GetContainingClass(store, d).IsNone
                 && (declKind == SyntaxKind.PropertyDeclaration || Utilities.IsParameterPropertyDeclaration(store, d, store.Parent(d))))
@@ -1142,7 +1142,7 @@ internal sealed partial class Checker
     private static bool IsAsyncGenerator(NodeStore store, Node node) =>
         !store.AsteriskToken(node).IsNone || Utilities.HasSyntacticModifierUncached(store, node, ModifierFlags.Async);
 
-    private static bool IsUsedInFunctionOrInstanceProperty(NodeStore store, Node usage, Node declaration, Node declContainer)
+    private bool IsUsedInFunctionOrInstanceProperty(NodeStore store, int file, Node usage, Node declaration, Node declContainer)
     {
         for (var current = usage; !current.IsNone; current = store.Parent(current))
         {
@@ -1175,7 +1175,28 @@ internal sealed partial class Checker
                     {
                         return true;
                     }
-                    // TODO(C8): isPropertyInitializedInStaticBlocks (static blocks initializing a static property).
+                    if (store.Kind(declaration) == SyntaxKind.PropertyDeclaration && Utilities.GetContainingClass(store, usage) == Utilities.GetContainingClass(store, declaration))
+                    {
+                        var propName = store.Name(declaration);
+                        if (store.Kind(propName) is SyntaxKind.Identifier or SyntaxKind.PrivateIdentifier)
+                        {
+                            var declarationRef = new NodeRef(file, declaration);
+                            var type = GetTypeOfSymbol(GetSymbolOfDeclaration(declarationRef));
+                            var staticBlocks = new List<NodeRef>();
+                            var classNode = store.Parent(declaration);
+                            foreach (var member in store.Nodes(store.Members(classNode)))
+                            {
+                                if (store.Kind(member) == SyntaxKind.ClassStaticBlockDeclaration)
+                                {
+                                    staticBlocks.Add(new NodeRef(file, member));
+                                }
+                            }
+                            if (IsPropertyInitializedInStaticBlocks(new NodeRef(file, propName), type, staticBlocks, store.Pos(classNode), store.Pos(current)))
+                            {
+                                return true;
+                            }
+                        }
+                    }
                 }
                 else
                 {
@@ -1191,11 +1212,11 @@ internal sealed partial class Checker
                 var decorated = store.Parent(parent);
                 if (store.Kind(decorated) == SyntaxKind.Parameter)
                 {
-                    return IsUsedInFunctionOrInstanceProperty(store, store.Parent(store.Parent(decorated)), declaration, declContainer);
+                    return IsUsedInFunctionOrInstanceProperty(store, file, store.Parent(store.Parent(decorated)), declaration, declContainer);
                 }
                 if (store.Kind(decorated) == SyntaxKind.MethodDeclaration)
                 {
-                    return IsUsedInFunctionOrInstanceProperty(store, store.Parent(decorated), declaration, declContainer);
+                    return IsUsedInFunctionOrInstanceProperty(store, file, store.Parent(decorated), declaration, declContainer);
                 }
             }
         }
@@ -2199,6 +2220,63 @@ internal sealed partial class Checker
         return SymbolRef.None;
     }
 
+    // checker.ts reportNonExportedMember
+    private void ReportNonExportedMember(NodeRef name, string nameText, string declarationName, SymbolRef moduleSymbol, string moduleName)
+    {
+        var valueDeclaration = ValueDeclarationOf(moduleSymbol);
+        var localSymbol = valueDeclaration.IsNone ? SymbolRef.None : LocalsOf(valueDeclaration)?.Get(nameText) ?? SymbolRef.None;
+        var exports = ExportsOf(moduleSymbol);
+        if (localSymbol.IsNone)
+        {
+            Error(name, Diagnostics.Module_0_has_no_exported_member_1, moduleName, declarationName);
+            return;
+        }
+        var exportedEqualsSymbol = exports?.Get(InternalSymbolName.ExportEquals) ?? SymbolRef.None;
+        if (!exportedEqualsSymbol.IsNone)
+        {
+            if (IsSameReference(exportedEqualsSymbol, localSymbol))
+            {
+                // reportInvalidImportEqualsExportMember (module kinds ES2015 and later)
+                Error(name, compilerOptions.GetESModuleInterop()
+                    ? Diagnostics._0_can_only_be_imported_by_using_a_default_import
+                    : Diagnostics._0_can_only_be_imported_by_turning_on_the_esModuleInterop_flag_and_using_a_default_import, declarationName);
+            }
+            else
+            {
+                Error(name, Diagnostics.Module_0_has_no_exported_member_1, moduleName, declarationName);
+            }
+            return;
+        }
+        var exportedSymbol = SymbolRef.None;
+        if (exports is not null)
+        {
+            for (var i = 0; i < exports.Count; i++)
+            {
+                if (IsSameReference(exports.ValueAt(i), localSymbol))
+                {
+                    exportedSymbol = exports.ValueAt(i);
+                    break;
+                }
+            }
+        }
+        var diagnostic = !exportedSymbol.IsNone
+            ? Error(name, Diagnostics.Module_0_declares_1_locally_but_it_is_exported_as_2, moduleName, declarationName, SymbolToString(exportedSymbol))
+            : Error(name, Diagnostics.Module_0_declares_1_locally_but_it_is_not_exported, moduleName, declarationName);
+        if (DeclarationsOf(localSymbol) is { } declarations)
+        {
+            var related = new ProgramRelatedInformation[declarations.Count];
+            for (var i = 0; i < declarations.Count; i++)
+            {
+                related[i] = CreateRelatedForNode(declarations[i], i == 0 ? Diagnostics._0_is_declared_here : Diagnostics.and_here, declarationName);
+            }
+            AddRelatedInfo(diagnostic, related);
+        }
+    }
+
+    // checker.ts getSymbolIfSameReference (as a test)
+    private bool IsSameReference(SymbolRef s1, SymbolRef s2) =>
+        GetMergedSymbol(ResolveSymbol(GetMergedSymbol(s1), dontResolveAlias: false)) == GetMergedSymbol(ResolveSymbol(GetMergedSymbol(s2), dontResolveAlias: false));
+
     private void ErrorNoModuleMemberSymbol(SymbolRef moduleSymbol, SymbolRef targetSymbol, NodeRef name, string nameText)
     {
         var moduleName = GetFullyQualifiedName(moduleSymbol);
@@ -2222,8 +2300,7 @@ internal sealed partial class Checker
         }
         else
         {
-            // (reportNonExportedMember: locals of the module that are not exported, TODO(C8))
-            Error(name, Diagnostics.Module_0_has_no_exported_member_1, moduleName, declarationName);
+            ReportNonExportedMember(name, nameText, declarationName, moduleSymbol, moduleName);
         }
         _ = nameText;
     }

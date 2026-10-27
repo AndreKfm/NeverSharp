@@ -228,7 +228,7 @@ internal sealed class ObjectTypeData
     public List<Signature>? DeclaredConstructSignatures;
     public List<IndexInfo>? DeclaredIndexInfos;
     public List<Type>? ResolvedBaseTypes;
-    public bool BaseTypesResolving;
+    public bool BaseTypesResolved; // baseTypesResolved
     public Type ResolvedBaseConstructorType;
 
     // TypeReference / GenericType

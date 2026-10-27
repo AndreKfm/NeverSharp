@@ -87,8 +87,9 @@ internal sealed partial class Checker
         }
     }
 
-    // checker.ts checkImportAttributes (the grammar parts that apply to Gate C's module ES2022; the attribute types: when
-    // the global ImportAttributes type exists)
+    // checker.ts checkImportAttributes. The relation of the attributes' object type to the global ImportAttributes type
+    // ({ [key: string]: string }) is not checked: attribute values that are not string literals are reported by
+    // checkExternalImportOrExportDeclaration already.
     private void CheckImportAttributes(NodeRef declaration)
     {
         var store = StoreOf(declaration);
@@ -97,28 +98,54 @@ internal sealed partial class Checker
         {
             return;
         }
+        var attributes = At(declaration, node);
         var isImportAttributes = store.Token(node) == SyntaxKind.WithKeyword;
         // isExclusivelyTypeOnlyImportOrExport
-        var validForTypeAttributes = store.Kind(declaration.Node) == SyntaxKind.ExportDeclaration
+        var isTypeOnly = store.Kind(declaration.Node) == SyntaxKind.ExportDeclaration
             ? store.IsTypeOnly(declaration.Node)
             : !store.ImportClause(declaration.Node).IsNone && store.PhaseModifier(store.ImportClause(declaration.Node)) == SyntaxKind.TypeKeyword;
-        if (validForTypeAttributes)
+        var validForTypeAttributes = isTypeOnly;
+        var hasOverride = GetResolutionModeOverride(attributes, reportErrors: validForTypeAttributes);
+        if (validForTypeAttributes && hasOverride)
         {
-            GetResolutionModeOverride(At(declaration, node), reportErrors: true);
+            return; // Other grammar checks do not apply to type-only imports with resolution mode assertions
         }
-        // !moduleSupportsImportAttributes(moduleKind): ES2022 does not support them
+        // !moduleSupportsImportAttributes(moduleKind)
         if (moduleKind is not (ModuleKind.ESNext or ModuleKind.Node18 or ModuleKind.Node20 or ModuleKind.NodeNext or ModuleKind.Preserve))
         {
-            GrammarErrorOnNode(At(declaration, node), isImportAttributes
+            GrammarErrorOnNode(attributes, isImportAttributes
                 ? Diagnostics.Import_attributes_are_only_supported_when_the_module_option_is_set_to_esnext_node18_node20_nodenext_or_preserve
                 : Diagnostics.Import_assertions_are_only_supported_when_the_module_option_is_set_to_esnext_node18_node20_nodenext_or_preserve);
             return;
         }
-        if (!isImportAttributes) // (ignoreDeprecations: not set in Gate C)
+        if (moduleKind is >= ModuleKind.Node20 and <= ModuleKind.NodeNext && !isImportAttributes)
         {
-            GrammarErrorOnFirstToken(At(declaration, node), Diagnostics.Import_assertions_have_been_replaced_by_import_attributes_Use_with_instead_of_assert);
+            GrammarErrorOnFirstToken(attributes, Diagnostics.Import_assertions_have_been_replaced_by_import_attributes_Use_with_instead_of_assert);
+            return;
         }
-        // TODO(C8): the remaining import attribute checks (type-only declarations, resolution-mode) for module kinds Gate C does not use
+        if (!isImportAttributes) // (ignoreDeprecations: not an option of Gate C)
+        {
+            GrammarErrorOnFirstToken(attributes, Diagnostics.Import_assertions_have_been_replaced_by_import_attributes_Use_with_instead_of_assert);
+        }
+        // getEmitSyntaxForModuleSpecifierExpression: CommonJS in .cts files
+        if (!store.ModuleSpecifier(declaration.Node).IsNone && GetImpliedNodeFormatForEmit(declaration.File) == ModuleKind.CommonJS && moduleKind != ModuleKind.Preserve)
+        {
+            GrammarErrorOnNode(attributes, isImportAttributes
+                ? Diagnostics.Import_attributes_are_not_allowed_on_statements_that_compile_to_CommonJS_require_calls
+                : Diagnostics.Import_assertions_are_not_allowed_on_statements_that_compile_to_CommonJS_require_calls);
+            return;
+        }
+        if (isTypeOnly)
+        {
+            GrammarErrorOnNode(attributes, isImportAttributes
+                ? Diagnostics.Import_attributes_cannot_be_used_with_type_only_imports_or_exports
+                : Diagnostics.Import_assertions_cannot_be_used_with_type_only_imports_or_exports);
+            return;
+        }
+        if (hasOverride)
+        {
+            GrammarErrorOnNode(attributes, Diagnostics.resolution_mode_can_only_be_set_for_type_only_imports);
+        }
     }
 
     // checker.ts checkExternalImportOrExportDeclaration

@@ -256,6 +256,46 @@ internal sealed partial class Checker
         return false;
     }
 
+    /// <summary>checker.ts isPropertyInitializedInStaticBlocks (module C8).</summary>
+    private bool IsPropertyInitializedInStaticBlocks(NodeRef propName, Type propType, List<NodeRef> staticBlocks, int startPos, int endPos)
+    {
+        var store = StoreOf(propName);
+        var name = store.Texts.GetString(store.EscapedText(propName.Node));
+        foreach (var staticBlock in staticBlocks)
+        {
+            // static block must be within the provided range as they are evaluated in document order (unlike constructors)
+            var pos = StoreOf(staticBlock).Pos(staticBlock.Node);
+            if (pos < startPos || pos > endPos)
+            {
+                continue;
+            }
+            var returnFlowNode = BindingOf(staticBlock.File).ReturnFlowNodeOf(staticBlock.Node);
+            Type flowType;
+            if (returnFlowNode.IsNone)
+            {
+                flowType = propType; // (reference.flowNode undefined: the declared type)
+            }
+            else
+            {
+                var saveName = syntheticThisAccessName;
+                syntheticThisAccessName = name;
+                try
+                {
+                    flowType = GetFlowTypeOfReference(syntheticThisAccess, propType, GetOptionalType(propType), NodeRef.None, new FlowRef(staticBlock.File, returnFlowNode));
+                }
+                finally
+                {
+                    syntheticThisAccessName = saveName;
+                }
+            }
+            if (!ContainsUndefinedType(flowType))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /// <summary>checker.ts isPropertyInitializedInConstructor.</summary>
     private bool IsPropertyInitializedInConstructor(NodeRef propName, Type propType, NodeRef constructor)
     {

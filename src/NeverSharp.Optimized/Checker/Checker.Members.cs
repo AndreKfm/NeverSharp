@@ -533,31 +533,43 @@ internal sealed partial class Checker
             return [];
         }
         var data = Types.Object(type);
-        if (data.ResolvedBaseTypes is null)
+        if (!data.BaseTypesResolved)
         {
-            if (data.BaseTypesResolving)
+            if (PushTypeResolution(type, ResolvedBaseTypesProperty))
             {
-                return [];
+                data.ResolvedBaseTypes ??= [];
+                var symbol = Types.Symbol(type);
+                var flags = symbol.IsNone ? SymbolFlags.None : SymbolFlagsOf(symbol);
+                if ((Types.ObjectFlagsOf(type) & ObjectFlags.Tuple) != 0)
+                {
+                    data.ResolvedBaseTypes = [GetTupleBaseType(type)];
+                }
+                else
+                {
+                    if ((flags & SymbolFlags.Class) != 0)
+                    {
+                        ResolveBaseTypesOfClass(type, data);
+                    }
+                    if ((flags & SymbolFlags.Interface) != 0)
+                    {
+                        ResolveBaseTypesOfInterface(type, data);
+                    }
+                }
+                if (!PopTypeResolution())
+                {
+                    foreach (var declaration in DeclarationsOf(symbol) ?? [])
+                    {
+                        if (Kind(declaration) is SyntaxKind.ClassDeclaration or SyntaxKind.InterfaceDeclaration)
+                        {
+                            // reportCircularBaseType
+                            Error(declaration, Diagnostics.Type_0_recursively_references_itself_as_a_base_type, TypeToString(type, NodeRef.None, TypeFormatFlags.WriteArrayAsGenericType));
+                        }
+                    }
+                }
             }
-            data.BaseTypesResolving = true;
-            data.ResolvedBaseTypes = [];
-            var symbol = Types.Symbol(type);
-            var flags = symbol.IsNone ? SymbolFlags.None : SymbolFlagsOf(symbol);
-            if ((Types.ObjectFlagsOf(type) & ObjectFlags.Tuple) != 0)
-            {
-                data.ResolvedBaseTypes = [GetTupleBaseType(type)];
-            }
-            else if ((flags & SymbolFlags.Class) != 0)
-            {
-                ResolveBaseTypesOfClass(type, data);
-            }
-            if ((flags & SymbolFlags.Interface) != 0)
-            {
-                ResolveBaseTypesOfInterface(type, data);
-            }
-            data.BaseTypesResolving = false;
+            data.BaseTypesResolved = true;
         }
-        return data.ResolvedBaseTypes;
+        return data.ResolvedBaseTypes ?? [];
     }
 
     // checker.ts resolveBaseTypesOfClass (module C3: with the instantiated constructors of the base expression)
@@ -672,7 +684,7 @@ internal sealed partial class Checker
             }
             foreach (var node in GetInterfaceBaseTypeNodes(declaration))
             {
-                var baseType = GetTypeFromTypeNode(At(declaration, node));
+                var baseType = GetReducedType(GetTypeFromTypeNode(At(declaration, node)));
                 if (IsErrorType(baseType))
                 {
                     continue;
@@ -683,7 +695,11 @@ internal sealed partial class Checker
                     {
                         data.ResolvedBaseTypes!.Add(baseType);
                     }
-                    // (reportCircularBaseType: TODO(C8))
+                    else
+                    {
+                        // reportCircularBaseType
+                        Error(declaration, Diagnostics.Type_0_recursively_references_itself_as_a_base_type, TypeToString(type, NodeRef.None, TypeFormatFlags.WriteArrayAsGenericType));
+                    }
                 }
                 else
                 {
@@ -971,6 +987,7 @@ internal sealed partial class Checker
     }
 
     private const int ResolvedBaseConstructorTypeProperty = 6;
+    private const int ResolvedBaseTypesProperty = 3;
 
     /// <summary>
     /// checker.ts getBaseConstructorTypeOfClass: undefinedType without an extends clause, errorType after an error,

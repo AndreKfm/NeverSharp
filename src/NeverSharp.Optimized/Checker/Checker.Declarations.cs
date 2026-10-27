@@ -415,7 +415,7 @@ internal sealed partial class Checker
             // - The constructor declares parameter properties
             //   or the containing class declares instance member variables with initializers.
             var superCallShouldBeRootLevel = false;
-            if (!emitStandardClassFields)
+            if (!EmitStandardClassFields)
             {
                 foreach (var m in store.Nodes(store.Members(containingClassDecl.Node)))
                 {
@@ -464,9 +464,6 @@ internal sealed partial class Checker
             Error(node, Diagnostics.Constructors_for_derived_classes_must_contain_a_super_call);
         }
     }
-
-    // checker.ts emitStandardClassFields: useDefineForClassFields && target >= ES2022
-    private bool emitStandardClassFields => compilerOptions.GetUseDefineForClassFields() && languageVersion >= ScriptTarget.ES2022;
 
     private static bool IsInstancePropertyWithInitializerOrPrivateIdentifierProperty(NodeStore store, Node n) =>
         IsPrivateIdentifierClassElementDeclaration(store, n) ||
@@ -1396,8 +1393,8 @@ internal sealed partial class Checker
         CheckTypeReferenceOrImport(node);
     }
 
-    // checker.ts getResolutionModeOverride (the grammar errors)
-    private void GetResolutionModeOverride(NodeRef node, bool reportErrors)
+    // checker.ts getResolutionModeOverride: whether the attributes set a valid resolution mode (and the grammar errors)
+    private bool GetResolutionModeOverride(NodeRef node, bool reportErrors)
     {
         var store = StoreOf(node);
         var elements = store.Nodes(store.Elements(node.Node));
@@ -1407,13 +1404,13 @@ internal sealed partial class Checker
             {
                 GrammarErrorOnNode(node, Diagnostics.Type_import_attributes_should_have_exactly_one_key_resolution_mode_with_value_import_or_require);
             }
-            return;
+            return false;
         }
         var elem = elements[0];
         var name = store.Name(elem);
         if (!Utilities.IsStringLiteralLike(store, name))
         {
-            return;
+            return false;
         }
         if (!store.Texts.Equals(store.Text(name), "resolution-mode"))
         {
@@ -1421,12 +1418,12 @@ internal sealed partial class Checker
             {
                 GrammarErrorOnNode(At(node, name), Diagnostics.resolution_mode_is_the_only_valid_key_for_type_import_attributes);
             }
-            return;
+            return false;
         }
         var value = store.Value(elem);
         if (!Utilities.IsStringLiteralLike(store, value))
         {
-            return;
+            return false;
         }
         if (!store.Texts.Equals(store.Text(value), "import") && !store.Texts.Equals(store.Text(value), "require"))
         {
@@ -1434,7 +1431,9 @@ internal sealed partial class Checker
             {
                 GrammarErrorOnNode(At(node, value), Diagnostics.resolution_mode_should_be_either_require_or_import);
             }
+            return false;
         }
+        return true;
     }
 
     // checker.ts checkNamedTupleMember
