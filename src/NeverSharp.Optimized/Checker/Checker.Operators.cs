@@ -324,7 +324,10 @@ internal sealed partial class Checker
                     }
                 }
                 var type = GetRestType(objectLiteralType, nonRestNames, Types.Symbol(objectLiteralType));
-                // (checkGrammarForDisallowedTrailingComma: C8)
+                if (allProperties)
+                {
+                    CheckGrammarForDisallowedTrailingComma(node, store.Properties(node.Node), Diagnostics.A_rest_parameter_or_binding_pattern_may_not_have_a_trailing_comma);
+                }
                 return CheckDestructuringAssignment(At(node, store.Expression(property.Node)), type);
             }
         }
@@ -413,7 +416,7 @@ internal sealed partial class Checker
             }
             else
             {
-                // (checkGrammarForDisallowedTrailingComma: C8)
+                CheckGrammarForDisallowedTrailingComma(node, store.Elements(node.Node), Diagnostics.A_rest_parameter_or_binding_pattern_may_not_have_a_trailing_comma);
                 var type = EveryType(sourceType, IsTupleType)
                     ? MapType(sourceType, t => SliceTupleType(t, elementIndex))
                     : CreateArrayType(elementType);

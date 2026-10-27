@@ -712,6 +712,7 @@ internal sealed partial class Checker
                 if (store.Token(clause) == SyntaxKind.ImplementsKeyword)
                 {
                     result.AddRange(store.Nodes(store.Types(clause)).ToArray());
+                    break; // getHeritageClause: the first implements clause
                 }
             }
         }

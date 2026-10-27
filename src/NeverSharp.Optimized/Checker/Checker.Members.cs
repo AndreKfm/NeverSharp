@@ -405,7 +405,7 @@ internal sealed partial class Checker
         return true;
     }
 
-    // utilities.ts getInterfaceBaseTypeNodes (the expressions of the extends clause)
+    // utilities.ts getInterfaceBaseTypeNodes (the expressions of the first extends clause, getHeritageClause)
     private List<Node> GetInterfaceBaseTypeNodes(NodeRef declaration)
     {
         var result = new List<Node>();
@@ -420,6 +420,7 @@ internal sealed partial class Checker
             if (store.Token(clause) == SyntaxKind.ExtendsKeyword)
             {
                 result.AddRange(store.Nodes(store.Types(clause)));
+                break;
             }
         }
         return result;
@@ -1402,7 +1403,50 @@ internal sealed partial class Checker
     /// <summary>checker.ts getSignaturesOfType.</summary>
     internal List<Signature> GetSignaturesOfType(Type type, SignatureKind kind)
     {
-        type = GetApparentType(type);
+        var result = GetSignaturesOfStructuredType(GetReducedApparentType(type), kind);
+        if (kind == SignatureKind.Call && result.Count == 0 && (Types.Flags(type) & TypeFlags.Union) != 0)
+        {
+            if (arrayFallbackSignatures.TryGetValue(type, out var fallback))
+            {
+                return fallback;
+            }
+            // If the union is all different instantiations of a member of the global array type...
+            string? memberName = null;
+            if (EveryType(type, t =>
+                {
+                    var symbol = Types.Symbol(t);
+                    if (symbol.IsNone || ParentOf(symbol).IsNone || !IsArrayOrTupleSymbol(ParentOf(symbol)))
+                    {
+                        return false;
+                    }
+                    if (memberName is null)
+                    {
+                        memberName = NameOf(symbol);
+                        return true;
+                    }
+                    return memberName == NameOf(symbol);
+                }))
+            {
+                // Transform the type from `(A[] | B[])["member"]` to `(A | B)[]["member"]` (since we pretend array is covariant anyway)
+                var arrayArg = MapType(type, t => GetMappedType(
+                    Types.Elements(Types.Object(IsReadonlyArraySymbol(ParentOf(Types.Symbol(t))) ? globalReadonlyArrayType : globalArrayType).TypeParameters).ToArray()[0],
+                    Types.Object(t).Mapper ?? throw new InvalidOperationException("array member type without a mapper")));
+                var arrayType = CreateArrayType(arrayArg, SomeType(type, t => IsReadonlyArraySymbol(ParentOf(Types.Symbol(t)))));
+                var signatures = GetSignaturesOfType(GetTypeOfPropertyOfType(arrayType, memberName!), kind);
+                arrayFallbackSignatures[type] = signatures;
+                return signatures;
+            }
+            arrayFallbackSignatures[type] = result;
+        }
+        return result;
+    }
+
+    // checker.ts UnionType.arrayFallbackSignatures
+    private readonly Dictionary<Type, List<Signature>> arrayFallbackSignatures = [];
+
+    // checker.ts getSignaturesOfStructuredType
+    internal List<Signature> GetSignaturesOfStructuredType(Type type, SignatureKind kind)
+    {
         if ((Types.Flags(type) & TypeFlags.Object) != 0)
         {
             var resolved = ResolveStructuredTypeMembers(type);
@@ -1415,6 +1459,26 @@ internal sealed partial class Checker
             return kind == SignatureKind.Call ? resolved.CallSignatures! : resolved.ConstructSignatures!;
         }
         return [];
+    }
+
+    // checker.ts isArrayOrTupleSymbol
+    private bool IsArrayOrTupleSymbol(SymbolRef symbol)
+    {
+        if (symbol.IsNone || Types.Symbol(globalArrayType).IsNone || Types.Symbol(globalReadonlyArrayType).IsNone)
+        {
+            return false;
+        }
+        return !GetSymbolIfSameReference(symbol, Types.Symbol(globalArrayType)).IsNone || !GetSymbolIfSameReference(symbol, Types.Symbol(globalReadonlyArrayType)).IsNone;
+    }
+
+    // checker.ts isReadonlyArraySymbol
+    private bool IsReadonlyArraySymbol(SymbolRef symbol)
+    {
+        if (symbol.IsNone || Types.Symbol(globalReadonlyArrayType).IsNone)
+        {
+            return false;
+        }
+        return !GetSymbolIfSameReference(symbol, Types.Symbol(globalReadonlyArrayType)).IsNone;
     }
 
     /// <summary>checker.ts getIndexInfosOfType.</summary>

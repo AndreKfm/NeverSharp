@@ -734,27 +734,6 @@ internal sealed partial class Checker
         return !endFlowNode.IsNone && IsReachableFlowNode(new FlowRef(func.File, endFlowNode));
     }
 
-    // checker.ts unwrapReturnType (TODO(C5): the return iteration type of generators and the awaited type; a generator's
-    // return is not checked, an async function's is when its type is a Promise reference)
-    private Type UnwrapReturnTypeForCodePaths(Type returnType, FunctionFlags functionFlags)
-    {
-        if ((functionFlags & FunctionFlags.Generator) != 0)
-        {
-            return Type.None;
-        }
-        if ((functionFlags & FunctionFlags.Async) != 0)
-        {
-            if ((Types.Flags(returnType) & TypeFlags.Any) != 0)
-            {
-                return returnType;
-            }
-            CreatePromiseType(unknownType); // resolves the global Promise type
-            var promised = GetPromisedTypeOfPromise(returnType);
-            return promised.IsNone ? Type.None : promised;
-        }
-        return returnType;
-    }
-
     /// <summary>
     /// checker.ts checkAllCodePathsInNonVoidFunctionReturnOrThrow: an explicitly typed function whose return type isn't
     /// void, any, or a union containing void or any must have a return or throw on every path.
@@ -765,11 +744,7 @@ internal sealed partial class Checker
         {
             var store = StoreOf(func);
             var functionFlags = GetFunctionFlagsOf(store, func.Node);
-            var type = returnType.IsNone ? Type.None : UnwrapReturnTypeForCodePaths(returnType, functionFlags);
-            if (!returnType.IsNone && type.IsNone)
-            {
-                return;
-            }
+            var type = returnType.IsNone ? Type.None : UnwrapReturnType(returnType, functionFlags);
             // Functions with an explicitly specified return type that includes `void` or is exactly `any` or `undefined` don't
             // need any return statements.
             if (!type.IsNone && (MaybeTypeOfKind(type, TypeFlags.Void) || (Types.Flags(type) & (TypeFlags.Any | TypeFlags.Undefined)) != 0))
@@ -825,7 +800,7 @@ internal sealed partial class Checker
     // checker.ts isUnwrappedReturnTypeUndefinedVoidOrAny
     private bool IsUnwrappedReturnTypeUndefinedVoidOrAny(NodeRef func, Type returnType)
     {
-        var type = UnwrapReturnTypeForCodePaths(returnType, GetFunctionFlagsOf(StoreOf(func), func.Node));
+        var type = UnwrapReturnType(returnType, GetFunctionFlagsOf(StoreOf(func), func.Node));
         return !type.IsNone && ((MaybeTypeOfKind(type, TypeFlags.Void) || (Types.Flags(type) & (TypeFlags.AnyOrUnknown | TypeFlags.Undefined)) != 0));
     }
 

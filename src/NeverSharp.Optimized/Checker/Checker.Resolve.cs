@@ -809,14 +809,35 @@ internal sealed partial class Checker
         });
     }
 
-    /// <summary>utilities.ts isValidTypeOnlyAliasUseSite (heritage clauses and computed names: the common cases).</summary>
+    /// <summary>utilities.ts isValidTypeOnlyAliasUseSite.</summary>
     private bool IsValidTypeOnlyAliasUseSite(NodeRef useSite)
     {
         var store = StoreOf(useSite);
         return (store.Flags(useSite.Node) & NodeFlags.Ambient) != 0
+            || (store.Flags(useSite.Node) & NodeFlags.JSDoc) != 0 // isInJSDoc
             || Utilities.IsPartOfTypeQuery(store, useSite.Node)
             || IsIdentifierInNonEmittingHeritageClause(store, useSite.Node)
+            || IsPartOfPossiblyValidTypeOrAbstractComputedPropertyName(store, useSite.Node)
             || !(Utilities.IsExpressionNode(store, useSite.Node) || IsShorthandPropertyNameUseSite(store, useSite.Node));
+    }
+
+    // utilities.ts isPartOfPossiblyValidTypeOrAbstractComputedPropertyName
+    private static bool IsPartOfPossiblyValidTypeOrAbstractComputedPropertyName(NodeStore store, Node node)
+    {
+        while (store.Kind(node) is SyntaxKind.Identifier or SyntaxKind.PropertyAccessExpression)
+        {
+            node = store.Parent(node);
+        }
+        if (store.Kind(node) != SyntaxKind.ComputedPropertyName)
+        {
+            return false;
+        }
+        if (Utilities.HasSyntacticModifierUncached(store, store.Parent(node), ModifierFlags.Abstract))
+        {
+            return true;
+        }
+        var containerKind = store.Kind(store.Parent(store.Parent(node)));
+        return containerKind is SyntaxKind.InterfaceDeclaration or SyntaxKind.TypeLiteral;
     }
 
     private static bool IsShorthandPropertyNameUseSite(NodeStore store, Node useSite) =>
@@ -1554,17 +1575,7 @@ internal sealed partial class Checker
         if (!container.IsNone && store.Length(store.Members(container)) == 1)
         {
             var type = GetDeclaredTypeOfSymbol(symbol);
-            if ((Types.Flags(type) & TypeFlags.Union) != 0)
-            {
-                foreach (var t in Types.Elements(Types.Union(type).Types))
-                {
-                    if ((Types.Flags(t) & TypeFlags.StringOrNumberLiteral) == 0)
-                    {
-                        return false;
-                    }
-                }
-                return true;
-            }
+            return (Types.Flags(type) & TypeFlags.Union) != 0 && AllTypesAssignableToKind(type, TypeFlags.StringOrNumberLiteral, strict: true);
         }
         return false;
     }

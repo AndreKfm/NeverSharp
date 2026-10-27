@@ -738,17 +738,6 @@ internal sealed partial class Checker
     internal bool TypeHasCallOrConstructSignatures(Type type) =>
         GetSignaturesOfType(type, SignatureKind.Call).Count != 0 || GetSignaturesOfType(type, SignatureKind.Construct).Count != 0;
 
-    /// <summary>checker.ts getSignaturesOfStructuredType (union and intersection members: C5).</summary>
-    internal List<Signature> GetSignaturesOfStructuredType(Type type, SignatureKind kind)
-    {
-        if ((Types.Flags(type) & TypeFlags.Object) != 0)
-        {
-            var resolved = ResolveStructuredTypeMembers(type);
-            return kind == SignatureKind.Call ? resolved.CallSignatures! : resolved.ConstructSignatures!;
-        }
-        return [];
-    }
-
     /// <summary>checker.ts getEffectiveConstraintOfIntersection (None when there is none).</summary>
     internal Type GetEffectiveConstraintOfIntersection(Type[] types, bool targetIsUnion)
     {
