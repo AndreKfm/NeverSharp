@@ -2,20 +2,14 @@
 // Portions Copyright (c) Microsoft Corporation.
 // SPDX-License-Identifier: Apache-2.0
 //
-// Ported from src/compiler/checker.ts (checkSourceFile, checkSourceElement, checkSourceElementWorker, checkNodeDeferred,
-// checkDeferredNode, checkBlock, checkIfStatement, checkDoStatement, checkWhileStatement, checkForStatement,
-// checkForInStatement, checkForOfStatement, checkBreakOrContinueStatement, checkReturnStatement, checkReturnExpression,
-// checkWithStatement, checkSwitchStatement, checkLabeledStatement, checkThrowStatement, checkTryStatement,
-// checkCatchClause, checkExpressionStatement, checkVariableStatement, checkVariableDeclarationList,
-// checkVariableDeclaration, checkBindingElement, checkVariableLikeDeclaration, checkVarDeclaredNamesNotShadowed,
-// areDeclarationFlagsIdentical, checkParameter, checkPropertyDeclaration, checkPropertySignature,
-// checkUnusedRenamedBindingElements)
+// Ported from src/compiler/checker.ts (checkSourceFile, checkSourceElement and the statement and variable declaration
+// checks; each function names its checker.ts counterpart)
 //   https://github.com/microsoft/TypeScript at commit 050880ce59e30b356b686bd3144efe24f875ebc8
-// Port structure follows internal/checker/checker.go (checkSourceFile, checkSourceElementWorker and the statement checks)
+// Port structure follows internal/checker/checker.go (checkSourceFile, checkSourceElementWorker, the statement checks)
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
-// Modified: translated from TypeScript to C#; module C8 (replaces C1's resolution walk). JSDoc comments and tags
-// (checkJSDocCommentWorker, the JSDoc node kinds) are module C9's (TODO(C9)). Emit helpers (checkExternalEmitHelpers)
-// are not checked: Gate C's target (ES2025) needs none of them.
+// Modified: translated from TypeScript to C#; module C8 (replaces C1's resolution walk). JSDoc comments and tags of
+// JavaScript files are module C9's (TODO(C9)). Emit helpers (checkExternalEmitHelpers) are not checked: Gate C's
+// target (ES2025) needs none.
 
 using NeverSharp.Generated;
 

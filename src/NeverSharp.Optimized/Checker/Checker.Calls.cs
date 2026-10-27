@@ -2290,7 +2290,7 @@ internal sealed partial class Checker
     {
         var store = StoreOf(node);
         var n = node.Node;
-        // (checkGrammarTypeArguments: C8)
+        CheckGrammarTypeArguments(node, store.TypeArguments(n));
         var signature = GetResolvedSignature(node, null, checkMode);
         if (signature == resolvingSignature)
         {
@@ -2298,7 +2298,7 @@ internal sealed partial class Checker
             // returns a function type. We defer checking and return silentNeverType.
             return silentNeverType;
         }
-        // (checkDeprecatedSignature: C8)
+        CheckDeprecatedSignature(signature, node);
         if (store.Kind(store.Expression(n)) == SyntaxKind.SuperKeyword)
         {
             return voidType;
@@ -2388,7 +2388,7 @@ internal sealed partial class Checker
     {
         var store = StoreOf(node);
         var arguments = store.Nodes(store.Arguments(node.Node));
-        // (checkGrammarImportCallExpression: C8)
+        CheckGrammarImportCallExpression(node);
         if (arguments.Length == 0)
         {
             return CreatePromiseReturnType(node, anyType);
@@ -2447,10 +2447,99 @@ internal sealed partial class Checker
             : GetUnionType([type, undefinedType, nullType]);
     }
 
-    // checker.ts checkTaggedTemplateExpression (checkGrammarTaggedTemplateChain, checkGrammarTypeArguments: C8)
+    // checker.ts checkTaggedTemplateExpression
     private Type CheckTaggedTemplateExpression(NodeRef node)
     {
+        var store = StoreOf(node);
+        // checkGrammarTaggedTemplateChain
+        if (!store.QuestionDotToken(node.Node).IsNone || (store.Flags(node.Node) & NodeFlags.OptionalChain) != 0)
+        {
+            GrammarErrorOnNode(At(node, store.Template(node.Node)), Diagnostics.Tagged_template_expressions_are_not_permitted_in_an_optional_chain);
+        }
+        else
+        {
+            CheckGrammarTypeArguments(node, store.TypeArguments(node.Node));
+        }
         var signature = GetResolvedSignature(node);
+        CheckDeprecatedSignature(signature, node);
         return GetReturnTypeOfSignature(signature);
+    }
+
+    // checker.ts checkGrammarImportCallExpression (module C8; verbatimModuleSyntax is not an option of Gate C)
+    private bool CheckGrammarImportCallExpression(NodeRef node)
+    {
+        var store = StoreOf(node);
+        var n = node.Node;
+        if (store.Kind(store.Expression(n)) == SyntaxKind.MetaProperty)
+        {
+            if (moduleKind is not (ModuleKind.ESNext or ModuleKind.Preserve))
+            {
+                return GrammarErrorOnNode(node, Diagnostics.Deferred_imports_are_only_supported_when_the_module_flag_is_set_to_esnext_or_preserve);
+            }
+        }
+        else if (moduleKind == ModuleKind.ES2015)
+        {
+            return GrammarErrorOnNode(node, Diagnostics.Dynamic_imports_are_only_supported_when_the_module_flag_is_set_to_es2020_es2022_esnext_commonjs_amd_system_umd_node16_node18_node20_or_nodenext);
+        }
+        if (!store.TypeArguments(n).IsNone)
+        {
+            return GrammarErrorOnNode(node, Diagnostics.This_use_of_import_is_invalid_import_calls_can_be_written_but_they_must_have_parentheses_and_cannot_have_type_arguments);
+        }
+        var argumentList = store.Arguments(n);
+        var nodeArguments = store.Nodes(argumentList);
+        if (!(moduleKind is >= ModuleKind.Node16 and <= ModuleKind.NodeNext) && moduleKind is not (ModuleKind.ESNext or ModuleKind.Preserve))
+        {
+            // We are allowed trailing comma after proposal-import-assertions.
+            CheckGrammarForDisallowedTrailingComma(node, argumentList);
+            if (nodeArguments.Length > 1)
+            {
+                return GrammarErrorOnNode(At(node, nodeArguments[1]), Diagnostics.Dynamic_imports_only_support_a_second_argument_when_the_module_option_is_set_to_esnext_node16_node18_node20_nodenext_or_preserve);
+            }
+        }
+        if (nodeArguments.Length is 0 or > 2)
+        {
+            return GrammarErrorOnNode(node, Diagnostics.Dynamic_imports_can_only_accept_a_module_specifier_and_an_optional_set_of_attributes_as_arguments);
+        }
+        // see: parseArgumentOrArrayLiteralElement...we use this function which parse arguments of callExpression to parse specifier for dynamic import.
+        // parseArgumentOrArrayLiteralElement allows spread element to be in an argument list which is not allowed as specifier in dynamic import.
+        foreach (var argument in nodeArguments)
+        {
+            if (store.Kind(argument) == SyntaxKind.SpreadElement)
+            {
+                return GrammarErrorOnNode(At(node, argument), Diagnostics.Argument_of_dynamic_import_cannot_be_spread_element);
+            }
+        }
+        return false;
+    }
+
+    // checker.ts checkDeprecatedSignature (module C8)
+    private void CheckDeprecatedSignature(Signature signature, NodeRef node)
+    {
+        ref var record = ref Signatures.Record(signature);
+        if ((record.Flags & SignatureFlags.IsSignatureCandidateForOverloadFailure) != 0)
+        {
+            return;
+        }
+        var declaration = record.Declaration;
+        if (!declaration.IsNone && (StoreOf(declaration).Flags(declaration.Node) & NodeFlags.Deprecated) != 0)
+        {
+            var suggestionNode = GetDeprecatedSuggestionNode(node);
+            var name = TryGetPropertyAccessOrIdentifierToString(GetInvokedExpressionOf(node));
+            AddDeprecatedSuggestionWithSignature(suggestionNode, declaration, name, SignatureToString(signature));
+        }
+    }
+
+    // utilities.ts getInvokedExpression
+    private NodeRef GetInvokedExpressionOf(NodeRef node)
+    {
+        var store = StoreOf(node);
+        return store.Kind(node.Node) switch
+        {
+            SyntaxKind.TaggedTemplateExpression => At(node, store.Tag(node.Node)),
+            SyntaxKind.JsxOpeningElement or SyntaxKind.JsxSelfClosingElement => At(node, store.TagName(node.Node)),
+            SyntaxKind.BinaryExpression => At(node, store.Right(node.Node)),
+            SyntaxKind.JsxOpeningFragment => node,
+            _ => At(node, store.Expression(node.Node)),
+        };
     }
 }

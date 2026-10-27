@@ -250,8 +250,15 @@ internal sealed partial class Checker
                 : Diagnostics.Import_declaration_conflicts_with_local_declaration_of_0;
             Error(node, message, SymbolToString(symbol));
         }
-        // (isolatedModules and verbatimModuleSyntax checks: Gate C sets neither; deprecations of import specifiers: not in
-        // the dumps)
+        // (isolatedModules and verbatimModuleSyntax checks: Gate C sets neither)
+        if (Kind(node) == SyntaxKind.ImportSpecifier)
+        {
+            var targetSymbol = ResolveAliasWithDeprecationCheck(symbol, node);
+            if (IsDeprecatedSymbol(targetSymbol) && DeclarationsOf(targetSymbol) is { } targetDeclarations)
+            {
+                AddDeprecatedSuggestion(node, targetDeclarations, NameOf(targetSymbol));
+            }
+        }
     }
 
     // checker.ts checkImportEqualsDeclaration

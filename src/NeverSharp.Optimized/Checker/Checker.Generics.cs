@@ -1479,6 +1479,13 @@ internal sealed partial class Checker
             var prop = GetPropertyOfType(objectType, propName);
             if (!prop.IsNone)
             {
+                if ((accessFlags & AccessFlags.ReportDeprecated) != 0 && !accessNode.IsNone && DeclarationsOf(prop) is { } propDeclarations && IsDeprecatedSymbol(prop) &&
+                    IsUncalledFunctionReference(accessNode, prop))
+                {
+                    var deprecatedNode = !accessExpression.IsNone ? At(accessExpression, StoreOf(accessExpression).ArgumentExpression(accessExpression.Node))
+                        : Kind(accessNode) == SyntaxKind.IndexedAccessType ? At(accessNode, StoreOf(accessNode).IndexType(accessNode.Node)) : accessNode;
+                    AddDeprecatedSuggestion(deprecatedNode, propDeclarations, propName);
+                }
                 if (!accessExpression.IsNone)
                 {
                     var accessedExpression = At(accessExpression, StoreOf(accessExpression).Expression(accessExpression.Node));

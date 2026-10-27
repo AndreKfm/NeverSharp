@@ -2,16 +2,8 @@
 // Portions Copyright (c) Microsoft Corporation.
 // SPDX-License-Identifier: Apache-2.0
 //
-// Ported from src/compiler/checker.ts (checkTypeParameter, checkTypeParameterDeferred, checkTypeParameters,
-// checkTypeParametersNotReferenced, checkSignatureDeclaration, checkAsyncFunctionReturnType, checkMethodDeclaration,
-// checkClassStaticBlockDeclaration, checkConstructorDeclaration, checkAccessorDeclaration, checkTypeReferenceNode,
-// checkTypeReferenceOrImport, checkTypePredicate, checkTypeLiteral, checkTupleType, checkInferType,
-// checkTemplateLiteralType, checkImportType, getResolutionModeOverride, checkNamedTupleMember, checkMappedType,
-// checkFunctionDeclaration, checkFunctionOrMethodDeclaration, checkFunctionOrConstructorSymbol,
-// getEffectiveDeclarationFlags, checkDecorators, checkExportsOnMergedDeclarations,
-// checkCollisionsForDeclarationName, checkTypeNameIsReserved, checkClassNameCollisionWithObject,
-// checkTypeAliasDeclaration, checkObjectTypeForDuplicateDeclarations, checkTypeForDuplicateIndexSignatures,
-// checkTypeParameterListsIdentical, areTypeParametersIdentical, getGlobalDisposableType, getGlobalAsyncDisposableType)
+// Ported from src/compiler/checker.ts (type parameters, signatures, functions and overloads, constructors, accessors,
+// type nodes, decorators, deprecations, merged exports and name collisions; each function names its counterpart)
 //   https://github.com/microsoft/TypeScript at commit 050880ce59e30b356b686bd3144efe24f875ebc8
 // Port structure follows internal/checker/checker.go
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
@@ -49,6 +41,149 @@ internal sealed partial class Checker
             deferredGlobalAsyncDisposableType = type.IsNone ? emptyObjectType : type;
         }
         return deferredGlobalAsyncDisposableType;
+    }
+
+    // ---- deprecations ----
+
+    // checker.ts addDeprecatedSuggestionWorker
+    private void AddDeprecatedSuggestionWorker(List<NodeRef> declarations, ProgramDiagnostic diagnostic)
+    {
+        foreach (var declaration in declarations)
+        {
+            var deprecatedTag = UtilitiesPublic.GetJSDocDeprecatedTag(StoreOf(declaration), declaration.Node);
+            if (!deprecatedTag.IsNone)
+            {
+                AddRelatedInfo(diagnostic, CreateRelatedForNode(At(declaration, deprecatedTag), Diagnostics.The_declaration_was_marked_as_deprecated_here));
+                break;
+            }
+        }
+        // We call `addRelatedInfo()` before adding the diagnostic to prevent duplicates.
+        diagnostic.Category = DiagnosticCategory.Suggestion;
+        suggestionDiagnostics.Add(diagnostic);
+    }
+
+    // checker.ts isDeprecatedSymbol
+    private bool IsDeprecatedSymbol(SymbolRef symbol)
+    {
+        var declarations = DeclarationsOf(symbol);
+        var parentSymbol = GetParentOfSymbol(symbol);
+        if (!parentSymbol.IsNone && declarations is { Count: > 1 })
+        {
+            return (SymbolFlagsOf(parentSymbol) & SymbolFlags.Interface) != 0 ? declarations.Exists(IsDeprecatedDeclaration) : declarations.TrueForAll(IsDeprecatedDeclaration);
+        }
+        var valueDeclaration = ValueDeclarationOf(symbol);
+        return (!valueDeclaration.IsNone && IsDeprecatedDeclaration(valueDeclaration)) ||
+            (declarations is { Count: > 0 } && declarations.TrueForAll(IsDeprecatedDeclaration));
+    }
+
+    // checker.ts isDeprecatedDeclaration
+    private bool IsDeprecatedDeclaration(NodeRef declaration) => (Utilities.GetCombinedNodeFlags(StoreOf(declaration), declaration.Node) & NodeFlags.Deprecated) != 0;
+
+    // checker.ts addDeprecatedSuggestion
+    private void AddDeprecatedSuggestion(NodeRef location, List<NodeRef> declarations, string deprecatedEntity) =>
+        AddDeprecatedSuggestionWorker(declarations, CreateDiagnosticForNode(location, Diagnostics._0_is_deprecated, deprecatedEntity));
+
+    // checker.ts addDeprecatedSuggestionWithSignature
+    private void AddDeprecatedSuggestionWithSignature(NodeRef location, NodeRef declaration, string? deprecatedEntity, string signatureString)
+    {
+        var diagnostic = deprecatedEntity is not null
+            ? CreateDiagnosticForNode(location, Diagnostics.The_signature_0_of_1_is_deprecated, signatureString, deprecatedEntity)
+            : CreateDiagnosticForNode(location, Diagnostics._0_is_deprecated, signatureString);
+        AddDeprecatedSuggestionWorker([declaration], diagnostic);
+    }
+
+    // checker.ts resolveAliasWithDeprecationCheck
+    private SymbolRef ResolveAliasWithDeprecationCheck(SymbolRef symbol, NodeRef location)
+    {
+        if ((SymbolFlagsOf(symbol) & SymbolFlags.Alias) == 0 || IsDeprecatedSymbol(symbol) || GetDeclarationOfAliasSymbol(symbol).IsNone)
+        {
+            return symbol;
+        }
+        var targetSymbol = ResolveAlias(symbol);
+        if (targetSymbol == unknownSymbol)
+        {
+            return targetSymbol;
+        }
+        while ((SymbolFlagsOf(symbol) & SymbolFlags.Alias) != 0)
+        {
+            var target = GetImmediateAliasedSymbol(symbol);
+            if (target.IsNone)
+            {
+                break;
+            }
+            if (target == targetSymbol)
+            {
+                break;
+            }
+            if (DeclarationsOf(target) is { Count: > 0 } targetDeclarations)
+            {
+                if (IsDeprecatedSymbol(target))
+                {
+                    AddDeprecatedSuggestion(location, targetDeclarations, NameOf(target));
+                    break;
+                }
+                if (symbol == targetSymbol)
+                {
+                    break;
+                }
+                symbol = target;
+            }
+        }
+        return targetSymbol;
+    }
+
+    // checker.ts isUncalledFunctionReference
+    private bool IsUncalledFunctionReference(NodeRef node, SymbolRef symbol)
+    {
+        if ((SymbolFlagsOf(symbol) & (SymbolFlags.Function | SymbolFlags.Method)) == 0)
+        {
+            return true;
+        }
+        var store = StoreOf(node);
+        var parent = UtilitiesPublic.FindAncestor(store, store.Parent(node.Node), n => store.Kind(n) is not (SyntaxKind.PropertyAccessExpression or SyntaxKind.ElementAccessExpression));
+        if (parent.IsNone)
+        {
+            parent = store.Parent(node.Node);
+        }
+        // isCallLikeExpression
+        var parentKind = store.Kind(parent);
+        if (parentKind is SyntaxKind.CallExpression or SyntaxKind.NewExpression or SyntaxKind.TaggedTemplateExpression or SyntaxKind.Decorator
+                or SyntaxKind.JsxOpeningElement or SyntaxKind.JsxSelfClosingElement ||
+            (parentKind == SyntaxKind.BinaryExpression && store.Kind(store.OperatorToken(parent)) == SyntaxKind.InstanceOfKeyword))
+        {
+            return parentKind is SyntaxKind.CallExpression or SyntaxKind.NewExpression && store.Kind(node.Node) == SyntaxKind.Identifier && HasMatchingArgument(At(node, parent), node);
+        }
+        return (DeclarationsOf(symbol) ?? []).TrueForAll(d => !Utilities.IsFunctionLike(StoreOf(d), d.Node) || IsDeprecatedDeclaration(d));
+    }
+
+    // checker.ts getDeprecatedSuggestionNode
+    private NodeRef GetDeprecatedSuggestionNode(NodeRef node)
+    {
+        var store = StoreOf(node);
+        var n = Utilities.SkipParentheses(store, node.Node);
+        switch (store.Kind(n))
+        {
+            case SyntaxKind.CallExpression:
+            case SyntaxKind.Decorator:
+            case SyntaxKind.NewExpression:
+                return GetDeprecatedSuggestionNode(At(node, store.Expression(n)));
+            case SyntaxKind.TaggedTemplateExpression:
+                return GetDeprecatedSuggestionNode(At(node, store.Tag(n)));
+            case SyntaxKind.JsxOpeningElement:
+            case SyntaxKind.JsxSelfClosingElement:
+                return GetDeprecatedSuggestionNode(At(node, store.TagName(n)));
+            case SyntaxKind.ElementAccessExpression:
+                return At(node, store.ArgumentExpression(n));
+            case SyntaxKind.PropertyAccessExpression:
+                return At(node, store.Name(n));
+            case SyntaxKind.TypeReference:
+            {
+                var typeName = store.TypeName(n);
+                return store.Kind(typeName) == SyntaxKind.QualifiedName ? At(node, store.Right(typeName)) : At(node, n);
+            }
+            default:
+                return At(node, n);
+        }
     }
 
     // ---- type parameters ----
@@ -1140,17 +1275,27 @@ internal sealed partial class Checker
         CheckTypeReferenceOrImport(node);
     }
 
-    // checker.ts checkTypeReferenceOrImport (the constraint check is a lazy diagnostic; deprecations: TODO(C8) if needed)
+    // checker.ts checkTypeReferenceOrImport (the constraint check is a lazy diagnostic)
     private void CheckTypeReferenceOrImport(NodeRef node)
     {
         var type = GetTypeFromTypeNode(node);
-        if (!IsErrorType(type) && !StoreOf(node).TypeArguments(node.Node).IsNone)
+        if (IsErrorType(type))
+        {
+            return;
+        }
+        if (!StoreOf(node).TypeArguments(node.Node).IsNone)
         {
             var typeParameters = GetTypeParametersForTypeReferenceOrImport(node);
             if (typeParameters is not null)
             {
                 CheckTypeArgumentConstraints(node, typeParameters);
             }
+        }
+        var symbol = SymbolNodeLinks.Has(node) ? SymbolNodeLinks.Get(node).ResolvedSymbol : SymbolRef.None;
+        if (!symbol.IsNone && DeclarationsOf(symbol) is { } declarations &&
+            declarations.Exists(d => IsTypeDeclaration(d) && (StoreOf(d).Flags(d.Node) & NodeFlags.Deprecated) != 0))
+        {
+            AddDeprecatedSuggestion(GetDeprecatedSuggestionNode(node), declarations, NameOf(symbol));
         }
     }
 

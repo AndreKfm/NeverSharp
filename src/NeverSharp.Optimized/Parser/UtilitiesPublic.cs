@@ -352,6 +352,9 @@ internal static partial class UtilitiesPublic
         return tags;
     }
 
+    /// <summary>utilitiesPublic.ts getJSDocDeprecatedTag.</summary>
+    internal static Node GetJSDocDeprecatedTag(NodeStore store, Node node) => GetFirstJSDocTag(store, node, tag => store.Kind(tag) == SyntaxKind.JSDocDeprecatedTag);
+
     /// <summary>Get the first JSDoc tag of a specified kind, or undefined if not present.</summary>
     private static Node GetFirstJSDocTag(NodeStore store, Node node, Func<Node, bool> predicate, bool? noCache = null)
     {

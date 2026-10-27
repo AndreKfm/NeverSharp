@@ -1191,6 +1191,12 @@ internal sealed partial class Checker
             return GetTypeOfSymbol(symbol);
         }
         var localOrExportSymbol = GetExportSymbolOfValueSymbolIfExported(symbol);
+        var targetSymbol = ResolveAliasWithDeprecationCheck(localOrExportSymbol, node); // (module C8)
+        if (IsDeprecatedSymbol(targetSymbol) && IsUncalledFunctionReference(node, targetSymbol) && DeclarationsOf(targetSymbol) is { } targetDeclarations)
+        {
+            var nodeStore = StoreOf(node);
+            AddDeprecatedSuggestion(node, targetDeclarations, nodeStore.Texts.GetString(nodeStore.EscapedText(node.Node))!);
+        }
         var declaration = ValueDeclarationOf(localOrExportSymbol);
         // If the identifier is declared in a binding pattern for which we're currently computing the implied type and the
         // reference occurs with the same binding pattern, return the non-inferrable any type. This for example occurs in

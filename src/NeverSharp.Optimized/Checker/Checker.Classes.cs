@@ -2,19 +2,13 @@
 // Portions Copyright (c) Microsoft Corporation.
 // SPDX-License-Identifier: Apache-2.0
 //
-// Ported from src/compiler/checker.ts (checkClassDeclaration, checkClassLikeDeclaration, checkClassForDuplicateDeclarations,
-// checkClassForStaticPropertyNameConflicts, checkBaseTypeAccessibility, getConstructorsForTypeArguments,
-// checkKindsOfPropertyMemberOverrides, isPropertyAbstractOrInterface, checkMembersForOverrideModifier,
-// checkExistingMemberForOverrideModifier, checkMemberForOverrideModifier, checkPropertyInitialization,
-// isPropertyInitializedInStaticBlocks, checkInterfaceDeclaration, checkEnumDeclaration, computeEnumMemberValues,
-// computeEnumMemberValue, computeConstantEnumMemberValue, evaluateEnumMember, evaluateElementAccessExpression,
-// getEnumMemberValue, checkModuleDeclaration, checkModuleAugmentationElement, getFirstNonAmbientClassOrFunctionDeclaration,
-// checkExternalModuleExports)
+// Ported from src/compiler/checker.ts (classes and inheritance, interfaces, enums and the enum member evaluator,
+// modules and checkExternalModuleExports; each function names its checker.ts counterpart)
 //   https://github.com/microsoft/TypeScript at commit 050880ce59e30b356b686bd3144efe24f875ebc8
 // Port structure follows internal/checker/checker.go
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
 // Modified: translated from TypeScript to C#; module C8 (replaces C4's checkClassLikeDeclaration relation checks and
-// C1's override and property initialization checks). Lazy diagnostics run where they are added (see AddLazyDiagnostic).
+// C1's override and property initialization checks). Lazy diagnostics run where they are added.
 
 using NeverSharp.Generated;
 
