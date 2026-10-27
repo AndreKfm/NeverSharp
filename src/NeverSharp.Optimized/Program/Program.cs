@@ -543,7 +543,7 @@ internal sealed class Program
                     new FileIncludeReason(FileIncludeKind.LibReferenceDirective, i, file.Store.FileName(file.Root)));
             }
             // else: programDiagnostics.addFileProcessingDiagnostic(FilePreprocessingLibReferenceDiagnostic), a
-            // diagnostic of the file ("Cannot find lib definition for '{0}'."); TODO(C8).
+            // diagnostic of the file ("Cannot find lib definition for '{0}'."): not ported, no Gate C unit references an unknown lib.
         }
     }
 

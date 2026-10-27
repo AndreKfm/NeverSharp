@@ -402,7 +402,7 @@ internal sealed partial class Checker
                     additionalContainers.Add(fileSymbol);
                 }
             }
-            // (getAlternativeContainingModules: re-exports from other files; Gate C programs have one file besides the library: TODO(C8))
+            // (getAlternativeContainingModules: re-exports from other files; Gate C programs have one file besides the library: not ported)
             var objectLiteralContainer = GetVariableDeclarationOfObjectLiteral(container, meaning);
             if (!enclosingDeclaration.IsNone &&
                 (SymbolFlagsOf(container) & GetQualifiedLeftMeaning(meaning)) != 0 &&

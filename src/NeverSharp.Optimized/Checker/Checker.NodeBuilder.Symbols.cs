@@ -8,7 +8,7 @@
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
 // Modified: translated from TypeScript to C#; module C2. Module specifiers (getSpecifierForModuleSymbol) are those of
 // Gate C's programs: ambient module names, and for source file modules the file name relative to the enclosing file
-// (moduleSpecifiers.getModuleSpecifiers in full: TODO(C8)).
+// (moduleSpecifiers.getModuleSpecifiers in full is not reachable in Gate C's one-file programs and is not ported).
 
 using System.Runtime.InteropServices;
 using NeverSharp.Generated;
@@ -666,7 +666,7 @@ internal sealed partial class Checker
         {
             return escapedName;
         }
-        // moduleSpecifiers.getModuleSpecifiers for a file of the program (TODO(C8): the specifier preferences in full)
+        // moduleSpecifiers.getModuleSpecifiers for a file of the program (the specifier preferences in full: not reachable in Gate C's one-file programs)
         var fileName = FileNameOfFile(file.File);
         var withoutExtension = RemoveFileExtensionForSpecifier(fileName);
         var slash = withoutExtension.LastIndexOf('/');
