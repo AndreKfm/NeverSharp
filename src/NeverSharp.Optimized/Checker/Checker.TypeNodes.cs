@@ -680,7 +680,15 @@ internal sealed partial class Checker
         {
             types.Add(GetTypeFromTypeNode(At(node, t)));
         }
-        return SetCachedNodeType(node, GetIntersectionType(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(types), aliasSymbol, GetTypeArgumentsForAliasSymbol(aliasSymbol)));
+        // We perform no supertype reduction for X & {} or {} & X, where X is one of string, number, bigint,
+        // or a pattern literal template type. This enables union types like "a" | "b" | string & {} or
+        // "aa" | "ab" | `a${string}` which preserve the literal types for purposes of statement completion.
+        var emptyIndex = types.Count == 2 ? types.IndexOf(emptyTypeLiteralType) : -1;
+        var other = emptyIndex >= 0 ? types[1 - emptyIndex] : unknownType;
+        var noSupertypeReduction = (Types.Flags(other) & (TypeFlags.String | TypeFlags.Number | TypeFlags.BigInt)) != 0 ||
+            ((Types.Flags(other) & TypeFlags.TemplateLiteral) != 0 && IsPatternLiteralType(other));
+        return SetCachedNodeType(node, GetIntersectionType(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(types), aliasSymbol, GetTypeArgumentsForAliasSymbol(aliasSymbol),
+            noSupertypeReduction ? IntersectionFlags.NoSupertypeReduction : IntersectionFlags.None));
     }
 
     private Type GetTypeFromTypeLiteralOrFunctionOrConstructorTypeNode(NodeRef node)
