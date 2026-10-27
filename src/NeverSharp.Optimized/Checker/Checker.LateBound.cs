@@ -169,9 +169,8 @@ internal sealed partial class Checker
                 var memberRef = new NodeRef(assignmentsOwner.File, member);
                 var store = StoreOf(memberRef);
                 var assignmentKind = Utilities.GetAssignmentDeclarationKind(store, member);
-                // (isPossiblyAliasedThisProperty: JavaScript `this` aliases, C9d)
                 var isInstanceMember = assignmentKind is AssignmentDeclarationKind.PrototypeProperty or AssignmentDeclarationKind.ObjectDefinePrototypeProperty or AssignmentDeclarationKind.Prototype ||
-                    (store.Kind(member) == SyntaxKind.BinaryExpression && assignmentKind == AssignmentDeclarationKind.ThisProperty);
+                    (store.Kind(member) == SyntaxKind.BinaryExpression && IsPossiblyAliasedThisProperty(memberRef, assignmentKind));
                 if (isStatic == !isInstanceMember && HasLateBindableName(memberRef))
                 {
                     LateBindMember(symbol, earlySymbols, lateSymbols, memberRef);
