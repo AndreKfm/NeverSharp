@@ -550,13 +550,18 @@ internal static partial class Utilities
                         {
                             return found.Value;
                         }
+                        if (store.Kind(statement) == SyntaxKind.ImportEqualsDeclaration)
+                        {
+                            // Treat re-exports of import aliases as instantiated, since they're ambiguous. This is
+                            // consistent with `export import x = mod.x` being treated as instantiated.
+                            found = ModuleInstanceState.Instantiated;
+                        }
                     }
                 }
                 if (found is not null)
                 {
                     return found.Value;
                 }
-                break;
             }
         }
         return ModuleInstanceState.Instantiated;

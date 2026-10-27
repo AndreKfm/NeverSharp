@@ -688,10 +688,80 @@ internal sealed partial class Checker
             }
             return moduleName;
         }
-        // a relative specifier from the enclosing file's folder with the minimal ending (`./index` becomes `.`)
+        // a relative specifier from the enclosing file's folder; the ending: moduleSpecifiers.ts
+        // getModuleSpecifierEndingPreference without a preference and without allowImportingTsExtensions: the .js
+        // extension when the importing file's imports use extensions (usesExtensionsOnImports), else the minimal ending
+        // (`./index` becomes `.`)
         var slash = withoutExtension.LastIndexOf('/');
         var baseName = slash >= 0 ? withoutExtension[(slash + 1)..] : withoutExtension;
+        if (UsesExtensionsOnImports(context.EnclosingFile))
+        {
+            var jsExtension = GetJSExtensionForSpecifier(fileName);
+            if (jsExtension is not null)
+            {
+                return "./" + baseName + jsExtension;
+            }
+        }
         return baseName == "index" ? "." : "./" + baseName;
+    }
+
+    // moduleSpecifiers.ts getJSExtensionForFile (the .ts/.tsx/.d.ts files of Gate C; .tsx keeps .jsx only under jsx: preserve)
+    private string? GetJSExtensionForSpecifier(string fileName)
+    {
+        if (fileName.EndsWith(".mjs", StringComparison.Ordinal) || fileName.EndsWith(".cjs", StringComparison.Ordinal) ||
+            fileName.EndsWith(".mts", StringComparison.Ordinal) || fileName.EndsWith(".cts", StringComparison.Ordinal))
+        {
+            return null; // handled by RemoveFileExtensionForSpecifier
+        }
+        if (fileName.EndsWith(".tsx", StringComparison.Ordinal))
+        {
+            return compilerOptions.Jsx == JsxEmit.Preserve ? ".jsx" : ".js";
+        }
+        return fileName.EndsWith(".ts", StringComparison.Ordinal) || fileName.EndsWith(".js", StringComparison.Ordinal) ? ".js" : null;
+    }
+
+    // utilities.ts usesExtensionsOnImports over the file's imports (program.ts collectExternalModuleReferences: the
+    // module specifiers of the top-level import and export declarations and external import-equals references, in order)
+    private bool UsesExtensionsOnImports(int fileIndex)
+    {
+        if (fileIndex == 0)
+        {
+            return false;
+        }
+        var file = FileAt(fileIndex);
+        var store = file.Store;
+        foreach (var statement in store.Nodes(store.Statements(file.Root)))
+        {
+            var specifier = store.Kind(statement) switch
+            {
+                SyntaxKind.ImportDeclaration or SyntaxKind.ExportDeclaration => store.ModuleSpecifier(statement),
+                SyntaxKind.ImportEqualsDeclaration when store.Kind(store.ModuleReference(statement)) == SyntaxKind.ExternalModuleReference => store.Expression(store.ModuleReference(statement)),
+                _ => Node.None,
+            };
+            if (specifier.IsNone || !Utilities.IsStringLiteralLike(store, specifier))
+            {
+                continue;
+            }
+            var text = store.Texts.GetString(store.Text(specifier)) ?? "";
+            if (!(text.StartsWith("./", StringComparison.Ordinal) || text.StartsWith("../", StringComparison.Ordinal) || text == "." || text == ".."))
+            {
+                continue; // pathIsRelative
+            }
+            if (text.EndsWith(".mjs", StringComparison.Ordinal) || text.EndsWith(".cjs", StringComparison.Ordinal) ||
+                text.EndsWith(".mts", StringComparison.Ordinal) || text.EndsWith(".cts", StringComparison.Ordinal) || text.EndsWith(".d.mts", StringComparison.Ordinal) || text.EndsWith(".d.cts", StringComparison.Ordinal))
+            {
+                continue; // extensionsNotSupportingExtensionlessResolution
+            }
+            foreach (var extension in (ReadOnlySpan<string>)[".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"])
+            {
+                if (text.EndsWith(extension, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return false;
     }
 
     private string FileNameOfFile(int file)
