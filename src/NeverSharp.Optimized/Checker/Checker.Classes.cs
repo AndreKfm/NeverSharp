@@ -471,7 +471,7 @@ internal sealed partial class Checker
                     var baseDeclarations = DeclarationsOf(@base);
                     if (((TransientCheckFlags(@base) & CheckFlags.Synthetic) != 0
                             ? baseDeclarations is not null && baseDeclarations.Exists(d => IsPropertyAbstractOrInterface(d, baseDeclarationFlags))
-                            : baseDeclarations is null || baseDeclarations.TrueForAll(d => IsPropertyAbstractOrInterface(d, baseDeclarationFlags))) ||
+                            : baseDeclarations is not null && baseDeclarations.TrueForAll(d => IsPropertyAbstractOrInterface(d, baseDeclarationFlags))) ||
                         (TransientCheckFlags(@base) & CheckFlags.Mapped) != 0 ||
                         (!derivedValueDeclaration.IsNone && Kind(derivedValueDeclaration) == SyntaxKind.BinaryExpression))
                     {

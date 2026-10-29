@@ -549,8 +549,8 @@ internal sealed partial class Checker
         var classType = classDecl.IsNone ? Type.None : GetDeclaredTypeOfClassOrInterface(GetSymbolOfDeclaration(At(node, classDecl)));
         if (Utilities.IsPartOfTypeNode(store, n))
         {
-            // (getTypeWithThisArgument for class heritage: C3)
-            return GetTypeFromTypeNode(node);
+            var typeFromTypeNode = GetTypeFromTypeNode(node);
+            return !classType.IsNone ? GetTypeWithThisArgument(typeFromTypeNode, Types.Object(classType).ThisType) : typeFromTypeNode;
         }
         if (Utilities.IsExpressionNode(store, n))
         {
@@ -561,7 +561,7 @@ internal sealed partial class Checker
             // A SyntaxKind.ExpressionWithTypeArguments is considered a type node, except when it occurs in the
             // extends clause of a class. We handle that case here.
             var baseTypes = GetBaseTypes(classType);
-            return baseTypes.Count > 0 ? baseTypes[0] : errorType;
+            return baseTypes.Count > 0 ? GetTypeWithThisArgument(baseTypes[0], Types.Object(classType).ThisType) : errorType;
         }
         if (IsTypeDeclaration(node))
         {
