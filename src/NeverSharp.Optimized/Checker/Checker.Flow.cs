@@ -340,7 +340,11 @@ internal sealed partial class Checker
     {
         if (IsSyntheticReference(target))
         {
-            return !IsSyntheticReference(source) && IsMatchingSyntheticTarget(source);
+            return !IsSyntheticReference(source) && !IsSyntheticElementAccess(source) && IsMatchingSyntheticTarget(source);
+        }
+        if (IsSyntheticElementAccess(target))
+        {
+            return IsMatchingSyntheticElementAccessTarget(source, SyntheticElementAccessOf(target));
         }
         var store = StoreOf(target);
         var t = target.Node;
@@ -365,6 +369,17 @@ internal sealed partial class Checker
             }
             var targetName = GetAccessedPropertyName(target);
             return targetName is not null && targetName == syntheticThisAccessName && IsMatchingThisTarget(At(target, store.Expression(t)));
+        }
+        if (IsSyntheticElementAccess(source))
+        {
+            // the synthetic element access of destructuring: an access expression with the same name on a matching expression
+            if (!Utilities.IsAccessExpression(store, t))
+            {
+                return false;
+            }
+            var access = SyntheticElementAccessOf(source);
+            var targetName = GetAccessedPropertyName(target);
+            return targetName is not null && targetName == access.Name && IsMatchingReference(access.Expression, At(target, store.Expression(t)));
         }
         var s = source.Node;
         switch (store.Kind(s))
@@ -423,12 +438,50 @@ internal sealed partial class Checker
         return false;
     }
 
+    // isMatchingReference(source, a synthetic element access of destructuring)
+    private bool IsMatchingSyntheticElementAccessTarget(NodeRef source, (NodeRef Expression, string Name, FlowRef FlowNode, NodeRef Parent) target)
+    {
+        if (IsSyntheticReference(source))
+        {
+            return false; // (never compared: the synthetic `this.<name>` is matched against nodes of a constructor only)
+        }
+        if (IsSyntheticElementAccess(source))
+        {
+            var access = SyntheticElementAccessOf(source);
+            return access.Name == target.Name && IsMatchingReference(access.Expression, target.Expression);
+        }
+        var store = StoreOf(source);
+        var s = source.Node;
+        switch (store.Kind(s))
+        {
+            case SyntaxKind.NonNullExpression:
+            case SyntaxKind.ParenthesizedExpression:
+            case SyntaxKind.SatisfiesExpression:
+                return IsMatchingSyntheticElementAccessTarget(At(source, store.Expression(s)), target);
+            case SyntaxKind.PropertyAccessExpression:
+            case SyntaxKind.ElementAccessExpression:
+            {
+                var name = GetAccessedPropertyName(source);
+                return name is not null && name == target.Name && IsMatchingReference(At(source, store.Expression(s)), target.Expression);
+            }
+            case SyntaxKind.QualifiedName:
+                return store.Texts.GetString(store.EscapedText(store.Right(s))) == target.Name && IsMatchingReference(At(source, store.Left(s)), target.Expression);
+            case SyntaxKind.BinaryExpression:
+                return store.Kind(store.OperatorToken(s)) == SyntaxKind.CommaToken && IsMatchingSyntheticElementAccessTarget(At(source, store.Right(s)), target);
+        }
+        return false;
+    }
+
     /// <summary>checker.ts getAccessedPropertyName (null: undefined).</summary>
     private string? GetAccessedPropertyName(NodeRef access)
     {
         if (IsSyntheticReference(access))
         {
             return syntheticThisAccessName;
+        }
+        if (IsSyntheticElementAccess(access))
+        {
+            return SyntheticElementAccessOf(access).Name;
         }
         var store = StoreOf(access);
         var n = access.Node;
@@ -555,22 +608,32 @@ internal sealed partial class Checker
         {
             return !IsSyntheticReference(target) && IsMatchingThisTarget(target);
         }
-        var store = StoreOf(source);
-        while (Utilities.IsAccessExpression(store, source.Node))
+        while (true)
         {
-            source = At(source, store.Expression(source.Node));
+            if (IsSyntheticElementAccess(source))
+            {
+                source = SyntheticElementAccessOf(source).Expression;
+            }
+            else
+            {
+                var store = StoreOf(source);
+                if (!Utilities.IsAccessExpression(store, source.Node))
+                {
+                    return false;
+                }
+                source = At(source, store.Expression(source.Node));
+            }
             if (IsMatchingReference(source, target))
             {
                 return true;
             }
         }
-        return false;
     }
 
     // checker.ts optionalChainContainsReference
     private bool OptionalChainContainsReference(NodeRef source, NodeRef target)
     {
-        if (IsSyntheticReference(source))
+        if (IsSyntheticReference(source) || IsSyntheticElementAccess(source))
         {
             return false;
         }
@@ -683,16 +746,31 @@ internal sealed partial class Checker
     // element type of arrays is used)
     private Type GetTypeOfDestructuredArrayElement(Type type, int index)
     {
-        if (EveryType(type, IsTupleType))
+        if (EveryType(type, IsTupleLikeType))
         {
-            var element = GetIndexedAccessTypeOrUndefined(type, GetNumberLiteralType(index));
+            var element = GetTupleElementType(type, index);
             if (!element.IsNone)
             {
                 return element;
             }
         }
-        var elementType = IsArrayType(type) ? GetElementTypeOfArrayType(type) : Type.None;
-        return !elementType.IsNone ? IncludeUndefinedInIndexSignature(elementType) : errorType;
+        var elementType = IncludeUndefinedInIndexSignature(CheckIteratedTypeOrElementType(IterationUse.Destructuring, type, undefinedType, NodeRef.None));
+        return !elementType.IsNone ? elementType : errorType;
+    }
+
+    // checker.ts getTupleElementType
+    private Type GetTupleElementType(Type type, int index)
+    {
+        var propType = GetTypeOfPropertyOfType(type, index.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        if (!propType.IsNone)
+        {
+            return propType;
+        }
+        if (EveryType(type, IsTupleType))
+        {
+            return GetTupleElementTypeOutOfStartCount(type, index, compilerOptions.NoUncheckedIndexedAccess == true ? undefinedType : Type.None);
+        }
+        return Type.None;
     }
 
     // checker.ts getAssignedTypeOfBinaryExpression
@@ -1010,6 +1088,16 @@ internal sealed partial class Checker
         if (IsSyntheticReference(node))
         {
             return false; // (its parent is the constructor)
+        }
+        if (IsSyntheticElementAccess(node))
+        {
+            // the synthetic element access of destructuring is its own root; its parent is the destructuring node
+            var p = SyntheticElementAccessOf(node).Parent;
+            var ps = StoreOf(p);
+            return ps.Kind(p.Node) == SyntaxKind.PropertyAccessExpression && (
+                ps.Texts.Equals(ps.EscapedText(ps.Name(p.Node)), "length") ||
+                (ps.Kind(ps.Parent(p.Node)) == SyntaxKind.CallExpression && ps.Kind(ps.Name(p.Node)) == SyntaxKind.Identifier &&
+                    Utilities.IsPushOrUnshiftIdentifier(ps, ps.Name(p.Node))));
         }
         var store = StoreOf(node);
         var root = GetReferenceRoot(store, node.Node);
@@ -1395,9 +1483,9 @@ internal sealed partial class Checker
     /// <summary>checker.ts isConstantReference.</summary>
     private bool IsConstantReference(NodeRef node)
     {
-        if (IsSyntheticReference(node))
+        if (IsSyntheticReference(node) || IsSyntheticElementAccess(node))
         {
-            return false; // (`this.x` without a resolved symbol: isReadonlySymbol(unknownSymbol))
+            return false; // (`this.x`, `x["y"]` without a resolved symbol: isReadonlySymbol(unknownSymbol))
         }
         var store = StoreOf(node);
         var n = node.Node;
@@ -1750,7 +1838,9 @@ internal sealed partial class Checker
         // has a contextual type containing no top-level instantiables (meaning constraints will determine
         // assignability), we substitute constraints for all instantiables in the type of the reference to give
         // control flow analysis an opportunity to narrow it further.
-        var substituteConstraints = (checkMode & CheckMode.Inferential) == 0 && !IsSyntheticReference(reference) &&
+        // (a synthetic access is in no constraint position and has no contextual type: its parent is a declaration it does
+        // not initialize)
+        var substituteConstraints = (checkMode & CheckMode.Inferential) == 0 && !IsSyntheticReference(reference) && !IsSyntheticElementAccess(reference) &&
             SomeType(type, IsGenericTypeWithUnionConstraint) &&
             (IsConstraintPosition(type, reference) || HasContextualTypeWithNoGenericTypes(reference, checkMode));
         return substituteConstraints ? MapType(type, GetBaseConstraintOrType) : type;

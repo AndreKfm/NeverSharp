@@ -494,11 +494,123 @@ internal sealed partial class Checker
         return GetTypeWithFacts(typeOrConstraint, TypeFacts.NEUndefined);
     }
 
-    // checker.ts getFlowTypeOfDestructuring (TODO(C7): the synthetic element access and its flow type)
-    private static Type GetFlowTypeOfDestructuring(NodeRef node, Type declaredType)
+    // ---- the synthetic element access of destructuring ----
+    //
+    // getSyntheticElementAccess builds `parentAccess["name"]` with the factory (its parent: the destructuring node; its
+    // flowNode: the parent access's) so that flow analysis narrows a destructured property as that access. Track O's nodes
+    // are records of a file's store, which a checker does not write: the access is a NodeRef with File -2 whose Node index
+    // (1-based) points into the table below, with the accessed expression (a node of the file or another synthetic access),
+    // the accessed name (escaped, as tryGetElementAccessExpressionName gives it for the string literal), the flow node and
+    // the parent. The functions flow analysis applies to references answer for it as for that element access. The
+    // parenthesized expression TypeScript wraps around a parent access that is not a left-hand-side expression is left out:
+    // flow analysis looks through it everywhere (isMatchingReference, getFlowCacheKey, containsMatchingReference). An access
+    // is made once per destructuring node (TypeScript makes a new one per call; flow analysis does not key on its identity).
+    private readonly List<(NodeRef Expression, string Name, FlowRef FlowNode, NodeRef Parent)> syntheticElementAccesses = [];
+    private readonly Dictionary<NodeRef, NodeRef> syntheticElementAccessOfNode = [];
+
+    private static bool IsSyntheticElementAccess(NodeRef node) => node.File == -2;
+
+    private (NodeRef Expression, string Name, FlowRef FlowNode, NodeRef Parent) SyntheticElementAccessOf(NodeRef node) =>
+        syntheticElementAccesses[node.Node.Index - 1];
+
+    // checker.ts getFlowTypeOfDestructuring
+    private Type GetFlowTypeOfDestructuring(NodeRef node, Type declaredType)
     {
-        _ = node;
-        return declaredType;
+        var reference = GetSyntheticElementAccess(node);
+        return reference.IsNone ? declaredType : GetFlowTypeOfReference(reference, declaredType, declaredType, NodeRef.None, SyntheticElementAccessOf(reference).FlowNode);
+    }
+
+    // checker.ts getSyntheticElementAccess
+    private NodeRef GetSyntheticElementAccess(NodeRef node)
+    {
+        if (syntheticElementAccessOfNode.TryGetValue(node, out var cached))
+        {
+            return cached;
+        }
+        var result = NodeRef.None;
+        var parentAccess = GetParentElementAccess(node);
+        if (!parentAccess.IsNone)
+        {
+            var flowNode = default(FlowRef);
+            if (IsSyntheticElementAccess(parentAccess))
+            {
+                flowNode = SyntheticElementAccessOf(parentAccess).FlowNode;
+            }
+            else if (Utilities.CanHaveFlowNode(StoreOf(parentAccess), parentAccess.Node))
+            {
+                flowNode = new FlowRef(parentAccess.File, FlowNodeOf(parentAccess));
+            }
+            if (!flowNode.IsNone)
+            {
+                var propName = GetSyntheticAccessPropertyName(node);
+                if (!string.IsNullOrEmpty(propName))
+                {
+                    syntheticElementAccesses.Add((parentAccess, Utilities.EscapeLeadingUnderscores(propName), flowNode, node));
+                    result = new NodeRef(-2, new Node(syntheticElementAccesses.Count));
+                }
+            }
+        }
+        syntheticElementAccessOfNode[node] = result;
+        return result;
+    }
+
+    // checker.ts getParentElementAccess
+    private NodeRef GetParentElementAccess(NodeRef node)
+    {
+        var store = StoreOf(node);
+        var parent = store.Parent(node.Node);
+        var ancestor = store.Parent(parent);
+        switch (store.Kind(ancestor))
+        {
+            case SyntaxKind.BindingElement:
+            case SyntaxKind.PropertyAssignment:
+                return GetSyntheticElementAccess(At(node, ancestor));
+            case SyntaxKind.ArrayLiteralExpression:
+                return GetSyntheticElementAccess(At(node, parent));
+            case SyntaxKind.VariableDeclaration:
+            {
+                var initializer = store.Initializer(ancestor);
+                return initializer.IsNone ? NodeRef.None : At(node, initializer);
+            }
+            case SyntaxKind.BinaryExpression:
+                return At(node, store.Right(ancestor));
+        }
+        return NodeRef.None;
+    }
+
+    // checker.ts getDestructuringPropertyName (the checker's own, not utilities.ts's)
+    private string? GetSyntheticAccessPropertyName(NodeRef node)
+    {
+        var store = StoreOf(node);
+        var n = node.Node;
+        var parent = store.Parent(n);
+        var kind = store.Kind(n);
+        if (kind == SyntaxKind.BindingElement && store.Kind(parent) == SyntaxKind.ObjectBindingPattern)
+        {
+            var propertyName = store.PropertyName(n);
+            return GetLiteralPropertyNameText(At(node, propertyName.IsNone ? store.Name(n) : propertyName));
+        }
+        if (kind is SyntaxKind.PropertyAssignment or SyntaxKind.ShorthandPropertyAssignment)
+        {
+            return GetLiteralPropertyNameText(At(node, store.Name(n)));
+        }
+        return store.Nodes(store.Elements(parent)).IndexOf(n).ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    // checker.ts getLiteralPropertyNameText
+    private string? GetLiteralPropertyNameText(NodeRef name)
+    {
+        if (Utilities.IsBindingPattern(StoreOf(name), name.Node))
+        {
+            return null; // (`{ {a} }`: a parse error; no property name)
+        }
+        var type = GetLiteralTypeFromPropertyName(name);
+        if ((Types.Flags(type) & (TypeFlags.StringLiteral | TypeFlags.NumberLiteral)) == 0)
+        {
+            return null;
+        }
+        var value = Types.Literal(type).Value;
+        return value is double d ? JsNumber.ToString(d) : (string)value!;
     }
 
     // checker.ts getTypeOfInitializer

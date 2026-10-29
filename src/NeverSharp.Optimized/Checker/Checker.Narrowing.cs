@@ -74,7 +74,7 @@ internal sealed partial class Checker
         {
             return declaredType;
         }
-        if (!IsSyntheticReference(reference))
+        if (!IsSyntheticReference(reference) && !IsSyntheticElementAccess(reference))
         {
             var store = StoreOf(reference);
             var parent = store.Parent(reference.Node);
@@ -108,6 +108,12 @@ internal sealed partial class Checker
         {
             // `this.<name>`: the key of `this` and the name
             return syntheticThisAccessName is null ? null : "0|" + container + "|" + declaredType.Id + "|" + initialType.Id + "." + syntheticThisAccessName;
+        }
+        if (IsSyntheticElementAccess(node))
+        {
+            var access = SyntheticElementAccessOf(node);
+            var key = GetFlowCacheKey(access.Expression, declaredType, initialType, flowContainer);
+            return key is null ? null : key + "." + access.Name;
         }
         var store = StoreOf(node);
         var n = node.Node;
@@ -174,7 +180,8 @@ internal sealed partial class Checker
             // We have made 2000 recursive invocations. To avoid overflowing the call stack we report an error
             // and disable further control flow analysis in the containing function or module body.
             flowAnalysisDisabled = true;
-            ReportFlowControlError(f.Reference);
+            // (a synthetic element access has its parent's text range)
+            ReportFlowControlError(IsSyntheticElementAccess(f.Reference) ? SyntheticElementAccessOf(f.Reference).Parent : f.Reference);
             return new FlowType(errorType, false);
         }
         f.FlowDepth++;
@@ -255,7 +262,8 @@ internal sealed partial class Checker
             {
                 // Check if we should continue with the control flow of the containing function.
                 var container = FlowNodeNode(flow);
-                var referenceKind = IsSyntheticReference(f.Reference) ? SyntaxKind.PropertyAccessExpression : Kind(f.Reference);
+                var referenceKind = IsSyntheticReference(f.Reference) ? SyntaxKind.PropertyAccessExpression
+                    : IsSyntheticElementAccess(f.Reference) ? SyntaxKind.ElementAccessExpression : Kind(f.Reference);
                 if (!container.IsNone && container != f.FlowContainer &&
                     referenceKind != SyntaxKind.PropertyAccessExpression &&
                     referenceKind != SyntaxKind.ElementAccessExpression &&
@@ -757,7 +765,7 @@ internal sealed partial class Checker
         var reference = f.Reference;
         var store = StoreOf(expr);
         var isPseudoReference = false;
-        if (!IsSyntheticReference(reference))
+        if (!IsSyntheticReference(reference) && !IsSyntheticElementAccess(reference))
         {
             var refStore = StoreOf(reference);
             var refKind = refStore.Kind(reference.Node);
@@ -886,6 +894,10 @@ internal sealed partial class Checker
         if (IsSyntheticReference(reference))
         {
             return IsMatchingThisTarget(target);
+        }
+        if (IsSyntheticElementAccess(reference))
+        {
+            return IsMatchingReference(SyntheticElementAccessOf(reference).Expression, target);
         }
         var refStore = StoreOf(reference);
         return Utilities.IsAccessExpression(refStore, reference.Node) && IsMatchingReference(At(reference, refStore.Expression(reference.Node)), target);
