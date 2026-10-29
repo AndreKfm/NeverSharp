@@ -666,7 +666,8 @@ internal sealed partial class Checker
         var typeKey = origin.IsNone ? GetTypeListId(span)
             : (Types.Flags(origin) & TypeFlags.Union) != 0 ? "|" + GetTypeListId(Types.Elements(Types.Union(origin).Types))
             : (Types.Flags(origin) & TypeFlags.Intersection) != 0 ? "&" + GetTypeListId(Types.Elements(Types.Union(origin).Types))
-            : "#" + origin.Id.ToString(CultureInfo.InvariantCulture) + "|" + GetTypeListId(span);
+            // origin type id alone is insufficient, as `keyof x` may resolve to multiple WIP values while `x` is still resolving
+            : "#" + Types.Data<IndexData>(origin).Type.Id.ToString(CultureInfo.InvariantCulture) + "|" + GetTypeListId(span);
         var id = typeKey + GetAliasId(aliasSymbol, aliasTypeArguments);
         if (!unionTypes.TryGetValue(id, out var type))
         {
