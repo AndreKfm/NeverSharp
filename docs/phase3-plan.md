@@ -31,9 +31,9 @@ The parser and binder work per file; the checker works per **program**: it resol
 
 Optimization steps after Gate C, as in Phases 1–2 (profile first).
 
-## Measurement (draft, §17)
+## Measurement (§17, prereg/v9)
 
-**Endpoint:** type-checking each benchmark repository's file list as one program with the same fixed options as Gate C (default library, `noResolve: true`), parse+bind+check, wall-clock: `cs-o-aot-ws-check` against `tsgo7-check` (typescript-go 7.0.2 creating the same program from the file list and calling the checker on every file through its own checker pool), G, interval and decision rule as §8; profile `check` (new, §16 style: the single-threaded variants as the variance gate's binding rows). Because the benchmark repositories' dependencies are not installed and imports are not resolved, the programs produce many diagnostics; both sides check the same programs with the same options, and the work done is reported (diagnostic counts per side) and compared. tsrs only if it exposes a callable checker. Windows only.
+**Endpoint:** type-checking each benchmark repository's file list as one program with the same fixed options as Gate C (default library, `noResolve: true`), parse+bind+check, wall-clock: `cs-o-aot-ws-check` against `tsgo7-check` (typescript-go 7.0.2 creating the same program from the file list and calling the checker on every file through its own checker pool), G, interval and decision rule as §8; profile `check` (new, §16 style: the single-threaded variants as the variance gate's binding rows). Because the benchmark repositories' dependencies are not installed and imports are not resolved, the programs produce many diagnostics; both sides check the same programs with the same options, and the work done is reported (diagnostic counts per side) and compared. tsrs 0.18.0 (`tsrs-check`) as secondary reference (author, 2026-10-29). Windows only. Accepted and tagged as `prereg/v9` (preregistration.md §17).
 
 ## Risks
 
