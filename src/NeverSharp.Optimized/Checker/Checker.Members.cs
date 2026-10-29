@@ -812,6 +812,18 @@ internal sealed partial class Checker
     private bool IsValidBaseType(Type type)
     {
         var flags = Types.Flags(type);
+        if ((flags & TypeFlags.TypeParameter) != 0)
+        {
+            var constraint = GetBaseConstraintOfType(type);
+            if (!constraint.IsNone)
+            {
+                return IsValidBaseType(constraint);
+            }
+        }
+        if ((flags & (TypeFlags.Object | TypeFlags.NonPrimitive | TypeFlags.Any)) != 0 && !IsGenericMappedType(type))
+        {
+            return true;
+        }
         if ((flags & TypeFlags.Intersection) != 0)
         {
             foreach (var t in Types.Elements(Types.Union(type).Types))
@@ -823,7 +835,7 @@ internal sealed partial class Checker
             }
             return true;
         }
-        return (flags & (TypeFlags.Object | TypeFlags.NonPrimitive | TypeFlags.Any)) != 0;
+        return false;
     }
 
     private bool HasBaseType(Type type, Type checkBase)

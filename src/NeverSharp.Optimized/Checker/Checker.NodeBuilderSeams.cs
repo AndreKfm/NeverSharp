@@ -85,5 +85,6 @@ internal sealed partial class Checker
         (Types.ObjectFlagsOf(type) & ObjectFlags.InstantiationExpressionType) != 0 ? Types.Object(type).Node : NodeRef.None;
 
     // getCheckFlags(symbol) & CheckFlags.Mapped
-    private bool IsMappedSymbol(SymbolRef symbol) => (GetCheckFlags(symbol) & CheckFlags.Mapped) != 0;
+    // (symbol as MappedSymbol).links?.mappedType: mapped and reverse mapped symbols have one
+    private bool IsMappedSymbol(SymbolRef symbol) => (GetCheckFlags(symbol) & (CheckFlags.Mapped | CheckFlags.ReverseMapped)) != 0;
 }
