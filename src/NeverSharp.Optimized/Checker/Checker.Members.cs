@@ -660,9 +660,13 @@ internal sealed partial class Checker
         return data.ResolvedBaseTypes ?? [];
     }
 
+    // checker.ts resolvingEmptyArray (the base types of a class while they are resolved; never written to)
+    private static readonly List<Type> resolvingEmptyBaseTypes = [];
+
     // checker.ts resolveBaseTypesOfClass (module C3: with the instantiated constructors of the base expression)
     private void ResolveBaseTypesOfClass(Type type, ObjectTypeData data)
     {
+        data.ResolvedBaseTypes = resolvingEmptyBaseTypes;
         var baseConstructorType = GetApparentType(GetBaseConstructorTypeOfClass(type));
         if ((Types.Flags(baseConstructorType) & (TypeFlags.Object | TypeFlags.Intersection | TypeFlags.Any)) == 0)
         {
@@ -718,6 +722,14 @@ internal sealed partial class Checker
             Error(ValueDeclarationOf(Types.Symbol(type)), Diagnostics.Type_0_recursively_references_itself_as_a_base_type, TypeToString(type, NodeRef.None, TypeFormatFlags.WriteArrayAsGenericType));
             data.ResolvedBaseTypes = [];
             return;
+        }
+        if (ReferenceEquals(data.ResolvedBaseTypes, resolvingEmptyBaseTypes))
+        {
+            // Circular reference, likely through instantiation of default parameters
+            // (otherwise there'd be an error from hasBaseType) - this is fine, but `.members` should be reset
+            // as `getIndexedAccessType` via `instantiateType` via `getTypeFromClassOrInterfaceReference` forces a
+            // partial instantiation of the members without the base types fully resolved
+            data.MembersResolved = false;
         }
         data.ResolvedBaseTypes = [reducedBaseType];
     }
