@@ -46,8 +46,9 @@ internal sealed partial class Checker
         {
             return resolved;
         }
-        // (no marker while it resolves: a predicate that needs itself, e.g. through the effects signature of a call in the
-        // flow of its own type, resolves again and meets the circularity in the type it references, as in checker.ts)
+        // (no marker while it resolves, except around getTypePredicateFromBody below: a predicate that needs itself, e.g.
+        // through the effects signature of a call in the flow of its own type, resolves again and meets the circularity
+        // in the type it references, as in checker.ts)
         ref var record = ref Signatures.Record(signature);
         TypePredicateInfo? predicate = null;
         if (!record.Target.IsNone)
@@ -81,6 +82,7 @@ internal sealed partial class Checker
                 (Signatures.Record(signature).ResolvedReturnType.IsNone || (Types.Flags(Signatures.Record(signature).ResolvedReturnType) & TypeFlags.Boolean) != 0) &&
                 (Signatures.Record(signature).Parameters?.Length ?? 0) > 0)
             {
+                resolvedTypePredicates[signature] = null; // avoid infinite loop
                 predicate = GetTypePredicateFromBody(declaration);
             }
         }
