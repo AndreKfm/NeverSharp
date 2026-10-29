@@ -270,10 +270,24 @@ internal sealed partial class Checker
                 existingFakeScope = context.FakeScope.Parent;
             }
             var locals = existingFakeScope?.Locals ?? new SymTable();
-            // (TypeScript records the names added and replaced to undo them; the table before is kept instead, which
-            // restores the same entries in the same order)
-            var before = existingFakeScope is not null ? new SymTable(locals) : null;
-            addAll((name, symbol) => locals.Set(name, symbol));
+            List<string>? newLocals = null;
+            List<(string Name, SymbolRef OldSymbol)>? oldLocals = null;
+            addAll((name, symbol) =>
+            {
+                if (existingFakeScope is not null)
+                {
+                    var oldSymbol = locals.Get(name);
+                    if (oldSymbol.IsNone)
+                    {
+                        (newLocals ??= []).Add(name);
+                    }
+                    else
+                    {
+                        (oldLocals ??= []).Add((name, oldSymbol));
+                    }
+                }
+                locals.Set(name, symbol);
+            });
             if (existingFakeScope is null)
             {
                 // Use a Block for this; the type of the node doesn't matter so long as it
@@ -287,7 +301,24 @@ internal sealed partial class Checker
                 return null;
             }
             // We did not create the current scope, so we have to clean it up
-            return () => existingFakeScope.Locals = before!;
+            // (as in TypeScript, whose undo runs `forEach(newLocals, s => locals.delete(s))` and
+            // `forEach(oldLocals, s => locals.set(s.name, s.oldSymbol))`: core.ts forEach stops at the first truthy
+            // result, so only the first name deleted and the first name restored are undone; the others stay visible
+            // to typeParameterShadowsOtherTypeParameterInScope of sibling signatures)
+            return () =>
+            {
+                foreach (var s in newLocals ?? [])
+                {
+                    if (locals.Delete(s))
+                    {
+                        break;
+                    }
+                }
+                if (oldLocals is { Count: > 0 })
+                {
+                    locals.Set(oldLocals[0].Name, oldLocals[0].OldSymbol);
+                }
+            };
         }
     }
 

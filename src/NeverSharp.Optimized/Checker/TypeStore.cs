@@ -487,6 +487,22 @@ internal sealed class SymTable
         values.Add(symbol);
     }
 
+    /// <summary>Map.delete: true when the name was present (the entries after it keep their order).</summary>
+    internal bool Delete(string name)
+    {
+        if (!index.Remove(name, out var i))
+        {
+            return false;
+        }
+        names.RemoveAt(i);
+        values.RemoveAt(i);
+        for (var j = i; j < names.Count; j++)
+        {
+            index[names[j]] = j;
+        }
+        return true;
+    }
+
     internal string NameAt(int i) => names[i];
 
     internal SymbolRef ValueAt(int i) => values[i];
