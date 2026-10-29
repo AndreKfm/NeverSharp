@@ -18,8 +18,9 @@
 // Port structure follows internal/checker/checker.go
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
 // Modified: translated from TypeScript to C#; module C5 (replaces C1's getTypeForVariableLikeDeclaration and its
-// for-of and binding element approximations). TODO(C7): getFlowTypeOfDestructuring and getFlowTypeInConstructor;
-// Module C9d: JavaScript container object types, JSDoc types (getParameterTypeOfTypeTag), empty literals of JavaScript
+// for-of and binding element approximations). Module C9f: getFlowTypeOfDestructuring with getSyntheticElementAccess,
+// getParentElementAccess, the checker's getDestructuringPropertyName and getLiteralPropertyNameText (a checker-owned
+// synthetic access, see below). Module C9d: JavaScript container object types, JSDoc types (getParameterTypeOfTypeTag), empty literals of JavaScript
 // initializers.
 
 using NeverSharp.Generated;
