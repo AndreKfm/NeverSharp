@@ -25,11 +25,25 @@
 // The driver name carries "-bind" and the JSON line adds "symbols" (sum of
 // the files' SymbolCount).
 //
-// Usage: parse-go [--bind] [--single] <file list>
+// --check (Phase 3, pre-registration §17, module C10): parse+bind+check of the
+// file list as one program, as tsgo's command line builds and checks one:
+// compiler.NewProgram with tsgo's own cached compiler host on the real file
+// system (NewCachedFSCompilerHost, the default library next to the executable:
+// bundled.LibPath(), build-go.mjs copies typescript-go's lib files there), the
+// root files of the list and TypeScript 6.0.3's default options given
+// explicitly (checkOptions below; table in docs/benchmark-harness.md §4.1),
+// then program.GetSemanticDiagnostics(ctx, nil) (every file, on the program's
+// default checker pool: 4 checkers, file i to checker i % 4) and
+// program.GetGlobalDiagnostics(ctx). --single: ProgramOptions.SingleThreaded
+// (one checker, everything sequential). The driver name carries "-check" and
+// the JSON line adds the diagnostic counts.
+//
+// Usage: parse-go [--bind | --check] [--single] <file list>
 
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -37,14 +51,95 @@ import (
 
 	"github.com/microsoft/typescript-go/internal/ast"
 	"github.com/microsoft/typescript-go/internal/binder"
+	"github.com/microsoft/typescript-go/internal/bundled"
+	"github.com/microsoft/typescript-go/internal/compiler"
 	"github.com/microsoft/typescript-go/internal/core"
+	"github.com/microsoft/typescript-go/internal/diagnostics"
 	"github.com/microsoft/typescript-go/internal/parser"
+	"github.com/microsoft/typescript-go/internal/tsoptions"
 	"github.com/microsoft/typescript-go/internal/tspath"
 	"github.com/microsoft/typescript-go/internal/vfs/osvfs"
 )
 
+// checkOptions: the computed values of TypeScript 6.0.3's default options with
+// noResolve (the C# side's program options, { noResolve: true }), each given
+// explicitly so that typescript-go's TypeScript 7 defaults do not apply.
+// (esModuleInterop, allowSyntheticDefaultImports and alwaysStrict are always
+// on in TypeScript 7 and deprecated as options; 6.0.3's defaults are on too.)
+func checkOptions() *core.CompilerOptions {
+	return &core.CompilerOptions{
+		NoResolve:                    core.TSTrue,
+		Target:                       core.ScriptTargetES2025,
+		Module:                       core.ModuleKindES2022,
+		ModuleResolution:             core.ModuleResolutionKindBundler,
+		ModuleDetection:              core.ModuleDetectionKindAuto,
+		Strict:                       core.TSTrue,
+		AllowJs:                      core.TSFalse,
+		ResolveJsonModule:            core.TSTrue,
+		ResolvePackageJsonExports:    core.TSTrue,
+		ResolvePackageJsonImports:    core.TSTrue,
+		UseDefineForClassFields:      core.TSTrue,
+		NoUncheckedSideEffectImports: core.TSTrue,
+	}
+}
+
+func runCheck(files []string, single bool, priority string) {
+	fs := osvfs.FS()
+	cwd, err := os.Getwd()
+	if err != nil {
+		panic(err)
+	}
+	cwd = tspath.NormalizePath(cwd)
+	singleThreaded := core.TSFalse
+	if single {
+		singleThreaded = core.TSTrue
+	}
+	var nodes, chars, total, errors, warnings, suggestions, messages int64
+	programFiles := 0
+	if len(files) > 0 {
+		host := compiler.NewCachedFSCompilerHost(cwd, fs, bundled.LibPath(), nil, nil)
+		config := tsoptions.NewParsedCommandLine(checkOptions(), files, tspath.ComparePathsOptions{UseCaseSensitiveFileNames: fs.UseCaseSensitiveFileNames(), CurrentDirectory: cwd})
+		program := compiler.NewProgram(compiler.ProgramOptions{Config: config, Host: host, SingleThreaded: singleThreaded})
+		ctx := context.Background()
+		semantic := program.GetSemanticDiagnostics(ctx, nil)
+		global := program.GetGlobalDiagnostics(ctx)
+		for _, list := range [][]*ast.Diagnostic{semantic, global} {
+			for _, d := range list {
+				total++
+				switch d.Category() {
+				case diagnostics.CategoryError:
+					errors++
+				case diagnostics.CategoryWarning:
+					warnings++
+				case diagnostics.CategorySuggestion:
+					suggestions++
+				default:
+					messages++
+				}
+			}
+		}
+		rootPaths := make(map[tspath.Path]bool, len(files))
+		for _, f := range files {
+			rootPaths[tspath.ToPath(f, cwd, fs.UseCaseSensitiveFileNames())] = true
+		}
+		for _, f := range program.GetSourceFiles() {
+			if rootPaths[f.Path()] {
+				nodes += int64(f.NodeCount)
+				chars += int64(len(f.Text()))
+			}
+		}
+		programFiles = len(program.GetSourceFiles())
+	}
+	mode := "parallel"
+	if single {
+		mode = "single"
+	}
+	fmt.Printf("{\"driver\":\"tsgo-7.0.2-check-%s\",\"files\":%d,\"bytes\":%d,\"nodes\":%d,\"programFiles\":%d,\"diagnostics\":%d,\"errors\":%d,\"warnings\":%d,\"suggestions\":%d,\"messages\":%d,\"priority\":\"%s\"}\n",
+		mode, len(files), chars, nodes, programFiles, total, errors, warnings, suggestions, messages, priority)
+}
+
 func main() {
-	single, bind := false, false
+	single, bind, check := false, false, false
 	args := os.Args[1:]
 	for len(args) > 0 && strings.HasPrefix(args[0], "--") {
 		switch args[0] {
@@ -52,6 +147,8 @@ func main() {
 			single = true
 		case "--bind":
 			bind = true
+		case "--check":
+			check = true
 		default:
 			fmt.Fprintln(os.Stderr, "unknown option "+args[0])
 			os.Exit(2)
@@ -71,6 +168,14 @@ func main() {
 		if line = strings.TrimSpace(line); line != "" {
 			files = append(files, tspath.NormalizeSlashes(line))
 		}
+	}
+	if check {
+		if bind {
+			fmt.Fprintln(os.Stderr, "--bind and --check exclude each other")
+			os.Exit(2)
+		}
+		runCheck(files, single, priority)
+		return
 	}
 
 	fs := osvfs.FS()

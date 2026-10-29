@@ -18,7 +18,16 @@
 //   binds it with Binder.BindSourceFile(sourceFile, new CompilerOptions()) (binder.ts bindSourceFile with options {},
 //   as the Gate B oracle binds); the binder output stays alive with its result. The driver name carries "-bind" and
 //   the JSON line adds "symbols" (sum of the files' symbolCount).
-//   Usage: parse-cs-optimized-<runtime> [--bind] [--single] <file list>
+// - --check (Track O only; Phase 3, pre-registration §17, module C10): parse+bind+check of the file list as one program.
+//   The work items parse every file as above (languageVersion: the program's emit target, as tsc's host parses it); one
+//   Program is built from them with TypeScript 6.0.3's default options plus noResolve (Program.Create: the default
+//   library from the lib folder next to the executable, module names resolved between the program's files); then
+//   typescript-go's compiler checker pool (CheckerPool: Program.BindSourceFiles, 4 checkers capped by the file count,
+//   file i to checker i % 4, each checker on its own thread) computes the semantic diagnostics of every program file
+//   and the global diagnostics. --single: everything sequential, one checker. The driver name carries "-check" and the
+//   JSON line adds the diagnostic counts ("diagnostics" and per category). --dump-diagnostics <file> writes the
+//   canonical diagnostics for harness/bench/check-equivalence.mjs (never in timed runs).
+//   Usage: parse-cs-optimized-<runtime> [--bind | --check [--dump-diagnostics <file>]] [--single] <file list>
 
 using System.Diagnostics;
 using System.Globalization;
@@ -32,6 +41,8 @@ using NeverSharp.Generated;
 
 var single = false;
 var bind = false;
+var check = false;
+string? dumpDiagnostics = null;
 var argIndex = 0;
 for (; argIndex < args.Length && args[argIndex].StartsWith("--", StringComparison.Ordinal); argIndex++)
 {
@@ -43,18 +54,29 @@ for (; argIndex < args.Length && args[argIndex].StartsWith("--", StringCompariso
         case "--bind":
             bind = true;
             break;
+        case "--check":
+            check = true;
+            break;
+        case "--dump-diagnostics":
+            dumpDiagnostics = args[++argIndex];
+            break;
         default:
             Console.Error.WriteLine($"unknown option {args[argIndex]}");
             return 2;
     }
 }
 #if !TRACK_OPTIMIZED
-if (bind)
+if (bind || check)
 {
-    Console.Error.WriteLine("--bind: Track F has no binder (pre-registration §15)");
+    Console.Error.WriteLine("--bind/--check: Track F has no binder or checker (pre-registration §15, §17)");
     return 2;
 }
 #endif
+if ((bind && check) || (dumpDiagnostics is not null && !check))
+{
+    Console.Error.WriteLine("--bind and --check exclude each other; --dump-diagnostics needs --check");
+    return 2;
+}
 var listPath = args[argIndex];
 
 var priority = "normal";
@@ -80,6 +102,13 @@ var sourceFiles = new SourceFile[files.Length];
 // comment parsed as typescript-go 7.0.2 does eagerly.
 var parseAllJsDoc = Environment.GetEnvironmentVariable("NEVERSHARP_JSDOC") == "all";
 var options = new CreateSourceFileOptions { LanguageVersion = ScriptTarget.Latest, JsDocParsingMode = parseAllJsDoc ? JSDocParsingMode.ParseAll : JSDocParsingMode.ParseForTypeErrors };
+
+#if TRACK_OPTIMIZED
+if (check)
+{
+    return CheckMode.Run(files, single, priority, dumpDiagnostics);
+}
+#endif
 
 #if TRACK_OPTIMIZED
 // NEVERSHARP_PROBE=read (development probe only, never set by bench.mjs): read and decode every file as ParseFile

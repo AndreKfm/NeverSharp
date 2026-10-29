@@ -40,6 +40,12 @@ internal interface ICompilerHost
 
     bool FileExists(string fileName);
 
+    /// <summary>ModuleResolutionHost.directoryExists (module resolution, C10).</summary>
+    bool DirectoryExists(string directoryName);
+
+    /// <summary>ModuleResolutionHost.readFile (module resolution reads package.json files, C10).</summary>
+    string? ReadFile(string fileName);
+
     /// <summary>CompilerHost.jsDocParsingMode (null: ParseAll).</summary>
     JSDocParsingMode? JsDocParsingMode { get; }
 }
@@ -91,4 +97,107 @@ internal sealed class MemoryCompilerHost : ICompilerHost
     public string GetCanonicalFileName(string fileName) => fileName;
 
     public bool FileExists(string fileName) => fileName == this.fileName || library.Exists(fileName);
+
+    // The oracle's host: directoryExists: () => false, readFile: the unit only.
+    public bool DirectoryExists(string directoryName) => false;
+
+    public string? ReadFile(string fileName) => fileName == this.fileName ? text : null;
+}
+
+/// <summary>
+/// The host of the check driver (module C10), the counterpart of tsc's ts.createCompilerHost(options) on the real file
+/// system: the program's root files are parsed by the driver beforehand (its parallel work items) and handed out by
+/// name; other files are parsed on request; the library files come from a <see cref="DefaultLibrary"/> named under the
+/// real library folder. File and directory existence is cached (the file system does not change during a run; the
+/// results are those of the uncached calls). Case-insensitive file names on Windows (ts.sys.useCaseSensitiveFileNames).
+/// Thread-safe for the reads module resolution makes; the program itself is built on one thread.
+/// </summary>
+internal sealed class DiskCompilerHost : ICompilerHost
+{
+    private readonly Dictionary<string, SourceFile> parsedFiles;
+    private readonly DefaultLibrary library;
+    private readonly string libFolder;
+    private readonly string currentDirectory;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> fileExists = new(StringComparer.Ordinal);
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> directoryExists = new(StringComparer.Ordinal);
+
+    /// <param name="parsedFiles">the files parsed beforehand, by file name as the program will ask for them (forward slashes)</param>
+    /// <param name="library">the library, whose virtual folder is <paramref name="libFolder"/> (the real folder with forward slashes)</param>
+    internal DiskCompilerHost(IEnumerable<SourceFile> parsedFiles, DefaultLibrary library, string libFolder, string currentDirectory, JSDocParsingMode? jsDocParsingMode)
+    {
+        UseCaseSensitiveFileNames = !OperatingSystem.IsWindows() && !OperatingSystem.IsMacOS();
+        this.parsedFiles = new Dictionary<string, SourceFile>(StringComparer.Ordinal);
+        foreach (var file in parsedFiles)
+        {
+            this.parsedFiles[GetCanonicalFileName(file.Store.FileName(file.Root))] = file;
+        }
+        this.library = library;
+        this.libFolder = libFolder;
+        this.currentDirectory = currentDirectory;
+        JsDocParsingMode = jsDocParsingMode;
+    }
+
+    public JSDocParsingMode? JsDocParsingMode { get; }
+
+    public bool UseCaseSensitiveFileNames { get; }
+
+    public SourceFile? GetSourceFile(string fileName, CreateSourceFileOptions options)
+    {
+        if (parsedFiles.TryGetValue(GetCanonicalFileName(fileName), out var file))
+        {
+            return file;
+        }
+        if (library.GetFile(fileName) is { } libFile)
+        {
+            return libFile;
+        }
+        if (!File.Exists(fileName))
+        {
+            return null;
+        }
+        return Parser.ParseFile(fileName, fileName, options, setParentNodes: false, ScriptKindFromExtension(fileName));
+    }
+
+    public string GetDefaultLibFileName(CompilerOptions options) => libFolder + "/" + options.GetDefaultLibFileName();
+
+    public string GetDefaultLibLocation() => libFolder;
+
+    public string GetCurrentDirectory() => currentDirectory;
+
+    // sys.ts toFileNameLowerCase on a case-insensitive file system
+    public string GetCanonicalFileName(string fileName) => UseCaseSensitiveFileNames ? fileName : fileName.ToLowerInvariant();
+
+    public bool FileExists(string fileName) => fileExists.GetOrAdd(fileName, static f => File.Exists(f));
+
+    public bool DirectoryExists(string directoryName) => directoryExists.GetOrAdd(directoryName, static d => Directory.Exists(d));
+
+    public string? ReadFile(string fileName)
+    {
+        try
+        {
+            var text = SourceText.ReadNative(fileName);
+            var result = text.GetString();
+            text.Release();
+            return result;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    // core.GetScriptKindFromFileName / utilities.ts ensureScriptKind (the extension decides)
+    internal static ScriptKind ScriptKindFromExtension(string name) => Path.GetExtension(name).ToLowerInvariant() switch
+    {
+        ".ts" or ".mts" or ".cts" => ScriptKind.TS,
+        ".tsx" => ScriptKind.TSX,
+        ".js" or ".mjs" or ".cjs" => ScriptKind.JS,
+        ".jsx" => ScriptKind.JSX,
+        ".json" => ScriptKind.JSON,
+        _ => ScriptKind.Unknown,
+    };
 }

@@ -89,8 +89,27 @@ Every parse-only driver, existing or future (tsc 6.0.3, typescript-go 7.0.2, eve
 | C# drivers additionally | `allocatedBytes` (`GC.GetTotalAllocatedBytes(true)`), `gen0`, `gen1`, `gen2` (`GC.CollectionCount`), `gcPauseMs` (`GC.GetTotalPauseDuration()`), all read after the last file is parsed; the runner stores them as `runtime` in run.json and reports them in the runtime-metrics table. |
 | Exit code | 0 on success; anything else fails the run. |
 | Parse+bind mode (Phase 2, pre-registration §15) | `<driver> --bind [--single] <file list>`: the same work item binds each file right after parsing it, with default options, and the binder output stays alive with its tree. C# Track O: `Binder.BindSourceFile(sourceFile, new CompilerOptions())` (binder.ts `bindSourceFile(file, {})`, as the Gate B oracle binds); typescript-go 7.0.2: `binder.BindSourceFile(sourceFile)` (takes no options in 7.0.2); tsrs 0.18.0: `tsrs_binder::bind_source_file(file)`. Track F and tsc have no bind mode. The driver name carries `-bind` before the mode (`cs-optimized-aot-ws-bind-parallel`, `tsgo-7.0.2-bind-single`, `tsrs-0.18.0-bind-parallel`) and the JSON line adds `symbols` (sum of the files' symbol counts). |
+| Check mode (Phase 3, draft pre-registration §17, module C10) | `<driver> --check [--single] <file list>`: the file list as **one program**, parse+bind+check. C# Track O (`cs-o-aot-ws`, `cs-o-aot-srv`): one work item per file parses it (`Parser.ParseFile`, languageVersion = the program's emit target, ParseForTypeErrors); `Program.Create(files, { noResolve: true }, DiskCompilerHost)` (TypeScript 6.0.3's default library from `lib/` next to the executable, copied from `harness/astdump/node_modules/typescript/lib` at build time; module names resolved between the program's files, `Program.Resolution.cs`/`ModuleNameResolver.cs`); then `CheckerPool` (port of typescript-go's `internal/compiler/checkerpool.go`): `Program.BindSourceFiles` (one work item per unbound file), 4 checkers (capped by the program's file count, 1 with `--single`), program file *i* (default library files first, in program order) assigned to checker *i* mod 4, each checker on its own thread visiting its files in program order: `Program.GetSemanticDiagnostics(file, checker)` for every program file, then every checker's `GetGlobalDiagnostics()` (sorted, deduplicated). typescript-go 7.0.2 (`tsgo7-check`): `compiler.NewProgram({Config: tsoptions.NewParsedCommandLine(options, files, …), Host: compiler.NewCachedFSCompilerHost(cwd, osvfs.FS(), bundled.LibPath(), nil, nil), SingleThreaded})` with typescript-go's own lib files next to the executable (`build-go.mjs` copies `internal/bundled/libs`), then `program.GetSemanticDiagnostics(ctx, nil)` and `program.GetGlobalDiagnostics(ctx)` on its default checker pool (same counts and assignment). No suggestion diagnostics, no syntactic or option diagnostics on either side. tsrs 0.18.0 has a program checker (`tsrs_compiler::new_program`, `Program::get_semantic_diagnostics`) but no check configuration (§17's profile has none; its pool may move files between checkers). The driver name carries `-check` (`cs-optimized-aot-ws-check-parallel`, `tsgo-7.0.2-check-single`) and the JSON line adds `programFiles` (with the library), `diagnostics` (total) and `errors`, `warnings`, `suggestions`, `messages`; C# also `checkers`. C# only: `--dump-diagnostics <file>` writes the canonical diagnostics for `check-equivalence.mjs` (never in timed runs). |
 
-The runner checks `files` against the parse set and `priority` against the requested class before timing (section 2); for the parse+bind configurations (`*-bind`, `*-bind-single`) it also checks the driver name and `symbols` > 0. `bench.mjs --check` runs only this validation, once per selected configuration and repository plus the empty file list, and prints the counts (functional check, no timing, nothing written).
+Options of the checked program: TypeScript 6.0.3's defaults with `noResolve: true` (`{ noResolve: true }` on the C# side and for tsc in `check-equivalence.mjs`). The Go driver passes every entry of the computed values explicitly (`checkOptions` in `go/parse.go`), so that no TypeScript 7 default applies:
+
+| Option | TypeScript 6.0.3 computed value (C#, tsc) | Passed to typescript-go |
+|---|---|---|
+| noResolve | true | `NoResolve: TSTrue` |
+| target | ES2025 (LatestStandard) | `Target: ES2025` |
+| module | ES2022 (from target) | `Module: ES2022` |
+| moduleResolution | bundler (from module) | `ModuleResolution: Bundler` |
+| moduleDetection | auto | `ModuleDetection: Auto` |
+| strict (and the strict family) | true | `Strict: TSTrue` |
+| allowJs | false | `AllowJs: TSFalse` |
+| resolveJsonModule | true (bundler) | `ResolveJsonModule: TSTrue` |
+| resolvePackageJsonExports / Imports | true (bundler) | `TSTrue` / `TSTrue` |
+| useDefineForClassFields | true (target ≥ ES2022) | `UseDefineForClassFields: TSTrue` |
+| noUncheckedSideEffectImports | true | `NoUncheckedSideEffectImports: TSTrue` |
+| esModuleInterop, allowSyntheticDefaultImports, alwaysStrict | true | not passed: always on in TypeScript 7 (deprecated as options) |
+| types, lib, jsx, noLib | none (`types` default `[]` in both), default library of the target (`lib.es2025.full.d.ts`), not set, false | defaults (equal) |
+
+The runner checks `files` against the parse set and `priority` against the requested class before timing (section 2); for the parse+bind configurations (`*-bind`, `*-bind-single`) it also checks the driver name and `symbols` > 0; for the check configurations (`*-check`, `*-check-single`) the driver name, a `diagnostics` count and `programFiles` > `files` (the default library is in the program). `bench.mjs --check` runs only this validation, once per selected configuration and repository plus the empty file list, and prints the counts (functional check, no timing, nothing written).
 
 ## 5. Measurement
 
@@ -241,4 +260,4 @@ Feasibility check (2026-10-21; tsgo numbers from this session, driver numbers fr
 
 ## Profiles (prereg/v8)
 
-`node bench.mjs --profile full|quick|binder` selects a fixed configuration set (pre-registration §16); `--configs` selects a custom set instead (recorded as profile `custom`, not a protocol profile). `report.mjs` binds the variance gate per profile and fails the gate if a binding configuration of the profile is missing. Runs recorded before prereg/v8 carry no profile and keep the earlier rule.
+`node bench.mjs --profile full|quick|binder|check` selects (`check`: draft §17, binding rows `tsgo7-check-single`, `cs-o-aot-ws-check-single`) a fixed configuration set (pre-registration §16); `--configs` selects a custom set instead (recorded as profile `custom`, not a protocol profile). `report.mjs` binds the variance gate per profile and fails the gate if a binding configuration of the profile is missing. Runs recorded before prereg/v8 carry no profile and keep the earlier rule.

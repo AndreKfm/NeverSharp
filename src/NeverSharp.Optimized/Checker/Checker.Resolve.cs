@@ -10,9 +10,10 @@
 // Port structure follows internal/binder/nameresolver.go and internal/checker/checker.go
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
 // Modified: translated from TypeScript to C#; module C1. Names are strings (escaped names); a name argument is a string
-// plus the identifier it came from (None for a plain string). Module resolution: Gate C's programs use noResolve, so
-// only ambient modules resolve (resolveExternalModule's host lookup finds nothing); `isReferenced` (unused checks) and
-// the type-only alias tracking are left to module C8.
+// plus the identifier it came from (None for a plain string). `isReferenced` (unused checks) and the type-only alias
+// tracking are left to module C8. Module C10: resolveExternalModule's tail (the program's recorded resolutions, the
+// resolution diagnostics, pattern ambient modules, untyped modules; not the node16/nodenext, rewriteRelativeImportExtensions
+// and project reference branches, which the options C10 supports do not reach).
 
 using NeverSharp.Generated;
 
@@ -2883,9 +2884,9 @@ internal sealed partial class Checker
     }
 
     /// <summary>
-    /// checker.ts resolveExternalModule. Track O's programs use noResolve (Gate C), so host.getResolvedModule finds no
-    /// module: only ambient modules (and, TODO(C9e), pattern ambient modules) resolve; otherwise the not-found error.
-    /// (C9e: pattern ambient modules left unported; the corpus units that declare them are identical without them)
+    /// checker.ts resolveExternalModule: ambient modules first, then the program's resolution of the name in the file of
+    /// <paramref name="location"/> (module C10; program.ts records it while the program is built), then pattern ambient
+    /// modules; otherwise the errors for untyped and unresolved modules.
     /// </summary>
     private SymbolRef ResolveExternalModule(NodeRef location, string moduleReference, DiagnosticMessage? moduleNotFoundError, NodeRef errorNode, bool isForAugmentation)
     {
@@ -2899,18 +2900,348 @@ internal sealed partial class Checker
         {
             return ambientModule;
         }
+        var currentSourceFile = FileAt(location.File);
+        var contextSpecifier = GetContextSpecifier(location);
+        var mode = !contextSpecifier.IsNone && Utilities.IsStringLiteralLike(StoreOf(contextSpecifier), contextSpecifier.Node)
+            ? program.GetModeForUsageLocation(currentSourceFile, contextSpecifier.Node)
+            : program.GetDefaultResolutionModeForFile(currentSourceFile);
+        var moduleResolutionKind = compilerOptions.GetEmitModuleResolutionKind();
+        var resolvedModule = program.GetResolvedModule(currentSourceFile, moduleReference, mode);
+        var resolutionDiagnostic = !errorNode.IsNone && resolvedModule is not null
+            ? Program.GetResolutionDiagnostic(compilerOptions, resolvedModule, StoreOf(location).IsDeclarationFile(currentSourceFile.Root))
+            : null;
+        var sourceFile = resolvedModule is not null
+            && (resolutionDiagnostic is null || resolutionDiagnostic == Diagnostics.Module_0_was_resolved_to_1_but_jsx_is_not_set)
+            ? program.GetSourceFile(resolvedModule.ResolvedFileName)
+            : null;
+        if (sourceFile is not null)
+        {
+            // If there's a resolutionDiagnostic we need to report it even if a sourceFile is found.
+            if (resolutionDiagnostic is not null)
+            {
+                Error(errorNode, resolutionDiagnostic, moduleReference, resolvedModule!.ResolvedFileName);
+            }
+            if (resolvedModule!.ResolvedUsingTsExtension && Parser.IsDeclarationFileName(moduleReference))
+            {
+                var importOrExport = ImportOrExportOf(location);
+                if ((!errorNode.IsNone && !importOrExport.IsNone && !StoreOf(importOrExport).IsTypeOnly(importOrExport.Node)) || !FindAncestorRef(location, SyntaxKind.CallExpression, Utilities.IsImportCall).IsNone)
+                {
+                    Error(errorNode, Diagnostics.A_declaration_file_cannot_be_imported_without_import_type_Did_you_mean_to_import_an_implementation_file_0_instead,
+                        GetSuggestedImportSource(ModuleNameResolver.TryExtractTSExtension(moduleReference)!));
+                }
+            }
+            else if (resolvedModule.ResolvedUsingTsExtension && !ShouldAllowImportingTsExtension(currentSourceFile.Store.FileName(currentSourceFile.Root)))
+            {
+                var importOrExport = ImportOrExportOf(location);
+                if (!errorNode.IsNone && !((!importOrExport.IsNone && StoreOf(importOrExport).IsTypeOnly(importOrExport.Node)) || !FindAncestorRef(location, SyntaxKind.ImportType, null).IsNone))
+                {
+                    var tsExtension = ModuleNameResolver.TryExtractTSExtension(moduleReference)!;
+                    Error(errorNode, Diagnostics.An_import_path_can_only_end_with_a_0_extension_when_allowImportingTsExtensions_is_enabled, tsExtension);
+                }
+            }
+            // (else if compilerOptions.rewriteRelativeImportExtensions: the option is not in Track O's options)
+
+            var sourceFileNumber = FileNumber(sourceFile);
+            var sourceFileSymbol = NodeSymbol(new NodeRef(sourceFileNumber, sourceFile.Root));
+            if (!sourceFileSymbol.IsNone)
+            {
+                if (!errorNode.IsNone && resolvedModule.IsExternalLibraryImport && !ModuleNameResolver.ResolutionExtensionIsTSOrJson(resolvedModule.Extension))
+                {
+                    ErrorOnImplicitAnyModule(isError: false, errorNode, mode, resolvedModule, moduleReference);
+                }
+                if (!errorNode.IsNone && moduleKind is ModuleKind.Node16 or ModuleKind.Node18)
+                {
+                    throw new NotSupportedException("Checker (module C10): node16/node18 module format checks of resolved modules are not ported");
+                }
+                // merged symbol is module declaration symbol combined with all augmentations
+                return GetMergedSymbol(sourceFileSymbol);
+            }
+            if (!errorNode.IsNone && moduleNotFoundError is not null && !IsSideEffectImport(errorNode))
+            {
+                // report errors only if it was requested
+                Error(errorNode, Diagnostics.File_0_is_not_a_module, sourceFile.Store.FileName(sourceFile.Root));
+            }
+            return SymbolRef.None;
+        }
+
+        if (patternAmbientModules is not null)
+        {
+            var pattern = FindBestPatternMatch(patternAmbientModules, moduleReference);
+            if (pattern is { } match)
+            {
+                // If the module reference matched a pattern ambient module ('*.foo') but there's also a
+                // module augmentation by the specific name requested ('a.foo'), we store the merged symbol
+                // by the augmentation name ('a.foo'), because asking for *.foo should not give you exports
+                // from a.foo.
+                if (patternAmbientModuleAugmentations is not null && patternAmbientModuleAugmentations.TryGetValue(moduleReference, out var augmentation))
+                {
+                    return GetMergedSymbol(augmentation);
+                }
+                return GetMergedSymbol(match.Symbol);
+            }
+        }
+
         if (errorNode.IsNone)
         {
             return SymbolRef.None;
         }
+
+        // May be an untyped module. If so, ignore resolutionDiagnostic.
+        if ((resolvedModule is not null && !ModuleNameResolver.ResolutionExtensionIsTSOrJson(resolvedModule.Extension) && resolutionDiagnostic is null)
+            || resolutionDiagnostic == Diagnostics.Could_not_find_a_declaration_file_for_module_0_1_implicitly_has_an_any_type)
+        {
+            if (isForAugmentation)
+            {
+                var diag = Diagnostics.Invalid_module_name_in_augmentation_Module_0_resolves_to_an_untyped_module_at_1_which_cannot_be_augmented;
+                Error(errorNode, diag, moduleReference, resolvedModule!.ResolvedFileName);
+            }
+            else
+            {
+                ErrorOnImplicitAnyModule(isError: noImplicitAny && moduleNotFoundError is not null, errorNode, mode, resolvedModule!, moduleReference);
+            }
+            // Failed imports and untyped modules are both treated in an untyped manner; only difference is whether we give a diagnostic first.
+            return SymbolRef.None;
+        }
+
         if (moduleNotFoundError is not null)
         {
-            // (resolutionDiagnostic, resolveJsonModule, node16 extension suggestions: need a resolved module or a module
-            // resolution mode Gate C does not use)
-            Error(errorNode, moduleNotFoundError, moduleReference);
+            // (a project reference redirect's output: no project references)
+            if (resolutionDiagnostic is not null)
+            {
+                Error(errorNode, resolutionDiagnostic, moduleReference, resolvedModule!.ResolvedFileName);
+            }
+            else
+            {
+                var isExtensionlessRelativePathImport = ModuleNameResolver.PathIsRelative(moduleReference) && !TsPath.GetBaseFileName(moduleReference).Contains('.', StringComparison.Ordinal);
+                var resolutionIsNode16OrNext = moduleResolutionKind is ModuleResolutionKind.Node16 or ModuleResolutionKind.NodeNext;
+                if (!compilerOptions.GetResolveJsonModule()
+                    && TsPath.FileExtensionIs(moduleReference, Extension.Json)
+                    && moduleResolutionKind != ModuleResolutionKind.Classic
+                    && HasJsonModuleEmitEnabled())
+                {
+                    Error(errorNode, Diagnostics.Cannot_find_module_0_Consider_using_resolveJsonModule_to_import_module_with_json_extension, moduleReference);
+                }
+                else if (mode == ModuleKind.ESNext && resolutionIsNode16OrNext && isExtensionlessRelativePathImport)
+                {
+                    throw new NotSupportedException("Checker (module C10): node16/nodenext extension suggestions are not ported");
+                }
+                else
+                {
+                    // (alternateResult: set only for node_modules packages, whose lookup is not ported)
+                    Error(errorNode, moduleNotFoundError, moduleReference);
+                }
+            }
         }
-        _ = location;
-        _ = isForAugmentation;
         return SymbolRef.None;
+
+        string GetSuggestedImportSource(string tsExtension)
+        {
+            var importSourceWithoutExtension = moduleReference[..^tsExtension.Length];
+            // Direct users to import source with .js extension if outputting an ES module.
+            // @see https://github.com/microsoft/TypeScript/issues/42151
+            if ((moduleKind >= ModuleKind.ES2015 && moduleKind <= ModuleKind.ESNext) || mode == ModuleKind.ESNext)
+            {
+                var preferTs = Parser.IsDeclarationFileName(moduleReference) && compilerOptions.GetAllowImportingTsExtensions();
+                var ext = tsExtension is Extension.Mts or Extension.Dmts ? preferTs ? ".mts" : ".mjs"
+                    : tsExtension is Extension.Cts or Extension.Dmts ? preferTs ? ".cts" : ".cjs"
+                    : preferTs ? ".ts" : ".js";
+                return importSourceWithoutExtension + ext;
+            }
+            return importSourceWithoutExtension;
+        }
+    }
+
+    // resolveExternalModule's contextSpecifier: the module specifier the location belongs to
+    private NodeRef GetContextSpecifier(NodeRef location)
+    {
+        var store = StoreOf(location);
+        var node = location.Node;
+        if (Utilities.IsStringLiteralLike(store, node))
+        {
+            return location;
+        }
+        var parent = store.Parent(node);
+        var moduleDeclaration = store.Kind(node) == SyntaxKind.ModuleDeclaration ? node
+            : !parent.IsNone && store.Kind(parent) == SyntaxKind.ModuleDeclaration && store.Name(parent) == node ? parent
+            : Node.None;
+        if (!moduleDeclaration.IsNone && store.Name(moduleDeclaration) is var name && !name.IsNone)
+        {
+            return At(location, name);
+        }
+        if (store.Kind(node) == SyntaxKind.ImportType && store.Argument(node) is var argument && !argument.IsNone
+            && store.Kind(argument) == SyntaxKind.LiteralType && store.Kind(store.Literal(argument)) == SyntaxKind.StringLiteral)
+        {
+            return At(location, store.Literal(argument));
+        }
+        // isVariableDeclarationInitializedToBareOrAccessedRequire(location) && getModuleSpecifierOfBareOrAccessedRequire(location)
+        if (store.Kind(node) == SyntaxKind.VariableDeclaration && store.Initializer(node) is var initializer && !initializer.IsNone)
+        {
+            var leftmost = GetLeftmostAccessExpression(store, initializer);
+            if (IsRequireCall(At(location, leftmost), requireStringLiteralLikeArgument: true))
+            {
+                return At(location, store.Nodes(store.Arguments(leftmost))[0]);
+            }
+        }
+        var importCall = FindAncestorRef(location, SyntaxKind.CallExpression, Utilities.IsImportCall);
+        if (!importCall.IsNone)
+        {
+            var arguments = store.Nodes(store.Arguments(importCall.Node));
+            if (arguments.Length > 0)
+            {
+                return At(location, arguments[0]);
+            }
+        }
+        var declaration = UtilitiesPublic.FindAncestor(store, node, n => store.Kind(n) is SyntaxKind.ImportDeclaration or SyntaxKind.JSDocImportTag or SyntaxKind.ExportDeclaration);
+        if (!declaration.IsNone && store.ModuleSpecifier(declaration) is var moduleSpecifier && !moduleSpecifier.IsNone)
+        {
+            return At(location, moduleSpecifier);
+        }
+        var importEquals = UtilitiesPublic.FindAncestor(store, node, n => Utilities.IsExternalModuleImportEqualsDeclaration(store, n));
+        if (!importEquals.IsNone)
+        {
+            return At(location, store.Expression(store.ModuleReference(importEquals)));
+        }
+        return NodeRef.None;
+    }
+
+    // findAncestor(location, isImportDeclaration)?.importClause || findAncestor(location, or(isImportEqualsDeclaration, isExportDeclaration))
+    private NodeRef ImportOrExportOf(NodeRef location)
+    {
+        var store = StoreOf(location);
+        var importDeclaration = UtilitiesPublic.FindAncestor(store, location.Node, n => store.Kind(n) == SyntaxKind.ImportDeclaration);
+        if (!importDeclaration.IsNone && store.ImportClause(importDeclaration) is var importClause && !importClause.IsNone)
+        {
+            return At(location, importClause);
+        }
+        var other = UtilitiesPublic.FindAncestor(store, location.Node, n => store.Kind(n) is SyntaxKind.ImportEqualsDeclaration or SyntaxKind.ExportDeclaration);
+        return other.IsNone ? NodeRef.None : At(location, other);
+    }
+
+    // findAncestor(location, test) for a test of one kind (and an extra predicate)
+    private NodeRef FindAncestorRef(NodeRef location, SyntaxKind kind, Func<NodeStore, Node, bool>? predicate)
+    {
+        var store = StoreOf(location);
+        var found = UtilitiesPublic.FindAncestor(store, location.Node, n => store.Kind(n) == kind && (predicate is null || predicate(store, n)));
+        return found.IsNone ? NodeRef.None : At(location, found);
+    }
+
+    // utilities.ts shouldAllowImportingTsExtension(compilerOptions, fromFileName)
+    private bool ShouldAllowImportingTsExtension(string fromFileName) =>
+        compilerOptions.GetAllowImportingTsExtensions() || Parser.IsDeclarationFileName(fromFileName);
+
+    // utilities.ts hasJsonModuleEmitEnabled
+    private bool HasJsonModuleEmitEnabled()
+    {
+        switch (compilerOptions.GetEmitModuleKind())
+        {
+            case ModuleKind.None:
+            case ModuleKind.System:
+            case ModuleKind.UMD:
+                return false;
+            default:
+                return true;
+        }
+    }
+
+    // utilities.ts isSideEffectImport
+    private bool IsSideEffectImport(NodeRef node)
+    {
+        var store = StoreOf(node);
+        var ancestor = UtilitiesPublic.FindAncestor(store, node.Node, n => store.Kind(n) == SyntaxKind.ImportDeclaration);
+        return !ancestor.IsNone && store.ImportClause(ancestor).IsNone;
+    }
+
+    /// <summary>checker.ts errorOnImplicitAnyModule.</summary>
+    private void ErrorOnImplicitAnyModule(bool isError, NodeRef errorNode, ModuleKind? mode, ResolvedModuleFull resolvedModule, string moduleReference)
+    {
+        if (IsSideEffectImport(errorNode))
+        {
+            return;
+        }
+        if (!Utilities.IsExternalModuleNameRelative(moduleReference) && resolvedModule.PackageId is not null)
+        {
+            // createModuleNotFoundChain: looks for @types packages in node_modules (not ported).
+            throw new NotSupportedException($"Checker (module C10): the untyped package chain of '{moduleReference}' is not ported");
+        }
+        _ = mode;
+        ErrorOrSuggestion(isError, errorNode, Diagnostics.Could_not_find_a_declaration_file_for_module_0_1_implicitly_has_an_any_type, moduleReference, resolvedModule.ResolvedFileName);
+    }
+
+    // ---- pattern ambient modules (checker.ts patternAmbientModules, binder.ts file.patternAmbientModules) ----
+
+    private List<(string Prefix, string Suffix, SymbolRef Symbol)>? patternAmbientModules;
+    private Dictionary<string, SymbolRef>? patternAmbientModuleAugmentations;
+
+    /// <summary>
+    /// binder.ts bindModuleDeclaration's file.patternAmbientModules, collected by initializeTypeChecker: the ambient
+    /// module declarations that are not augmentations and whose name is a pattern with one `*`, in document order. (The
+    /// binder records them as it visits every module declaration; Track O's binder does not keep them, so the checker
+    /// finds them among the statements of the file and of module blocks, where module declarations can be written.)
+    /// </summary>
+    private void CollectPatternAmbientModules(int file)
+    {
+        var sourceFile = FileAt(file);
+        var store = sourceFile.Store;
+        foreach (var statement in store.Nodes(store.Statements(sourceFile.Root)))
+        {
+            Visit(statement);
+        }
+
+        void Visit(Node node)
+        {
+            if (store.Kind(node) != SyntaxKind.ModuleDeclaration)
+            {
+                return;
+            }
+            if (Utilities.IsAmbientModule(store, node) && !Utilities.IsModuleAugmentationExternal(store, node))
+            {
+                var name = store.Name(node);
+                if (store.Kind(name) == SyntaxKind.StringLiteral)
+                {
+                    // tryParsePattern: a pattern when the text has exactly one '*'
+                    var text = store.Texts.GetString(store.Text(name))!;
+                    var star = text.IndexOf('*', StringComparison.Ordinal);
+                    if (star != -1 && text.IndexOf('*', star + 1) == -1)
+                    {
+                        (patternAmbientModules ??= []).Add((text[..star], text[(star + 1)..], NodeSymbol(new NodeRef(file, node))));
+                    }
+                }
+            }
+            var body = store.Body(node);
+            if (body.IsNone)
+            {
+                return;
+            }
+            if (store.Kind(body) == SyntaxKind.ModuleBlock)
+            {
+                foreach (var statement in store.Nodes(store.Statements(body)))
+                {
+                    Visit(statement);
+                }
+            }
+            else
+            {
+                Visit(body);
+            }
+        }
+    }
+
+    // core.ts findBestPatternMatch: the longest prefix wins (the first of equal ones)
+    private static (string Prefix, string Suffix, SymbolRef Symbol)? FindBestPatternMatch(List<(string Prefix, string Suffix, SymbolRef Symbol)> values, string candidate)
+    {
+        (string Prefix, string Suffix, SymbolRef Symbol)? matchedValue = null;
+        var longestMatchPrefixLength = -1;
+        foreach (var v in values)
+        {
+            if (v.Prefix.Length > longestMatchPrefixLength
+                && candidate.Length >= v.Prefix.Length + v.Suffix.Length
+                && candidate.StartsWith(v.Prefix, StringComparison.Ordinal)
+                && candidate.EndsWith(v.Suffix, StringComparison.Ordinal))
+            {
+                longestMatchPrefixLength = v.Prefix.Length;
+                matchedValue = v;
+            }
+        }
+        return matchedValue;
     }
 }

@@ -53,7 +53,7 @@ push("", "Configurations:", "");
 for (const c of configs) push(`- \`${c.id}\`: ${c.label}`);
 push("");
 
-push(`## Table 1. Wall-clock, throughput, peak memory (parse-only${configs.some(c => /-bind(-single)?$/.test(c.id)) ? "; `*-bind` rows: parse+bind" : ""})`, "",
+push(`## Table 1. Wall-clock, throughput, peak memory (parse-only${configs.some(c => /-bind(-single)?$/.test(c.id)) ? "; `*-bind` rows: parse+bind" : ""}${configs.some(c => /-check(-single)?$/.test(c.id)) ? "; `*-check` rows: the file list as one program, parse+bind+check" : ""})`, "",
     row(["Repository", "Configuration", "Median (s)", "MAD (s)", "MAD/median", "Files/s", "MB/s", "Peak working set (MiB)", "Peak commit (MiB)"]),
     row(["---", "---", "---:", "---:", "---:", "---:", "---:", "---:", "---:"]));
 for (const r of repos) for (const c of configs) {
@@ -67,6 +67,17 @@ push("");
 // binder created, and are compared with the parse+bind reference (Tables 2c, 2d), never with a parse-only one.
 const isBind = id => /-bind(-single)?$/.test(id);
 const bindConfigs = configs.filter(c => isBind(c.id));
+// Phase 3 (draft pre-registration §17): check configurations (`*-check`, `*-check-single`) report the diagnostics of
+// the checked program, and are compared with typescript-go's program check (Table 2e), never with parse-only or bind rows.
+const isCheck = id => /-check(-single)?$/.test(id);
+const checkConfigs = configs.filter(c => isCheck(c.id));
+if (checkConfigs.length > 0) {
+    push("## Table 1c. Program check: diagnostics reported (driver report of the validation run)", "",
+        "Semantic diagnostics of every program file plus the global diagnostics. The C# configurations check with TypeScript 6.0.3's checker (Track O, Gate C), typescript-go with TypeScript 7's, which differs in places: the counts show that checking happened; the C# diagnostics were compared once with tsc 6.0.3's (harness/bench/check-equivalence.mjs).", "",
+        row(["Configuration", ...repos]), row(["---", ...repos.map(() => "---:")]));
+    for (const c of checkConfigs) push(row([c.id, ...repos.map(r => result(r, c.id) ? String(result(r, c.id).output.diagnostics) : "n/a")]));
+    push("");
+}
 if (bindConfigs.length > 0) {
     push("## Table 1b. Parse+bind: symbols created (driver report of the validation run)", "",
         "Sum of the files' symbol counts. The C# configurations bind with TypeScript 6.0.3's binder (Track O, Gate B), typescript-go and tsrs with TypeScript 7's, which differs in places: the counts show that binding happened, they are not compared.", "",
@@ -79,7 +90,7 @@ const ci = x => `${x.estimate.toFixed(2)} [${x.low.toFixed(2)}, ${x.high.toFixed
 push(`## Table 2. Median wall-clock relative to \`${BASELINE}\`, with 95 % confidence interval`, "",
     "Ratio of medians; ratio > 1 means slower than typescript-go's default (parallel) configuration. Interval: percentile bootstrap, 10,000 resamples of both samples, fixed seed. The geometric mean resamples every repository jointly.", "",
     row(["Configuration", ...repos, "Geometric mean"]), row(["---", ...repos.map(() => "---:"), "---:"]));
-for (const c of configs.filter(c => !isBind(c.id))) {
+for (const c of configs.filter(c => !isBind(c.id) && !isCheck(c.id))) {
     const pairs = repos.map(r => result(r, c.id) && result(r, BASELINE) ? [result(r, c.id).timing.times, result(r, BASELINE).timing.times] : undefined);
     const cells = pairs.map(p => p === undefined ? "n/a" : c.id === BASELINE ? "1.00" : ci(bootstrapMedianRatio(p[0], p[1])));
     const valid = pairs.filter(p => p !== undefined);
@@ -94,7 +105,7 @@ if (configs.some(c => c.id === RUST)) {
     push(`## Table 2b. Median wall-clock relative to \`${RUST}\` (secondary reference), with 95 % confidence interval`, "",
         "Same method as Table 2, against tsrs (Rust port of TypeScript 7 / typescript-go), parallel. Secondary: never replaces the primary endpoint against typescript-go. tsrs parses JSDoc in .ts files lazily (TypeScript 7.1), typescript-go 7.0.2 eagerly, the C# tracks as tsc's host does (ParseForTypeErrors); see docs/references.md.", "",
         row(["Configuration", ...repos, "Geometric mean"]), row(["---", ...repos.map(() => "---:"), "---:"]));
-    for (const c of configs.filter(c => !isBind(c.id))) {
+    for (const c of configs.filter(c => !isBind(c.id) && !isCheck(c.id))) {
         const pairs = repos.map(r => result(r, c.id) && result(r, RUST) ? [result(r, c.id).timing.times, result(r, RUST).timing.times] : undefined);
         const cells = pairs.map(p => p === undefined ? "n/a" : c.id === RUST ? "1.00" : ci(bootstrapMedianRatio(p[0], p[1])));
         const valid = pairs.filter(p => p !== undefined);
@@ -109,11 +120,13 @@ if (configs.some(c => c.id === RUST)) {
 for (const [table, reference, note] of [
     ["2c", "tsgo7-bind", "Endpoint of pre-registration §15: parse+bind per file, against typescript-go 7.0.2 (parser.ParseSourceFile and binder.BindSourceFile per file, parallel). Same method as Table 2. typescript-go's binder ports TypeScript 7 and differs from 6.0.3's in places."],
     ["2d", "tsrs-bind", "Secondary reference: parse+bind against tsrs 0.18.0 (tsrs_parser::parse_source_file_owned and tsrs_binder::bind_source_file per file, parallel). Same method as Table 2."],
+    ["2e", "tsgo7-check", "Endpoint of draft pre-registration §17: each repository's file list as one program, parse+bind+check, against typescript-go 7.0.2 (compiler.NewProgram, GetSemanticDiagnostics and GetGlobalDiagnostics on its default checker pool of 4 checkers). Same method as Table 2. typescript-go's checker ports TypeScript 7 and differs from 6.0.3's in places."],
 ]) {
     if (!configs.some(c => c.id === reference)) continue;
-    push(`## Table ${table}. Parse+bind: median wall-clock relative to \`${reference}\`, with 95 % confidence interval`, "", note, "",
+    const rows = reference === "tsgo7-check" ? checkConfigs : bindConfigs;
+    push(`## Table ${table}. ${reference === "tsgo7-check" ? "Program check" : "Parse+bind"}: median wall-clock relative to \`${reference}\`, with 95 % confidence interval`, "", note, "",
         row(["Configuration", ...repos, "Geometric mean"]), row(["---", ...repos.map(() => "---:"), "---:"]));
-    for (const c of bindConfigs) {
+    for (const c of rows) {
         const pairs = repos.map(r => result(r, c.id) && result(r, reference) ? [result(r, c.id).timing.times, result(r, reference).timing.times] : undefined);
         const cells = pairs.map(p => p === undefined ? "n/a" : c.id === reference ? "1.00" : ci(bootstrapMedianRatio(p[0], p[1])));
         const valid = pairs.filter(p => p !== undefined);
@@ -133,6 +146,7 @@ const PROFILE_RIG_CHECK = {
     full: ["tsc6-parse", "tsgo7-parse-single", "cs-aot-ws-single", "cs-o-aot-ws-single"],
     quick: ["tsgo7-parse-single", "cs-o-aot-ws-single"],
     binder: ["tsgo7-bind-single", "cs-o-aot-ws-bind-single"],
+    check: ["tsgo7-check-single", "cs-o-aot-ws-check-single"],
 };
 const runProfile = run.profile ?? "full";
 const RIG_CHECK = new Set(PROFILE_RIG_CHECK[runProfile] ?? PROFILE_RIG_CHECK.full);

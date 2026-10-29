@@ -593,9 +593,42 @@ internal sealed partial class Checker
             mainModule = ResolveExternalModuleSymbol(mainModule);
             if ((SymbolFlagsOf(mainModule) & SymbolFlags.Namespace) != 0)
             {
-                // TODO(C9e): pattern ambient module augmentations and `export *` targets of the augmented module (left in
-                // C9e: no Gate C unit depends on them).
-                mainModule = MergeSymbol(mainModule, augmentationSymbol);
+                // If we're merging an augmentation to a pattern ambient module, we want to
+                // perform the merge unidirectionally from the augmentation ('a.foo') to
+                // the pattern ('*.foo'), so that 'getMergedSymbol()' on a.foo gives you
+                // all the exports both from the pattern and from the augmentation, but
+                // 'getMergedSymbol()' on *.foo only gives you exports from *.foo. (module C10)
+                if (patternAmbientModules is not null && patternAmbientModules.Exists(module => module.Symbol == mainModule))
+                {
+                    var merged = MergeSymbol(augmentationSymbol, mainModule, unidirectional: true);
+                    patternAmbientModuleAugmentations ??= [];
+                    // moduleName will be a StringLiteral since this is not `declare global`.
+                    var nameStore = StoreOf(moduleName);
+                    patternAmbientModuleAugmentations[nameStore.Texts.GetString(nameStore.Text(moduleName.Node))!] = merged;
+                }
+                else
+                {
+                    var mainExports = ExportsOf(mainModule);
+                    var augmentationExports = ExportsOf(augmentationSymbol);
+                    if (mainExports is not null && !mainExports.Get(InternalSymbolName.ExportStar).IsNone && augmentationExports is { Count: > 0 })
+                    {
+                        // We may need to merge the module augmentation's exports into the target symbols of the resolved exports
+                        var resolvedExports = GetResolvedMembersOrExportsOfSymbol(mainModule, isStatic: true);
+                        var entries = new List<(string Key, SymbolRef Value)>();
+                        for (var i = 0; i < augmentationExports.Count; i++)
+                        {
+                            entries.Add((augmentationExports.NameAt(i), augmentationExports.ValueAt(i)));
+                        }
+                        foreach (var (key, value) in entries)
+                        {
+                            if (resolvedExports.Has(key) && !mainExports.Has(key))
+                            {
+                                MergeSymbol(resolvedExports.Get(key), value);
+                            }
+                        }
+                    }
+                    mainModule = MergeSymbol(mainModule, augmentationSymbol);
+                }
             }
             else
             {

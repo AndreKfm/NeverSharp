@@ -10,7 +10,7 @@
 // plus the raw hyperfine exports. A run whose rig checks fail is still written
 // but marked protocolCompliant=false; the report labels it as a probe.
 //
-// Usage: node bench.mjs [--repos a,b] [--profile full|quick|binder | --configs x,y] [--runs 20] [--warmup 3]
+// Usage: node bench.mjs [--repos a,b] [--profile full|quick|binder|check | --configs x,y] [--runs 20] [--warmup 3]
 //                       [--mem-runs 5] [--priority high|normal] [--corpus benchmark|tuning] [--label text]
 //        node bench.mjs --check [--repos a,b] [--configs x,y] [--corpus benchmark|tuning]
 //
@@ -18,7 +18,10 @@
 // plus the empty file list; prints the drivers' file, node and symbol counts and writes nothing.
 //
 // Parse+bind configurations (`*-bind`, `*-bind-single`; pre-registration §15) run the drivers with --bind and
-// additionally require a symbol count above zero.
+// additionally require a symbol count above zero. Check configurations (`*-check`, `*-check-single`; draft §17) run them
+// with --check (the file list as one program) and require a diagnostic count and more program files than listed files
+// (the default library). In the functional check (--check) the validation run goes through peakmem, which reports the
+// run's peak working set and wall time.
 //
 // Default: every configuration (C# drivers: build-cs.mjs). Before the C# parsers exist,
 // select the configurations with --configs.
@@ -63,6 +66,12 @@ const configurations = [
         expectDriver: "tsrs-0.18.0-bind-parallel", command: list => [parseRs, "--bind", list] },
     { id: "tsrs-bind-single", label: "tsrs 0.18.0 (Rust), parse+bind, single-threaded", threads: "single", bind: true,
         expectDriver: "tsrs-0.18.0-bind-single", command: list => [parseRs, "--bind", "--single", list] },
+    // Phase 3 (pre-registration §17): the file list as one program, parse+bind+check (--check); the driver reports the
+    // diagnostics its checker produced (semantic diagnostics of every file and the global diagnostics).
+    { id: "tsgo7-check", label: "typescript-go 7.0.2, program parse+bind+check, parallel (default checker pool)", threads: "parallel", check: true,
+        expectDriver: "tsgo-7.0.2-check-parallel", command: list => [parseGo, "--check", list] },
+    { id: "tsgo7-check-single", label: "typescript-go 7.0.2, program parse+bind+check, single-threaded", threads: "single", check: true,
+        expectDriver: "tsgo-7.0.2-check-single", command: list => [parseGo, "--check", "--single", list] },
 ];
 // C# configurations of pre-registration §6.4, built by build-cs.mjs. The driver reports the
 // runtime it actually runs with; the runner checks it against the configuration's name.
@@ -90,6 +99,15 @@ for (const [track, prefix] of [["faithful", "cs"], ["optimized", "cs-o"]]) {
                 { id: `${prefix}-${runtime}-bind-single`, label: `C# Track O, ${description}, parse+bind, single-threaded`, threads: "single", bind: true,
                     expectDriver: `cs-${track}-${runtime}-bind-single`, command: list => [driver, "--bind", "--single", list] });
         }
+        // Parse+bind+check of the program (pre-registration §17): Track O, NativeAOT runtimes only.
+        if (track === "optimized" && runtime.startsWith("aot-")) {
+            const endpoint = runtime === "aot-ws" ? " (checker endpoint)" : "";
+            configurations.push(
+                { id: `${prefix}-${runtime}-check`, label: `C# Track O, ${description}, program parse+bind+check, parallel (4 checkers)${endpoint}`, threads: "parallel", check: true,
+                    expectDriver: `cs-${track}-${runtime}-check-parallel`, command: list => [driver, "--check", list] },
+                { id: `${prefix}-${runtime}-check-single`, label: `C# Track O, ${description}, program parse+bind+check, single-threaded`, threads: "single", check: true,
+                    expectDriver: `cs-${track}-${runtime}-check-single`, command: list => [driver, "--check", "--single", list] });
+        }
     }
 }
 
@@ -115,6 +133,8 @@ const PROFILES = {
     quick: ["tsgo7-parse", "tsgo7-parse-single", "tsrs-parse", "tsrs-parse-single", "cs-o-aot-ws", "cs-o-aot-ws-single"],
     binder: ["tsgo7-bind", "tsgo7-bind-single", "tsrs-bind", "tsrs-bind-single",
         "cs-o-aot-ws-bind", "cs-o-aot-ws-bind-single", "cs-o-aot-srv-bind", "cs-o-aot-srv-bind-single"],
+    // Phase 3 checker endpoint (draft §17; tsrs has no checker that can be called on a program, docs/benchmark-harness.md)
+    check: ["tsgo7-check", "tsgo7-check-single", "cs-o-aot-ws-check", "cs-o-aot-ws-check-single", "cs-o-aot-srv-check", "cs-o-aot-srv-check-single"],
 };
 const profile = arg("--profile", configFilter ? undefined : "full");
 if (profile && configFilter) throw new Error("--profile and --configs exclude each other");
@@ -125,29 +145,42 @@ const configs = configurations.filter(c => !selected || selected.includes(c.id))
 
 // Step 1 of measure(): one run, checked against the expected file count, the priority class, the driver name and,
 // for parse+bind configurations, a symbol count above zero. Returns the driver's report.
-function validate(name, list, expectedFiles, config) {
+// withPeak (the functional check, --check): the run goes through peakmem, which adds the peak working set and the wall
+// time it measured to the returned report (peak, peakMs).
+function validate(name, list, expectedFiles, config, withPeak = false) {
     const command = config.command(list);
-    const check = spawnSync(command[0], command.slice(1), { encoding: "utf8", env: driverEnv });
-    if (check.status !== 0) throw new Error(`${config.id} on ${name} failed: ${check.stderr}`);
+    const check = withPeak
+        ? spawnSync(peakmem, command, { encoding: "utf8", env: driverEnv, maxBuffer: 1 << 26 })
+        : spawnSync(command[0], command.slice(1), { encoding: "utf8", env: driverEnv, maxBuffer: 1 << 26 });
+    if (check.status !== 0) throw new Error(`${config.id} on ${name} failed (${check.status}): ${check.stderr}`);
     const output = JSON.parse(check.stdout.trim().split("\n").pop());
+    if (withPeak) {
+        const peak = JSON.parse(check.stderr.trim().split("\n").pop());
+        output.peak = peak.peakWorkingSetBytes;
+        output.peakMs = peak.wallMs;
+    }
     if (output.files !== expectedFiles) throw new Error(`${config.id} on ${name}: parsed ${output.files} files, expected ${expectedFiles}`);
     if (output.priority !== priority) throw new Error(`${config.id} on ${name}: driver reports priority class ${output.priority}, expected ${priority}`);
     if (config.expectDriver && output.driver !== config.expectDriver) throw new Error(`${config.id} on ${name}: driver reports ${output.driver}, expected ${config.expectDriver}`);
     if (expectedFiles > 0 && !(output.nodes > 0)) throw new Error(`${config.id} on ${name}: driver reports ${output.nodes} nodes (no parser behind the driver?)`);
     if (config.bind && typeof output.symbols !== "number") throw new Error(`${config.id} on ${name}: driver reports no symbol count (no bind mode?)`);
     if (config.bind && expectedFiles > 0 && !(output.symbols > 0)) throw new Error(`${config.id} on ${name}: driver reports ${output.symbols} symbols (no binder behind the driver?)`);
+    if (config.check && typeof output.diagnostics !== "number") throw new Error(`${config.id} on ${name}: driver reports no diagnostic count (no check mode?)`);
+    if (config.check && expectedFiles > 0 && !(output.programFiles > expectedFiles)) throw new Error(`${config.id} on ${name}: driver reports ${output.programFiles} program files (no default library?)`);
     return output;
 }
 
 // --check: functional check only (no rig checks, no timing, no memory runs, nothing written): validate every selected
 // configuration once per repository and print the drivers' counts.
 if (process.argv.includes("--check")) {
-    console.log("| Repository | Configuration | Driver | Files | Nodes | Symbols |");
-    console.log("|---|---|---|---:|---:|---:|");
+    console.log("| Repository | Configuration | Driver | Files | Nodes | Symbols | Diagnostics | Peak working set (MiB) | Wall (s) |");
+    console.log("|---|---|---|---:|---:|---:|---:|---:|---:|");
     for (const repo of repos) {
         for (const config of configs) {
-            const output = validate(repo, join(benchDir, "filelists", `${repo}.txt`), fileManifest.repos[repo].files, config);
-            console.log(`| ${repo} | ${config.id} | ${output.driver} | ${output.files} | ${output.nodes} | ${output.symbols ?? "-"} |`);
+            const output = validate(repo, join(benchDir, "filelists", `${repo}.txt`), fileManifest.repos[repo].files, config, existsSync(peakmem));
+            const peak = output.peak === undefined ? "-" : (output.peak / 1048576).toFixed(0);
+            const seconds = output.peakMs === undefined ? "-" : (output.peakMs / 1000).toFixed(1);
+            console.log(`| ${repo} | ${config.id} | ${output.driver} | ${output.files} | ${output.nodes} | ${output.symbols ?? "-"} | ${output.diagnostics ?? "-"} | ${peak} | ${seconds} |`);
         }
     }
     for (const config of configs) validate("fixed-cost", join(benchDir, "filelists", "empty.txt"), 0, config);

@@ -10,9 +10,10 @@
 // Port structure follows internal/compiler/program.go and internal/compiler/fileloader.go
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
 // Modified: translated from TypeScript to C#; module C0 implements the program of Gate C and the checker endpoint:
-// root files, the default library and lib reference directives with `noResolve: true` (no referenced files, type
-// reference directives or module resolution: imports stay unresolved, as tsc's with noResolve; other options throw
-// NotSupportedException), no project references, no old program.
+// root files, the default library and lib reference directives with `noResolve: true` (no referenced files or type
+// reference directives; other options throw NotSupportedException), no project references, no old program. Module C10
+// adds processImportedModules (Program.Resolution.cs): every module name of every file is resolved and recorded, as
+// tsc does with noResolve; resolved files are not added to the program.
 
 using NeverSharp.Generated;
 
@@ -24,7 +25,7 @@ namespace NeverSharp.Optimized;
 /// (created on first use; it binds the files that are not bound yet, as checker.ts initializeTypeChecker does).
 /// One thread uses a program at a time; library files are shared read-only (<see cref="DefaultLibrary"/>).
 /// </summary>
-internal sealed class Program
+internal sealed partial class Program
 {
     // program.ts FileIncludeKind (the kinds this program creates).
     private enum FileIncludeKind
@@ -57,6 +58,8 @@ internal sealed class Program
         currentDirectory = host.GetCurrentDirectory();
         defaultLibraryPath = host.GetDefaultLibLocation();
         RootNames = rootNames;
+        // (no host.resolveModuleNames: createModuleResolutionCache)
+        moduleResolutionCache = new ModuleResolutionCache(currentDirectory, host.GetCanonicalFileName);
 
         for (var i = 0; i < rootNames.Count; i++)
         {
@@ -222,6 +225,32 @@ internal sealed class Program
     internal Checker GetTypeChecker() => checker ??= new Checker(this);
 
     /// <summary>
+    /// typescript-go program.go BindSourceFiles: binds every file that is not bound yet, one work item per file on the
+    /// thread pool (typescript-go's core.WorkGroup), or sequentially when <paramref name="singleThreaded"/>. Checkers
+    /// created afterwards find every file bound (module C10: the check driver's checker pool).
+    /// </summary>
+    internal void BindSourceFiles(bool singleThreaded)
+    {
+        if (singleThreaded)
+        {
+            foreach (var file in files)
+            {
+                Binder.BindSourceFile(file, options);
+            }
+            return;
+        }
+        var tasks = new List<Task>(files.Count);
+        foreach (var file in files)
+        {
+            if (file.Binding is null)
+            {
+                tasks.Add(Task.Run(() => Binder.BindSourceFile(file, options)));
+            }
+        }
+        Task.WaitAll(tasks);
+    }
+
+    /// <summary>
     /// program.getOptionsDiagnostics(): the diagnostics of file processing without a file (e.g. TS6504 for a JavaScript
     /// root file without allowJs) and the emit-path check of verifyCompilerOptions (TS5055 for a JavaScript root file
     /// whose output would overwrite it; the rest of option validation finds nothing for the options C0 supports).
@@ -283,9 +312,14 @@ internal sealed class Program
     /// also the JSDoc parse diagnostics), filtered by the comment directives (not in plain JavaScript files). No program
     /// diagnostics of the file (e.g. unknown lib references); C8 completes.
     /// </summary>
-    internal List<ProgramDiagnostic> GetSemanticDiagnostics(SourceFile file)
+    internal List<ProgramDiagnostic> GetSemanticDiagnostics(SourceFile file) => GetSemanticDiagnostics(file, GetTypeChecker());
+
+    /// <summary>
+    /// The semantic diagnostics of <paramref name="file"/> from the given checker (typescript-go's
+    /// getSemanticDiagnosticsWithChecker; the check driver's checker pool, module C10).
+    /// </summary>
+    internal List<ProgramDiagnostic> GetSemanticDiagnostics(SourceFile file, Checker checker)
     {
-        var checker = GetTypeChecker();
         var result = new List<ProgramDiagnostic>();
         if (!CanIncludeBindAndCheckDiagnostics(file, options))
         {
@@ -517,8 +551,8 @@ internal sealed class Program
         {
             ProcessLibReferenceDirectives(file);
         }
-        // (processImportedModules: with noResolve no imported file is added; module resolution is the checker's
-        // concern for diagnostics, imports stay unresolved.)
+        // always process imported modules to record module name resolutions
+        ProcessImportedModules(file);
         if (isDefaultLib)
         {
             processingDefaultLibFiles!.Add(file);

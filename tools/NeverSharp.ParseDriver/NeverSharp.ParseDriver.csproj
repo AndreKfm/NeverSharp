@@ -16,4 +16,9 @@
   <ItemGroup>
     <ProjectReference Include="$(RepoRoot)src/NeverSharp.$(NeverSharpTrack)/NeverSharp.$(NeverSharpTrack).csproj" />
   </ItemGroup>
+  <!-- check mode (Track O): TypeScript 6.0.3's default library next to the executable, in lib/ (the pinned package the
+       Gate C oracle reads). -->
+  <ItemGroup Condition="'$(NeverSharpTrack)' == 'Optimized'">
+    <None Include="$(RepoRoot)harness/astdump/node_modules/typescript/lib/lib.*.d.ts" Link="lib/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

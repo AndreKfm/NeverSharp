@@ -7,10 +7,14 @@
 // The checkout is not modified. Prints `go version -m` of the result so the
 // build settings can be compared with the release binary.
 //
+// The check mode (--check, module C10) reads the default library where tsgo's
+// release does, next to the executable (bundled.LibPath() of a noembed build):
+// typescript-go's own lib files (internal/bundled/libs) are copied there.
+//
 // Usage: node build-go.mjs
 
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { artifactsDir, exe, pins, repoRoot } from "./common.mjs";
 
@@ -34,5 +38,7 @@ writeFileSync(overlay, JSON.stringify({
 const output = join(binDir, "parse-go" + exe);
 const env = { ...process.env, GOROOT: "", GOTOOLCHAIN: "local", GOFLAGS: "-mod=mod", CGO_ENABLED: "0", GOAMD64: "v1" };
 execFileSync(goBin, ["build", "-overlay", overlay, "-trimpath", "-ldflags=-s -w", "-tags=noembed", "-o", output, "./cmd/neversharp-parse"], { cwd: module, stdio: "inherit", env });
+const libs = join(module, "internal", "bundled", "libs");
+for (const f of readdirSync(libs).filter(f => f.endsWith(".d.ts"))) copyFileSync(join(libs, f), join(binDir, f));
 const info = execFileSync(goBin, ["version", "-m", output], { encoding: "utf8", env });
 console.log(info.split("\n").filter(l => !/^\s+dep\s/.test(l)).join("\n"));
