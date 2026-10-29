@@ -20,13 +20,30 @@
 // file regions off, the default outside the CLI's --noEmit check, is this plain call). The driver name carries
 // "-bind" and the JSON line adds "symbols" (sum of the files' symbol_count).
 //
-// Usage: parse-rs [--bind] [--single] <file list>
+// --check (Phase 3, pre-registration §17, module C11): parse+bind+check of the file list as one program, as tsrs's
+// command line builds and checks one (tsrs_execute/src/execute.rs): tsrs_compiler::new_program with
+// ProgramOptions::new(config, host) — the cached compiler host on the OS file system wrapped with the embedded default
+// library (tsrs_vfs::bundled::wrap_fs, bundled::default_lib_path(), as tsrs_execute/src/sys.rs), the root files of the
+// list and TypeScript 6.0.3's default options given explicitly (check_options below, the Go driver's checkOptions;
+// table in docs/benchmark-harness.md §4.1) —, then program.get_semantic_diagnostics(ctx, None) (every file, on the
+// program's built-in checker pool) and program.get_global_diagnostics(ctx). The program API's defaults stay: no
+// leaf-file freeing, no checker recycling (the CLI turns both on only for its own --noEmit check). Parallelism (tsrs's
+// default, tsrs_compiler/src/checkerpool.rs): the checker count is half the available parallelism but every core up
+// to 16, at least 4 and at most 32, and at most one checker per 32 type-checked files (default_checker_count;
+// capped by the program's file count); files are assigned to checkers by directory locality (locality_associations)
+// and a checker that runs out of files takes not-yet-started files from the queue with the most work left (work
+// stealing, stealing_enabled); parsing runs on rayon. --single: ProgramOptions.single_threaded (one checker,
+// everything sequential). The driver name carries "-check" and the JSON line adds the diagnostic counts.
+//
+// Usage: parse-rs [--bind | --check] [--single] <file list>
 
 use rayon::prelude::*;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicI64, Ordering};
 use tsrs_ast::SourceFileParseOptions;
-use tsrs_core::tspath::{normalize_slashes, to_path};
-use tsrs_vfs::osvfs;
+use tsrs_core::tspath::{normalize_path, normalize_slashes, to_path};
+use tsrs_core::{CompilerOptions, ModuleDetectionKind, ModuleKind, ModuleResolutionKind, P, ScriptTarget, Tristate};
+use tsrs_vfs::{bundled, osvfs};
 
 #[global_allocator]
 static GLOBAL: mimalloc_safe::MiMalloc = mimalloc_safe::MiMalloc;
@@ -70,13 +87,83 @@ fn main() {
     std::process::exit(if status.is_ok() { 0 } else { 1 });
 }
 
+// check_options: the computed values of TypeScript 6.0.3's default options with noResolve (the C# side's program
+// options, { noResolve: true }), each given explicitly, as the Go driver's checkOptions. (esModuleInterop,
+// allowSyntheticDefaultImports and alwaysStrict are always on in tsrs, as in TypeScript 7; 6.0.3's defaults are on too.)
+fn check_options() -> CompilerOptions {
+    CompilerOptions {
+        no_resolve: Tristate::True,
+        target: ScriptTarget::ES2025,
+        module: ModuleKind::ES2022,
+        module_resolution: ModuleResolutionKind::Bundler,
+        module_detection: ModuleDetectionKind::Auto,
+        strict: Tristate::True,
+        allow_js: Tristate::False,
+        resolve_json_module: Tristate::True,
+        resolve_package_json_exports: Tristate::True,
+        resolve_package_json_imports: Tristate::True,
+        use_define_for_class_fields: Tristate::True,
+        no_unchecked_side_effect_imports: Tristate::True,
+        ..Default::default()
+    }
+}
+
+fn run_check(files: Vec<String>, single: bool, priority: &str) {
+    let (mut nodes, mut chars, mut total, mut errors, mut warnings, mut suggestions, mut messages) = (0i64, 0i64, 0i64, 0i64, 0i64, 0i64, 0i64);
+    let mut program_files = 0;
+    let file_count = files.len();
+    if !files.is_empty() {
+        let os = osvfs::fs();
+        let use_case_sensitive = os.use_case_sensitive_file_names();
+        let fs: Arc<dyn tsrs_vfs::FS> = Arc::new(bundled::wrap_fs(os));
+        let cwd = normalize_path(&normalize_slashes(&std::env::current_dir().unwrap().to_string_lossy()));
+        let root_paths: std::collections::HashSet<_> = files.iter().map(|f| to_path(f, &cwd, use_case_sensitive)).collect();
+        let host = tsrs_compiler::new_cached_fs_compiler_host(&cwd, fs, &bundled::default_lib_path(), None, None, None);
+        let config = tsrs_tsoptions::new_parsed_command_line(
+            P::new(check_options()),
+            files,
+            Vec::new(),
+            tsrs_core::tspath::ComparePathsOptions { use_case_sensitive_file_names: use_case_sensitive, current_directory: cwd.clone() },
+        );
+        let mut options = tsrs_compiler::ProgramOptions::new(P::new(config), host);
+        if single {
+            options.single_threaded = Tristate::True;
+        }
+        let program = tsrs_compiler::new_program(options);
+        let ctx = tsrs_compiler::Context::default();
+        let semantic = program.get_semantic_diagnostics(&ctx, None);
+        let global = program.get_global_diagnostics(&ctx);
+        for d in semantic.iter().chain(global.iter()) {
+            total += 1;
+            match d.category() {
+                tsrs_diagnostics::Category::Error => errors += 1,
+                tsrs_diagnostics::Category::Warning => warnings += 1,
+                tsrs_diagnostics::Category::Suggestion => suggestions += 1,
+                tsrs_diagnostics::Category::Message => messages += 1,
+            }
+        }
+        for f in program.get_source_files() {
+            if root_paths.contains(f.path()) {
+                nodes += f.node_count.get() as i64;
+                chars += f.text().len() as i64;
+            }
+        }
+        program_files = program.get_source_files().len();
+    }
+    let mode = if single { "single" } else { "parallel" };
+    println!(
+        "{{\"driver\":\"tsrs-0.18.0-check-{mode}\",\"files\":{file_count},\"bytes\":{chars},\"nodes\":{nodes},\"programFiles\":{program_files},\"diagnostics\":{total},\"errors\":{errors},\"warnings\":{warnings},\"suggestions\":{suggestions},\"messages\":{messages},\"priority\":\"{priority}\"}}"
+    );
+}
+
 fn run() {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
-    let (mut single, mut bind) = (false, false);
+    let (mut single, mut bind, mut check) = (false, false, false);
     while args.first().is_some_and(|a| a.starts_with("--")) {
         match args.remove(0).as_str() {
             "--single" => single = true,
             "--bind" => bind = true,
+            "--check" => check = true,
             other => {
                 eprintln!("unknown option {other}");
                 std::process::exit(2);
@@ -90,6 +177,14 @@ fn run() {
 
     let list = std::fs::read_to_string(&args[0]).expect("cannot read the file list");
     let files: Vec<String> = list.lines().map(str::trim).filter(|l| !l.is_empty()).map(normalize_slashes).collect();
+    if check {
+        if bind {
+            eprintln!("--bind and --check exclude each other");
+            std::process::exit(2);
+        }
+        run_check(files, single, priority);
+        return;
+    }
     let fs = osvfs::fs();
     let use_case_sensitive = fs.use_case_sensitive_file_names();
     let nodes = AtomicI64::new(0);

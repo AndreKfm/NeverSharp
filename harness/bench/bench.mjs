@@ -72,6 +72,12 @@ const configurations = [
         expectDriver: "tsgo-7.0.2-check-parallel", command: list => [parseGo, "--check", list] },
     { id: "tsgo7-check-single", label: "typescript-go 7.0.2, program parse+bind+check, single-threaded", threads: "single", check: true,
         expectDriver: "tsgo-7.0.2-check-single", command: list => [parseGo, "--check", "--single", list] },
+    // tsrs's program check (module C11, decided by the author on 2026-10-29): tsrs_compiler::new_program and its
+    // built-in checker pool with tsrs's default parallelism (parse-rs --check; docs/benchmark-harness.md §4.1).
+    { id: "tsrs-check", label: "tsrs 0.18.0 (Rust), program parse+bind+check, parallel (tsrs's default checker pool)", threads: "parallel", check: true,
+        expectDriver: "tsrs-0.18.0-check-parallel", command: list => [parseRs, "--check", list] },
+    { id: "tsrs-check-single", label: "tsrs 0.18.0 (Rust), program parse+bind+check, single-threaded", threads: "single", check: true,
+        expectDriver: "tsrs-0.18.0-check-single", command: list => [parseRs, "--check", "--single", list] },
 ];
 // C# configurations of pre-registration §6.4, built by build-cs.mjs. The driver reports the
 // runtime it actually runs with; the runner checks it against the configuration's name.
@@ -133,8 +139,8 @@ const PROFILES = {
     quick: ["tsgo7-parse", "tsgo7-parse-single", "tsrs-parse", "tsrs-parse-single", "cs-o-aot-ws", "cs-o-aot-ws-single"],
     binder: ["tsgo7-bind", "tsgo7-bind-single", "tsrs-bind", "tsrs-bind-single",
         "cs-o-aot-ws-bind", "cs-o-aot-ws-bind-single", "cs-o-aot-srv-bind", "cs-o-aot-srv-bind-single"],
-    // Phase 3 checker endpoint (draft §17; tsrs has no checker that can be called on a program, docs/benchmark-harness.md)
-    check: ["tsgo7-check", "tsgo7-check-single", "cs-o-aot-ws-check", "cs-o-aot-ws-check-single", "cs-o-aot-srv-check", "cs-o-aot-srv-check-single"],
+    // Phase 3 checker endpoint (draft §17); tsrs's program check reported next to it (module C11)
+    check: ["tsgo7-check", "tsgo7-check-single", "tsrs-check", "tsrs-check-single", "cs-o-aot-ws-check", "cs-o-aot-ws-check-single", "cs-o-aot-srv-check", "cs-o-aot-srv-check-single"],
 };
 const profile = arg("--profile", configFilter ? undefined : "full");
 if (profile && configFilter) throw new Error("--profile and --configs exclude each other");

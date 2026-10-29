@@ -73,7 +73,7 @@ const isCheck = id => /-check(-single)?$/.test(id);
 const checkConfigs = configs.filter(c => isCheck(c.id));
 if (checkConfigs.length > 0) {
     push("## Table 1c. Program check: diagnostics reported (driver report of the validation run)", "",
-        "Semantic diagnostics of every program file plus the global diagnostics. The C# configurations check with TypeScript 6.0.3's checker (Track O, Gate C), typescript-go with TypeScript 7's, which differs in places: the counts show that checking happened; the C# diagnostics were compared once with tsc 6.0.3's (harness/bench/check-equivalence.mjs).", "",
+        "Semantic diagnostics of every program file plus the global diagnostics. The C# configurations check with TypeScript 6.0.3's checker (Track O, Gate C), typescript-go and tsrs with TypeScript 7's, which differs in places: the counts show that checking happened; the C# diagnostics were compared once with tsc 6.0.3's (harness/bench/check-equivalence.mjs).", "",
         row(["Configuration", ...repos]), row(["---", ...repos.map(() => "---:")]));
     for (const c of checkConfigs) push(row([c.id, ...repos.map(r => result(r, c.id) ? String(result(r, c.id).output.diagnostics) : "n/a")]));
     push("");

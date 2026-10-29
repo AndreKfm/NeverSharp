@@ -5,7 +5,7 @@
 // against the pinned tsrs checkout (external/tsrs, pins.json references.tsrs) with the pinned Rust
 // toolchain (.tools/rust, pins.json tools.rust), tsrs's Cargo.lock (Cargo keeps its versions and adds only
 // this crate) and release profile.
-// Copies the driver to artifacts/bin/parse-rs(.exe) and checks it on an empty file list.
+// Copies the driver to artifacts/bin/parse-rs(.exe) and checks it (parse mode and check mode) on an empty file list.
 //
 // NativeAOT-style linking on Windows needs the MSVC linker found through vswhere, as for the C# builds.
 //
@@ -40,3 +40,7 @@ copyFileSync(join(target, "release", "parse-rs" + exe), driver);
 const r = spawnSync(driver, [join(benchDir, "filelists", "empty.txt")], { encoding: "utf8" });
 if (r.status !== 0) throw new Error(`parse-rs failed: ${r.stderr}`);
 console.log(`ok   parse-rs (${rustc}): ${r.stdout.trim()}`);
+// the check mode (module C11) on the empty file list
+const c = spawnSync(driver, ["--check", join(benchDir, "filelists", "empty.txt")], { encoding: "utf8" });
+if (c.status !== 0 || JSON.parse(c.stdout.trim().split("\n").pop()).driver !== "tsrs-0.18.0-check-parallel") throw new Error(`parse-rs --check failed: ${c.stderr}${c.stdout}`);
+console.log(`ok   parse-rs --check: ${c.stdout.trim()}`);

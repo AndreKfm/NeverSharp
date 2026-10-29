@@ -6,8 +6,8 @@
 // tsc 6.0.3 (harness/astdump/node_modules/typescript, the Gate C oracle's package) and by the C# check driver
 // (cs-o-aot-ws, --check --single --dump-diagnostics). Compares the semantic diagnostics of every program file (in program
 // order) and the global diagnostics, line by line in the canonical form of tools/NeverSharp.ParseDriver/CheckMode.cs.
-// typescript-go 7.0.2's counts (parse-go --check --single) are reported next to them; they are expected to differ
-// (TypeScript 7).
+// typescript-go 7.0.2's counts (parse-go --check --single) and tsrs 0.18.0's (parse-rs --check --single, module C11) are
+// reported next to them; they are expected to differ (TypeScript 7).
 //
 // tsc runs as in executeCommandLine: ts.createCompilerHost(options) on the real file system with jsDocParsingMode
 // ParseForTypeErrors, ts.createProgram(root files of the list, options, host), then program.getSemanticDiagnostics(file)
@@ -16,7 +16,7 @@
 //
 // Output: artifacts/bench/check-equivalence/<repo>.{tsc,cs}.txt and <repo>.json; a markdown summary on stdout.
 //
-// Usage: node check-equivalence.mjs [--repos a,b] [--corpus benchmark|tuning] [--skip-tsgo]
+// Usage: node check-equivalence.mjs [--repos a,b] [--corpus benchmark|tuning] [--skip-tsgo] [--skip-tsrs]
 //        node check-equivalence.mjs --tsc-dump <file list> <out>   (internal: the tsc side, in its own process)
 
 import { spawnSync } from "node:child_process";
@@ -57,6 +57,7 @@ if (process.argv.includes("--tsc-dump")) {
 const node = join(repoRoot, ".tools", `node-${pins.tools.node.version}`, "node" + exe);
 const csDriver = join(repoRoot, "artifacts", "bin", "cs", "optimized-aot-ws", "parse-cs-optimized-aot-ws" + exe);
 const parseGo = join(repoRoot, "artifacts", "bin", "parse-go" + exe);
+const parseRs = join(repoRoot, "artifacts", "bin", "parse-rs" + exe);
 const corpusName = arg("--corpus", "benchmark");
 const repos = arg("--repos", undefined)?.split(",") ?? (corpusName === "tuning" ? ["tuning"] : pins.benchmarkCorpus.repos.map(r => r.name));
 const outDir = join(repoRoot, "artifacts", "bench", "check-equivalence");
@@ -71,8 +72,8 @@ const run = (command, args) => {
 const readLines = file => readFileSync(file, "utf8").split("\n").filter(Boolean);
 const codeOf = line => line.split("\t")[4];
 
-console.log("| Repository | tsc 6.0.3 | C# (single) | identical | only tsc | only C# | tsgo 7.0.2 (single) |");
-console.log("|---|---:|---:|---|---:|---:|---:|");
+console.log("| Repository | tsc 6.0.3 | C# (single) | identical | only tsc | only C# | tsgo 7.0.2 (single) | tsrs 0.18.0 (single) |");
+console.log("|---|---:|---:|---|---:|---:|---:|---:|");
 const details = [];
 for (const repo of repos) {
     const list = join(benchDir, "filelists", `${repo}.txt`);
@@ -81,6 +82,7 @@ for (const repo of repos) {
     const tsc = run(node, ["--max-old-space-size=16384", "--stack-size=8192", import.meta.filename, "--tsc-dump", list, tscOut]);
     const cs = run(csDriver, ["--check", "--single", "--dump-diagnostics", csOut, list]);
     const tsgo = process.argv.includes("--skip-tsgo") ? null : run(parseGo, ["--check", "--single", list]);
+    const tsrs = process.argv.includes("--skip-tsrs") ? null : run(parseRs, ["--check", "--single", list]);
     const a = readLines(tscOut);
     const b = readLines(csOut);
     const identical = a.length === b.length && a.every((l, i) => l === b[i]);
@@ -109,13 +111,14 @@ for (const repo of repos) {
         tsc: { ...tsc.output, seconds: tsc.seconds },
         cs: { ...cs.output, seconds: cs.seconds },
         tsgo: tsgo && { ...tsgo.output, seconds: tsgo.seconds },
+        tsrs: tsrs && { ...tsrs.output, seconds: tsrs.seconds },
         sameOrder: identical,
         onlyTsc: onlyTsc.length, onlyCs: onlyCs.length,
         differencesByCode: [...byCode.values()].sort((x, y) => (y.tsc + y.cs) - (x.tsc + x.cs)),
     };
     writeFileSync(join(outDir, `${repo}.json`), JSON.stringify(summary, null, 1));
     details.push(summary);
-    console.log(`| ${repo} | ${tsc.output.total} | ${cs.output.diagnostics} | ${identical ? "yes" : "no"} | ${onlyTsc.length} | ${onlyCs.length} | ${tsgo ? tsgo.output.diagnostics : "-"} |`);
+    console.log(`| ${repo} | ${tsc.output.total} | ${cs.output.diagnostics} | ${identical ? "yes" : "no"} | ${onlyTsc.length} | ${onlyCs.length} | ${tsgo ? tsgo.output.diagnostics : "-"} | ${tsrs ? tsrs.output.diagnostics : "-"} |`);
 }
 for (const s of details) {
     if (s.identical) continue;

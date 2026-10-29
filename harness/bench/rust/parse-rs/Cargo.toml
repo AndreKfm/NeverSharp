@@ -15,6 +15,9 @@ tsrs_binder = { path = "../../../../external/tsrs/crates/tsrs_binder" }
 tsrs_ast = { path = "../../../../external/tsrs/crates/tsrs_ast" }
 tsrs_core = { path = "../../../../external/tsrs/crates/tsrs_core" }
 tsrs_vfs = { path = "../../../../external/tsrs/crates/tsrs_vfs" }
+tsrs_compiler = { path = "../../../../external/tsrs/crates/tsrs_compiler" }
+tsrs_tsoptions = { path = "../../../../external/tsrs/crates/tsrs_tsoptions" }
+tsrs_diagnostics = { path = "../../../../external/tsrs/crates/tsrs_diagnostics" }
 rayon = "1"
 mimalloc-safe = { version = "0.1.67", features = ["v3", "no_thp"] }
 
