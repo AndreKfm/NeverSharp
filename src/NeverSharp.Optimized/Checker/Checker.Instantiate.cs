@@ -613,17 +613,45 @@ internal sealed partial class Checker
             {
                 return GetWriteTypeOfInstantiatedSymbol(symbol);
             }
-            var setter = GetDeclarationOfKind(symbol, SyntaxKind.SetAccessor);
-            if (!setter.IsNone)
-            {
-                var annotation = GetTypeAnnotationFromAccessor(setter);
-                if (!annotation.IsNone)
-                {
-                    return GetTypeFromTypeNode(annotation);
-                }
-            }
+            return GetWriteTypeOfAccessors(symbol);
         }
         return GetTypeOfSymbol(symbol);
+    }
+
+    private const int WriteTypeProperty = 7;
+
+    // checker.ts getWriteTypeOfAccessors
+    private Type GetWriteTypeOfAccessors(SymbolRef symbol)
+    {
+        if (ValueSymbolLinks.Get(symbol).WriteType.IsNone)
+        {
+            if (!PushTypeResolution(symbol, WriteTypeProperty))
+            {
+                return errorType;
+            }
+            var setter = GetDeclarationOfKind(symbol, SyntaxKind.SetAccessor);
+            if (setter.IsNone)
+            {
+                var property = GetDeclarationOfKind(symbol, SyntaxKind.PropertyDeclaration);
+                setter = !property.IsNone && Utilities.IsAutoAccessorPropertyDeclaration(StoreOf(property), property.Node) ? property : NodeRef.None;
+            }
+            var writeType = GetAnnotatedAccessorType(setter);
+            if (!PopTypeResolution())
+            {
+                if (!GetAnnotatedAccessorTypeNode(setter).IsNone)
+                {
+                    Error(setter, Diagnostics._0_is_referenced_directly_or_indirectly_in_its_own_type_annotation, SymbolToString(symbol));
+                }
+                writeType = errorType;
+            }
+            // Absent an explicit setter type annotation we use the read type of the accessor.
+            if (ValueSymbolLinks.Get(symbol).WriteType.IsNone)
+            {
+                var type = !writeType.IsNone ? writeType : GetTypeOfAccessors(symbol);
+                ValueSymbolLinks.Get(symbol).WriteType = type;
+            }
+        }
+        return ValueSymbolLinks.Get(symbol).WriteType;
     }
 
     private readonly Dictionary<NodeRef, Type[]> outerTypeParametersOfDeclarations = [];

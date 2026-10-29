@@ -1401,18 +1401,12 @@ internal sealed partial class Checker
         var store = StoreOf(accessor);
         if (store.Kind(accessor.Node) == SyntaxKind.GetAccessor)
         {
-            return At(accessor, store.Type(accessor.Node));
+            var jsDocType = Utilities.IsInJSFile(store, accessor.Node) ? GetJSDocType(store, accessor.Node) : Node.None;
+            var typeNode = !jsDocType.IsNone ? jsDocType : GetEffectiveReturnTypeNode(store, accessor.Node);
+            return typeNode.IsNone ? NodeRef.None : At(accessor, typeNode);
         }
-        // getEffectiveSetAccessorTypeAnnotationNode: the type of the parameter
-        var parameters = store.Parameters(accessor.Node);
-        foreach (var parameter in store.Nodes(parameters))
-        {
-            if (!Utilities.IsThisIdentifier(store, store.Name(parameter)))
-            {
-                return At(accessor, store.Type(parameter));
-            }
-        }
-        return NodeRef.None;
+        // getEffectiveSetAccessorTypeAnnotationNode
+        return GetAnnotatedAccessorTypeNode(accessor);
     }
 
     private NodeRef GetTypeAnnotationFromAllAccessorDeclarations(NodeRef node, (NodeRef First, NodeRef Second, NodeRef Get, NodeRef Set) accessors)
