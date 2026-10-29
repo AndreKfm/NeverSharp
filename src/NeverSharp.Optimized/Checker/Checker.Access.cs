@@ -1388,7 +1388,7 @@ internal sealed partial class Checker
                         }
                         else if ((indexFlags & TypeFlags.UniqueESSymbol) != 0)
                         {
-                            var symbolName = GetFullyQualifiedName(Types.Symbol(indexType));
+                            var symbolName = GetFullyQualifiedName(Types.Symbol(indexType), accessExpression);
                             errorInfo = ChainDiagnosticMessages(null, Diagnostics.Property_0_does_not_exist_on_type_1, "[" + symbolName + "]", TypeToString(objectType));
                         }
                         else if ((indexFlags & TypeFlags.StringLiteral) != 0)

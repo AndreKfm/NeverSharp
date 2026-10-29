@@ -719,21 +719,123 @@ internal sealed partial class Checker
             }
             return moduleName;
         }
-        // a relative specifier from the enclosing file's folder; the ending: moduleSpecifiers.ts
-        // getModuleSpecifierEndingPreference without a preference and without allowImportingTsExtensions: the .js
-        // extension when the importing file's imports use extensions (usesExtensionsOnImports), else the minimal ending
-        // (`./index` becomes `.`)
-        var slash = withoutExtension.LastIndexOf('/');
-        var baseName = slash >= 0 ? withoutExtension[(slash + 1)..] : withoutExtension;
-        if (UsesExtensionsOnImports(context.EnclosingFile))
+        // getLocalModuleSpecifier: the path relative to the enclosing file's folder (ensurePathIsNonModuleName), its
+        // ending by processEnding (no baseUrl, paths, rootDirs; the package.json imports of the project-relative
+        // preference are not ported: TODO(C11) if a repository needs them). The ending preference: "js" when the
+        // resolution mode is ESNext (getSpecifierForModuleSymbol's importModuleSpecifierEnding: the mode of the enclosing
+        // declaration's module specifier, else the file's default mode), else getModuleSpecifierEndingPreference without
+        // allowImportingTsExtensions: the .js extension when the importing file's imports use extensions
+        // (usesExtensionsOnImports), else the minimal ending (`./index` becomes `.`)
+        var contextFile = FileAt(context.EnclosingFile);
+        var originalModuleSpecifier = CanHaveModuleSpecifier(context.EnclosingDeclaration) ? TryGetModuleSpecifierFromDeclaration(context.EnclosingDeclaration) : NodeRef.None;
+        var resolutionMode = !originalModuleSpecifier.IsNone ? program.GetModeForUsageLocation(contextFile, originalModuleSpecifier.Node) : null;
+        if (resolutionMode is null or ModuleKind.None)
         {
-            var jsExtension = GetJSExtensionForSpecifier(fileName);
-            if (jsExtension is not null)
+            resolutionMode = program.GetDefaultResolutionModeForFile(contextFile);
+        }
+        var currentDirectory = program.Host.GetCurrentDirectory();
+        var sourceDirectory = ModuleNameResolver.GetDirectoryPath(TsPath.GetNormalizedAbsolutePath(FileNameOfFile(context.EnclosingFile), currentDirectory));
+        var relativePath = GetRelativePathFromDirectory(sourceDirectory, TsPath.GetNormalizedAbsolutePath(withoutExtension, currentDirectory));
+        if (!relativePath.StartsWith('/') && TsPath.GetRootLength(relativePath) == 0 && !ModuleNameResolver.PathIsRelative(relativePath))
+        {
+            relativePath = "./" + relativePath; // ensurePathIsNonModuleName
+        }
+        var jsExtension = GetJSExtensionForSpecifier(fileName);
+        if (jsExtension is null)
+        {
+            return relativePath; // .mjs/.cjs kept, .mts/.cts as .mjs/.cjs: processEnding before the preference applies
+        }
+        if (resolutionMode == ModuleKind.ESNext || UsesExtensionsOnImports(context.EnclosingFile))
+        {
+            return relativePath + jsExtension;
+        }
+        return relativePath.EndsWith("/index", StringComparison.Ordinal) ? relativePath[..^"/index".Length] : relativePath;
+    }
+
+    // path.ts getRelativePathFromDirectory over normalized absolute paths (getPathComponentsRelativeTo: the roots are
+    // compared ignoring case, the other components by the host's canonical file names)
+    private string GetRelativePathFromDirectory(string fromDirectory, string to)
+    {
+        var fromComponents = PathComponentsOf(fromDirectory);
+        var toComponents = PathComponentsOf(to);
+        var ignoreCase = !program.Host.UseCaseSensitiveFileNames;
+        int start;
+        for (start = 0; start < fromComponents.Count && start < toComponents.Count; start++)
+        {
+            var comparison = start == 0 || ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+            if (!string.Equals(fromComponents[start], toComponents[start], comparison))
             {
-                return "./" + baseName + jsExtension;
+                break;
             }
         }
-        return baseName == "index" ? "." : "./" + baseName;
+        if (start == 0)
+        {
+            return to;
+        }
+        var components = new List<string>();
+        for (var i = start; i < fromComponents.Count; i++)
+        {
+            components.Add("..");
+        }
+        for (var i = start; i < toComponents.Count; i++)
+        {
+            components.Add(toComponents[i]);
+        }
+        return string.Join('/', components);
+
+        static List<string> PathComponentsOf(string path)
+        {
+            var rootLength = TsPath.GetRootLength(path);
+            var components = new List<string> { path[..rootLength] };
+            components.AddRange(path[rootLength..].Split('/', StringSplitOptions.RemoveEmptyEntries));
+            return components;
+        }
+    }
+
+    // utilities.ts canHaveModuleSpecifier
+    private bool CanHaveModuleSpecifier(NodeRef node) =>
+        !node.IsNone && Kind(node) is SyntaxKind.VariableDeclaration or SyntaxKind.BindingElement or SyntaxKind.ImportDeclaration or SyntaxKind.ExportDeclaration or
+            SyntaxKind.ImportEqualsDeclaration or SyntaxKind.ImportClause or SyntaxKind.NamespaceExport or SyntaxKind.NamespaceImport or SyntaxKind.ExportSpecifier or
+            SyntaxKind.ImportSpecifier or SyntaxKind.ImportType;
+
+    // utilities.ts tryGetModuleSpecifierFromDeclaration
+    private NodeRef TryGetModuleSpecifierFromDeclaration(NodeRef node)
+    {
+        var store = StoreOf(node);
+        NodeRef StringLiteralLike(Node n) => !n.IsNone && Utilities.IsStringLiteralLike(store, n) ? At(node, n) : NodeRef.None;
+        switch (Kind(node))
+        {
+            case SyntaxKind.VariableDeclaration:
+            case SyntaxKind.BindingElement:
+                for (var n = store.Initializer(node.Node); !n.IsNone; n = store.Parent(n))
+                {
+                    if (IsRequireCall(At(node, n), requireStringLiteralLikeArgument: true))
+                    {
+                        foreach (var requireArgument in store.Nodes(store.Arguments(n)))
+                        {
+                            return At(node, requireArgument);
+                        }
+                    }
+                }
+                return NodeRef.None;
+            case SyntaxKind.ImportDeclaration:
+            case SyntaxKind.ExportDeclaration:
+                return StringLiteralLike(store.ModuleSpecifier(node.Node));
+            case SyntaxKind.ImportEqualsDeclaration:
+                var moduleReference = store.ModuleReference(node.Node);
+                return store.Kind(moduleReference) == SyntaxKind.ExternalModuleReference ? StringLiteralLike(store.Expression(moduleReference)) : NodeRef.None;
+            case SyntaxKind.ImportClause:
+            case SyntaxKind.NamespaceExport:
+                return StringLiteralLike(store.ModuleSpecifier(store.Parent(node.Node)));
+            case SyntaxKind.NamespaceImport:
+            case SyntaxKind.ExportSpecifier:
+                return StringLiteralLike(store.ModuleSpecifier(store.Parent(store.Parent(node.Node))));
+            case SyntaxKind.ImportSpecifier:
+                return StringLiteralLike(store.ModuleSpecifier(store.Parent(store.Parent(store.Parent(node.Node)))));
+            default: // ImportType: isLiteralImportTypeNode
+                var argument = store.Argument(node.Node);
+                return store.Kind(argument) == SyntaxKind.LiteralType ? StringLiteralLike(store.Literal(argument)) : NodeRef.None;
+        }
     }
 
     // moduleSpecifiers.ts getJSExtensionForFile (the .ts/.tsx/.d.ts files of Gate C; .tsx keeps .jsx only under jsx: preserve)
@@ -806,9 +908,9 @@ internal sealed partial class Checker
 
     private static string RemoveFileExtensionForSpecifier(string fileName)
     {
-        // moduleSpecifiers.ts removeExtensionAndIndexPostFix / processEnding: .mjs and .cjs are kept, .mts/.cts (and their
-        // declaration files) become .mjs/.cjs
-        if (fileName.EndsWith(".mjs", StringComparison.Ordinal) || fileName.EndsWith(".cjs", StringComparison.Ordinal))
+        // moduleSpecifiers.ts removeExtensionAndIndexPostFix / processEnding: .json, .mjs and .cjs are kept, .mts/.cts (and
+        // their declaration files) become .mjs/.cjs
+        if (fileName.EndsWith(".json", StringComparison.Ordinal) || fileName.EndsWith(".mjs", StringComparison.Ordinal) || fileName.EndsWith(".cjs", StringComparison.Ordinal))
         {
             return fileName;
         }
@@ -819,7 +921,7 @@ internal sealed partial class Checker
                 return fileName[..^extension.Length] + jsExtension;
             }
         }
-        foreach (var extension in (ReadOnlySpan<string>)[".d.ts", ".d.mts", ".d.cts", ".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".json"])
+        foreach (var extension in (ReadOnlySpan<string>)[".d.ts", ".d.mts", ".d.cts", ".ts", ".tsx", ".mts", ".cts", ".js", ".jsx"])
         {
             if (fileName.EndsWith(extension, StringComparison.Ordinal))
             {

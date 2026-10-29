@@ -2217,10 +2217,10 @@ internal sealed partial class Checker
     }
 
     /// <summary>checker.ts getFullyQualifiedName.</summary>
-    private string GetFullyQualifiedName(SymbolRef symbol)
+    private string GetFullyQualifiedName(SymbolRef symbol, NodeRef containingLocation = default)
     {
         var parent = ParentOf(symbol);
-        return !parent.IsNone ? GetFullyQualifiedName(parent) + "." + SymbolToString(symbol) : SymbolToString(symbol, NodeRef.None, SymbolFlags.None, SymbolFormatFlags.DoNotIncludeSymbolChain | SymbolFormatFlags.AllowAnyNodeKind);
+        return !parent.IsNone ? GetFullyQualifiedName(parent, containingLocation) + "." + SymbolToString(symbol) : SymbolToString(symbol, containingLocation, SymbolFlags.None, SymbolFormatFlags.DoNotIncludeSymbolChain | SymbolFormatFlags.AllowAnyNodeKind);
     }
 
     private static bool IsNonLocalAlias(SymbolFlags flags, SymbolFlags excludes = SymbolFlags.Value | SymbolFlags.Type | SymbolFlags.Namespace) =>
@@ -2671,7 +2671,7 @@ internal sealed partial class Checker
         }
         if (symbolFromModule.IsNone)
         {
-            ErrorNoModuleMemberSymbol(moduleSymbol, targetSymbol, At(specifier, name), nameText);
+            ErrorNoModuleMemberSymbol(moduleSymbol, targetSymbol, declaration, At(specifier, name), nameText);
         }
         return symbolFromModule;
     }
@@ -2746,9 +2746,9 @@ internal sealed partial class Checker
     private bool IsSameReference(SymbolRef s1, SymbolRef s2) =>
         GetMergedSymbol(ResolveSymbol(GetMergedSymbol(s1), dontResolveAlias: false)) == GetMergedSymbol(ResolveSymbol(GetMergedSymbol(s2), dontResolveAlias: false));
 
-    private void ErrorNoModuleMemberSymbol(SymbolRef moduleSymbol, SymbolRef targetSymbol, NodeRef name, string nameText)
+    private void ErrorNoModuleMemberSymbol(SymbolRef moduleSymbol, SymbolRef targetSymbol, NodeRef node, NodeRef name, string nameText)
     {
-        var moduleName = GetFullyQualifiedName(moduleSymbol);
+        var moduleName = GetFullyQualifiedName(moduleSymbol, node);
         var store = StoreOf(name);
         var declarationName = Utilities.DeclarationNameToString(store, name.Node);
         var exports = ExportsOf(targetSymbol);
