@@ -2118,9 +2118,10 @@ internal sealed partial class Checker
             }
             case SyntaxKind.MethodDeclaration:
             {
-                // object literal methods: the function type of the method symbol
+                // object literal methods (of symbols that are properties too, e.g. merged with JS this-assignments; it
+                // checks the method and gets the type of the symbol under resolution: a circularity, any)
                 var annotated = TryGetTypeFromEffectiveTypeNode(declaration);
-                type = !annotated.IsNone ? annotated : GetTypeOfFuncClassEnumModule(symbol);
+                type = !annotated.IsNone ? annotated : CheckObjectLiteralMethod(declaration, CheckMode.Normal);
                 break;
             }
             case SyntaxKind.Parameter:
