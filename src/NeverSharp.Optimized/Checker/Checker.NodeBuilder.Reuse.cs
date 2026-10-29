@@ -601,7 +601,7 @@ internal sealed partial class Checker
         }
         if (markReused)
         {
-            reusedNodes.Add(copy);
+            MarkReused(copy);
         }
         return copy;
     }

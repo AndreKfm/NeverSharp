@@ -8,10 +8,10 @@
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
 // Modified: translated from TypeScript to C#; module C2. The nodes are built in a node store of the checker's own
 // (synthesized nodes: pos and end -1, NodeFlags.Synthesized) and printed with the Track O printer; a store mark is
-// taken before and the store truncated after each print. Existing nodes the builder reuses are copied into that store
-// and remembered as reused (TypeScript's setTextRange/setOriginalNode: such nodes are not fully synthetic, which the
-// .types baseline underlines with spaces). Left out: the per-enclosing-declaration serializedTypes cache (a cache of
-// the result), symbol trackers and their error reports (typeToString passes none), the expanding/verbosity mode of
+// taken before and the store truncated after each print that adds nothing to the serializedTypes cache. Existing nodes
+// the builder reuses are copied into that store and remembered as reused (TypeScript's setTextRange/setOriginalNode:
+// such nodes are not fully synthetic, which the .types baseline underlines with spaces). Left out: symbol trackers and
+// their error reports (typeToString passes none), the expanding/verbosity mode of
 // quick info (maxExpansionDepth -1 throughout) and declaration emit's symbolTableToDeclarationStatements.
 
 using System.Runtime.InteropServices;
@@ -68,8 +68,10 @@ internal sealed partial class Checker
     private int synthDepth;
     private readonly HashSet<Node> reusedNodes = [];
 
-    // NodeLinks.serializedTypes (visitAndTransformType's cache), for the current outermost print
-    private readonly Dictionary<(NodeRef, Type, NodeBuilderFlags, InternalNodeBuilderFlags), (Node Node, bool Truncating, int AddedLength)> serializedTypes = [];
+    // NodeLinks.serializedTypes (visitAndTransformType's cache) of every enclosing declaration
+    // (the enclosing declaration is the fake scope when there is one: TypeScript's pushFakeScope makes a Block the
+    // enclosing declaration, with NodeLinks of its own)
+    private readonly Dictionary<(NodeRef, FakeScope?, Type, NodeBuilderFlags, InternalNodeBuilderFlags), (Node Node, bool Truncating, int AddedLength)> serializedTypes = [];
 
     private NodeStore S => synthStore!;
 
@@ -88,6 +90,8 @@ internal sealed partial class Checker
     }
 
     // Begins building nodes for one print (nested prints, e.g. symbolToString inside the builder, share the store).
+    // NodeLinks.serializedTypes keeps the results of earlier prints: the store keeps every node a print made while the
+    // cache holds results (a print that adds no result to the cache is truncated away again).
     private void BeginSynth()
     {
         if (synthStore is null)
@@ -98,18 +102,34 @@ internal sealed partial class Checker
         if (synthDepth++ == 0)
         {
             synthMark = synthStore.GetMark();
-            reusedNodes.Clear();
-            serializedTypes.Clear();
+            synthCacheCount = serializedTypes.Count;
+            synthReusedCount = reusedNodesInOrder.Count;
         }
     }
 
     private void EndSynth()
     {
-        if (--synthDepth == 0)
+        if (--synthDepth == 0 && serializedTypes.Count == synthCacheCount)
         {
             synthStore!.Truncate(synthMark);
-            reusedNodes.Clear();
-            serializedTypes.Clear();
+            for (var i = reusedNodesInOrder.Count - 1; i >= synthReusedCount; i--)
+            {
+                reusedNodes.Remove(reusedNodesInOrder[i]);
+            }
+            reusedNodesInOrder.RemoveRange(synthReusedCount, reusedNodesInOrder.Count - synthReusedCount);
+        }
+    }
+
+    private int synthCacheCount;
+    private int synthReusedCount;
+    // reusedNodes in the order they were marked (a truncated print unmarks its own)
+    private readonly List<Node> reusedNodesInOrder = [];
+
+    private void MarkReused(Node node)
+    {
+        if (reusedNodes.Add(node))
+        {
+            reusedNodesInOrder.Add(node);
         }
     }
 
@@ -1362,7 +1382,7 @@ internal sealed partial class Checker
         }
     }
 
-    // checker.ts visitAndTransformType (without the serializedTypes cache)
+    // checker.ts visitAndTransformType
     private Node VisitAndTransformType(Type type, NodeBuilderContext context, Func<Type, Node> transform)
     {
         var objectFlags = Types.ObjectFlagsOf(type);
@@ -1391,10 +1411,10 @@ internal sealed partial class Checker
             context.SymbolDepth ??= [];
         }
         // Don't rely on type cache if we're expand a type, because we need to compute `canIncreaseExpansionDepth`.
-        // (NodeLinks.serializedTypes of the enclosing declaration; the cached nodes live in the builder's store, which is
-        // reset after each outermost print, so here the cache lasts for one print.)
+        // (NodeLinks.serializedTypes of the enclosing declaration; the cached nodes live in the builder's store, which
+        // keeps them for the checker's lifetime, see BeginSynth.)
         var useCache = context.MaxExpansionDepth < 0 && !context.EnclosingDeclaration.IsNone;
-        var cacheKey = useCache ? (context.EnclosingDeclaration, type, context.Flags, context.InternalFlags) : default;
+        var cacheKey = useCache ? (context.FakeScope is null ? context.EnclosingDeclaration : NodeRef.None, context.FakeScope, type, context.Flags, context.InternalFlags) : default;
         if (useCache && serializedTypes.TryGetValue(cacheKey, out var cached))
         {
             if (cached.Truncating)
@@ -1725,7 +1745,7 @@ internal sealed partial class Checker
         }
         if (reusedNodes.Contains(identifier))
         {
-            reusedNodes.Add(clone);
+            MarkReused(clone);
         }
         return clone;
     }
