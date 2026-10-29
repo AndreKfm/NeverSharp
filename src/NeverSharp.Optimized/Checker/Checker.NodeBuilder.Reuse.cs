@@ -418,14 +418,44 @@ internal sealed partial class Checker
         }
         if (kind == SyntaxKind.ComputedPropertyName && Utilities.IsEntityNameExpression(store, store.Expression(n)))
         {
-            var (introducesError, result) = TrackExistingEntityName(context, At(node, store.Expression(n)));
+            var expression = At(node, store.Expression(n));
+            var (introducesError, result) = TrackExistingEntityName(context, expression);
             if (!introducesError)
             {
-                return SComputedPropertyName(result);
+                // factory.updateComputedPropertyName: the updated node's original is the existing node (reused)
+                var updated = SComputedPropertyName(result);
+                MarkReused(updated);
+                return updated;
             }
-            // (computed names whose entity is not accessible: the evaluated literal; C8)
-            reuseUnsupported = true;
-            return Node.None;
+            var computedPropertyNameType = ResolverSerializeTypeOfExpression(context, expression);
+            Node literal;
+            if (S.Kind(computedPropertyNameType) == SyntaxKind.LiteralType)
+            {
+                literal = S.Literal(computedPropertyNameType);
+            }
+            else
+            {
+                var evaluated = EvaluateEntityNameExpression(expression, NodeRef.None);
+                var literalNode = evaluated is string s ? SStringLiteral(s) : evaluated is double d ? SNumericLiteral(d) : Node.None;
+                if (literalNode.IsNone)
+                {
+                    // (isImportTypeNode: trackComputedName, a symbol tracker's; typeToString has none) the node itself
+                    return CopyExistingNode(node);
+                }
+                literal = literalNode;
+            }
+            var literalText = S.Texts.GetString(S.Text(literal)) ?? "";
+            if (S.Kind(literal) == SyntaxKind.StringLiteral && Scanner.IsIdentifierText(literalText, languageVersion))
+            {
+                return SIdentifier(literalText);
+            }
+            if (S.Kind(literal) == SyntaxKind.NumericLiteral && !literalText.StartsWith('-'))
+            {
+                return literal;
+            }
+            var updatedWithLiteral = SComputedPropertyName(literal);
+            MarkReused(updatedWithLiteral);
+            return updatedWithLiteral;
         }
         if (kind == SyntaxKind.TypePredicate)
         {
