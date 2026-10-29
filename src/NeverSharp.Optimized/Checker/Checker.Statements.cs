@@ -17,9 +17,10 @@ namespace NeverSharp.Optimized;
 
 internal sealed partial class Checker
 {
-    // checkNodeDeferred: the deferred nodes of the file being checked, in deferral order (an insertion-ordered set)
-    private readonly List<NodeRef> deferredNodes = [];
-    private readonly HashSet<NodeRef> deferredNodeSet = [];
+    // checkNodeDeferred: links.deferredNodes of each source file (by file number), in deferral order (an
+    // insertion-ordered set), and NodeCheckFlags.TypeChecked of the source files whose check has finished
+    private readonly Dictionary<int, (List<NodeRef> List, HashSet<NodeRef> Set)> deferredNodes = [];
+    private readonly HashSet<int> typeCheckedFiles = [];
     // checker.ts potentialUnusedRenamedBindingElementsInTypes
     private readonly List<NodeRef> potentialUnusedRenamedBindingElementsInTypes = [];
 
@@ -33,13 +34,16 @@ internal sealed partial class Checker
         potentialUnusedRenamedBindingElementsInTypes.Clear();
         CheckSourceElements(file, store.Statements(file.Node));
         CheckSourceElement(At(file, store.EndOfFileToken(file.Node)));
-        // checkDeferredNodes (nodes deferred while deferred nodes are checked are checked in the same pass)
-        for (var i = 0; i < deferredNodes.Count; i++)
+        // checkDeferredNodes (nodes deferred while deferred nodes are checked are checked in the same pass, as the
+        // iteration of a Set sees elements added during it)
+        if (deferredNodes.TryGetValue(file.File, out var deferred))
         {
-            CheckDeferredNode(deferredNodes[i]);
+            for (var i = 0; i < deferred.List.Count; i++)
+            {
+                CheckDeferredNode(deferred.List[i]);
+            }
+            deferredNodes.Remove(file.File);
         }
-        deferredNodes.Clear();
-        deferredNodeSet.Clear();
         if (Utilities.IsExternalOrCommonJsModule(store, file.Node, BindingOf(file.File)))
         {
             RegisterForUnusedIdentifiersCheck(file);
@@ -53,6 +57,7 @@ internal sealed partial class Checker
         {
             CheckExternalModuleExports(file);
         }
+        typeCheckedFiles.Add(file.File);
     }
 
     // checker.ts checkSourceFileWorker: the renamed binding elements of function types
@@ -97,9 +102,20 @@ internal sealed partial class Checker
     // checker.ts checkNodeDeferred
     private void CheckNodeDeferred(NodeRef node)
     {
-        if (deferredNodeSet.Add(node))
+        var enclosingFile = node.File;
+        if (typeCheckedFiles.Contains(enclosingFile))
         {
-            deferredNodes.Add(node);
+            // Debug.assert(!links.deferredNodes, "A type-checked file should have no deferred nodes.")
+            return;
+        }
+        if (!deferredNodes.TryGetValue(enclosingFile, out var deferred))
+        {
+            deferred = ([], []);
+            deferredNodes[enclosingFile] = deferred;
+        }
+        if (deferred.Set.Add(node))
+        {
+            deferred.List.Add(node);
         }
     }
 
