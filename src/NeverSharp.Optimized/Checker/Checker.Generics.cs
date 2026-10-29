@@ -333,14 +333,17 @@ internal sealed partial class Checker
             // No need to normalize when we only have regular required elements
             return CreateTypeReference(target, elementTypes);
         }
-        var targetFlags = targetData.ElementFlags!;
+        // target.elementFlags[i]: undefined (no flag set) past the target's elements, when the type arguments end with the
+        // this-type argument of getTypeWithThisArgument
+        var allFlags = targetData.ElementFlags!;
+        ElementFlags TargetFlag(int i) => i < allFlags.Length ? allFlags[i] : 0;
         if ((targetData.CombinedFlags & ElementFlags.Variadic) != 0)
         {
             // Transform [A, ...(X | Y | Z)] into [A, ...X] | [A, ...Y] | [A, ...Z]
             var unionIndex = -1;
             for (var i = 0; i < elementTypes.Length; i++)
             {
-                if ((targetFlags[i] & ElementFlags.Variadic) != 0 && (Types.Flags(elementTypes[i]) & (TypeFlags.Never | TypeFlags.Union)) != 0)
+                if ((TargetFlag(i) & ElementFlags.Variadic) != 0 && (Types.Flags(elementTypes[i]) & (TypeFlags.Never | TypeFlags.Union)) != 0)
                 {
                     unionIndex = i;
                     break;
@@ -351,7 +354,7 @@ internal sealed partial class Checker
                 var probe = new Type[elementTypes.Length];
                 for (var i = 0; i < probe.Length; i++)
                 {
-                    probe[i] = (targetFlags[i] & ElementFlags.Variadic) != 0 ? elementTypes[i] : unknownType;
+                    probe[i] = (TargetFlag(i) & ElementFlags.Variadic) != 0 ? elementTypes[i] : unknownType;
                 }
                 return CheckCrossProductUnion(probe)
                     ? MapType(elementTypes[unionIndex], t => CreateNormalizedTupleType(target, ReplaceElement(elementTypes, unionIndex, t)))
@@ -373,7 +376,7 @@ internal sealed partial class Checker
         for (var i = 0; i < elementTypes.Length; i++)
         {
             var type = elementTypes[i];
-            var flags = targetFlags[i];
+            var flags = TargetFlag(i);
             var label = labels is not null && i < labels.Length ? labels[i] : NodeRef.None;
             if ((flags & ElementFlags.Variadic) != 0)
             {
