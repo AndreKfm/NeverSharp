@@ -1174,13 +1174,13 @@ internal sealed partial class Checker
             {
                 case SyntaxKind.PropertyDeclaration:
                 case SyntaxKind.PropertySignature:
-                    return IsThislessVariableLikeDeclaration(store, declaration.Node);
+                    return IsThislessVariableLikeDeclaration(declaration);
                 case SyntaxKind.MethodDeclaration:
                 case SyntaxKind.MethodSignature:
                 case SyntaxKind.Constructor:
                 case SyntaxKind.GetAccessor:
                 case SyntaxKind.SetAccessor:
-                    return IsThislessFunctionLikeDeclaration(store, declaration.Node);
+                    return IsThislessFunctionLikeDeclaration(declaration);
             }
         }
         return false;
@@ -1233,17 +1233,20 @@ internal sealed partial class Checker
         return constraint.IsNone || IsThislessType(store, constraint);
     }
 
-    // checker.ts isThislessVariableLikeDeclaration (the TypeScript part; JSDoc: C9)
-    private static bool IsThislessVariableLikeDeclaration(NodeStore store, Node node)
+    // checker.ts isThislessVariableLikeDeclaration
+    private bool IsThislessVariableLikeDeclaration(NodeRef declaration)
     {
-        var typeNode = store.Type(node);
-        return !typeNode.IsNone ? IsThislessType(store, typeNode) : store.Initializer(node).IsNone;
+        var store = StoreOf(declaration);
+        var typeNode = GetEffectiveTypeAnnotationNode(declaration);
+        return !typeNode.IsNone ? IsThislessType(store, typeNode.Node) : store.Initializer(declaration.Node).IsNone;
     }
 
     // checker.ts isThislessFunctionLikeDeclaration
-    private static bool IsThislessFunctionLikeDeclaration(NodeStore store, Node node)
+    private bool IsThislessFunctionLikeDeclaration(NodeRef declaration)
     {
-        var returnType = store.Type(node);
+        var store = StoreOf(declaration);
+        var node = declaration.Node;
+        var returnType = GetEffectiveReturnTypeNode(store, node);
         if (!(store.Kind(node) == SyntaxKind.Constructor || (!returnType.IsNone && IsThislessType(store, returnType))))
         {
             return false;
@@ -1253,21 +1256,17 @@ internal sealed partial class Checker
         {
             foreach (var p in store.Nodes(parameters))
             {
-                if (!IsThislessVariableLikeDeclaration(store, p))
+                if (!IsThislessVariableLikeDeclaration(At(declaration, p)))
                 {
                     return false;
                 }
             }
         }
-        var typeParameters = store.TypeParameters(node);
-        if (!typeParameters.IsNone)
+        foreach (var tp in GetEffectiveTypeParameterDeclarations(store, node))
         {
-            foreach (var tp in store.Nodes(typeParameters))
+            if (!IsThislessTypeParameter(store, tp))
             {
-                if (!IsThislessTypeParameter(store, tp))
-                {
-                    return false;
-                }
+                return false;
             }
         }
         return true;

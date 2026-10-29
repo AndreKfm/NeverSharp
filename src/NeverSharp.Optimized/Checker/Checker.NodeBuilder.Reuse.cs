@@ -2008,8 +2008,7 @@ internal sealed partial class Checker
             : At(fn, GetEffectiveReturnTypeNode(store, fn.Node));
         if (!returnTypeNode.IsNone)
         {
-            returnType = Result(SerializeTypeAnnotationOfDeclaration(returnTypeNode, context, fn, symbol));
-        }
+            returnType = Result(SerializeTypeAnnotationOfDeclaration(returnTypeNode, context, fn, symbol));        }
         else if (IsValueSignatureDeclaration(store, fn.Node))
         {
             returnType = TypeFromSingleReturnExpression(fn, context);
