@@ -212,6 +212,14 @@ internal struct AliasSymbolLinks
     public byte TypeOnlyState; // links.typeOnlyDeclaration: 0 undefined, 1 false, 2 a declaration (module C8)
 }
 
+/// <summary>types.go ExportTypeLinks (checker.ts SymbolLinks.target and originatingImport of the module symbols
+/// cloneTypeAsModuleType creates).</summary>
+internal struct ExportTypeLinks
+{
+    public SymbolRef Target;
+    public NodeRef OriginatingImport;
+}
+
 /// <summary>types.go DeclaredTypeLinks (declared types of type parameters, classes, interfaces, enums).</summary>
 internal struct DeclaredTypeLinks
 {

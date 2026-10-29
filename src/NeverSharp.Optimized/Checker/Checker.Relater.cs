@@ -87,8 +87,24 @@ internal sealed partial class Checker
                         errorInfo = chain;
                     }
                 }
-                // (the quickfix diagnostic for a namespace-style import (links.originatingImport): module C9)
-                var diag = c.CreateDiagnosticForNodeFromMessageChain(errorNode, errorInfo, null);
+                List<DiagnosticRelatedInformation>? relatedInformation = null;
+                // Check if we should issue an extra diagnostic to produce a quickfix for a slightly incorrect import statement
+                var sourceSymbol = c.Types.Symbol(source);
+                if (headMessage is not null && !errorNode.IsNone && result == Ternary.False && !sourceSymbol.IsNone && c.ExportTypeLinks.Has(sourceSymbol))
+                {
+                    var links = c.ExportTypeLinks.Get(sourceSymbol);
+                    if (!links.OriginatingImport.IsNone && !Utilities.IsImportCall(c.StoreOf(links.OriginatingImport), links.OriginatingImport.Node))
+                    {
+                        var helpfulRetry = c.CheckTypeRelatedTo(c.GetTypeOfSymbol(links.Target), target, relation, errorNode: NodeRef.None);
+                        if (helpfulRetry)
+                        {
+                            // Likely an incorrect import. Issue a helpful diagnostic to produce a quickfix to change the import
+                            var info = c.CreateRelatedForNode(links.OriginatingImport, Diagnostics.Type_originates_at_this_import_A_namespace_style_import_cannot_be_called_or_constructed_and_will_cause_a_failure_at_runtime_Consider_using_a_default_import_or_import_require_here_instead);
+                            relatedInformation = [info]; // Cause the error to appear with the error that triggered it
+                        }
+                    }
+                }
+                var diag = c.CreateDiagnosticForNodeFromMessageChain(errorNode, errorInfo, relatedInformation);
                 if (relatedInfo is not null)
                 {
                     foreach (var info in relatedInfo)

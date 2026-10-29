@@ -53,6 +53,7 @@ internal sealed partial class Checker
         TransientSymbols = new TransientSymbolStore();
         ValueSymbolLinks = new SymbolLinkStore<ValueSymbolLinks>(files.Count);
         AliasSymbolLinks = new SymbolLinkStore<AliasSymbolLinks>(files.Count);
+        ExportTypeLinks = new SymbolLinkStore<ExportTypeLinks>(files.Count);
         DeclaredTypeLinks = new SymbolLinkStore<DeclaredTypeLinks>(files.Count);
         NodeLinks = new NodeLinkStore<NodeLinks>(files.Count);
         SymbolNodeLinks = new NodeLinkStore<SymbolNodeLinks>(files.Count);
@@ -100,6 +101,8 @@ internal sealed partial class Checker
     internal SymbolLinkStore<ValueSymbolLinks> ValueSymbolLinks { get; }
 
     internal SymbolLinkStore<AliasSymbolLinks> AliasSymbolLinks { get; }
+
+    internal SymbolLinkStore<ExportTypeLinks> ExportTypeLinks { get; }
 
     internal SymbolLinkStore<DeclaredTypeLinks> DeclaredTypeLinks { get; }
 

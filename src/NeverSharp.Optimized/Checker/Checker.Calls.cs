@@ -668,6 +668,7 @@ internal sealed partial class Checker
                 AddRelatedInfo(diag, CreateRelatedForNode(expression, relatedMessage));
             }
             diagnostics.Add(diag);
+            InvocationErrorRecovery(apparentType, SignatureKind.Call, diag);
             return ResolveErrorCall(node);
         }
         return ResolveCall(node, callSignatures, candidatesOutArray, checkMode, SignatureFlags.None, headMessage);
@@ -1132,7 +1133,29 @@ internal sealed partial class Checker
         return (ChainDiagnosticMessages(errorInfo, headMessage), maybeMissingAwait ? Diagnostics.Did_you_forget_to_use_await : null);
     }
 
-    // checker.ts invocationError (invocationErrorRecovery: namespace imports under noResolve have no originating import)
+    // checker.ts invocationErrorRecovery
+    private void InvocationErrorRecovery(Type apparentType, SignatureKind kind, ProgramDiagnostic diagnostic)
+    {
+        var symbol = Types.Symbol(apparentType);
+        if (symbol.IsNone || !ExportTypeLinks.Has(symbol))
+        {
+            return;
+        }
+        var importNode = ExportTypeLinks.Get(symbol).OriginatingImport;
+        // Create a diagnostic on the originating import if possible onto which we can attach a quickfix
+        //  An import call expression cannot be rewritten into another form to correct the error - the only solution is to use `.default` at the use-site
+        if (!importNode.IsNone && !Utilities.IsImportCall(StoreOf(importNode), importNode.Node))
+        {
+            var sigs = GetSignaturesOfType(GetTypeOfSymbol(ExportTypeLinks.Get(symbol).Target), kind);
+            if (sigs.Count == 0)
+            {
+                return;
+            }
+            AddRelatedInfo(diagnostic, CreateRelatedForNode(importNode, Diagnostics.Type_originates_at_this_import_A_namespace_style_import_cannot_be_called_or_constructed_and_will_cause_a_failure_at_runtime_Consider_using_a_default_import_or_import_require_here_instead));
+        }
+    }
+
+    // checker.ts invocationError
     private void InvocationError(NodeRef errorTarget, Type apparentType, SignatureKind kind, ProgramRelatedInformation? relatedInformation = null)
     {
         var (messageChain, relatedInfo) = InvocationErrorDetails(errorTarget, apparentType, kind);
@@ -1154,6 +1177,7 @@ internal sealed partial class Checker
         {
             AddRelatedInfo(diagnostic, relatedInformation);
         }
+        InvocationErrorRecovery(apparentType, kind, diagnostic);
     }
 
     // checker.ts getDiagnosticSpanForCallNode
@@ -2968,13 +2992,79 @@ internal sealed partial class Checker
         var moduleSymbol = ResolveExternalModuleName(node, specifier);
         if (!moduleSymbol.IsNone)
         {
-            var esModuleSymbol = ResolveExternalModuleSymbol(moduleSymbol, dontResolveAlias: true);
+            var esModuleSymbol = ResolveESModuleSymbol(moduleSymbol, specifier, dontResolveAlias: true, suppressInteropError: false);
             if (!esModuleSymbol.IsNone)
             {
-                return CreatePromiseReturnType(node, GetTypeOfSymbol(esModuleSymbol));
+                var syntheticType = GetTypeWithSyntheticDefaultOnly(GetTypeOfSymbol(esModuleSymbol), esModuleSymbol, moduleSymbol, specifier);
+                if (syntheticType.IsNone)
+                {
+                    syntheticType = GetTypeWithSyntheticDefaultImportType(GetTypeOfSymbol(esModuleSymbol), esModuleSymbol, moduleSymbol, specifier);
+                }
+                return CreatePromiseReturnType(node, syntheticType);
             }
         }
         return CreatePromiseReturnType(node, anyType);
+    }
+
+    // checker.ts createDefaultPropertyWrapperForModule
+    private Type CreateDefaultPropertyWrapperForModule(SymbolRef symbol, SymbolRef originalSymbol, SymbolRef anonymousSymbol = default)
+    {
+        var memberTable = new SymTable();
+        var newSymbol = CreateSymbol(SymbolFlags.Alias, InternalSymbolName.Default);
+        TransientSymbols.Record(newSymbol).Parent = originalSymbol;
+        var nameType = GetStringLiteralType("default");
+        ValueSymbolLinks.Get(newSymbol).NameType = nameType;
+        var aliasTarget = ResolveSymbol(symbol, dontResolveAlias: false);
+        AliasSymbolLinks.Get(newSymbol).AliasTarget = aliasTarget;
+        memberTable.Set(InternalSymbolName.Default, newSymbol);
+        return CreateAnonymousType(anonymousSymbol, memberTable, [], [], []);
+    }
+
+    // SyntheticDefaultModuleType.defaultOnlyType and .syntheticType (typescript-go: cachedTypes by type)
+    private readonly Dictionary<Type, Type> defaultOnlyTypes = [];
+    private readonly Dictionary<Type, Type> syntheticDefaultTypes = [];
+
+    // checker.ts getTypeWithSyntheticDefaultOnly
+    private Type GetTypeWithSyntheticDefaultOnly(Type type, SymbolRef symbol, SymbolRef originalSymbol, NodeRef moduleSpecifier)
+    {
+        var hasDefaultOnly = IsOnlyImportableAsDefault(moduleSpecifier);
+        if (hasDefaultOnly && !type.IsNone && !IsErrorType(type))
+        {
+            if (!defaultOnlyTypes.TryGetValue(type, out var result))
+            {
+                result = CreateDefaultPropertyWrapperForModule(symbol, originalSymbol);
+                defaultOnlyTypes[type] = result;
+            }
+            return result;
+        }
+        return Type.None;
+    }
+
+    // checker.ts getTypeWithSyntheticDefaultImportType
+    private Type GetTypeWithSyntheticDefaultImportType(Type type, SymbolRef symbol, SymbolRef originalSymbol, NodeRef moduleSpecifier)
+    {
+        if (compilerOptions.GetAllowSyntheticDefaultImports() && !type.IsNone && !IsErrorType(type))
+        {
+            if (!syntheticDefaultTypes.TryGetValue(type, out var result))
+            {
+                var file = SourceFileDeclarationOf(originalSymbol);
+                var hasSyntheticDefault = CanHaveSyntheticDefault(file, originalSymbol, dontResolveAlias: false, moduleSpecifier);
+                if (hasSyntheticDefault)
+                {
+                    var anonymousSymbol = CreateSymbol(SymbolFlags.TypeLiteral, InternalSymbolName.Type);
+                    var defaultContainingObject = CreateDefaultPropertyWrapperForModule(symbol, originalSymbol, anonymousSymbol);
+                    ValueSymbolLinks.Get(anonymousSymbol).ResolvedType = defaultContainingObject;
+                    result = IsValidSpreadType(type) ? GetSpreadType(type, defaultContainingObject, anonymousSymbol, objectFlags: 0, isReadonly: false) : defaultContainingObject;
+                }
+                else
+                {
+                    result = type;
+                }
+                syntheticDefaultTypes[type] = result;
+            }
+            return result;
+        }
+        return type;
     }
 
     // checker.ts getNullableType

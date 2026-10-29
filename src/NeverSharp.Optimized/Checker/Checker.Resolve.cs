@@ -2339,12 +2339,7 @@ internal sealed partial class Checker
             case SyntaxKind.NamespaceExport:
                 return GetTargetOfNamespaceExport(node, dontRecursivelyResolve);
             case SyntaxKind.ImportSpecifier:
-            {
-                // getTargetOfImportSpecifier
-                var resolvedSpecifier = GetExternalModuleMember(At(node, store.Parent(store.Parent(store.Parent(node.Node)))), node, dontRecursivelyResolve);
-                MarkSymbolOfAliasDeclarationIfTypeOnly(node, SymbolRef.None, resolvedSpecifier, overwriteEmpty: false);
-                return resolvedSpecifier;
-            }
+                return GetTargetOfImportSpecifier(node, dontRecursivelyResolve);
             case SyntaxKind.ExportSpecifier:
                 return GetTargetOfExportSpecifier(node, SymbolFlags.Value | SymbolFlags.Type | SymbolFlags.Namespace, dontRecursivelyResolve);
             case SyntaxKind.ExportAssignment:
@@ -2549,25 +2544,186 @@ internal sealed partial class Checker
         return !moduleSymbol.IsNone ? GetTargetOfModuleDefault(moduleSymbol, node, dontResolveAlias) : SymbolRef.None;
     }
 
-    // checker.ts getTargetofModuleDefault, for ambient modules (Gate C resolves no files): a default export, else the
-    // synthetic default of allowSyntheticDefaultImports (the module, or its export=).
+    // checker.ts resolveExportByName
+    private SymbolRef ResolveExportByName(SymbolRef moduleSymbol, string name, NodeRef sourceNode, bool dontResolveAlias)
+    {
+        var exports = ExportsOf(moduleSymbol)!;
+        var exportValue = exports.Get(InternalSymbolName.ExportEquals);
+        var exportSymbol = !exportValue.IsNone
+            ? GetPropertyOfType(GetTypeOfSymbol(exportValue), name, skipObjectFunctionPropertyAugment: true)
+            : exports.Get(name);
+        var resolved = ResolveSymbol(exportSymbol, dontResolveAlias);
+        MarkSymbolOfAliasDeclarationIfTypeOnly(sourceNode, exportSymbol, resolved, overwriteEmpty: false);
+        return resolved;
+    }
+
+    // checker.ts isSyntacticDefault
+    private bool IsSyntacticDefault(NodeRef node)
+    {
+        var store = StoreOf(node);
+        var kind = store.Kind(node.Node);
+        return (kind == SyntaxKind.ExportAssignment && !store.IsExportEquals(node.Node))
+            || Utilities.HasSyntacticModifier(store, node.Node, ModifierFlags.Default)
+            || kind == SyntaxKind.ExportSpecifier
+            || kind == SyntaxKind.NamespaceExport;
+    }
+
+    // checker.ts getEmitSyntaxForModuleSpecifierExpression
+    private ModuleKind? GetEmitSyntaxForModuleSpecifierExpression(NodeRef usage) =>
+        Utilities.IsStringLiteralLike(StoreOf(usage), usage.Node) ? program.GetEmitSyntaxForUsageLocation(FileAt(usage.File), usage.Node) : null;
+
+    // checker.ts isESMFormatImportImportingCommonjsFormatFile
+    private static bool IsESMFormatImportImportingCommonjsFormatFile(ModuleKind? usageMode, ModuleKind? targetMode) =>
+        usageMode == ModuleKind.ESNext && targetMode == ModuleKind.CommonJS;
+
+    // checker.ts isOnlyImportableAsDefault: JSON modules imported into ES modules under node16..nodenext only; with any
+    // other module kind (Gate C and the repository programs: ES2022) it is false, so the resolution of the JSON module
+    // is not ported.
+    private bool IsOnlyImportableAsDefault(NodeRef usage, SymbolRef resolvedModule = default)
+    {
+        if (ModuleKind.Node16 <= moduleKind && moduleKind <= ModuleKind.NodeNext)
+        {
+            throw new NotSupportedException("Checker (module C11): isOnlyImportableAsDefault for node16/nodenext is not ported");
+        }
+        _ = usage;
+        _ = resolvedModule;
+        return false;
+    }
+
+    // moduleSymbol.declarations?.find(isSourceFile)
+    private NodeRef SourceFileDeclarationOf(SymbolRef symbol)
+    {
+        if (DeclarationsOf(symbol) is { } declarations)
+        {
+            foreach (var declaration in declarations)
+            {
+                if (Kind(declaration) == SyntaxKind.SourceFile)
+                {
+                    return declaration;
+                }
+            }
+        }
+        return NodeRef.None;
+    }
+
+    // checker.ts canHaveSyntheticDefault. The node16/nodenext branch is unreachable with the supported module kinds,
+    // and the project-reference branch needs project references (none in Gate C or the repository programs): both
+    // left out.
+    private bool CanHaveSyntheticDefault(NodeRef file, SymbolRef moduleSymbol, bool dontResolveAlias, NodeRef usage)
+    {
+        var usageMode = file.IsNone ? null : GetEmitSyntaxForModuleSpecifierExpression(usage);
+        if (!file.IsNone && usageMode is not null)
+        {
+            var targetMode = GetImpliedNodeFormatForEmit(file.File);
+            if (usageMode == ModuleKind.ESNext && targetMode == ModuleKind.CommonJS && ModuleKind.Node16 <= moduleKind && moduleKind <= ModuleKind.NodeNext)
+            {
+                // In Node.js, CommonJS modules always have a synthetic default when imported into ESM
+                return true;
+            }
+            if (usageMode == ModuleKind.ESNext && targetMode == ModuleKind.ESNext)
+            {
+                // No matter what the `module` setting is, if we're confident that both files
+                // are ESM, there cannot be a synthetic default.
+                return false;
+            }
+            // (declaration files of project references: getRedirectFromSourceFile/getRedirectFromOutput, not ported)
+        }
+        if (!compilerOptions.GetAllowSyntheticDefaultImports())
+        {
+            return false;
+        }
+        // Declaration files (and ambient modules)
+        var store = file.IsNone ? null : StoreOf(file);
+        if (file.IsNone || store!.IsDeclarationFile(file.Node))
+        {
+            // Definitely cannot have a synthetic default if they have a syntactic default member specified
+            var defaultExportSymbol = ResolveExportByName(moduleSymbol, InternalSymbolName.Default, NodeRef.None, dontResolveAlias: true); // Dont resolve alias because we want the immediately exported symbol's declaration
+            if (!defaultExportSymbol.IsNone && DeclarationsOf(defaultExportSymbol) is { } declarations)
+            {
+                foreach (var declaration in declarations)
+                {
+                    if (IsSyntacticDefault(declaration))
+                    {
+                        return false;
+                    }
+                }
+            }
+            // It _might_ still be incorrect to assume there is no __esModule marker on the import at runtime, even if there is no `default` member
+            // So we check a bit more,
+            if (!ResolveExportByName(moduleSymbol, Utilities.EscapeLeadingUnderscores("__esModule"), NodeRef.None, dontResolveAlias).IsNone)
+            {
+                // If there is an `__esModule` specified in the declaration (meaning someone explicitly added it or wrote it in their code),
+                // it definitely is a module and does not have a synthetic default
+                return false;
+            }
+            // There are _many_ declaration files not written with esmodules in mind that still get compiled into a format with __esModule set
+            // Meaning there may be no default at runtime - however to be on the permissive side, we allow access to a synthetic default member
+            // as there is no marker to indicate if the accompanying JS has `__esModule` or not, or is even native esm
+            return true;
+        }
+        // TypeScript files never have a synthetic default (as they are always emitted with an __esModule marker) _unless_ they contain an export= statement
+        if (!Utilities.IsInJSFile(store, file.Node))
+        {
+            return HasExportAssignmentSymbol(moduleSymbol);
+        }
+        // JS files have a synthetic default if they do not contain ES2015+ module syntax (export = is not valid in js) _and_ do not have an __esModule marker
+        return store.ExternalModuleIndicator(file.Node) is not Node && ResolveExportByName(moduleSymbol, Utilities.EscapeLeadingUnderscores("__esModule"), NodeRef.None, dontResolveAlias).IsNone;
+    }
+
+    // checker.ts hasExportAssignmentSymbol
+    private bool HasExportAssignmentSymbol(SymbolRef moduleSymbol) => ExportsOf(moduleSymbol)!.Has(InternalSymbolName.ExportEquals);
+
+    // checker.ts getTargetofModuleDefault. The node20..nodenext `module.exports` branch is unreachable with the
+    // supported module kinds and left out.
     private SymbolRef GetTargetOfModuleDefault(SymbolRef moduleSymbol, NodeRef node, bool dontResolveAlias)
     {
+        var file = SourceFileDeclarationOf(moduleSymbol);
+        var specifier = GetModuleSpecifierForImportOrExport(node);
+        SymbolRef exportDefaultSymbol;
         if (IsShorthandAmbientModuleSymbol(moduleSymbol))
         {
-            return moduleSymbol;
-        }
-        var exports = ExportsOf(moduleSymbol);
-        SymbolRef exportDefaultSymbol;
-        if (exports is not null && exports.Has(InternalSymbolName.ExportEquals))
-        {
-            exportDefaultSymbol = ResolveSymbol(exports.Get(InternalSymbolName.ExportEquals), dontResolveAlias);
+            exportDefaultSymbol = moduleSymbol;
         }
         else
         {
-            exportDefaultSymbol = ResolveSymbol(exports?.Get(InternalSymbolName.Default) ?? SymbolRef.None, dontResolveAlias);
+            if (ModuleKind.Node20 <= moduleKind && moduleKind <= ModuleKind.NodeNext)
+            {
+                throw new NotSupportedException("Checker (module C11): getTargetofModuleDefault for node20/nodenext is not ported");
+            }
+            exportDefaultSymbol = ResolveExportByName(moduleSymbol, InternalSymbolName.Default, node, dontResolveAlias);
         }
-        if (exportDefaultSymbol.IsNone && compilerOptions.GetAllowSyntheticDefaultImports())
+        if (specifier.IsNone)
+        {
+            return exportDefaultSymbol;
+        }
+        var hasDefaultOnly = IsOnlyImportableAsDefault(specifier, moduleSymbol);
+        var hasSyntheticDefault = CanHaveSyntheticDefault(file, moduleSymbol, dontResolveAlias, specifier);
+        if (exportDefaultSymbol.IsNone && !hasSyntheticDefault && !hasDefaultOnly)
+        {
+            var store = StoreOf(node);
+            if (HasExportAssignmentSymbol(moduleSymbol) && !compilerOptions.GetAllowSyntheticDefaultImports())
+            {
+                var compilerOptionName = moduleKind >= ModuleKind.ES2015 ? "allowSyntheticDefaultImports" : "esModuleInterop";
+                var exportEqualsSymbol = ExportsOf(moduleSymbol)!.Get(InternalSymbolName.ExportEquals);
+                var exportAssignment = ValueDeclarationOf(exportEqualsSymbol);
+                var err = Error(At(node, store.Name(node.Node)), Diagnostics.Module_0_can_only_be_default_imported_using_the_1_flag, SymbolToString(moduleSymbol), compilerOptionName);
+                if (!exportAssignment.IsNone)
+                {
+                    AddRelatedInfo(err, CreateRelatedForNode(exportAssignment, Diagnostics.This_module_is_declared_with_export_and_can_only_be_used_with_a_default_import_when_using_the_0_flag, compilerOptionName));
+                }
+            }
+            else if (store.Kind(node.Node) == SyntaxKind.ImportClause)
+            {
+                ReportNonDefaultExport(moduleSymbol, node);
+            }
+            else
+            {
+                var name = store.Kind(node.Node) is SyntaxKind.ImportSpecifier or SyntaxKind.ExportSpecifier && !store.PropertyName(node.Node).IsNone
+                    ? store.PropertyName(node.Node) : store.Name(node.Node);
+                ErrorNoModuleMemberSymbol(moduleSymbol, moduleSymbol, node, At(node, name), ModuleExportNameTextEscaped(store, name));
+            }
+        }
+        else if (hasSyntheticDefault || hasDefaultOnly)
         {
             // per emit behavior, a synthetic default overrides a "real" .default member if `__esModule` is not present
             var resolved = ResolveExternalModuleSymbol(moduleSymbol, dontResolveAlias);
@@ -2580,6 +2736,62 @@ internal sealed partial class Checker
         }
         MarkSymbolOfAliasDeclarationIfTypeOnly(node, exportDefaultSymbol, SymbolRef.None, overwriteEmpty: false);
         return exportDefaultSymbol;
+    }
+
+    // checker.ts getModuleSpecifierForImportOrExport
+    private NodeRef GetModuleSpecifierForImportOrExport(NodeRef node)
+    {
+        var store = StoreOf(node);
+        var n = node.Node;
+        switch (store.Kind(n))
+        {
+            case SyntaxKind.ImportClause:
+                return At(node, store.ModuleSpecifier(store.Parent(n)));
+            case SyntaxKind.ImportEqualsDeclaration:
+                var reference = store.ModuleReference(n);
+                return store.Kind(reference) == SyntaxKind.ExternalModuleReference ? At(node, store.Expression(reference)) : NodeRef.None;
+            case SyntaxKind.NamespaceImport:
+                return At(node, store.ModuleSpecifier(store.Parent(store.Parent(n))));
+            case SyntaxKind.ImportSpecifier:
+                return At(node, store.ModuleSpecifier(store.Parent(store.Parent(store.Parent(n)))));
+            case SyntaxKind.ExportSpecifier:
+                return At(node, store.ModuleSpecifier(store.Parent(store.Parent(n))));
+            default:
+                throw new InvalidOperationException("Debug.assertNever: " + store.Kind(n));
+        }
+    }
+
+    // checker.ts reportNonDefaultExport
+    private void ReportNonDefaultExport(SymbolRef moduleSymbol, NodeRef node)
+    {
+        var store = StoreOf(node);
+        var nodeSymbol = NodeSymbol(node);
+        var exports = ExportsOf(moduleSymbol);
+        if (exports is not null && exports.Has(NameOf(nodeSymbol)))
+        {
+            Error(At(node, store.Name(node.Node)), Diagnostics.Module_0_has_no_default_export_Did_you_mean_to_use_import_1_from_0_instead, SymbolToString(moduleSymbol), SymbolToString(nodeSymbol));
+        }
+        else
+        {
+            var diagnostic = Error(At(node, store.Name(node.Node)), Diagnostics.Module_0_has_no_default_export, SymbolToString(moduleSymbol));
+            var exportStar = exports?.Get(InternalSymbolName.ExportStar) ?? SymbolRef.None;
+            if (!exportStar.IsNone && DeclarationsOf(exportStar) is { } declarations)
+            {
+                foreach (var decl in declarations)
+                {
+                    var declStore = StoreOf(decl);
+                    if (declStore.Kind(decl.Node) == SyntaxKind.ExportDeclaration && !declStore.ModuleSpecifier(decl.Node).IsNone)
+                    {
+                        var target = ResolveExternalModuleName(decl, At(decl, declStore.ModuleSpecifier(decl.Node)));
+                        if (!target.IsNone && ExportsOf(target)?.Has(InternalSymbolName.Default) == true)
+                        {
+                            AddRelatedInfo(diagnostic, CreateRelatedForNode(decl, Diagnostics.export_Asterisk_does_not_re_export_a_default));
+                            break;
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // checker.ts isShorthandAmbientModuleSymbol
@@ -2599,7 +2811,7 @@ internal sealed partial class Checker
         var store = StoreOf(node);
         var moduleSpecifier = store.ModuleSpecifier(store.Parent(store.Parent(node.Node)));
         var immediate = ResolveExternalModuleName(node, At(node, moduleSpecifier));
-        var resolved = ResolveExternalModuleSymbol(immediate, dontResolveAlias);
+        var resolved = ResolveESModuleSymbol(immediate, At(node, moduleSpecifier), dontResolveAlias, suppressInteropError: false);
         MarkSymbolOfAliasDeclarationIfTypeOnly(node, immediate, resolved, overwriteEmpty: false);
         return resolved;
     }
@@ -2608,10 +2820,126 @@ internal sealed partial class Checker
     {
         var store = StoreOf(node);
         var moduleSpecifier = store.ModuleSpecifier(store.Parent(node.Node));
-        var immediate = ResolveExternalModuleName(node, At(node, moduleSpecifier));
-        var resolved = ResolveExternalModuleSymbol(immediate, dontResolveAlias);
+        var immediate = moduleSpecifier.IsNone ? SymbolRef.None : ResolveExternalModuleName(node, At(node, moduleSpecifier));
+        var resolved = moduleSpecifier.IsNone ? SymbolRef.None : ResolveESModuleSymbol(immediate, At(node, moduleSpecifier), dontResolveAlias, suppressInteropError: false);
         MarkSymbolOfAliasDeclarationIfTypeOnly(node, immediate, resolved, overwriteEmpty: false);
         return resolved;
+    }
+
+    // An external module with an 'export =' declaration may be referenced as an ES6 module provided the 'export ='
+    // references a symbol that is at least declared as a module or a variable. The target of the 'export =' may
+    // combine other declarations with the module or variable (e.g. a class/module, function/module, interface/variable).
+    // checker.ts resolveESModuleSymbol; the node20..nodenext `module.exports` branch is unreachable with the supported
+    // module kinds and left out.
+    internal SymbolRef ResolveESModuleSymbol(SymbolRef moduleSymbol, NodeRef referencingLocation, bool dontResolveAlias, bool suppressInteropError)
+    {
+        var symbol = ResolveExternalModuleSymbol(moduleSymbol, dontResolveAlias);
+        if (!dontResolveAlias && !symbol.IsNone)
+        {
+            if (!suppressInteropError && (SymbolFlagsOf(symbol) & (SymbolFlags.Module | SymbolFlags.Variable)) == 0 && GetDeclarationOfKind(symbol, SyntaxKind.SourceFile).IsNone)
+            {
+                var compilerOptionName = moduleKind >= ModuleKind.ES2015
+                    ? "allowSyntheticDefaultImports"
+                    : "esModuleInterop";
+                Error(referencingLocation, Diagnostics.This_module_can_only_be_referenced_with_ECMAScript_imports_Slashexports_by_turning_on_the_0_flag_and_referencing_its_default_export, compilerOptionName);
+                return symbol;
+            }
+            var store = StoreOf(referencingLocation);
+            var referenceParent = Parent(referencingLocation);
+            var namespaceImport = store.Kind(referenceParent.Node) == SyntaxKind.ImportDeclaration ? GetNamespaceDeclarationNode(store, referenceParent.Node) : Node.None;
+            var isImportCall = Utilities.IsImportCall(store, referenceParent.Node);
+            if (!namespaceImport.IsNone || isImportCall)
+            {
+                var reference = At(referenceParent, isImportCall ? store.Element(store.Arguments(referenceParent.Node), 0) : store.ModuleSpecifier(referenceParent.Node));
+                var type = GetTypeOfSymbol(symbol);
+                var defaultOnlyType = GetTypeWithSyntheticDefaultOnly(type, symbol, moduleSymbol, reference);
+                if (!defaultOnlyType.IsNone)
+                {
+                    return CloneTypeAsModuleType(symbol, defaultOnlyType, referenceParent);
+                }
+                var targetFile = SourceFileDeclarationOf(moduleSymbol);
+                var usageMode = GetEmitSyntaxForModuleSpecifierExpression(reference);
+                if (ModuleKind.Node20 <= moduleKind && moduleKind <= ModuleKind.NodeNext)
+                {
+                    throw new NotSupportedException("Checker (module C11): resolveESModuleSymbol for node20/nodenext is not ported");
+                }
+                var isEsmCjsRef = !targetFile.IsNone && IsESMFormatImportImportingCommonjsFormatFile(usageMode, GetImpliedNodeFormatForEmit(targetFile.File));
+                if (compilerOptions.GetESModuleInterop() || isEsmCjsRef)
+                {
+                    if (HasSignatures(type) ||
+                        !GetPropertyOfType(type, InternalSymbolName.Default, skipObjectFunctionPropertyAugment: true).IsNone ||
+                        isEsmCjsRef)
+                    {
+                        var moduleType = (Types.Flags(type) & TypeFlags.StructuredType) != 0
+                            ? GetTypeWithSyntheticDefaultImportType(type, symbol, moduleSymbol, reference)
+                            : CreateDefaultPropertyWrapperForModule(symbol, ParentOf(symbol));
+                        return CloneTypeAsModuleType(symbol, moduleType, referenceParent);
+                    }
+                }
+            }
+        }
+        return symbol;
+    }
+
+    // utilities.ts getNamespaceDeclarationNode
+    private static Node GetNamespaceDeclarationNode(NodeStore store, Node node)
+    {
+        switch (store.Kind(node))
+        {
+            case SyntaxKind.ImportDeclaration:
+            case SyntaxKind.JSDocImportTag:
+                var importClause = store.ImportClause(node);
+                var namedBindings = importClause.IsNone ? Node.None : store.NamedBindings(importClause);
+                return !namedBindings.IsNone && store.Kind(namedBindings) == SyntaxKind.NamespaceImport ? namedBindings : Node.None;
+            case SyntaxKind.ImportEqualsDeclaration:
+                return node;
+            case SyntaxKind.ExportDeclaration:
+                var exportClause = store.ExportClause(node);
+                return !exportClause.IsNone && store.Kind(exportClause) == SyntaxKind.NamespaceExport ? exportClause : Node.None;
+            default:
+                return Node.None;
+        }
+    }
+
+    // checker.ts hasSignatures
+    private bool HasSignatures(Type type) =>
+        GetSignaturesOfStructuredType(type, SignatureKind.Call).Count > 0 || GetSignaturesOfStructuredType(type, SignatureKind.Construct).Count > 0;
+
+    /// <summary>
+    /// checker.ts cloneTypeAsModuleType: a new symbol which has the module's type less the call and construct signatures.
+    /// </summary>
+    private SymbolRef CloneTypeAsModuleType(SymbolRef symbol, Type moduleType, NodeRef referenceParent)
+    {
+        var result = CreateSymbol(SymbolFlagsOf(symbol), NameOf(symbol));
+        ref var r = ref TransientSymbols.Record(result);
+        var declarations = DeclarationsOf(symbol);
+        r.Declarations = declarations is null ? [] : [.. declarations];
+        r.Parent = ParentOf(symbol);
+        ref var links = ref ExportTypeLinks.Get(result);
+        links.Target = symbol;
+        links.OriginatingImport = referenceParent;
+        var valueDeclaration = ValueDeclarationOf(symbol);
+        if (!valueDeclaration.IsNone)
+        {
+            TransientSymbols.Record(result).ValueDeclaration = valueDeclaration;
+        }
+        if (ConstEnumOnlyModuleOf(symbol))
+        {
+            TransientSymbols.Record(result).ConstEnumOnlyModule = true;
+        }
+        var members = MembersOf(symbol);
+        if (members is not null)
+        {
+            TransientSymbols.Record(result).Members = new SymTable(members);
+        }
+        var exports = ExportsOf(symbol);
+        if (exports is not null)
+        {
+            TransientSymbols.Record(result).Exports = new SymTable(exports);
+        }
+        var resolvedModuleType = ResolveStructuredTypeMembers(moduleType); // Should already be resolved from the signature checks above
+        ValueSymbolLinks.Get(result).ResolvedType = CreateAnonymousType(result, resolvedModuleType.Members!, [], [], resolvedModuleType.IndexInfos);
+        return result;
     }
 
     private SymbolRef GetTargetOfExportSpecifier(NodeRef node, SymbolFlags meaning, bool dontResolveAlias)
@@ -2636,25 +2964,123 @@ internal sealed partial class Checker
         return resolvedSpecifier;
     }
 
-    // checker.ts getExternalModuleMember, for ambient modules.
+    // utilities.ts moduleExportNameTextEscaped
+    private static string ModuleExportNameTextEscaped(NodeStore store, Node name) =>
+        store.Kind(name) == SyntaxKind.StringLiteral ? Utilities.EscapeLeadingUnderscores(store.Texts.GetString(store.Text(name))!) : store.Texts.GetString(store.EscapedText(name))!;
+
+    // checker.ts getTargetOfImportSpecifier (import specifiers; binding elements are in GetTargetOfAliasDeclaration)
+    private SymbolRef GetTargetOfImportSpecifier(NodeRef node, bool dontResolveAlias)
+    {
+        var store = StoreOf(node);
+        var name = !store.PropertyName(node.Node).IsNone ? store.PropertyName(node.Node) : store.Name(node.Node);
+        if (Utilities.ModuleExportNameIsDefault(store, name))
+        {
+            var specifier = GetModuleSpecifierForImportOrExport(node);
+            var moduleSymbol = specifier.IsNone ? SymbolRef.None : ResolveExternalModuleName(node, specifier);
+            if (!moduleSymbol.IsNone)
+            {
+                return GetTargetOfModuleDefault(moduleSymbol, node, dontResolveAlias);
+            }
+        }
+        var resolved = GetExternalModuleMember(At(node, store.Parent(store.Parent(store.Parent(node.Node)))), node, dontResolveAlias);
+        MarkSymbolOfAliasDeclarationIfTypeOnly(node, SymbolRef.None, resolved, overwriteEmpty: false);
+        return resolved;
+    }
+
+    // This function creates a synthetic symbol that combines the value side of one symbol with the
+    // type/namespace side of another symbol (checker.ts combineValueAndTypeSymbols).
+    private SymbolRef CombineValueAndTypeSymbols(SymbolRef valueSymbol, SymbolRef typeSymbol)
+    {
+        if (valueSymbol == unknownSymbol && typeSymbol == unknownSymbol)
+        {
+            return unknownSymbol;
+        }
+        if ((SymbolFlagsOf(valueSymbol) & (SymbolFlags.Type | SymbolFlags.Namespace)) != 0)
+        {
+            return valueSymbol;
+        }
+        var result = CreateSymbol(SymbolFlagsOf(valueSymbol) | SymbolFlagsOf(typeSymbol), NameOf(valueSymbol));
+        var declarations = new List<NodeRef>();
+        foreach (var d in DeclarationsOf(valueSymbol) ?? [])
+        {
+            if (!declarations.Contains(d))
+            {
+                declarations.Add(d);
+            }
+        }
+        foreach (var d in DeclarationsOf(typeSymbol) ?? [])
+        {
+            if (!declarations.Contains(d))
+            {
+                declarations.Add(d);
+            }
+        }
+        var parent = ParentOf(valueSymbol);
+        if (parent.IsNone)
+        {
+            parent = ParentOf(typeSymbol);
+        }
+        var valueDeclaration = ValueDeclarationOf(valueSymbol);
+        var members = MembersOf(typeSymbol);
+        var exports = ExportsOf(valueSymbol);
+        ref var r = ref TransientSymbols.Record(result);
+        r.Declarations = declarations;
+        r.Parent = parent;
+        if (!valueDeclaration.IsNone)
+        {
+            r.ValueDeclaration = valueDeclaration;
+        }
+        if (members is not null)
+        {
+            r.Members = new SymTable(members);
+        }
+        if (exports is not null)
+        {
+            r.Exports = new SymTable(exports);
+        }
+        return result;
+    }
+
+    // checker.ts getPropertyOfVariable
+    private SymbolRef GetPropertyOfVariable(SymbolRef symbol, string name)
+    {
+        if ((SymbolFlagsOf(symbol) & SymbolFlags.Variable) != 0)
+        {
+            var valueDeclaration = ValueDeclarationOf(symbol);
+            var typeAnnotation = StoreOf(valueDeclaration).Type(valueDeclaration.Node);
+            if (!typeAnnotation.IsNone)
+            {
+                return ResolveSymbol(GetPropertyOfType(GetTypeFromTypeNode(At(valueDeclaration, typeAnnotation)), name), dontResolveAlias: false);
+            }
+        }
+        return SymbolRef.None;
+    }
+
+    // checker.ts getExternalModuleMember
     private SymbolRef GetExternalModuleMember(NodeRef declaration, NodeRef specifier, bool dontResolveAlias)
     {
         var store = StoreOf(specifier);
         var requireArgument = GetExternalModuleRequireArgument(store, declaration.Node);
         var moduleSpecifier = At(declaration, !requireArgument.IsNone ? requireArgument : store.ModuleSpecifier(declaration.Node));
-        var moduleSymbol = ResolveExternalModuleName(specifier, moduleSpecifier);
+        var moduleSymbol = ResolveExternalModuleName(declaration, moduleSpecifier);
         var name = store.Kind(specifier.Node) != SyntaxKind.PropertyAccessExpression && !store.PropertyName(specifier.Node).IsNone ? store.PropertyName(specifier.Node) : store.Name(specifier.Node);
         if (store.Kind(name) is not (SyntaxKind.Identifier or SyntaxKind.StringLiteral))
         {
             return SymbolRef.None;
         }
-        var nameText = store.Texts.GetString(store.Kind(name) == SyntaxKind.Identifier ? store.EscapedText(name) : store.Text(name))!;
-        if (store.Kind(name) == SyntaxKind.StringLiteral)
-        {
-            nameText = Utilities.EscapeLeadingUnderscores(nameText);
-        }
-        var targetSymbol = ResolveExternalModuleSymbol(moduleSymbol);
+        var nameText = ModuleExportNameTextEscaped(store, name);
+        var suppressInteropError = nameText == InternalSymbolName.Default && compilerOptions.GetAllowSyntheticDefaultImports();
+        var targetSymbol = ResolveESModuleSymbol(moduleSymbol, moduleSpecifier, dontResolveAlias: false, suppressInteropError);
         if (targetSymbol.IsNone)
+        {
+            return SymbolRef.None;
+        }
+        // Note: The empty string is a valid module export name:
+        //
+        //   import { "" as foo } from "./foo";
+        //   export { foo as "" };
+        //
+        if (nameText.Length == 0 && store.Kind(name) != SyntaxKind.StringLiteral)
         {
             return SymbolRef.None;
         }
@@ -2662,18 +3088,40 @@ internal sealed partial class Checker
         {
             return moduleSymbol;
         }
-        // (symbolFromVariable: properties of an export= variable, TODO(C5))
-        var symbolFromModule = GetExportOfModule(targetSymbol, nameText, specifier, dontResolveAlias);
-        if (symbolFromModule.IsNone && nameText == InternalSymbolName.Default && compilerOptions.GetAllowSyntheticDefaultImports())
+        SymbolRef symbolFromVariable;
+        // First check if module was specified with "export=". If so, get the member from the resolved type
+        if (!moduleSymbol.IsNone && ExportsOf(moduleSymbol)?.Has(InternalSymbolName.ExportEquals) == true)
         {
-            var resolved = ResolveExternalModuleSymbol(moduleSymbol, dontResolveAlias);
-            symbolFromModule = !resolved.IsNone ? resolved : ResolveSymbol(moduleSymbol, dontResolveAlias);
+            symbolFromVariable = GetPropertyOfType(GetTypeOfSymbol(targetSymbol), nameText, skipObjectFunctionPropertyAugment: true);
         }
-        if (symbolFromModule.IsNone)
+        else
+        {
+            symbolFromVariable = GetPropertyOfVariable(targetSymbol, nameText);
+        }
+        // if symbolFromVariable is export - get its final target
+        symbolFromVariable = ResolveSymbol(symbolFromVariable, dontResolveAlias);
+        var symbolFromModule = GetExportOfModule(targetSymbol, nameText, specifier, dontResolveAlias);
+        if (symbolFromModule.IsNone && nameText == InternalSymbolName.Default)
+        {
+            var file = SourceFileDeclarationOf(moduleSymbol);
+            if (IsOnlyImportableAsDefault(moduleSpecifier, moduleSymbol) || CanHaveSyntheticDefault(file, moduleSymbol, dontResolveAlias, moduleSpecifier))
+            {
+                var resolved = ResolveExternalModuleSymbol(moduleSymbol, dontResolveAlias);
+                symbolFromModule = !resolved.IsNone ? resolved : ResolveSymbol(moduleSymbol, dontResolveAlias);
+            }
+        }
+        var symbol = !symbolFromModule.IsNone && !symbolFromVariable.IsNone && symbolFromModule != symbolFromVariable
+            ? CombineValueAndTypeSymbols(symbolFromVariable, symbolFromModule)
+            : !symbolFromModule.IsNone ? symbolFromModule : symbolFromVariable;
+        if (store.Kind(specifier.Node) is SyntaxKind.ImportSpecifier or SyntaxKind.ExportSpecifier && IsOnlyImportableAsDefault(moduleSpecifier, moduleSymbol) && nameText != InternalSymbolName.Default)
+        {
+            Error(At(specifier, name), Diagnostics.Named_imports_from_a_JSON_file_into_an_ECMAScript_module_are_not_allowed_when_module_is_set_to_0, moduleKind.ToString());
+        }
+        else if (symbol.IsNone)
         {
             ErrorNoModuleMemberSymbol(moduleSymbol, targetSymbol, declaration, At(specifier, name), nameText);
         }
-        return symbolFromModule;
+        return symbol;
     }
 
     private SymbolRef GetExportOfModule(SymbolRef symbol, string name, NodeRef specifier, bool dontResolveAlias)
@@ -2751,7 +3199,6 @@ internal sealed partial class Checker
         var moduleName = GetFullyQualifiedName(moduleSymbol, node);
         var store = StoreOf(name);
         var declarationName = Utilities.DeclarationNameToString(store, name.Node);
-        var exports = ExportsOf(targetSymbol);
         var suggestion = store.Kind(name.Node) == SyntaxKind.Identifier ? GetSuggestedSymbolForNonexistentModule(name, targetSymbol) : SymbolRef.None;
         if (!suggestion.IsNone)
         {
@@ -2763,7 +3210,7 @@ internal sealed partial class Checker
                 d.RelatedInformation = [CreateRelatedForNode(suggestionValueDeclaration, Diagnostics._0_is_declared_here, suggestionName)];
             }
         }
-        else if (exports is not null && exports.Has(InternalSymbolName.Default))
+        else if (ExportsOf(moduleSymbol)?.Has(InternalSymbolName.Default) == true)
         {
             Error(name, Diagnostics.Module_0_has_no_exported_member_1_Did_you_mean_to_use_import_1_from_0_instead, moduleName, declarationName);
         }

@@ -385,6 +385,9 @@ internal sealed partial class Program
     /// <summary>program.getModeForUsageLocation(file, usage): the resolution mode of a module name.</summary>
     internal ModuleKind? GetModeForUsageLocation(SourceFile file, Node usage) => GetModeForUsageLocationWorker(file, usage, options);
 
+    /// <summary>program.getEmitSyntaxForUsageLocation(file, usage) (the checker's getEmitSyntaxForModuleSpecifierExpression).</summary>
+    internal ModuleKind? GetEmitSyntaxForUsageLocation(SourceFile file, Node usage) => GetEmitSyntaxForUsageLocationWorker(file, usage, options);
+
     /// <summary>program.getDefaultResolutionModeForFile(file) (getDefaultResolutionModeForFileWorker).</summary>
     internal ModuleKind? GetDefaultResolutionModeForFile(SourceFile file) =>
         ImportSyntaxAffectsModuleResolution(options) ? GetImpliedNodeFormatForEmitWorker(file, options) : null;
