@@ -1,0 +1,28 @@
+NeverSharp pre-registration timestamp
+
+tag:                 prereg/v9
+tag object:          882064fda3ac3c7f9f231a589883677f090a68de
+tagged commit:       0d6a67462634b6d635deec0bb83b408825316fa3
+commit tree:         3e9911ecf3a98528c70ddece57130785f98d3822
+commit date:         2026-10-29T13:17:04+01:00
+
+SHA-256 of files at the tagged commit (content as stored in git, `git show <commit>:<path> | sha256sum`):
+docs/preregistration.md                     b8a25e67a1d5afc2fa971ab0bd724cbf9a5d47e73d99c0ac518c65120dfce8a8
+docs/phase3-plan.md                         15448607ebd25998518824b7fc9e9079cf5a4c124c4ea18517a23bccb1ac7b89
+docs/benchmark-harness.md                   6e4365d0a2dc11ab8f0718442f2fc610378ea91f2a043c35ccb681df12715fcd
+docs/references.md                          dfe88a111f937c08d6f964ab6b9bf921c5af80a5ade87038a7b7ac05893abb28
+pins.json                                   d80f5bea7ff497eee20cdc801f4d968c4ea788c6d3c057effbad512ed814816d
+eng/Gate2.Optimized.props                   126d001b31867b0c0f9083507e9c7f13b7bcc006104707887e2d30949b0ae82f
+eng/optimized.noalloc-allowlist.toml        b36efa146c020eb85066e908346623cecb6d64daf25ff482d52f3e9f3965ff26
+harness/astdump/dump-ts-checker.mjs         46edd3c674579af12e837ec0f830bb5bd0b9d9c830b0dd31f966de44ec63750e
+harness/astdump/compare-checker.mjs         b82a9f015ea6f8d0bad5f9cfed56c85c5fffbacc44f82354b8cd213d4320edce
+harness/bench/report.mjs                    0ffa11fef9fde14ef37b0eeed4fb2a28744b5882068e653b1ccff5b8b773fcd1
+harness/bench/bench.mjs                     8ce31f35048372ae49ec53a6a13cbffb5c42e47603b47e5b7469e2e6a6c42a28
+harness/bench/result.schema.json            62e7e8b0d15649a2a5f2f0b58a0180b1e61d6946244c93714cba56510896a376
+harness/bench/check-equivalence.mjs         bd198d1ec94b20afbd9f582a3c12049bf915fa51d6f89ae717dd1d86c1c84c00
+harness/bench/go/parse.go                   dff25986eab6abf2338afe486d981293619bcdc2d7ae69bf7bf5e0532a5c2d57
+harness/bench/rust/parse-rs/src/main.rs     df2f76d2188601cdb77dfa4214f467e8fbe4d3bb7e1568355d88803b99dd5ace
+tools/NeverSharp.ParseDriver/Program.cs     c696e801de3e516be5fa513433bf80023bcf7d6b28f2266b15864b464a35e7cc
+tools/NeverSharp.ParseDriver/CheckMode.cs   ee5385d924657dd806462608178b325a8c317a496fef8f10f48d5e41c4e8a998
+
+Verify: ots verify docs/timestamps/prereg-v9.txt.ots  (after the proof has been upgraded with ots upgrade)
