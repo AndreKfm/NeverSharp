@@ -853,7 +853,17 @@ internal sealed partial class Checker
             SkippedGenericFunction(node, checkMode);
             return resolvingSignature;
         }
-        // (JavaScript @class functions: C9)
+        // If the function is explicitly marked with `@class`, then it must be constructed.
+        if (callSignatures.Exists(sig =>
+            {
+                var declaration = Signatures.Record(sig).Declaration;
+                return !declaration.IsNone && Utilities.IsInJSFile(StoreOf(declaration), declaration.Node) &&
+                    !GetFirstJSDocTagOfKind(StoreOf(declaration), declaration.Node, SyntaxKind.JSDocClassTag).IsNone;
+            }))
+        {
+            Error(node, Diagnostics.Value_of_type_0_is_not_callable_Did_you_mean_to_include_new, TypeToString(funcType));
+            return ResolveErrorCall(node);
+        }
         return ResolveCall(node, callSignatures, candidatesOutArray, checkMode, callChainFlags);
     }
 
