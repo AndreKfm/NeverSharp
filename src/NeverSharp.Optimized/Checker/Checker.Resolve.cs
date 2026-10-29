@@ -2888,7 +2888,8 @@ internal sealed partial class Checker
     /// <paramref name="location"/> (module C10; program.ts records it while the program is built), then pattern ambient
     /// modules; otherwise the errors for untyped and unresolved modules.
     /// </summary>
-    private SymbolRef ResolveExternalModule(NodeRef location, string moduleReference, DiagnosticMessage? moduleNotFoundError, NodeRef errorNode, bool isForAugmentation)
+    /// <param name="modeOverride">the resolution mode of a synthetic specifier (the JSX runtime import), when Has is set</param>
+    private SymbolRef ResolveExternalModule(NodeRef location, string moduleReference, DiagnosticMessage? moduleNotFoundError, NodeRef errorNode, bool isForAugmentation, (bool Has, ModuleKind? Mode) modeOverride = default)
     {
         if (!errorNode.IsNone && moduleReference.StartsWith("@types/", StringComparison.Ordinal))
         {
@@ -2902,7 +2903,8 @@ internal sealed partial class Checker
         }
         var currentSourceFile = FileAt(location.File);
         var contextSpecifier = GetContextSpecifier(location);
-        var mode = !contextSpecifier.IsNone && Utilities.IsStringLiteralLike(StoreOf(contextSpecifier), contextSpecifier.Node)
+        var mode = modeOverride.Has ? modeOverride.Mode
+            : !contextSpecifier.IsNone && Utilities.IsStringLiteralLike(StoreOf(contextSpecifier), contextSpecifier.Node)
             ? program.GetModeForUsageLocation(currentSourceFile, contextSpecifier.Node)
             : program.GetDefaultResolutionModeForFile(currentSourceFile);
         var moduleResolutionKind = compilerOptions.GetEmitModuleResolutionKind();

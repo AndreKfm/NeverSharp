@@ -8,7 +8,7 @@
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
 // Modified: translated from TypeScript to C#; module C10. The imports and module augmentations of a file are kept by the
 // program (TypeScript stores them in the source file; library files are shared read-only here). With noResolve no
-// resolved file is added; no importHelpers and no JSX runtime import (the options C10 supports have neither).
+// resolved file is added; no importHelpers (not in the options C10 supports); the JSX runtime import is recorded by text.
 //
 // program.ts: processImportedModules, collectExternalModuleReferences, getModuleNames, resolveModuleNamesWorker,
 // getModeForUsageLocation(Worker), getEmitSyntaxForUsageLocationWorker, getResolutionModeOverride,
@@ -38,7 +38,8 @@ internal sealed partial class Program
     private void ProcessImportedModules(SourceFile file)
     {
         var (imports, moduleAugmentations) = CollectExternalModuleReferences(file);
-        if (imports.Count == 0 && moduleAugmentations.Count == 0)
+        var syntheticJsxImport = GetSyntheticJsxImportText(file, options);
+        if (imports.Count == 0 && moduleAugmentations.Count == 0 && syntheticJsxImport is null)
         {
             return;
         }
@@ -49,6 +50,14 @@ internal sealed partial class Program
         var containingFileName = TsPath.GetNormalizedAbsolutePath(store.FileName(file.Root), currentDirectory);
         var resolutionsInFile = new Dictionary<(string Name, ModuleKind? Mode), ResolvedModuleFull?>();
         resolvedModules[file] = resolutionsInFile;
+        if (syntheticJsxImport is not null)
+        {
+            // the synthesized `import "<base>/jsx-runtime"` (createSyntheticImport, the first import): its specifier's mode
+            // is getModeForUsageLocation of a string literal whose parent is an import declaration of the file
+            var mode = ImportSyntaxAffectsModuleResolution(options) ? GetEmitSyntaxOfFile(file, options) : null;
+            syntheticJsxImports[file] = (syntheticJsxImport, mode);
+            resolutionsInFile[(syntheticJsxImport, mode)] = ModuleNameResolver.ResolveModuleName(syntheticJsxImport, containingFileName, options, host, moduleResolutionCache, mode);
+        }
         foreach (var moduleNameNode in moduleNames)
         {
             var moduleName = store.Texts.GetString(store.Text(moduleNameNode))!;
@@ -60,6 +69,50 @@ internal sealed partial class Program
             // (addResolutionDiagnosticsFromResolutionOrCache: the ported resolution produces no resolution diagnostics.)
             // (noResolve: no resolved file is added to the program.)
         }
+    }
+
+    // the files with a synthesized JSX runtime import: its text and the mode it was resolved with
+    private readonly Dictionary<SourceFile, (string Text, ModuleKind? Mode)> syntheticJsxImports = new(ReferenceEqualityComparer.Instance);
+
+    /// <summary>The synthesized JSX runtime import of <paramref name="file"/> (checker.ts getJSXRuntimeImportSpecifier), if any.</summary>
+    internal (string Text, ModuleKind? Mode)? GetSyntheticJsxImport(SourceFile file) => syntheticJsxImports.TryGetValue(file, out var s) ? s : null;
+
+    /// <summary>
+    /// collectExternalModuleReferences' synthesized JSX import: getJSXRuntimeImport(getJSXImplicitImportBase(options, file))
+    /// for JavaScript files and for non-declaration files that are modules or under isolatedModules (importHelpers: not in
+    /// Track O's options).
+    /// </summary>
+    private static string? GetSyntheticJsxImportText(SourceFile file, CompilerOptions options)
+    {
+        var store = file.Store;
+        var root = file.Root;
+        if (!(Utilities.IsInJSFile(store, root) || (!store.IsDeclarationFile(root) && (options.GetIsolatedModules() || Utilities.IsExternalModule(store, root)))))
+        {
+            return null;
+        }
+        // utilities.ts getJSXImplicitImportBase (the jsxImportSource option: not in Track O's options)
+        var pragmas = store.Pragmas(root);
+        var jsxImportSourcePragma = Checker.LastPragmaFactory(pragmas, "jsximportsource", out var hasImportSource);
+        var jsxRuntimeFactory = Checker.LastPragmaFactory(pragmas, "jsxruntime", out _);
+        if (jsxRuntimeFactory == "classic")
+        {
+            return null;
+        }
+        var importBase = options.Jsx is JsxEmit.ReactJSX or JsxEmit.ReactJSXDev || hasImportSource || jsxRuntimeFactory == "automatic"
+            ? (!string.IsNullOrEmpty(jsxImportSourcePragma) ? jsxImportSourcePragma : "react")
+            : null;
+        // utilities.ts getJSXRuntimeImport
+        return importBase is null ? null : importBase + "/" + (options.Jsx == JsxEmit.ReactJSXDev ? "jsx-dev-runtime" : "jsx-runtime");
+    }
+
+    // getEmitSyntaxForUsageLocationWorker for a usage in an import declaration of the file (no import-equals, require or
+    // import call): the file's emit module format
+    private static ModuleKind? GetEmitSyntaxOfFile(SourceFile file, CompilerOptions options)
+    {
+        var fileEmitMode = GetEmitModuleFormatOfFileWorker(file, options);
+        return fileEmitMode == ModuleKind.CommonJS ? ModuleKind.CommonJS
+            : EmitModuleKindIsNonNodeESM(fileEmitMode) || fileEmitMode == ModuleKind.Preserve ? ModuleKind.ESNext
+            : null;
     }
 
     // program.ts getModuleNames

@@ -1721,8 +1721,9 @@ internal sealed partial class Checker
     // sourceFileLinks.jsxImplicitImportContainer per file (unknownSymbol for false)
     private readonly Dictionary<int, SymbolRef> jsxImplicitImportContainers = [];
 
-    // checker.ts getJsxNamespaceContainerForImplicitImport (the specifier is the location: the program's synthetic
-    // import specifier is not created)
+    // checker.ts getJsxNamespaceContainerForImplicitImport. The program's synthetic import specifier is not a node here
+    // (getJSXRuntimeImportSpecifier): when the program synthesized the import, its resolution mode is the specifier's
+    // (module C10); otherwise the location's, as in TypeScript.
     private SymbolRef GetJsxNamespaceContainerForImplicitImport(NodeRef location)
     {
         if (location.IsNone)
@@ -1739,8 +1740,10 @@ internal sealed partial class Checker
             return SymbolRef.None;
         }
         // (moduleResolution classic: not used in Gate C)
+        var synthetic = program.GetSyntheticJsxImport(FileAt(location.File));
+        var modeOverride = synthetic is { } s && s.Text == runtimeImportSpecifier ? (true, s.Mode) : default;
         var mod = ResolveExternalModule(location, runtimeImportSpecifier,
-            Diagnostics.This_JSX_tag_requires_the_module_path_0_to_exist_but_none_could_be_found_Make_sure_you_have_types_for_the_appropriate_package_installed, location, isForAugmentation: false);
+            Diagnostics.This_JSX_tag_requires_the_module_path_0_to_exist_but_none_could_be_found_Make_sure_you_have_types_for_the_appropriate_package_installed, location, isForAugmentation: false, modeOverride);
         var result = !mod.IsNone && mod != unknownSymbol ? GetMergedSymbol(ResolveSymbol(mod)) : SymbolRef.None;
         jsxImplicitImportContainers[location.File] = result.IsNone ? unknownSymbol : result;
         return result;
@@ -1767,7 +1770,7 @@ internal sealed partial class Checker
         importBase is null ? null : importBase + "/" + (compilerOptions.Jsx == JsxEmit.ReactJSXDev ? "jsx-dev-runtime" : "jsx-runtime");
 
     // the factory argument of the last pragma of the given name
-    private static string? LastPragmaFactory(PragmaMap? pragmas, string name, out bool present)
+    internal static string? LastPragmaFactory(PragmaMap? pragmas, string name, out bool present)
     {
         present = false;
         if (pragmas is null || !pragmas.TryGetValue(name, out var value))
