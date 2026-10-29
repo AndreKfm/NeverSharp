@@ -552,6 +552,12 @@ internal sealed partial class Checker
         while (true)
         {
             // onEnter
+            if (Utilities.IsInJSFile(store, current) && !Utilities.GetAssignedExpandoInitializer(store, current).IsNone)
+            {
+                // the defaulted container of `x.y = x.y || {}`: the type of its right operand
+                lastResult = CheckExpression(At(node, store.Right(current)), checkMode);
+                break;
+            }
             CheckNullishCoalesceOperands(At(node, current));
             var op = store.Kind(store.OperatorToken(current));
             var currentLeft = store.Left(current);
