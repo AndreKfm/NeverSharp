@@ -19,8 +19,8 @@
 //
 // Parse+bind configurations (`*-bind`, `*-bind-single`; pre-registration §15) run the drivers with --bind and
 // additionally require a symbol count above zero. Check configurations (`*-check`, `*-check-single`; draft §17) run them
-// with --check (the file list as one program) and require a diagnostic count and more program files than listed files
-// (the default library). In the functional check (--check) the validation run goes through peakmem, which reports the
+// with --check (the file list as one program) and require a diagnostic count and a program file count above zero (the
+// tuning corpus has JavaScript files, which the program does not include without allowJs). In the functional check (--check) the validation run goes through peakmem, which reports the
 // run's peak working set and wall time.
 //
 // Default: every configuration (C# drivers: build-cs.mjs). Before the C# parsers exist,
@@ -166,7 +166,7 @@ function validate(name, list, expectedFiles, config, withPeak = false) {
     if (config.bind && typeof output.symbols !== "number") throw new Error(`${config.id} on ${name}: driver reports no symbol count (no bind mode?)`);
     if (config.bind && expectedFiles > 0 && !(output.symbols > 0)) throw new Error(`${config.id} on ${name}: driver reports ${output.symbols} symbols (no binder behind the driver?)`);
     if (config.check && typeof output.diagnostics !== "number") throw new Error(`${config.id} on ${name}: driver reports no diagnostic count (no check mode?)`);
-    if (config.check && expectedFiles > 0 && !(output.programFiles > expectedFiles)) throw new Error(`${config.id} on ${name}: driver reports ${output.programFiles} program files (no default library?)`);
+    if (config.check && expectedFiles > 0 && !(output.programFiles > 0)) throw new Error(`${config.id} on ${name}: driver reports ${output.programFiles} program files (no program behind the driver?)`);
     return output;
 }
 

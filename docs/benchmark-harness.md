@@ -109,7 +109,7 @@ Options of the checked program: TypeScript 6.0.3's defaults with `noResolve: tru
 | esModuleInterop, allowSyntheticDefaultImports, alwaysStrict | true | not passed: always on in TypeScript 7 (deprecated as options) |
 | types, lib, jsx, noLib | none (`types` default `[]` in both), default library of the target (`lib.es2025.full.d.ts`), not set, false | defaults (equal) |
 
-The runner checks `files` against the parse set and `priority` against the requested class before timing (section 2); for the parse+bind configurations (`*-bind`, `*-bind-single`) it also checks the driver name and `symbols` > 0; for the check configurations (`*-check`, `*-check-single`) the driver name, a `diagnostics` count and `programFiles` > `files` (the default library is in the program). `bench.mjs --check` runs only this validation, once per selected configuration and repository plus the empty file list, and prints the counts (functional check, no timing, nothing written).
+The runner checks `files` against the parse set and `priority` against the requested class before timing (section 2); for the parse+bind configurations (`*-bind`, `*-bind-single`) it also checks the driver name and `symbols` > 0; for the check configurations (`*-check`, `*-check-single`) the driver name, a `diagnostics` count and `programFiles` > 0. `bench.mjs --check` runs only this validation, once per selected configuration and repository plus the empty file list, and prints the counts (functional check, no timing, nothing written).
 
 ## 5. Measurement
 
