@@ -46,7 +46,8 @@ internal sealed partial class Checker
         {
             return resolved;
         }
-        resolvedTypePredicates[signature] = null; // (noTypePredicate while it resolves)
+        // (no marker while it resolves: a predicate that needs itself, e.g. through the effects signature of a call in the
+        // flow of its own type, resolves again and meets the circularity in the type it references, as in checker.ts)
         ref var record = ref Signatures.Record(signature);
         TypePredicateInfo? predicate = null;
         if (!record.Target.IsNone)
