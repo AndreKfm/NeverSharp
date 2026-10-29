@@ -300,6 +300,18 @@ internal static partial class UtilitiesPublic
         return default;
     }
 
+    /// <summary>
+    /// The nodes without comments that getJSDocTagsWorker gave an empty jsDoc list (`node.jsDoc ??= []`) while the
+    /// checker that owns this set runs on the thread (null outside a checker: the list is then written to the store, as
+    /// during binding, which writes its file alone).
+    /// </summary>
+    [ThreadStatic]
+    internal static HashSet<(NodeStore Store, int Node)>? CheckerEmptyJsDocLists;
+
+    /// <summary>`!!node.jsDoc`: the node's own list, or the empty list getJSDocTagsWorker gave it.</summary>
+    internal static bool HasJsDocList(NodeStore store, Node node) =>
+        store.JsDoc(node) is not null || (CheckerEmptyJsDocLists?.Contains((store, node.Index)) ?? false);
+
     private static IReadOnlyList<Node> GetJSDocTagsWorker(NodeStore store, Node node, bool? noCache = null)
     {
         if (!Utilities.CanHaveJSDoc(store, node))
@@ -337,7 +349,23 @@ internal static partial class UtilitiesPublic
             {
                 // node.jsDoc ??= []; node.jsDoc.jsDocCache = tags;
                 var array = jsDoc as JSDocArray;
-                if (array == null)
+                if (array != null)
+                {
+                    array.JsDocCache = tags;
+                }
+                else if (CheckerEmptyJsDocLists is { } marks)
+                {
+                    // A checker runs on this thread: the files' stores are shared by the checkers of a program and read
+                    // from several threads, so they are not written (a new jsDoc entry can move a store's object slots
+                    // under a concurrent reader). The empty list that `node.jsDoc ??= []` gives a node without comments
+                    // is observable (`decl.jsDoc` in getSignaturesOfSymbol): the checker records it; a node with
+                    // comments keeps its list and its tags are computed again.
+                    if (jsDoc == null)
+                    {
+                        marks.Add((store, node.Index));
+                    }
+                }
+                else
                 {
                     array = new JSDocArray();
                     if (jsDoc != null)
@@ -345,8 +373,8 @@ internal static partial class UtilitiesPublic
                         array.AddRange(jsDoc);
                     }
                     store.SetJsDoc(node, array);
+                    array.JsDocCache = tags;
                 }
-                array.JsDocCache = tags;
             }
         }
         return tags;

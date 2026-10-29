@@ -38,10 +38,17 @@ internal sealed partial class Checker
     private readonly bool exactOptionalPropertyTypes;
     private readonly bool noUncheckedSideEffectImports;
 
+    // The empty jsDoc lists getJSDocTags gives nodes without comments while this checker runs (UtilitiesPublic.CheckerEmptyJsDocLists)
+    private readonly HashSet<(NodeStore Store, int Node)> emptyJsDocLists = [];
+
+    /// <summary>Makes this checker the one that runs on the current thread (its own record of JSDoc lookups).</summary>
+    internal void EnterThread() => UtilitiesPublic.CheckerEmptyJsDocLists = emptyJsDocLists;
+
     internal Checker(Program program)
     {
         ArgumentNullException.ThrowIfNull(program);
         this.program = program;
+        EnterThread();
         compilerOptions = program.Options;
         var files = program.SourceFiles;
         for (var i = 0; i < files.Count; i++)

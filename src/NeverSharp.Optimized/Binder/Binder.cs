@@ -150,12 +150,16 @@ internal sealed partial class Binder
         }
         var binder = threadBinder ?? new Binder();
         threadBinder = null;
+        // The binder writes its file alone: JSDoc lookups cache in the file's store (UtilitiesPublic.CheckerEmptyJsDocLists).
+        var checkerEmptyJsDocLists = UtilitiesPublic.CheckerEmptyJsDocLists;
+        UtilitiesPublic.CheckerEmptyJsDocLists = null;
         try
         {
             binder.BindFile(file, options);
         }
         finally
         {
+            UtilitiesPublic.CheckerEmptyJsDocLists = checkerEmptyJsDocLists;
             // Step BO1: the binder store's range in the thread's binder slab ends here.
             file.Binding?.Commit();
             binder.Clear();

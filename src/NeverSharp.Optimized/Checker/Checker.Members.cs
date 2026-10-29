@@ -1666,7 +1666,7 @@ internal sealed partial class Checker
                 }
             }
             // (node.jsDoc: also the empty array getJSDocTags caches on a node without its own comments)
-            if (Utilities.IsInJSFile(store, decl.Node) && store.JsDoc(decl.Node) is not null)
+            if (Utilities.IsInJSFile(store, decl.Node) && UtilitiesPublic.HasJsDocList(store, decl.Node))
             {
                 var hasOverloadTags = false;
                 foreach (var tag in UtilitiesPublic.GetJSDocTags(store, decl.Node))

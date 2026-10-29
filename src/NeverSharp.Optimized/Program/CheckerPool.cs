@@ -57,6 +57,7 @@ internal sealed class CheckerPool
         RunAll(checkers.Length, checkerIndex =>
         {
             var checker = checkers[checkerIndex];
+            checker.EnterThread();
             for (var i = 0; i < files.Count; i++)
             {
                 if (fileAssociations[files[i]] == checkerIndex)
@@ -72,7 +73,11 @@ internal sealed class CheckerPool
     internal List<ProgramDiagnostic> GetGlobalDiagnostics()
     {
         var perChecker = new List<ProgramDiagnostic>[checkers.Length];
-        RunAll(checkers.Length, i => perChecker[i] = checkers[i].GetGlobalDiagnostics());
+        RunAll(checkers.Length, i =>
+        {
+            checkers[i].EnterThread();
+            perChecker[i] = checkers[i].GetGlobalDiagnostics();
+        });
         var all = new List<ProgramDiagnostic>();
         foreach (var list in perChecker)
         {
