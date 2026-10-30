@@ -38,8 +38,8 @@ internal sealed partial class Checker
         private NodeRef errorNode = errorNode;
         private DiagnosticMessageChain? errorInfo;
         private List<ProgramRelatedInformation>? relatedInfo;
-        private List<string>? maybeKeys;
-        private HashSet<string>? maybeKeysSet;
+        private List<RelationKey>? maybeKeys;
+        private HashSet<RelationKey>? maybeKeysSet;
         private List<Type> sourceStack = [];
         private List<Type> targetStack = [];
         private int maybeCount;
@@ -1153,7 +1153,7 @@ internal sealed partial class Checker
             if (maybeKeys is null)
             {
                 maybeKeys = [];
-                maybeKeysSet = new HashSet<string>(StringComparer.Ordinal);
+                maybeKeysSet = [];
                 sourceStack = [];
                 targetStack = [];
             }
@@ -1167,8 +1167,7 @@ internal sealed partial class Checker
                 // A key that starts with "*" is an indication that we have type references that reference constrained
                 // type parameters. For such keys we also check against the key we would have gotten if all type parameters
                 // were unconstrained.
-                var broadestEquivalentId = id.StartsWith('*') ? c.GetRelationKey(source, target, intersectionState, relation, ignoreConstraints: true) : null;
-                if (broadestEquivalentId is not null && maybeKeysSet.Contains(broadestEquivalentId))
+                if (id.HasConstraintMarker && maybeKeysSet.Contains(c.GetRelationKey(source, target, intersectionState, relation, ignoreConstraints: true)))
                 {
                     return Ternary.Maybe;
                 }

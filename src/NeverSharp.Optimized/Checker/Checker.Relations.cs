@@ -86,9 +86,55 @@ internal enum SignatureCheckMode
 internal sealed class Relation(string name)
 {
     internal readonly string Name = name;
-    internal readonly Dictionary<string, RelationComparisonResult> Results = new(StringComparer.Ordinal);
+    internal readonly Dictionary<RelationKey, RelationComparisonResult> Results = [];
 
     public override string ToString() => Name;
+}
+
+/// <summary>
+/// checker.ts getRelationKey's string as a value (module CO1): the two type ids and the intersection state for the key
+/// <c>`${source.id},${target.id}${postFix}`</c>, the string itself for a pair of generic type references. The
+/// generic key has '=', '-' or '&lt;' after its first id (its types have type arguments), so it never equals a plain
+/// pair's key, and two keys are equal exactly when their strings are.
+/// </summary>
+internal readonly struct RelationKey : IEquatable<RelationKey>
+{
+    private readonly int source;
+    private readonly int target;
+    private readonly int intersectionState;
+    private readonly string? text;
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal RelationKey(int source, int target, int intersectionState)
+    {
+        this.source = source;
+        this.target = target;
+        this.intersectionState = intersectionState;
+    }
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal RelationKey(string text)
+    {
+        this.text = text;
+    }
+
+    /// <summary>`id.startsWith("*")`: a generic key of type references with constrained type parameters.</summary>
+    internal bool HasConstraintMarker
+    {
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+        get => text is { Length: > 0 } && text[0] == '*';
+    }
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    public bool Equals(RelationKey other) => text is null
+        ? other.text is null && source == other.source && target == other.target && intersectionState == other.intersectionState
+        : other.text is not null && text == other.text;
+
+    public override bool Equals(object? obj) => obj is RelationKey other && Equals(other);
+
+    public override int GetHashCode() => text is null
+        ? (int)(((uint)source * 0x9E3779B1u) ^ ((uint)target * 0x85EBCA6Bu) ^ (uint)intersectionState)
+        : text.GetHashCode(StringComparison.Ordinal);
 }
 
 /// <summary>checker.ts ErrorOutputContainer.</summary>
@@ -1245,16 +1291,19 @@ internal sealed partial class Checker
     /// checker.ts getRelationKey: to improve caching, the relation key for two generic types uses the target's id plus
     /// ids of the type parameters; for other cases, the types ids are used.
     /// </summary>
-    private string GetRelationKey(Type source, Type target, IntersectionState intersectionState, Relation relation, bool ignoreConstraints)
+    private RelationKey GetRelationKey(Type source, Type target, IntersectionState intersectionState, Relation relation, bool ignoreConstraints)
     {
         if (relation == identityRelation && source.Id > target.Id)
         {
             (source, target) = (target, source);
         }
-        var postFix = intersectionState != 0 ? ":" + ((int)intersectionState).ToString(CultureInfo.InvariantCulture) : "";
-        return IsTypeReferenceWithGenericArguments(source) && IsTypeReferenceWithGenericArguments(target)
-            ? GetGenericTypeReferenceRelationKey(source, target, postFix, ignoreConstraints)
-            : source.Id.ToString(CultureInfo.InvariantCulture) + "," + target.Id.ToString(CultureInfo.InvariantCulture) + postFix;
+        if (IsTypeReferenceWithGenericArguments(source) && IsTypeReferenceWithGenericArguments(target))
+        {
+            var postFix = intersectionState != 0 ? ":" + ((int)intersectionState).ToString(CultureInfo.InvariantCulture) : "";
+            return new RelationKey(GetGenericTypeReferenceRelationKey(source, target, postFix, ignoreConstraints));
+        }
+        // `${source.id},${target.id}${postFix}`
+        return new RelationKey(source.Id, target.Id, (int)intersectionState);
     }
 
     // ---- properties of classes ----
