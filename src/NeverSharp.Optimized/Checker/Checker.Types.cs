@@ -996,9 +996,11 @@ internal sealed partial class Checker
             count *= (Types.Flags(t) & TypeFlags.Union) != 0 ? Types.Union(t).Types.Count : (Types.Flags(t) & TypeFlags.Never) != 0 ? 0 : 1;
         }
         var intersections = new List<Type>();
+        // (types.slice() per combination: one buffer, refilled; getIntersectionType reads it as a span)
+        var constituents = new Type[types.Length];
         for (var i = 0; i < count; i++)
         {
-            var constituents = (Type[])types.Clone();
+            types.CopyTo(constituents, 0);
             var n = i;
             for (var j = types.Length - 1; j >= 0; j--)
             {

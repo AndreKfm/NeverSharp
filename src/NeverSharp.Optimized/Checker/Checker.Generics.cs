@@ -2416,7 +2416,15 @@ internal sealed partial class Checker
         {
             if ((Types.ObjectFlagsOf(type) & ObjectFlags.IsNeverIntersectionComputed) == 0)
             {
-                var isNever = GetPropertiesOfUnionOrIntersectionType(type).Exists(IsNeverReducedProperty);
+                var isNever = false;
+                foreach (var prop in GetPropertiesOfUnionOrIntersectionType(type))
+                {
+                    if (IsNeverReducedProperty(prop))
+                    {
+                        isNever = true;
+                        break;
+                    }
+                }
                 Types.Record(type).ObjectFlags |= ObjectFlags.IsNeverIntersectionComputed | (isNever ? ObjectFlags.IsNeverIntersection : 0);
             }
             return (Types.ObjectFlagsOf(type) & ObjectFlags.IsNeverIntersection) != 0 ? neverType : type;

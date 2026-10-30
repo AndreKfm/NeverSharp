@@ -58,7 +58,26 @@ internal sealed partial class Checker
             Array.Resize(ref names, Math.Max(symbol.Index + 1, names.Length * 2));
             binderNames[symbol.File] = names;
         }
-        return names[symbol.Index] ??= StoreOf(symbol.File).Texts.GetString(BindingOf(symbol.File).Name(symbol.BinderSymbol)) ?? "";
+        return names[symbol.Index] ??= InternBinderName(StoreOf(symbol.File).Texts, BindingOf(symbol.File).Name(symbol.BinderSymbol));
+    }
+
+    // The names of binder symbols, one string per distinct name in this checker (looked up by the text's characters)
+    private readonly Dictionary<string, string> binderNameStrings = new(StringComparer.Ordinal);
+
+    private string InternBinderName(TextTable texts, TextRef text)
+    {
+        if (text.IsNone)
+        {
+            return "";
+        }
+        var lookup = binderNameStrings.GetAlternateLookup<ReadOnlySpan<char>>();
+        if (lookup.TryGetValue(texts.Span(text), out var interned))
+        {
+            return interned;
+        }
+        var name = texts.GetString(text) ?? "";
+        binderNameStrings.TryAdd(name, name);
+        return name;
     }
 
     /// <summary>symbol.declarations (null when undefined; the list must not be modified).</summary>

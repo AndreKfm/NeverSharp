@@ -348,8 +348,106 @@ internal sealed partial class Checker
     internal ProgramDiagnostic CreateDiagnosticForNode(NodeRef node, DiagnosticMessage message, params object?[] args)
     {
         var file = FileAt(node.File);
-        var d = Utilities.CreateDiagnosticForNodeInSourceFile(file.Store, file.Root, node.Node, message, args);
-        return ProgramDiagnostic.FromFile(file, d);
+        var span = Utilities.GetErrorSpanForNode(file.Store, file.Root, node.Node);
+        return CreateProgramFileDiagnostic(file, span.Start, span.Length, message, args);
+    }
+
+    /// <summary>
+    /// utilities.ts createFileDiagnostic as a program diagnostic of <paramref name="file"/>: the members
+    /// Utilities.CreateFileDiagnostic gives the parser's diagnostic and ProgramDiagnostic.FromFile copies, built
+    /// directly (module CO1: no intermediate diagnostic, the message formatted in this checker's builder).
+    /// </summary>
+    internal ProgramDiagnostic CreateProgramFileDiagnostic(SourceFile file, int start, int length, DiagnosticMessage message, object?[] args)
+    {
+        // assertDiagnosticLocation
+        var textLength = file.Store.SourceFileText(file.Root).Chars.Length;
+        Debug.AssertGreaterThanOrEqual(start, 0);
+        Debug.AssertGreaterThanOrEqual(length, 0);
+        Debug.AssertLessThanOrEqual(start, textLength);
+        Debug.AssertLessThanOrEqual(start + length, textLength);
+        var text = Utilities.GetLocaleSpecificMessage(message);
+        if (args.Length != 0)
+        {
+            text = FormatStringFromArgs(text, args);
+        }
+        return new ProgramDiagnostic
+        {
+            SourceFile = file,
+            File = file.Root,
+            StartOrUndefined = start,
+            LengthOrUndefined = length,
+            MessageText = text,
+            Category = message.Category,
+            Code = message.Code,
+            ReportsUnnecessary = message.ReportsUnnecessary,
+            ReportsDeprecated = message.ReportsDeprecated,
+        };
+    }
+
+    // The builder FormatStringFromArgs reuses (a message is complete before the next one is formatted)
+    private readonly System.Text.StringBuilder messageBuilder = new();
+
+    /// <summary>utilities.ts formatStringFromArgs (Utilities.FormatStringFromArgs with this checker's builder).</summary>
+    private string FormatStringFromArgs(string text, object?[] args)
+    {
+        var result = messageBuilder;
+        var started = false;
+        var last = 0;
+        var i = 0;
+        while (i < text.Length)
+        {
+            if (text[i] == '{')
+            {
+                var j = i + 1;
+                while (j < text.Length && text[j] >= '0' && text[j] <= '9')
+                {
+                    j++;
+                }
+                if (j > i + 1 && j < text.Length && text[j] == '}')
+                {
+                    if (!started)
+                    {
+                        result.Clear();
+                        started = true;
+                    }
+                    result.Append(text, last, i - last);
+                    // `+index`: digits only, so the number is a non-negative integer (or beyond any index).
+                    var index = long.TryParse(text.AsSpan(i + 1, j - i - 1), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var n) && n < args.Length ? (int)n : -1;
+                    // JavaScript's `"" + value` for the values of DiagnosticArguments (string | number)
+                    switch (Debug.CheckDefined(index >= 0 ? args[index] : null))
+                    {
+                        case string s:
+                            result.Append(s);
+                            break;
+                        case int k:
+                            result.Append(System.Globalization.CultureInfo.InvariantCulture, $"{k}");
+                            break;
+                        case double d:
+                            result.Append(JsNumber.ToString(d));
+                            break;
+                        case var other:
+                            result.Append(Debug.Stringify(other));
+                            break;
+                    }
+                    i = j + 1;
+                    last = i;
+                    continue;
+                }
+            }
+            i++;
+        }
+        if (!started)
+        {
+            return text;
+        }
+        result.Append(text, last, text.Length - last);
+        var formatted = result.ToString();
+        if (result.Capacity > 4096)
+        {
+            result.Clear();
+            result.Capacity = 256;
+        }
+        return formatted;
     }
 
     /// <summary>A related-information entry for a node (createDiagnosticForNode used as relatedInformation).</summary>

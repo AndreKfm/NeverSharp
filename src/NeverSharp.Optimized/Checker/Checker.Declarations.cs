@@ -1104,18 +1104,21 @@ internal sealed partial class Checker
                 return;
             }
             var canonicalFlags = GetEffectiveDeclarationFlags(GetCanonicalOverload(overloads, implementation), flagsToCheck);
-            // group(overloads, o => getSourceFileOfNode(o).fileName): groups in order of first appearance
+            // group(overloads, o => getSourceFileOfNode(o).fileName): groups in order of first appearance (indexed by
+            // file number: one program file per file name)
             var groups = new List<List<NodeRef>>();
+            var groupOfFile = new Dictionary<int, List<NodeRef>>();
             foreach (var o in overloads)
             {
-                var existing = groups.Find(g => g[0].File == o.File);
-                if (existing is null)
+                if (groupOfFile.TryGetValue(o.File, out var existing))
                 {
-                    groups.Add([o]);
+                    existing.Add(o);
                 }
                 else
                 {
-                    existing.Add(o);
+                    List<NodeRef> group = [o];
+                    groups.Add(group);
+                    groupOfFile.Add(o.File, group);
                 }
             }
             foreach (var group in groups)

@@ -259,8 +259,7 @@ internal sealed partial class Checker
     /// <summary>utilities.ts createFileDiagnostic (with the checker's program file).</summary>
     internal ProgramDiagnostic CreateFileDiagnostic(int fileNumber, int start, int length, DiagnosticMessage message, params object?[] args)
     {
-        var file = FileAt(fileNumber);
-        return ProgramDiagnostic.FromFile(file, Utilities.CreateFileDiagnostic(file.Store, file.Root, start, length, message, args));
+        return CreateProgramFileDiagnostic(FileAt(fileNumber), start, length, message, args);
     }
 
     /// <summary>utilities.ts createDiagnosticForNodeArray: the span of the list (its first element's start to its end).</summary>

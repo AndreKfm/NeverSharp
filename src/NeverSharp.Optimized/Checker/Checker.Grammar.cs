@@ -62,8 +62,7 @@ internal sealed partial class Checker
     // utilities.ts createFileDiagnostic
     private ProgramDiagnostic CreateFileDiagnosticAt(int fileNumber, int start, int length, DiagnosticMessage message, params object?[] args)
     {
-        var file = FileAt(fileNumber);
-        return ProgramDiagnostic.FromFile(file, Utilities.CreateFileDiagnostic(file.Store, file.Root, start, length, message, args));
+        return CreateProgramFileDiagnostic(FileAt(fileNumber), start, length, message, args);
     }
 
     // createFileDiagnostic used as related information

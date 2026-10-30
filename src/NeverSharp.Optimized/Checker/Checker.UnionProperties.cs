@@ -91,7 +91,7 @@ internal sealed partial class Checker
                         }
                         else
                         {
-                            propSet ??= [singleProp];
+                            propSet ??= new List<SymbolRef>(containingTypes.Count) { singleProp };
                             if (!propSet.Contains(prop))
                             {
                                 propSet.Add(prop);
@@ -187,11 +187,11 @@ internal sealed partial class Checker
             return singleProp;
         }
         var props = propSet ?? [singleProp];
-        var declarations = new List<NodeRef>();
+        var declarations = new List<NodeRef>(props.Count);
         var hasDeclarations = false;
         var firstType = Type.None;
         var nameType = Type.None;
-        var propTypes = new List<Type>();
+        var propTypes = new List<Type>(props.Count + (indexTypes?.Count ?? 0));
         List<Type>? writeTypes = null;
         var firstValueDeclaration = NodeRef.None;
         var hasNonUniformValueDeclaration = false;

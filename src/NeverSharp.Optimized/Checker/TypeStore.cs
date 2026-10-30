@@ -480,7 +480,7 @@ internal sealed class Chunks<T>
 /// A symbol table the checker owns (types.ts SymbolTable: a Map from escaped name to symbol, iterated in insertion
 /// order; Map.set on an existing key keeps its position). Binder tables are read through a cached copy of this kind
 /// (<see cref="Checker.TableOf"/>), so the checker sees one table type for binder and transient symbols.
-/// Layout (module CO1): the entries in insertion order in two arrays (names, symbols); up to <see cref="LinearLimit"/>
+/// Layout (module CO1): the entries (name, symbol) in insertion order in one array; up to <see cref="LinearLimit"/>
 /// entries are found by a scan, larger tables by an open-addressing index (linear probing, load at most 1/2, entry
 /// number + 1 per slot, 0 free). No per-entry objects.
 /// </summary>
@@ -488,23 +488,26 @@ internal sealed class SymTable
 {
     private const int LinearLimit = 8;
 
-    private string[] names;
-    private SymbolRef[] values;
+    private struct Entry
+    {
+        public string Name;
+        public SymbolRef Value;
+    }
+
+    private Entry[] entries;
     private int[]? buckets; // null: at most LinearLimit entries, found by a scan
     private int count;
 
     internal SymTable(int capacity = 0)
     {
-        names = capacity == 0 ? [] : new string[capacity];
-        values = capacity == 0 ? [] : new SymbolRef[capacity];
+        entries = capacity == 0 ? [] : new Entry[capacity];
     }
 
     /// <summary>new Map(other): a copy in the same order.</summary>
     internal SymTable(SymTable other)
     {
         count = other.count;
-        names = other.names.AsSpan(0, count).ToArray();
-        values = other.values.AsSpan(0, count).ToArray();
+        entries = other.entries.AsSpan(0, count).ToArray();
         buckets = other.buckets is null ? null : (int[])other.buckets.Clone();
     }
 
@@ -519,7 +522,7 @@ internal sealed class SymTable
     internal SymbolRef Get(string name)
     {
         var i = Find(name);
-        return i >= 0 ? values[i] : SymbolRef.None;
+        return i >= 0 ? entries[i].Value : SymbolRef.None;
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
@@ -531,15 +534,14 @@ internal sealed class SymTable
         var i = Find(name);
         if (i >= 0)
         {
-            values[i] = symbol;
+            entries[i].Value = symbol;
             return;
         }
-        if (count == names.Length)
+        if (count == entries.Length)
         {
             Resize(Math.Max(4, count * 2));
         }
-        names[count] = name;
-        values[count] = symbol;
+        entries[count] = new Entry { Name = name, Value = symbol };
         count++;
         if (buckets is not null)
         {
@@ -554,14 +556,14 @@ internal sealed class SymTable
         }
         else if (count > LinearLimit)
         {
-            Rehash(BucketCountFor(names.Length));
+            Rehash(BucketCountFor(entries.Length));
         }
     }
 
     /// <summary>Makes room for <paramref name="capacity"/> entries (no change to the contents).</summary>
     internal void EnsureCapacity(int capacity)
     {
-        if (capacity > names.Length)
+        if (capacity > entries.Length)
         {
             Resize(capacity);
             if (buckets is not null && capacity * 2 > buckets.Length)
@@ -587,7 +589,7 @@ internal sealed class SymTable
                 var mask = buckets.Length - 1;
                 for (var entry = count - 1; entry >= 0; entry--)
                 {
-                    var slot = Hash(names[entry]) & mask;
+                    var slot = Hash(entries[entry].Name) & mask;
                     while (buckets[slot] != entry + 1)
                     {
                         slot = (slot + 1) & mask;
@@ -596,7 +598,7 @@ internal sealed class SymTable
                 }
             }
         }
-        Array.Clear(names, 0, count);
+        Array.Clear(entries, 0, count);
         count = 0;
     }
 
@@ -608,11 +610,9 @@ internal sealed class SymTable
         {
             return false;
         }
-        Array.Copy(names, i + 1, names, i, count - i - 1);
-        Array.Copy(values, i + 1, values, i, count - i - 1);
+        Array.Copy(entries, i + 1, entries, i, count - i - 1);
         count--;
-        names[count] = null!;
-        values[count] = default;
+        entries[count] = default;
         if (buckets is not null)
         {
             if (count <= LinearLimit)
@@ -628,22 +628,22 @@ internal sealed class SymTable
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal string NameAt(int i) => names[i];
+    internal string NameAt(int i) => entries[i].Name;
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal SymbolRef ValueAt(int i) => values[i];
+    internal SymbolRef ValueAt(int i) => entries[i].Value;
 
     // The entry number of the name, -1 when absent.
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private int Find(string name)
     {
         var b = buckets;
+        var e = entries;
         if (b is null)
         {
-            var n = names;
             for (var i = 0; i < count; i++)
             {
-                if (n[i] == name)
+                if (e[i].Name == name)
                 {
                     return i;
                 }
@@ -658,18 +658,14 @@ internal sealed class SymTable
             {
                 return -1;
             }
-            if (names[entry - 1] == name)
+            if (e[entry - 1].Name == name)
             {
                 return entry - 1;
             }
         }
     }
 
-    private void Resize(int capacity)
-    {
-        Array.Resize(ref names, capacity);
-        Array.Resize(ref values, capacity);
-    }
+    private void Resize(int capacity) => Array.Resize(ref entries, capacity);
 
     private void Rehash(int bucketCount)
     {
@@ -685,7 +681,7 @@ internal sealed class SymTable
     private void Insert(int[] b, int entry)
     {
         var mask = b.Length - 1;
-        var slot = Hash(names[entry]) & mask;
+        var slot = Hash(entries[entry].Name) & mask;
         while (b[slot] != 0)
         {
             slot = (slot + 1) & mask;
