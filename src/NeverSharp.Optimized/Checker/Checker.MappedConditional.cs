@@ -811,6 +811,7 @@ internal sealed partial class Checker
             : allOuterTypeParameters.FindAll(tp => IsTypeParameterPossiblyReferenced(tp, node)).ToArray();
         var root = new ConditionalRoot
         {
+            Id = ++conditionalRootCount,
             Node = node,
             CheckType = checkType,
             ExtendsType = GetTypeFromTypeNode(At(node, store.ExtendsType(node.Node))),
@@ -823,10 +824,20 @@ internal sealed partial class Checker
         var resolved = SetCachedNodeType(node, GetConditionalType(root, null, forConstraint: false));
         if (outerTypeParameters is not null)
         {
-            root.Instantiations = new Dictionary<string, Type>(StringComparer.Ordinal) { [GetTypeListId(outerTypeParameters)] = resolved };
+            var mark = keyScratch.Mark();
+            keyScratch.Add(root.Id);
+            keyScratch.Add(0);
+            keyScratch.AddTypes(outerTypeParameters);
+            conditionalInstantiations.Set(keyScratch.Since(mark), resolved);
+            keyScratch.Release(mark);
         }
         return resolved;
     }
+
+    // root.instantiations of the conditional roots (module CO2: one map; each key starts with the root's number, then
+    // 1 for the "C" prefix of a constraint instantiation or 0, the type arguments and the alias)
+    private readonly KeyMap<Type> conditionalInstantiations = new();
+    private int conditionalRootCount;
 
     // checker.ts getInferTypeParameters
     private Type[]? GetInferTypeParameters(NodeRef node)
@@ -1063,9 +1074,13 @@ internal sealed partial class Checker
             // mapper to the type parameters to produce the effective list of type arguments, and compute the
             // instantiation cache key from the type IDs of the type arguments.
             var typeArguments = Array.ConvertAll(root.OuterTypeParameters, t => GetMappedType(t, mapper));
-            var id = (forConstraint ? "C" : "") + GetTypeListId(typeArguments) + GetAliasId(aliasSymbol, aliasTypeArguments);
-            root.Instantiations ??= new Dictionary<string, Type>(StringComparer.Ordinal);
-            if (!root.Instantiations.TryGetValue(id, out var result))
+            var mark = keyScratch.Mark();
+            keyScratch.Add(root.Id);
+            keyScratch.Add(forConstraint ? 1 : 0);
+            keyScratch.AddTypes(typeArguments);
+            AddAliasKey(aliasSymbol, aliasTypeArguments);
+            var id = keyScratch.Since(mark);
+            if (!conditionalInstantiations.TryGetValue(id, out var result))
             {
                 var newMapper = CreateTypeMapper(root.OuterTypeParameters, typeArguments);
                 var checkType = root.CheckType;
@@ -1076,8 +1091,9 @@ internal sealed partial class Checker
                 result = !distributionType.IsNone && checkType != distributionType && (Types.Flags(distributionType) & (TypeFlags.Union | TypeFlags.Never)) != 0
                     ? MapTypeWithAlias(distributionType, t => GetConditionalType(root, PrependTypeMapping(checkType, t, newMapper), forConstraint), aliasSymbol, aliasTypeArguments)
                     : GetConditionalType(root, newMapper, forConstraint, aliasSymbol, aliasTypeArguments);
-                root.Instantiations[id] = result;
+                conditionalInstantiations.Set(id, result);
             }
+            keyScratch.Release(mark);
             return result;
         }
         return type;

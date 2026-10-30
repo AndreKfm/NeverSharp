@@ -639,7 +639,7 @@ internal sealed partial class Checker
         {
             var typeArguments = TypeArgumentsFromTypeReferenceNode(node);
             var typeArgumentList = Types.CreateList(typeArguments);
-            var id = GetAliasId(symbol, typeArgumentList);
+            var id = GetAliasId(symbol, typeArgumentList, Types);
             if (!errorTypes.TryGetValue(id, out var unresolved))
             {
                 unresolved = Types.CreateIntrinsic(TypeFlags.Any, "error", ObjectFlags.CouldContainTypeVariablesComputed | ObjectFlags.IsGenericTypeComputed | ObjectFlags.IsUnknownLikeUnionComputed | ObjectFlags.IsNeverIntersectionComputed, "alias " + id);
@@ -651,7 +651,7 @@ internal sealed partial class Checker
             return unresolved;
         }
         var type = GetDeclaredTypeOfSymbol(symbol);
-        var typeParameters = aliasInstantiations.TryGetValue(symbol, out var entry) ? entry.TypeParameters : null;
+        var typeParameters = aliasInstantiations.TryGetValue(symbol, out var entry) ? entry : null;
         if (typeParameters is not null)
         {
             var store = StoreOf(node);

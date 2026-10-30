@@ -242,7 +242,7 @@ internal sealed class ObjectTypeData
     public Type Target;
     public TypeList ResolvedTypeArguments;
     public bool HasResolvedTypeArguments;
-    public Dictionary<string, Type>? Instantiations;
+    public bool HasInstantiations; // instantiations !== undefined (the entries: Checker.typeInstantiations, module CO2)
     public NodeRef Node; // deferred type reference node (C3)
 
     // AnonymousType / DeferredTypeReference / MappedType (C3): the instantiation's mapper (Target: the instantiated type)
@@ -321,7 +321,7 @@ internal sealed class ConditionalRoot
     public bool IsDistributive;
     public Type[]? InferTypeParameters;
     public Type[]? OuterTypeParameters;
-    public Dictionary<string, Type>? Instantiations;
+    public int Id; // the root's number in its checker (the key of its instantiations, Checker.conditionalInstantiations; module CO2)
     public SymbolRef AliasSymbol;
     public TypeList AliasTypeArguments;
 }
@@ -736,6 +736,180 @@ internal sealed class SymTable
         h ^= h >> 15;
         return (int)(h & 0x7FFFFFFF);
     }
+}
+
+/// <summary>
+/// A map from a sequence of ints to a value (module CO2): the counterpart of checker.ts's caches keyed by strings built
+/// from ids (getTypeListId, getAliasId and the prefixes around them). The callers encode each part of the string as
+/// ints (lists with their length, a tag per prefix), one to one, so a key hits exactly when TypeScript's string would.
+/// Keys live in an int arena, the index is open addressing (linear probing, load at most 1/2); no per-entry objects
+/// and no references. Never iterated.
+/// </summary>
+internal sealed class KeyMap<TValue>
+    where TValue : struct
+{
+    private struct Slot
+    {
+        public int Start;  // key offset + 1 (0: free)
+        public int Length;
+        public int Hash;
+        public TValue Value;
+    }
+
+    private int[] keys = new int[256];
+    private int keysUsed;
+    private Slot[] slots = new Slot[64];
+    private int count;
+
+    internal int Count => count;
+
+    /// <summary>Map.clear (the arrays are kept for reuse).</summary>
+    internal void Clear()
+    {
+        if (count > 0)
+        {
+            Array.Clear(slots);
+            count = 0;
+            keysUsed = 0;
+        }
+    }
+
+    /// <summary>Map.get: whether the key is present, and its value.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal bool TryGetValue(ReadOnlySpan<int> key, out TValue value)
+    {
+        var hash = Hash(key);
+        var s = slots;
+        var mask = s.Length - 1;
+        for (var i = hash & mask; ; i = (i + 1) & mask)
+        {
+            ref var slot = ref s[i];
+            if (slot.Start == 0)
+            {
+                value = default;
+                return false;
+            }
+            if (slot.Hash == hash && slot.Length == key.Length && keys.AsSpan(slot.Start - 1, slot.Length).SequenceEqual(key))
+            {
+                value = slot.Value;
+                return true;
+            }
+        }
+    }
+
+    /// <summary>Map.set (a present key keeps its slot and gets the new value).</summary>
+    internal void Set(ReadOnlySpan<int> key, TValue value)
+    {
+        if ((count + 1) * 2 > slots.Length)
+        {
+            Grow();
+        }
+        var hash = Hash(key);
+        var s = slots;
+        var mask = s.Length - 1;
+        for (var i = hash & mask; ; i = (i + 1) & mask)
+        {
+            ref var slot = ref s[i];
+            if (slot.Start == 0)
+            {
+                if (keysUsed + key.Length > keys.Length)
+                {
+                    Array.Resize(ref keys, Math.Max(keys.Length * 2, keysUsed + key.Length));
+                }
+                key.CopyTo(keys.AsSpan(keysUsed));
+                slot.Start = keysUsed + 1;
+                slot.Length = key.Length;
+                slot.Hash = hash;
+                slot.Value = value;
+                keysUsed += key.Length;
+                count++;
+                return;
+            }
+            if (slot.Hash == hash && slot.Length == key.Length && keys.AsSpan(slot.Start - 1, slot.Length).SequenceEqual(key))
+            {
+                slot.Value = value;
+                return;
+            }
+        }
+    }
+
+    private void Grow()
+    {
+        var old = slots;
+        var grown = new Slot[old.Length * 2];
+        var mask = grown.Length - 1;
+        foreach (var slot in old)
+        {
+            if (slot.Start == 0)
+            {
+                continue;
+            }
+            var i = slot.Hash & mask;
+            while (grown[i].Start != 0)
+            {
+                i = (i + 1) & mask;
+            }
+            grown[i] = slot;
+        }
+        slots = grown;
+    }
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private static int Hash(ReadOnlySpan<int> key)
+    {
+        var h = (uint)key.Length * 0x9E3779B1u;
+        foreach (var k in key)
+        {
+            h = (System.Numerics.BitOperations.RotateLeft(h, 5) ^ (uint)k) * 0x27D4EB2Fu;
+        }
+        h ^= h >> 15;
+        h *= 0x85EBCA6Bu;
+        h ^= h >> 13;
+        return (int)(h & 0x7FFFFFFF);
+    }
+}
+
+/// <summary>
+/// The scratch stack the checker builds <see cref="KeyMap{TValue}"/> keys on (module CO2): a key is the ints pushed since
+/// its mark; nested key building (while a type is created on a cache miss) pushes above it, so the key's span stays valid
+/// until the mark is released (a span into an array the stack outgrew still reads the same ints).
+/// </summary>
+internal sealed class KeyScratch
+{
+    private int[] ints = new int[256];
+    private int top;
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal int Mark() => top;
+
+    internal void Add(int value)
+    {
+        if (top == ints.Length)
+        {
+            Array.Resize(ref ints, ints.Length * 2);
+        }
+        ints[top++] = value;
+    }
+
+    /// <summary>A list: its length, then its type ids.</summary>
+    internal void AddTypes(ReadOnlySpan<Type> types)
+    {
+        if (top + types.Length + 1 > ints.Length)
+        {
+            Array.Resize(ref ints, Math.Max(ints.Length * 2, top + types.Length + 1));
+        }
+        ints[top++] = types.Length;
+        foreach (var type in types)
+        {
+            ints[top++] = type.Id;
+        }
+    }
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal ReadOnlySpan<int> Since(int mark) => ints.AsSpan(mark, top - mark);
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal void Release(int mark) => top = mark;
 }
 
 /// <summary>

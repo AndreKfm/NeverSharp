@@ -156,10 +156,7 @@ internal sealed partial class Checker
                 data.TypeParameters = Types.CreateList(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(all));
                 data.OuterTypeParameters = outerTypeParameters is null ? TypeList.Empty : Types.CreateList(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(outerTypeParameters));
                 data.LocalTypeParameters = localTypeParameters is null ? TypeList.Empty : Types.CreateList(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(localTypeParameters));
-                data.Instantiations = new Dictionary<string, Type>(StringComparer.Ordinal)
-                {
-                    [GetTypeListId(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(all))] = type,
-                };
+                InitializeInstantiations(type, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(all));
                 data.Target = type;
                 data.ResolvedTypeArguments = data.TypeParameters;
                 data.HasResolvedTypeArguments = true;

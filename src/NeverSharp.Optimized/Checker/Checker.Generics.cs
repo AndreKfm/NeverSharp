@@ -295,7 +295,7 @@ internal sealed partial class Checker
         data.HasTypeParameters = arity > 0;
         data.OuterTypeParameters = TypeList.Empty;
         data.LocalTypeParameters = list;
-        data.Instantiations = new Dictionary<string, Type>(StringComparer.Ordinal) { [GetTypeListId(typeParameters)] = type };
+        InitializeInstantiations(type, typeParameters);
         data.Target = type;
         data.ResolvedTypeArguments = list;
         data.HasResolvedTypeArguments = true;
@@ -1113,7 +1113,7 @@ internal sealed partial class Checker
     // ---- template literal and string mapping types ----
 
     private readonly Dictionary<string, Type> templateLiteralTypes = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, Type> stringMappingTypes = new(StringComparer.Ordinal);
+    private readonly Dictionary<(SymbolRef Symbol, Type Type), Type> stringMappingTypes = []; // (module CO2: the key's parts as values)
 
     /// <summary>checker.ts getTemplateLiteralType.</summary>
     internal Type GetTemplateLiteralType(string[] texts, Type[] types)
@@ -1288,7 +1288,7 @@ internal sealed partial class Checker
 
     private Type GetStringMappingTypeForGenericType(SymbolRef symbol, Type type)
     {
-        var id = symbol.File.ToString(CultureInfo.InvariantCulture) + "." + symbol.Index.ToString(CultureInfo.InvariantCulture) + "," + type.Id.ToString(CultureInfo.InvariantCulture);
+        var id = (symbol, type);
         if (!stringMappingTypes.TryGetValue(id, out var result))
         {
             stringMappingTypes[id] = result = Types.CreateWithData(TypeFlags.StringMapping, new StringMappingData { Type = type }, symbol);
@@ -1391,7 +1391,7 @@ internal sealed partial class Checker
 
     // ---- indexed access types ----
 
-    private readonly Dictionary<string, Type> indexedAccessTypes = new(StringComparer.Ordinal);
+    private readonly KeyMap<Type> indexedAccessTypes = new();
 
     /// <summary>checker.ts getIndexedAccessType.</summary>
     internal Type GetIndexedAccessType(Type objectType, Type indexType, AccessFlags accessFlags = AccessFlags.None, NodeRef accessNode = default, SymbolRef aliasSymbol = default, TypeList aliasTypeArguments = default)
@@ -1450,15 +1450,21 @@ internal sealed partial class Checker
             }
             // Defer the operation by creating an indexed access type.
             var persistentAccessFlags = accessFlags & AccessFlags.Persistent;
-            var id = objectType.Id.ToString(CultureInfo.InvariantCulture) + "," + indexType.Id.ToString(CultureInfo.InvariantCulture) + "," + ((int)persistentAccessFlags).ToString(CultureInfo.InvariantCulture) + GetAliasId(aliasSymbol, aliasTypeArguments);
+            var mark = keyScratch.Mark();
+            keyScratch.Add(objectType.Id);
+            keyScratch.Add(indexType.Id);
+            keyScratch.Add((int)persistentAccessFlags);
+            AddAliasKey(aliasSymbol, aliasTypeArguments);
+            var id = keyScratch.Since(mark);
             if (!indexedAccessTypes.TryGetValue(id, out var type))
             {
                 type = Types.CreateWithData(TypeFlags.IndexedAccess, new IndexedAccessData { ObjectType = objectType, IndexType = indexType, AccessFlags = persistentAccessFlags });
                 ref var record = ref Types.Record(type);
                 record.AliasSymbol = aliasSymbol;
                 record.AliasTypeArguments = aliasTypeArguments;
-                indexedAccessTypes[id] = type;
+                indexedAccessTypes.Set(id, type);
             }
+            keyScratch.Release(mark);
             return type;
         }
         // In the following we resolve T[K] to the type of the property in T selected by K.
@@ -1957,7 +1963,7 @@ internal sealed partial class Checker
 
     // ---- substitution and NoInfer types ----
 
-    private readonly Dictionary<string, Type> substitutionTypes = new(StringComparer.Ordinal);
+    private readonly Dictionary<long, Type> substitutionTypes = []; // (module CO2: `${baseType.id}>${constraint.id}` as the two ids)
 
     /// <summary>checker.ts getSubstitutionType.</summary>
     internal Type GetSubstitutionType(Type baseType, Type constraint) =>
@@ -1965,7 +1971,7 @@ internal sealed partial class Checker
 
     private Type GetOrCreateSubstitutionType(Type baseType, Type constraint)
     {
-        var id = baseType.Id.ToString(CultureInfo.InvariantCulture) + ">" + constraint.Id.ToString(CultureInfo.InvariantCulture);
+        var id = ((long)baseType.Id << 32) | (uint)constraint.Id;
         if (!substitutionTypes.TryGetValue(id, out var result))
         {
             substitutionTypes[id] = result = Types.CreateWithData(TypeFlags.Substitution, new SubstitutionData { BaseType = baseType, Constraint = constraint });

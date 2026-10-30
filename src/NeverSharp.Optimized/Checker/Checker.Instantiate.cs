@@ -211,7 +211,7 @@ internal sealed partial class Checker
     private int instantiationCount;
     private NodeRef currentNode;
     private readonly List<TypeMapper> activeTypeMappers = [];
-    private readonly List<Dictionary<string, Type>> activeTypeMappersCaches = [];
+    private readonly List<KeyMap<Type>> activeTypeMappersCaches = []; // (module CO2: keys `${type.id}${getAliasId(...)}` as ints)
     private int activeTypeMappersCount;
 
     private void PushActiveMapper(TypeMapper mapper)
@@ -219,7 +219,7 @@ internal sealed partial class Checker
         if (activeTypeMappersCount == activeTypeMappers.Count)
         {
             activeTypeMappers.Add(mapper);
-            activeTypeMappersCaches.Add(new Dictionary<string, Type>(StringComparer.Ordinal));
+            activeTypeMappersCaches.Add(new KeyMap<Type>());
         }
         else
         {
@@ -279,10 +279,14 @@ internal sealed partial class Checker
         {
             PushActiveMapper(mapper);
         }
-        var key = type.Id.ToString(CultureInfo.InvariantCulture) + GetAliasId(aliasSymbol, aliasTypeArguments);
+        var mark = keyScratch.Mark();
+        keyScratch.Add(type.Id);
+        AddAliasKey(aliasSymbol, aliasTypeArguments);
+        var key = keyScratch.Since(mark);
         var mapperCache = activeTypeMappersCaches[index != -1 ? index : activeTypeMappersCount - 1];
         if (mapperCache.TryGetValue(key, out var cached))
         {
+            keyScratch.Release(mark);
             return cached;
         }
         instantiationCount++;
@@ -294,8 +298,9 @@ internal sealed partial class Checker
         }
         else
         {
-            mapperCache[key] = result;
+            mapperCache.Set(key, result);
         }
+        keyScratch.Release(mark);
         instantiationDepth--;
         return result;
     }
@@ -700,15 +705,23 @@ internal sealed partial class Checker
             }
             var newAliasSymbol = !aliasSymbol.IsNone ? aliasSymbol : Types.Record(type).AliasSymbol;
             var newAliasTypeArguments = !aliasSymbol.IsNone ? aliasTypeArguments : InstantiateTypeList(Types.Record(type).AliasTypeArguments, mapper);
-            var id = GetTypeListId(typeArguments) + GetAliasId(newAliasSymbol, newAliasTypeArguments);
-            var targetData = Types.Object(target);            if (targetData.Instantiations is null)
+            // (the key getTypeListId(typeArguments) + getAliasId(...) in target.instantiations, as ints after target's id)
+            var mark = keyScratch.Mark();
+            keyScratch.Add(target.Id);
+            keyScratch.AddTypes(typeArguments);
+            AddAliasKey(newAliasSymbol, newAliasTypeArguments);
+            var id = keyScratch.Since(mark);
+            if (!Types.Object(target).HasInstantiations)
             {
-                targetData.Instantiations = new Dictionary<string, Type>(StringComparer.Ordinal)
-                {
-                    [GetTypeListId(typeParameters) + GetAliasId(Types.Record(target).AliasSymbol, Types.Record(target).AliasTypeArguments)] = target,
-                };
+                Types.Object(target).HasInstantiations = true;
+                var initial = keyScratch.Mark();
+                keyScratch.Add(target.Id);
+                keyScratch.AddTypes(typeParameters);
+                AddAliasKey(Types.Record(target).AliasSymbol, Types.Record(target).AliasTypeArguments);
+                typeInstantiations.Set(keyScratch.Since(initial), target);
+                keyScratch.Release(initial);
             }
-            if (!targetData.Instantiations.TryGetValue(id, out var result))
+            if (!typeInstantiations.TryGetValue(id, out var result))
             {
                 var newMapper = CreateTypeMapper(typeParameters, typeArguments);
                 var targetFlags = Types.ObjectFlagsOf(target);
@@ -719,7 +732,7 @@ internal sealed partial class Checker
                 result = (targetFlags & ObjectFlags.Reference) != 0 ? CreateDeferredTypeReference(typeData.Target, typeData.Node, newMapper, newAliasSymbol, newAliasTypeArguments)
                     : (targetFlags & ObjectFlags.Mapped) != 0 ? InstantiateMappedType(target, newMapper, newAliasSymbol, newAliasTypeArguments)
                     : InstantiateAnonymousType(target, newMapper, newAliasSymbol, newAliasTypeArguments);
-                targetData.Instantiations[id] = result; // Set cached result early in case we recursively invoke instantiation while eagerly computing type variable visibility below
+                typeInstantiations.Set(id, result); // Set cached result early in case we recursively invoke instantiation while eagerly computing type variable visibility below
                 var resultObjectFlags = Types.ObjectFlagsOf(result);
                 if ((Types.Flags(result) & TypeFlags.ObjectFlagsType) != 0 && (resultObjectFlags & ObjectFlags.CouldContainTypeVariablesComputed) == 0)
                 {
@@ -740,6 +753,7 @@ internal sealed partial class Checker
                     }
                 }
             }
+            keyScratch.Release(mark);
             return result;
         }
         return type;
@@ -1275,13 +1289,15 @@ internal sealed partial class Checker
     // ---- type alias instantiation ----
 
     // getSymbolLinks(symbol).typeParameters / instantiations of generic type aliases
-    private readonly Dictionary<SymbolRef, (Type[] TypeParameters, Dictionary<string, Type> Instantiations)> aliasInstantiations = [];
+    // (module CO2: the instantiations of all aliases in one map, keyed by the alias symbol and the string's parts)
+    private readonly Dictionary<SymbolRef, Type[]> aliasInstantiations = [];
+    private readonly KeyMap<Type> aliasInstantiationCache = new();
 
     /// <summary>The type parameters of a generic type alias (links.typeParameters; null when not generic).</summary>
     internal Type[]? GetTypeAliasTypeParameters(SymbolRef symbol)
     {
         GetDeclaredTypeOfSymbol(symbol);
-        return aliasInstantiations.TryGetValue(symbol, out var entry) ? entry.TypeParameters : null;
+        return aliasInstantiations.TryGetValue(symbol, out var entry) ? entry : null;
     }
 
     // called from getDeclaredTypeOfTypeAlias when the resolution did not circle
@@ -1293,7 +1309,13 @@ internal sealed partial class Checker
             // Initialize the instantiation cache for generic type aliases. The declared type corresponds to
             // an instantiation of the type alias with the type parameters supplied as type arguments.
             var array = typeParameters.ToArray();
-            aliasInstantiations[symbol] = (array, new Dictionary<string, Type>(StringComparer.Ordinal) { [GetTypeListId(array)] = type });
+            aliasInstantiations[symbol] = array;
+            var mark = keyScratch.Mark();
+            keyScratch.Add(symbol.File);
+            keyScratch.Add(symbol.Index);
+            keyScratch.AddTypes(array);
+            aliasInstantiationCache.Set(keyScratch.Since(mark), type);
+            keyScratch.Release(mark);
         }
     }
 
@@ -1309,17 +1331,24 @@ internal sealed partial class Checker
                 return typeKind == IntrinsicTypeKind.NoInfer ? GetNoInferType(typeArguments[0]) : GetStringMappingType(symbol, typeArguments[0]);
             }
         }
-        if (!aliasInstantiations.TryGetValue(symbol, out var entry))
+        if (!aliasInstantiations.TryGetValue(symbol, out var typeParameters))
         {
             return type;
         }
-        var typeParameters = entry.TypeParameters;
-        var id = GetTypeListId(typeArguments) + GetAliasId(aliasSymbol, aliasTypeArguments);        if (!entry.Instantiations.TryGetValue(id, out var instantiation))
+        var mark = keyScratch.Mark();
+        keyScratch.Add(symbol.File);
+        keyScratch.Add(symbol.Index);
+        keyScratch.AddTypes(typeArguments);
+        AddAliasKey(aliasSymbol, aliasTypeArguments);
+        var id = keyScratch.Since(mark);
+        if (!aliasInstantiationCache.TryGetValue(id, out var instantiation))
         {
             var valueDeclaration = ValueDeclarationOf(symbol);
             var isJs = !valueDeclaration.IsNone && Utilities.IsInJSFile(StoreOf(valueDeclaration), valueDeclaration.Node);
-            instantiation = InstantiateTypeWithAlias(type, CreateTypeMapper(typeParameters, FillMissingTypeArguments(typeArguments, typeParameters, GetMinTypeArgumentCount(typeParameters), isJs)), aliasSymbol, aliasTypeArguments);            entry.Instantiations[id] = instantiation;
+            instantiation = InstantiateTypeWithAlias(type, CreateTypeMapper(typeParameters, FillMissingTypeArguments(typeArguments, typeParameters, GetMinTypeArgumentCount(typeParameters), isJs)), aliasSymbol, aliasTypeArguments);
+            aliasInstantiationCache.Set(id, instantiation);
         }
+        keyScratch.Release(mark);
         return instantiation;
     }
 
@@ -1660,7 +1689,8 @@ internal sealed partial class Checker
 
     // ---- signatures ----
 
-    private readonly Dictionary<(Signature, string), Signature> signatureInstantiations = [];
+    // signature.instantiations (module CO2: one map, the signature's id first in each key)
+    private readonly KeyMap<Signature> signatureInstantiations = new();
 
     /// <summary>checker.ts getSignatureInstantiation.</summary>
     internal Signature GetSignatureInstantiation(Signature signature, Type[] typeArguments, bool isJavascript, List<Type>? inferredTypeParameters = null)
@@ -1686,11 +1716,16 @@ internal sealed partial class Checker
 
     private Signature GetSignatureInstantiationWithoutFillingInTypeArguments(Signature signature, Type[] typeArguments)
     {
-        var id = GetTypeListId(typeArguments);
-        if (!signatureInstantiations.TryGetValue((signature, id), out var instantiation))
+        var mark = keyScratch.Mark();
+        keyScratch.Add(signature.Id);
+        keyScratch.AddTypes(typeArguments);
+        var id = keyScratch.Since(mark);
+        if (!signatureInstantiations.TryGetValue(id, out var instantiation))
         {
-            signatureInstantiations[(signature, id)] = instantiation = CreateSignatureInstantiation(signature, typeArguments);
+            instantiation = CreateSignatureInstantiation(signature, typeArguments);
+            signatureInstantiations.Set(id, instantiation);
         }
+        keyScratch.Release(mark);
         return instantiation;
     }
 

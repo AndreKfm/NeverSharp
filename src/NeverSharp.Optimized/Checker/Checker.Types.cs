@@ -100,9 +100,9 @@ internal sealed partial class Checker
     private readonly Dictionary<double, Type> numberLiteralTypes = [];
     private readonly Dictionary<string, Type> bigIntLiteralTypes = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Type> enumLiteralTypes = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, Type> unionTypes = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, Type> unionOfUnionTypes = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, Type> intersectionTypes = new(StringComparer.Ordinal);
+    private readonly KeyMap<Type> unionTypes = new();
+    private readonly KeyMap<Type> unionOfUnionTypes = new();
+    private readonly KeyMap<Type> intersectionTypes = new();
     private readonly Dictionary<Type, Type> freshTypes = [];
     private readonly Dictionary<Type, Type> regularUnionTypes = [];
     private readonly Dictionary<string, SymbolRef> unresolvedSymbols = new(StringComparer.Ordinal);
@@ -166,7 +166,7 @@ internal sealed partial class Checker
         unknownEmptyObjectType = CreateAnonymousType(SymbolRef.None, emptySymbols);
         unknownUnionType = strictNullChecks ? GetUnionType([undefinedType, nullType, unknownEmptyObjectType]) : unknownType;
         emptyGenericType = CreateAnonymousType(SymbolRef.None, emptySymbols);
-        Types.Object(emptyGenericType).Instantiations = new Dictionary<string, Type>(StringComparer.Ordinal);
+        Types.Object(emptyGenericType).HasInstantiations = true;
         anyFunctionType = CreateAnonymousType(SymbolRef.None, emptySymbols);
         Types.Record(anyFunctionType).ObjectFlags |= ObjectFlags.NonInferrableType;
         noConstraintType = CreateAnonymousType(SymbolRef.None, emptySymbols);
@@ -359,9 +359,34 @@ internal sealed partial class Checker
         return result.ToString();
     }
 
-    private string GetAliasId(SymbolRef aliasSymbol, TypeList aliasTypeArguments) =>
+    // checker.ts getAliasId as text (the error types of unresolved aliases print it)
+    private static string GetAliasId(SymbolRef aliasSymbol, TypeList aliasTypeArguments, TypeStore types) =>
         aliasSymbol.IsNone ? "" : "@" + aliasSymbol.File.ToString(CultureInfo.InvariantCulture) + "." + aliasSymbol.Index.ToString(CultureInfo.InvariantCulture)
-            + (aliasTypeArguments.IsPresent ? ":" + GetTypeListId(Types.Elements(aliasTypeArguments)) : "");
+            + (aliasTypeArguments.IsPresent ? ":" + GetTypeListId(types.Elements(aliasTypeArguments)) : "");
+
+    // The scratch stack of KeyMap keys (module CO2: the caches TypeScript keys by id strings)
+    private readonly KeyScratch keyScratch = new();
+
+    // checker.ts getAliasId as key ints: nothing (no alias: the empty string), or -2, the symbol and then -1 (no type
+    // arguments) or the list. (Keys put it after a list or an id, so "nothing" cannot run into what follows.)
+    private void AddAliasKey(SymbolRef aliasSymbol, TypeList aliasTypeArguments)
+    {
+        if (aliasSymbol.IsNone)
+        {
+            return;
+        }
+        keyScratch.Add(-2);
+        keyScratch.Add(aliasSymbol.File);
+        keyScratch.Add(aliasSymbol.Index);
+        if (aliasTypeArguments.IsPresent)
+        {
+            keyScratch.AddTypes(Types.Elements(aliasTypeArguments));
+        }
+        else
+        {
+            keyScratch.Add(-1);
+        }
+    }
 
     private ObjectFlags GetPropagatingFlagsOfTypes(ReadOnlySpan<Type> types, TypeFlags excludeKinds = 0)
     {
@@ -560,14 +585,20 @@ internal sealed partial class Checker
         // We optimize for the common case of unioning a union type with some other type (such as `undefined`).
         if (types.Length == 2 && origin.IsNone && ((Types.Flags(types[0]) & TypeFlags.Union) != 0 || (Types.Flags(types[1]) & TypeFlags.Union) != 0))
         {
-            var infix = unionReduction == UnionReduction.None ? "N" : unionReduction == UnionReduction.Subtype ? "S" : "L";
+            // (the key `${id}${infix}${id}${getAliasId(...)}` as ints: the ids, the reduction, the alias)
             var index = types[0].Id < types[1].Id ? 0 : 1;
-            var id = types[index].Id.ToString(CultureInfo.InvariantCulture) + infix + types[1 - index].Id.ToString(CultureInfo.InvariantCulture) + GetAliasId(aliasSymbol, aliasTypeArguments);
+            var mark = keyScratch.Mark();
+            keyScratch.Add(types[index].Id);
+            keyScratch.Add((int)unionReduction);
+            keyScratch.Add(types[1 - index].Id);
+            AddAliasKey(aliasSymbol, aliasTypeArguments);
+            var id = keyScratch.Since(mark);
             if (!unionOfUnionTypes.TryGetValue(id, out var type))
             {
                 type = GetUnionTypeWorker(types, unionReduction, aliasSymbol, aliasTypeArguments, Type.None);
-                unionOfUnionTypes[id] = type;
+                unionOfUnionTypes.Set(id, type);
             }
+            keyScratch.Release(mark);
             return type;
         }
         return GetUnionTypeWorker(types, unionReduction, aliasSymbol, aliasTypeArguments, origin);
@@ -672,12 +703,32 @@ internal sealed partial class Checker
             return types[0];
         }
         var span = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(types);
-        var typeKey = origin.IsNone ? GetTypeListId(span)
-            : (Types.Flags(origin) & TypeFlags.Union) != 0 ? "|" + GetTypeListId(Types.Elements(Types.Union(origin).Types))
-            : (Types.Flags(origin) & TypeFlags.Intersection) != 0 ? "&" + GetTypeListId(Types.Elements(Types.Union(origin).Types))
+        // (the key: typeKey + getAliasId(aliasSymbol, aliasTypeArguments), as ints: a tag for the origin kind)
+        var mark = keyScratch.Mark();
+        if (origin.IsNone)
+        {
+            keyScratch.Add(0);
+            keyScratch.AddTypes(span);
+        }
+        else if ((Types.Flags(origin) & TypeFlags.Union) != 0)
+        {
+            keyScratch.Add(1);
+            keyScratch.AddTypes(Types.Elements(Types.Union(origin).Types));
+        }
+        else if ((Types.Flags(origin) & TypeFlags.Intersection) != 0)
+        {
+            keyScratch.Add(2);
+            keyScratch.AddTypes(Types.Elements(Types.Union(origin).Types));
+        }
+        else
+        {
             // origin type id alone is insufficient, as `keyof x` may resolve to multiple WIP values while `x` is still resolving
-            : "#" + Types.Data<IndexData>(origin).Type.Id.ToString(CultureInfo.InvariantCulture) + "|" + GetTypeListId(span);
-        var id = typeKey + GetAliasId(aliasSymbol, aliasTypeArguments);
+            keyScratch.Add(3);
+            keyScratch.Add(Types.Data<IndexData>(origin).Type.Id);
+            keyScratch.AddTypes(span);
+        }
+        AddAliasKey(aliasSymbol, aliasTypeArguments);
+        var id = keyScratch.Since(mark);
         if (!unionTypes.TryGetValue(id, out var type))
         {
             var flags = TypeFlags.Union;
@@ -689,8 +740,9 @@ internal sealed partial class Checker
             ref var record = ref Types.Record(type);
             record.AliasSymbol = aliasSymbol;
             record.AliasTypeArguments = aliasTypeArguments;
-            unionTypes[id] = type;
+            unionTypes.Set(id, type);
         }
+        keyScratch.Release(mark);
         return type;
     }
 
@@ -917,7 +969,18 @@ internal sealed partial class Checker
             }
         }
         var span = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(typeSet);
-        var id = GetTypeListId(span) + ((flags & IntersectionFlags.NoConstraintReduction) != 0 ? "*" : GetAliasId(aliasSymbol, aliasTypeArguments));
+        // (the key getTypeListId(typeSet) + ("*" or getAliasId(...)) as ints: -3 for "*", else the alias key)
+        var mark = keyScratch.Mark();
+        keyScratch.AddTypes(span);
+        if ((flags & IntersectionFlags.NoConstraintReduction) != 0)
+        {
+            keyScratch.Add(-3);
+        }
+        else
+        {
+            AddAliasKey(aliasSymbol, aliasTypeArguments);
+        }
+        var id = keyScratch.Since(mark);
         if (!intersectionTypes.TryGetValue(id, out var result))
         {
             if ((includes & TypeFlags.Union) != 0)
@@ -932,8 +995,9 @@ internal sealed partial class Checker
                 record.AliasSymbol = aliasSymbol;
                 record.AliasTypeArguments = aliasTypeArguments;
             }
-            intersectionTypes[id] = result;
+            intersectionTypes.Set(id, result);
         }
+        keyScratch.Release(mark);
         return result;
     }
 
@@ -1166,7 +1230,7 @@ internal sealed partial class Checker
         }
     }
 
-    private readonly Dictionary<string, List<Type>> subtypeReductionCache = new(StringComparer.Ordinal);
+    private readonly KeyMap<TypeList> subtypeReductionCache = new(); // (module CO2: the reduced lists in the type list arena)
 
     // checker.ts removeSubtypes (null: the union is too complex to represent)
     private List<Type>? RemoveSubtypes(List<Type> types, bool hasObjectTypes)
@@ -1176,10 +1240,13 @@ internal sealed partial class Checker
         {
             return types;
         }
-        var id = GetTypeListId(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(types));
+        var mark = keyScratch.Mark();
+        keyScratch.AddTypes(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(types));
+        var id = keyScratch.Since(mark);
         if (subtypeReductionCache.TryGetValue(id, out var match))
         {
-            return [.. match];
+            keyScratch.Release(mark);
+            return [.. Types.Elements(match)];
         }
         // We assume that redundant primitive types have already been removed from the types array and that there
         // are no any and unknown types in the array. Thus, the only possible supertypes for primitive types are empty
@@ -1227,6 +1294,7 @@ internal sealed partial class Checker
                             if (estimatedCount > 1000000)
                             {
                                 Error(currentNode, Diagnostics.Expression_produces_a_union_type_that_is_too_complex_to_represent);
+                                keyScratch.Release(mark);
                                 return null;
                             }
                         }
@@ -1251,7 +1319,8 @@ internal sealed partial class Checker
                 }
             }
         }
-        subtypeReductionCache[id] = [.. types];
+        subtypeReductionCache.Set(id, Types.CreateList(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(types)));
+        keyScratch.Release(mark);
         return types;
     }
 
@@ -1480,20 +1549,39 @@ internal sealed partial class Checker
     /// <summary>checker.ts createTypeReference.</summary>
     internal Type CreateTypeReference(Type target, ReadOnlySpan<Type> typeArguments)
     {
-        var targetData = Types.Object(target);
-        var id = GetTypeListId(typeArguments);
-        targetData.Instantiations ??= new Dictionary<string, Type>(StringComparer.Ordinal);
-        if (!targetData.Instantiations.TryGetValue(id, out var type))
+        // (target.instantiations keyed by getTypeListId(typeArguments): the ints after target's id)
+        Types.Object(target).HasInstantiations = true;
+        var mark = keyScratch.Mark();
+        keyScratch.Add(target.Id);
+        keyScratch.AddTypes(typeArguments);
+        var id = keyScratch.Since(mark);
+        if (!typeInstantiations.TryGetValue(id, out var type))
         {
             type = CreateObjectType(ObjectFlags.Reference, Types.Symbol(target));
-            targetData.Instantiations[id] = type;
+            typeInstantiations.Set(id, type);
             Types.Record(type).ObjectFlags |= typeArguments.Length > 0 ? GetPropagatingFlagsOfTypes(typeArguments) : 0;
             var data = Types.Object(type);
             data.Target = target;
             data.ResolvedTypeArguments = Types.CreateList(typeArguments);
             data.HasResolvedTypeArguments = true;
         }
+        keyScratch.Release(mark);
         return type;
+    }
+
+    // types.ts ObjectType.instantiations of every object type of this checker (module CO2: one map, the owner type's id
+    // first in each key; ObjectTypeData.HasInstantiations records that the owner's map exists)
+    private readonly KeyMap<Type> typeInstantiations = new();
+
+    // `type.instantiations = new Map([[getTypeListId(typeParameters), type]])` (generic and tuple target types)
+    private void InitializeInstantiations(Type type, ReadOnlySpan<Type> typeParameters)
+    {
+        Types.Object(type).HasInstantiations = true;
+        var mark = keyScratch.Mark();
+        keyScratch.Add(type.Id);
+        keyScratch.AddTypes(typeParameters);
+        typeInstantiations.Set(keyScratch.Since(mark), type);
+        keyScratch.Release(mark);
     }
 
     /// <summary>checker.ts createDeferredTypeReference.</summary>
