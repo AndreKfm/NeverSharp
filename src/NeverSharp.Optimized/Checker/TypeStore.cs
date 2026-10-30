@@ -64,7 +64,8 @@ internal sealed class TypeStore
     private readonly List<ObjectTypeData> objects = [null!];
     private readonly Chunks<UnionData> unions = new();
     private int unionCount;
-    private readonly List<TypeParameterData> typeParameters = [null!];
+    private readonly Chunks<TypeParameterData> typeParameters = new(); // [0] unused (module CO2: records, not objects)
+    private int typeParameterCount;
 
     /// <summary>A new object type (createObjectType) with its data record.</summary>
     internal Type CreateObject(ObjectFlags objectFlags, SymbolRef symbol)
@@ -92,12 +93,15 @@ internal sealed class TypeStore
     /// <summary>A new type parameter (createTypeParameter).</summary>
     internal Type CreateTypeParameter(SymbolRef symbol)
     {
-        typeParameters.Add(new TypeParameterData());
-        return Create(TypeFlags.TypeParameter, ObjectFlags.None, symbol, typeParameters.Count - 1);
+        typeParameterCount++;
+        typeParameters.EnsureIndex(typeParameterCount);
+        typeParameters[typeParameterCount] = default;
+        return Create(TypeFlags.TypeParameter, ObjectFlags.None, symbol, typeParameterCount);
     }
 
-    /// <summary>The data of a type parameter.</summary>
-    internal TypeParameterData TypeParameter(Type type) => typeParameters[types[type.Id].Data];
+    /// <summary>The data of a type parameter (a reference to its record, valid while the store grows).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal ref TypeParameterData TypeParameter(Type type) => ref typeParameters[types[type.Id].Data];
 
     // The data of the instantiable kinds module C3 adds (indexed access, index, conditional, substitution, template
     // literal and string mapping types), one record class per kind.
@@ -267,8 +271,8 @@ internal sealed class ObjectTypeData
     public bool ContainsError;
 }
 
-/// <summary>types.ts TypeParameter.</summary>
-internal sealed class TypeParameterData
+/// <summary>types.ts TypeParameter (module CO2: a record in the store's chunks).</summary>
+internal struct TypeParameterData
 {
     public Type Constraint;
     public Type Default;

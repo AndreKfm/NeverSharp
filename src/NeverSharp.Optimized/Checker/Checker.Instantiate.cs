@@ -183,7 +183,7 @@ internal sealed partial class Checker
     // checker.ts getRestrictiveTypeParameter
     private Type GetRestrictiveTypeParameter(Type tp)
     {
-        var data = Types.TypeParameter(tp);
+        ref var data = ref Types.TypeParameter(tp);
         if ((data.Constraint.IsNone && GetConstraintDeclaration(tp).IsNone) || data.Constraint == noConstraintType)
         {
             return tp;
@@ -781,7 +781,7 @@ internal sealed partial class Checker
             return true;
         }
         var store = StoreOf(node);
-        var tpData = Types.TypeParameter(tp);
+        var tpIsThisType = Types.TypeParameter(tp).IsThisType;
         var tpDeclaration = tpDeclarations[0];
         var container = Parent(tpDeclaration);
         for (var n = node; n != container; n = Parent(n))
@@ -800,9 +800,9 @@ internal sealed partial class Checker
             switch (s.Kind(c))
             {
                 case SyntaxKind.ThisType:
-                    return tpData.IsThisType;
+                    return tpIsThisType;
                 case SyntaxKind.Identifier:
-                    return !tpData.IsThisType && Utilities.IsPartOfTypeNode(s, c) && MaybeTypeParameterReference(s, c) && GetTypeFromTypeNodeWorker(current) == tp; // use worker because we're looking for === equality
+                    return !tpIsThisType && Utilities.IsPartOfTypeNode(s, c) && MaybeTypeParameterReference(s, c) && GetTypeFromTypeNodeWorker(current) == tp; // use worker because we're looking for === equality
                 case SyntaxKind.TypeQuery:
                 {
                     var entityName = s.ExprName(c);
@@ -812,7 +812,7 @@ internal sealed partial class Checker
                         // Don't attempt to analyze typeof this.xxx
                         var firstIdentifierSymbol = GetResolvedSymbol(At(current, firstIdentifier));
                         var tpScope = Kind(tpDeclaration) == SyntaxKind.TypeParameter ? Parent(tpDeclaration) // Type parameter is a regular type parameter, e.g. foo<T>
-                            : tpData.IsThisType ? tpDeclaration // Type parameter is the this type, and its declaration is the class declaration.
+                            : tpIsThisType ? tpDeclaration // Type parameter is the this type, and its declaration is the class declaration.
                             : NodeRef.None; // Type parameter's declaration was unrecognized, e.g. comes from JSDoc annotation.
                         var idDeclarations = DeclarationsOf(firstIdentifierSymbol);
                         if (idDeclarations is not null && !tpScope.IsNone)
@@ -1437,7 +1437,7 @@ internal sealed partial class Checker
     /// <summary>checker.ts getResolvedTypeParameterDefault.</summary>
     private Type GetResolvedTypeParameterDefault(Type typeParameter)
     {
-        var data = Types.TypeParameter(typeParameter);
+        ref var data = ref Types.TypeParameter(typeParameter);
         if (data.Default.IsNone)
         {
             if (!data.Target.IsNone)
@@ -1505,7 +1505,7 @@ internal sealed partial class Checker
     /// <summary>checker.ts getConstraintFromTypeParameter (the worker; use GetConstraintOfTypeParameter).</summary>
     internal Type GetConstraintFromTypeParameter(Type typeParameter)
     {
-        var data = Types.TypeParameter(typeParameter);
+        ref var data = ref Types.TypeParameter(typeParameter);
         if (data.Constraint.IsNone)
         {
             if (!data.Target.IsNone)
