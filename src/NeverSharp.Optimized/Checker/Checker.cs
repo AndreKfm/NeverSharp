@@ -405,18 +405,47 @@ internal sealed partial class Checker
         };
     }
 
+    // checker.ts deferredDiagnosticsCallbacks, and whether addLazyDiagnostic currently runs its argument at once
+    // (checkSourceFileWithEagerDiagnostics replaces addLazyDiagnostic by `cb => cb()` while it checks a file)
+    private List<Action> deferredDiagnosticsCallbacks = [];
+    private bool eagerLazyDiagnostics;
+
     /// <summary>
     /// checker.ts addLazyDiagnostic. Files are only checked for their diagnostics (checkSourceFileWithEagerDiagnostics),
-    /// which run lazy diagnostics immediately; deferring them would change the order types are created in.
+    /// which run lazy diagnostics immediately; outside a file check (initializeTypeChecker: name resolution errors of
+    /// aliases resolved while the globals are merged) they wait for ensurePendingDiagnosticWorkComplete.
     /// </summary>
-    private static void AddLazyDiagnostic(Action diagnostic) => diagnostic();
+    private void AddLazyDiagnostic(Action diagnostic)
+    {
+        if (eagerLazyDiagnostics)
+        {
+            diagnostic();
+        }
+        else
+        {
+            deferredDiagnosticsCallbacks.Add(diagnostic);
+        }
+    }
+
+    /// <summary>checker.ts ensurePendingDiagnosticWorkComplete.</summary>
+    private void EnsurePendingDiagnosticWorkComplete()
+    {
+        // Invoke any existing lazy diagnostics to add them, clear the backlog of diagnostics
+        // (for-of over the array: callbacks added by a callback run in the same loop)
+        for (var i = 0; i < deferredDiagnosticsCallbacks.Count; i++)
+        {
+            deferredDiagnosticsCallbacks[i]();
+        }
+        deferredDiagnosticsCallbacks = [];
+    }
 
     private readonly HashSet<int> checkedFiles = [];
 
-    /// <summary>checker.ts getDiagnostics(sourceFile): checks the file (once) and returns its diagnostics.</summary>
+    /// <summary>checker.ts getDiagnostics(sourceFile) (getDiagnosticsWorker): checks the file (once) and returns its diagnostics.</summary>
     internal List<ProgramDiagnostic> GetDiagnostics(SourceFile file)
     {
         ArgumentNullException.ThrowIfNull(file);
+        EnsurePendingDiagnosticWorkComplete();
         var previousGlobal = diagnostics.GlobalCount;
         CheckSourceFileOnce(FileNumber(file));
         var result = new List<ProgramDiagnostic>();
@@ -445,7 +474,11 @@ internal sealed partial class Checker
         {
             return;
         }
+        // checkSourceFileWithEagerDiagnostics
+        var oldEager = eagerLazyDiagnostics;
+        eagerLazyDiagnostics = true;
         CheckSourceFile(new NodeRef(file, FileAt(file).Root));
+        eagerLazyDiagnostics = oldEager;
     }
 
     // utilities.ts canIncludeBindAndCheckDiagnostics (plain and checked JavaScript files included since module C9a)
@@ -466,7 +499,11 @@ internal sealed partial class Checker
     }
 
     /// <summary>checker.ts getGlobalDiagnostics().</summary>
-    internal List<ProgramDiagnostic> GetGlobalDiagnostics() => [.. diagnostics.GetGlobalDiagnostics()];
+    internal List<ProgramDiagnostic> GetGlobalDiagnostics()
+    {
+        EnsurePendingDiagnosticWorkComplete();
+        return [.. diagnostics.GetGlobalDiagnostics()];
+    }
 
     private void CheckNode(NodeRef node)
     {
