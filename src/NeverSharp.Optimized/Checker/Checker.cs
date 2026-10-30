@@ -627,7 +627,7 @@ internal sealed class DiagnosticCollection
     /// utilities.ts diagnosticsEqualityComparer: same file, start, length, code (the canonical head's when set) and
     /// head message text (the canonical head's when set).
     /// </summary>
-    private static bool EqualityComparer(ProgramDiagnostic a, ProgramDiagnostic b) =>
+    internal static bool EqualityComparer(ProgramDiagnostic a, ProgramDiagnostic b) =>
         string.Equals(FilePath(a), FilePath(b), StringComparison.Ordinal) &&
         CompareValues(a.StartOrUndefined, b.StartOrUndefined) == 0 &&
         CompareValues(a.LengthOrUndefined, b.LengthOrUndefined) == 0 &&

@@ -66,6 +66,29 @@ internal sealed class CheckerPool
                 }
             }
         });
+        if (checkers.Length > 1)
+        {
+            // GetSemanticDiagnostics(ctx, nil) sorts and deduplicates the concatenation of all files' diagnostics. Each
+            // checker adds the global diagnostics it produced to the result of its first file (getDiagnosticsWorker),
+            // so every checker reports the same file-less diagnostics once: keep the first occurrence in file order.
+            var seen = new List<ProgramDiagnostic>();
+            foreach (var list in diagnostics)
+            {
+                list?.RemoveAll(d =>
+                {
+                    if (d.SourceFile is not null)
+                    {
+                        return false;
+                    }
+                    if (seen.Exists(s => DiagnosticCollection.EqualityComparer(s, d)))
+                    {
+                        return true;
+                    }
+                    seen.Add(d);
+                    return false;
+                });
+            }
+        }
         return diagnostics;
     }
 
