@@ -27,9 +27,10 @@ node scripts/install-tools.mjs             # Go (Microsoft build), Node, hyperfi
 cd harness/bench && npm ci                 # typescript@6.0.3 and typescript@7.0.2 (npm aliases), lockfile-pinned
 node filelists.mjs                         # parse sets per repo + manifest (counts, bytes, content hash), empty list for fixed cost
 node tuning.mjs                            # tuning corpus (after harness/astdump/corpus.mjs): tests/cases units + TypeScript src
+node tuning-check.mjs                      # the checker's tuning list: the tuning corpus without the units tsc 6.0.3 cannot check as one program (tuning-check-exclude.txt)
 node build-go.mjs                          # Go parse driver, built like Microsoft's tsgo release binary
 dotnet build peakmem -c Release -o ../../artifacts/bin/peakmem
-node bench.mjs [--corpus benchmark|tuning] [--repos …] [--configs …] [--runs 20] [--warmup 3] [--mem-runs 5] [--label …]
+node bench.mjs [--corpus benchmark|tuning|tuning-check] [--repos …] [--configs …] [--runs 20] [--warmup 3] [--mem-runs 5] [--label …]
 node report.mjs artifacts/bench/results/<runId>/run.json
 ```
 

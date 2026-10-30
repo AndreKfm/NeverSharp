@@ -11,8 +11,8 @@
 // but marked protocolCompliant=false; the report labels it as a probe.
 //
 // Usage: node bench.mjs [--repos a,b] [--profile full|quick|binder|check | --configs x,y] [--runs 20] [--warmup 3]
-//                       [--mem-runs 5] [--priority high|normal] [--corpus benchmark|tuning] [--label text]
-//        node bench.mjs --check [--repos a,b] [--configs x,y] [--corpus benchmark|tuning]
+//                       [--mem-runs 5] [--priority high|normal] [--corpus benchmark|tuning|tuning-check] [--label text]
+//        node bench.mjs --check [--repos a,b] [--configs x,y] [--corpus benchmark|tuning|tuning-check]
 //
 // --check: functional check, not a measurement: step 1 only, for every selected configuration and repository
 // plus the empty file list; prints the drivers' file, node and symbol counts and writes nothing.
@@ -127,11 +127,12 @@ const priority = arg("--priority", "high");
 if (priority !== "high" && priority !== "normal") throw new Error("--priority must be high or normal");
 const driverEnv = { ...process.env, NEVERSHARP_PRIORITY: priority };
 
-// --corpus benchmark (default): Microsoft's five repositories; --corpus tuning: the tuning corpus (pre-registration §3).
+// --corpus benchmark (default): Microsoft's five repositories; --corpus tuning: the tuning corpus (pre-registration §3);
+// --corpus tuning-check: the tuning corpus without the units tsc 6.0.3 cannot check as one program (tuning-check.mjs).
 const corpusName = arg("--corpus", "benchmark");
-if (corpusName !== "benchmark" && corpusName !== "tuning") throw new Error("--corpus must be benchmark or tuning");
-const fileManifest = JSON.parse(readFileSync(join(benchDir, "filelists", corpusName === "tuning" ? "tuning-manifest.json" : "manifest.json"), "utf8"));
-const repos = (corpusName === "tuning" ? ["tuning"] : pins.benchmarkCorpus.repos.map(r => r.name)).filter(r => !repoFilter || repoFilter.includes(r));
+if (corpusName !== "benchmark" && corpusName !== "tuning" && corpusName !== "tuning-check") throw new Error("--corpus must be benchmark, tuning or tuning-check");
+const fileManifest = JSON.parse(readFileSync(join(benchDir, "filelists", corpusName === "benchmark" ? "manifest.json" : `${corpusName}-manifest.json`), "utf8"));
+const repos = (corpusName === "benchmark" ? pins.benchmarkCorpus.repos.map(r => r.name) : [corpusName]).filter(r => !repoFilter || repoFilter.includes(r));
 // --profile (prereg/v8): fixed configuration sets for protocol runs. full: every configuration; quick: additional
 // parse-only runs of Track O; binder: the Phase 2 binder endpoint set. A profile and --configs exclude each other.
 // The variance gate binds per profile (report.mjs, PROFILE_RIG_CHECK).
@@ -307,7 +308,7 @@ const run = {
     startedAt: startedAt.toISOString(),
     finishedAt: new Date().toISOString(),
     protocolCompliant: environment.protocolCompliant,
-    suite: corpusName === "tuning" ? "parse-tuning" : "parse",
+    suite: corpusName === "benchmark" ? "parse" : `parse-${corpusName}`,
     settings: { runs, warmup, memRuns, hyperfineShell: "none", processPriority: priority },
     environment,
     corpus: Object.fromEntries(repos.map(r => [r, { commit: fileManifest.repos[r].commit, files: fileManifest.repos[r].files, bytes: fileManifest.repos[r].bytes, contentSha256: fileManifest.repos[r].contentSha256 }])),

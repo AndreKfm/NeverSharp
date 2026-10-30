@@ -1,0 +1,15 @@
+# Units of the tuning corpus that tsc 6.0.3 cannot check when the whole corpus is one program (Gate C options,
+# noResolve). Each unit checks alone; together with other units' globals tsc throws. Found by removing the file of
+# each crash and checking again until tsc finished (module C12, 2026-10-30). tuning-check.mjs leaves them out.
+# The units are global scripts: same-named globals of different units merge.
+#
+# Debug.assert in evaluateElementAccessExpression (an enum member read through E["x"], the merged enum declares
+# the member in another unit)
+001355.ts	compiler/constEnumErrors.ts
+001395.ts	compiler/constantEnumAssert.ts
+002626.ts	compiler/duplicateObjectLiteralProperty_computedName2.ts
+003575.ts	compiler/forwardRefInEnum.ts
+# TypeError: an expando assignment on a global function merges with other units' globals of the same name
+004315.ts	compiler/indexTypeNoSubstitutionTemplateLiteral.ts	(Foo[`b`] = ...; with 005336.ts: computeEnumMemberValues, "node.members is not iterable")
+008667.ts	compiler/wellKnownSymbolExpando.ts	(f[Symbol.iterator] = ...; getMembersOfSymbol of an undefined parent from getLateBoundSymbol)
+016338.ts	conformance/types/thisType/thisTypeInTaggedTemplateCall.ts	(class Foo; getTypeAliasInstantiation reads links.instantiations of a merged Foo without alias type parameters)

@@ -16,7 +16,7 @@
 //
 // Output: artifacts/bench/check-equivalence/<repo>.{tsc,cs}.txt and <repo>.json; a markdown summary on stdout.
 //
-// Usage: node check-equivalence.mjs [--repos a,b] [--corpus benchmark|tuning] [--skip-tsgo] [--skip-tsrs]
+// Usage: node check-equivalence.mjs [--repos a,b] [--corpus benchmark|tuning|tuning-check] [--skip-tsgo] [--skip-tsrs]
 //        node check-equivalence.mjs --tsc-dump <file list> <out>   (internal: the tsc side, in its own process)
 
 import { spawnSync } from "node:child_process";
@@ -59,7 +59,7 @@ const csDriver = join(repoRoot, "artifacts", "bin", "cs", "optimized-aot-ws", "p
 const parseGo = join(repoRoot, "artifacts", "bin", "parse-go" + exe);
 const parseRs = join(repoRoot, "artifacts", "bin", "parse-rs" + exe);
 const corpusName = arg("--corpus", "benchmark");
-const repos = arg("--repos", undefined)?.split(",") ?? (corpusName === "tuning" ? ["tuning"] : pins.benchmarkCorpus.repos.map(r => r.name));
+const repos = arg("--repos", undefined)?.split(",") ?? (corpusName === "benchmark" ? pins.benchmarkCorpus.repos.map(r => r.name) : [corpusName]);
 const outDir = join(repoRoot, "artifacts", "bench", "check-equivalence");
 mkdirSync(outDir, { recursive: true });
 
