@@ -794,11 +794,14 @@ internal sealed partial class Checker
         {
             return true;
         }
-        foreach (var declaration in symbol.IsNone ? [] : DeclarationsOf(symbol) ?? [])
+        if (!symbol.IsNone && DeclarationsOf(symbol) is { } declarations)
         {
-            if (program.IsSourceFileDefaultLibrary(FileAt(declaration.File)))
+            foreach (var declaration in declarations)
             {
-                return true;
+                if (IsDefaultLibraryFile(declaration.File))
+                {
+                    return true;
+                }
             }
         }
         return false;

@@ -24,7 +24,7 @@ internal sealed class SymbolLinkStore<T>
     where T : struct
 {
     private int[][] slots;           // [file][symbol index] -> record index (0: none)
-    private T[] records = new T[64]; // records[0] unused
+    private readonly Chunks<T> records = new(); // records[0] unused
     private int count;
 
     internal SymbolLinkStore(int fileCount)
@@ -49,11 +49,8 @@ internal sealed class SymbolLinkStore<T>
         var slot = fileSlots[symbol.Index];
         if (slot == 0)
         {
-            if (count + 1 == records.Length)
-            {
-                Array.Resize(ref records, records.Length * 2);
-            }
             slot = fileSlots[symbol.Index] = ++count;
+            records.EnsureIndex(slot);
         }
         return ref records[slot];
     }

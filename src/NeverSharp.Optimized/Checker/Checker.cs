@@ -127,6 +127,22 @@ internal sealed partial class Checker
     /// <summary>The file number of a program source file (1-based; 0 if the file is not in the program).</summary>
     internal int FileNumber(SourceFile file) => fileIndex.TryGetValue(file, out var i) ? i : 0;
 
+    // program.isSourceFileDefaultLibrary per file number (0: not computed yet, 1: a default library file, 2: not one)
+    private sbyte[]? defaultLibraryFiles;
+
+    /// <summary>program.isSourceFileDefaultLibrary(file) of a program file number, computed once per file.</summary>
+    internal bool IsDefaultLibraryFile(int file)
+    {
+        defaultLibraryFiles ??= new sbyte[program.SourceFiles.Count + 1];
+        var known = defaultLibraryFiles[file];
+        if (known == 0)
+        {
+            known = program.IsSourceFileDefaultLibrary(FileAt(file)) ? (sbyte)1 : (sbyte)2;
+            defaultLibraryFiles[file] = known;
+        }
+        return known == 1;
+    }
+
     /// <summary>A node of <paramref name="file"/> as a program-wide reference.</summary>
     internal NodeRef Ref(SourceFile file, Node node) => new(FileNumber(file), node);
 
@@ -278,6 +294,7 @@ internal sealed partial class Checker
 
         ReportAmalgamatedDuplicates();
         amalgamatedDuplicates = null;
+        amalgamatedDuplicatesByFiles = null;
     }
 
     /// <summary>

@@ -286,7 +286,8 @@ internal sealed partial class Checker
         {
             return diagnostic;
         }
-        diagnostic.RelatedInformation ??= [];
+        diagnostic.RelatedInformation ??= new List<DiagnosticRelatedInformation>(relatedInformation.Length);
+        diagnostic.RelatedInformation.EnsureCapacity(diagnostic.RelatedInformation.Count + relatedInformation.Length);
         foreach (var info in relatedInformation)
         {
             diagnostic.RelatedInformation.Add(info);

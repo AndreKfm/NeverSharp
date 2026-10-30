@@ -54,12 +54,15 @@ internal sealed class TypeStore
     {
         public TypeList Types;
         public Type Origin;
+        public SymTable? PropertyCache;                                     // types.ts propertyCache
+        public SymTable? PropertyCacheWithoutObjectFunctionPropertyAugment; // types.ts propertyCacheWithoutObjectFunctionPropertyAugment
+        public List<SymbolRef>? ResolvedProperties;                         // types.ts resolvedProperties
     }
 
     private TypeRecord[] types = new TypeRecord[256];
     private int typeCount; // types[0] is the undefined handle
     private readonly List<ObjectTypeData> objects = [null!];
-    private UnionData[] unions = new UnionData[64];
+    private readonly Chunks<UnionData> unions = new();
     private int unionCount;
     private readonly List<TypeParameterData> typeParameters = [null!];
 
@@ -76,11 +79,8 @@ internal sealed class TypeStore
     /// <summary>A new union or intersection type (or an origin type) with its member list.</summary>
     internal Type CreateUnionOrIntersection(TypeFlags flags, ObjectFlags objectFlags, TypeList members, Type origin)
     {
-        if (unionCount + 1 == unions.Length)
-        {
-            Array.Resize(ref unions, unions.Length * 2);
-        }
         unionCount++;
+        unions.EnsureIndex(unionCount);
         unions[unionCount] = new UnionData { Types = members, Origin = origin };
         return Create(flags, objectFlags, default, unionCount);
     }
@@ -199,6 +199,13 @@ internal sealed class TypeStore
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal ReadOnlySpan<Type> Elements(TypeList list) => list.Count == 0 ? default : lists.AsSpan(list.Start, list.Count);
+
+    /// <summary>
+    /// Element <paramref name="index"/> of a list, read from the arena as it is now (unlike a span from
+    /// <see cref="Elements"/>, valid while the loop that reads it creates types and lists).
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal Type Element(TypeList list, int index) => lists[list.Start + index];
 }
 
 /// <summary>
@@ -420,7 +427,7 @@ internal sealed class TransientSymbolStore
         public SymbolRef ExportSymbol;
     }
 
-    private TransientSymbolRecord[] symbols = new TransientSymbolRecord[64];
+    private readonly Chunks<TransientSymbolRecord> symbols = new();
     private int count;
 
     internal int Count => count;
@@ -428,11 +435,8 @@ internal sealed class TransientSymbolStore
     /// <summary>checker.ts createSymbol(flags, name, checkFlags).</summary>
     internal SymbolRef Create(SymbolFlags flags, string escapedName, CheckFlags checkFlags = CheckFlags.None)
     {
-        if (count + 1 == symbols.Length)
-        {
-            Array.Resize(ref symbols, symbols.Length * 2);
-        }
         count++;
+        symbols.EnsureIndex(count);
         symbols[count] = new TransientSymbolRecord { Flags = flags | SymbolFlags.Transient, CheckFlags = checkFlags, EscapedName = escapedName };
         return new SymbolRef(0, count);
     }
@@ -442,68 +446,269 @@ internal sealed class TransientSymbolStore
 }
 
 /// <summary>
+/// Records of one kind in fixed-size chunks that never move (module CO1): growing adds a chunk instead of copying the
+/// records into a larger array (records with references would be copied with write barriers and the whole new array
+/// scanned by the next collection), and a <c>ref</c> to a record stays valid while the store grows.
+/// </summary>
+internal sealed class Chunks<T>
+{
+    private const int Shift = 12;
+    private const int Size = 1 << Shift;
+    private const int Mask = Size - 1;
+
+    private T[][] chunks = [new T[Size]];
+
+    internal ref T this[int index]
+    {
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+        get => ref chunks[index >> Shift][index & Mask];
+    }
+
+    /// <summary>Makes <paramref name="index"/> addressable.</summary>
+    internal void EnsureIndex(int index)
+    {
+        var chunk = index >> Shift;
+        if (chunk >= chunks.Length)
+        {
+            Array.Resize(ref chunks, Math.Max(chunks.Length * 2, chunk + 1));
+        }
+        chunks[chunk] ??= new T[Size];
+    }
+}
+
+/// <summary>
 /// A symbol table the checker owns (types.ts SymbolTable: a Map from escaped name to symbol, iterated in insertion
 /// order; Map.set on an existing key keeps its position). Binder tables are read through a cached copy of this kind
 /// (<see cref="Checker.TableOf"/>), so the checker sees one table type for binder and transient symbols.
+/// Layout (module CO1): the entries in insertion order in two arrays (names, symbols); up to <see cref="LinearLimit"/>
+/// entries are found by a scan, larger tables by an open-addressing index (linear probing, load at most 1/2, entry
+/// number + 1 per slot, 0 free). No per-entry objects.
 /// </summary>
 internal sealed class SymTable
 {
-    private readonly Dictionary<string, int> index;
-    private readonly List<string> names;
-    private readonly List<SymbolRef> values;
+    private const int LinearLimit = 8;
+
+    private string[] names;
+    private SymbolRef[] values;
+    private int[]? buckets; // null: at most LinearLimit entries, found by a scan
+    private int count;
 
     internal SymTable(int capacity = 0)
     {
-        index = new Dictionary<string, int>(capacity, StringComparer.Ordinal);
-        names = new List<string>(capacity);
-        values = new List<SymbolRef>(capacity);
+        names = capacity == 0 ? [] : new string[capacity];
+        values = capacity == 0 ? [] : new SymbolRef[capacity];
     }
 
     /// <summary>new Map(other): a copy in the same order.</summary>
     internal SymTable(SymTable other)
     {
-        index = new Dictionary<string, int>(other.index, StringComparer.Ordinal);
-        names = new List<string>(other.names);
-        values = new List<SymbolRef>(other.values);
+        count = other.count;
+        names = other.names.AsSpan(0, count).ToArray();
+        values = other.values.AsSpan(0, count).ToArray();
+        buckets = other.buckets is null ? null : (int[])other.buckets.Clone();
     }
 
-    internal int Count => names.Count;
+    internal int Count
+    {
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+        get => count;
+    }
 
     /// <summary>Map.get (None when absent).</summary>
-    internal SymbolRef Get(string name) => index.TryGetValue(name, out var i) ? values[i] : SymbolRef.None;
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal SymbolRef Get(string name)
+    {
+        var i = Find(name);
+        return i >= 0 ? values[i] : SymbolRef.None;
+    }
 
-    internal bool Has(string name) => index.ContainsKey(name);
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal bool Has(string name) => Find(name) >= 0;
 
     /// <summary>Map.set.</summary>
     internal void Set(string name, SymbolRef symbol)
     {
-        if (index.TryGetValue(name, out var i))
+        var i = Find(name);
+        if (i >= 0)
         {
             values[i] = symbol;
             return;
         }
-        index.Add(name, names.Count);
-        names.Add(name);
-        values.Add(symbol);
+        if (count == names.Length)
+        {
+            Resize(Math.Max(4, count * 2));
+        }
+        names[count] = name;
+        values[count] = symbol;
+        count++;
+        if (buckets is not null)
+        {
+            if (count * 2 > buckets.Length)
+            {
+                Rehash(buckets.Length * 2);
+            }
+            else
+            {
+                Insert(buckets, count - 1);
+            }
+        }
+        else if (count > LinearLimit)
+        {
+            Rehash(BucketCountFor(names.Length));
+        }
+    }
+
+    /// <summary>Makes room for <paramref name="capacity"/> entries (no change to the contents).</summary>
+    internal void EnsureCapacity(int capacity)
+    {
+        if (capacity > names.Length)
+        {
+            Resize(capacity);
+            if (buckets is not null && capacity * 2 > buckets.Length)
+            {
+                Rehash(BucketCountFor(capacity));
+            }
+        }
+    }
+
+    /// <summary>Map.clear (the arrays are kept for reuse).</summary>
+    internal void Clear()
+    {
+        if (buckets is not null)
+        {
+            if (count * 8 >= buckets.Length)
+            {
+                Array.Clear(buckets);
+            }
+            else
+            {
+                // A large index of a table reused with few entries: free just their slots, the last entry first (with
+                // linear probing and no deletions, the probe path of an entry only crosses slots of earlier entries).
+                var mask = buckets.Length - 1;
+                for (var entry = count - 1; entry >= 0; entry--)
+                {
+                    var slot = Hash(names[entry]) & mask;
+                    while (buckets[slot] != entry + 1)
+                    {
+                        slot = (slot + 1) & mask;
+                    }
+                    buckets[slot] = 0;
+                }
+            }
+        }
+        Array.Clear(names, 0, count);
+        count = 0;
     }
 
     /// <summary>Map.delete: true when the name was present (the entries after it keep their order).</summary>
     internal bool Delete(string name)
     {
-        if (!index.Remove(name, out var i))
+        var i = Find(name);
+        if (i < 0)
         {
             return false;
         }
-        names.RemoveAt(i);
-        values.RemoveAt(i);
-        for (var j = i; j < names.Count; j++)
+        Array.Copy(names, i + 1, names, i, count - i - 1);
+        Array.Copy(values, i + 1, values, i, count - i - 1);
+        count--;
+        names[count] = null!;
+        values[count] = default;
+        if (buckets is not null)
         {
-            index[names[j]] = j;
+            if (count <= LinearLimit)
+            {
+                buckets = null;
+            }
+            else
+            {
+                Rehash(buckets.Length);
+            }
         }
         return true;
     }
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal string NameAt(int i) => names[i];
 
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SymbolRef ValueAt(int i) => values[i];
+
+    // The entry number of the name, -1 when absent.
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private int Find(string name)
+    {
+        var b = buckets;
+        if (b is null)
+        {
+            var n = names;
+            for (var i = 0; i < count; i++)
+            {
+                if (n[i] == name)
+                {
+                    return i;
+                }
+            }
+            return -1;
+        }
+        var mask = b.Length - 1;
+        for (var slot = Hash(name) & mask; ; slot = (slot + 1) & mask)
+        {
+            var entry = b[slot];
+            if (entry == 0)
+            {
+                return -1;
+            }
+            if (names[entry - 1] == name)
+            {
+                return entry - 1;
+            }
+        }
+    }
+
+    private void Resize(int capacity)
+    {
+        Array.Resize(ref names, capacity);
+        Array.Resize(ref values, capacity);
+    }
+
+    private void Rehash(int bucketCount)
+    {
+        var b = new int[bucketCount];
+        for (var i = 0; i < count; i++)
+        {
+            Insert(b, i);
+        }
+        buckets = b;
+    }
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private void Insert(int[] b, int entry)
+    {
+        var mask = b.Length - 1;
+        var slot = Hash(names[entry]) & mask;
+        while (b[slot] != 0)
+        {
+            slot = (slot + 1) & mask;
+        }
+        b[slot] = entry + 1;
+    }
+
+    // a power of two with load at most 1/2
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private static int BucketCountFor(int capacity) => (int)System.Numerics.BitOperations.RoundUpToPowerOf2((uint)Math.Max(capacity * 2, 32));
+
+    // FNV-1a over the UTF-16 code units, with a final mix for the low bits the index uses
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private static int Hash(string s)
+    {
+        var h = 2166136261u;
+        foreach (var c in s)
+        {
+            h = (h ^ c) * 16777619u;
+        }
+        h ^= h >> 15;
+        h *= 0x85EBCA6Bu;
+        h ^= h >> 13;
+        return (int)(h & 0x7FFFFFFF);
+    }
 }

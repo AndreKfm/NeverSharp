@@ -384,26 +384,26 @@ internal sealed partial class Checker
             var targetPath = FileNameOf(targetSymbolFile);
             var firstFile = string.CompareOrdinal(sourcePath, targetPath) < 0 ? sourceSymbolFile : targetSymbolFile;
             var secondFile = firstFile == sourceSymbolFile ? targetSymbolFile : sourceSymbolFile;
-            var key = FileNameOf(firstFile) + "|" + FileNameOf(secondFile);
-            var filesDuplicates = amalgamatedDuplicates.Find(d => d.Key == key);
-            if (filesDuplicates is null)
+            amalgamatedDuplicatesByFiles ??= [];
+            if (!amalgamatedDuplicatesByFiles.TryGetValue((firstFile, secondFile), out var filesDuplicates))
             {
-                filesDuplicates = new DuplicateInfoForFiles(key, firstFile, secondFile);
+                filesDuplicates = new DuplicateInfoForFiles(firstFile, secondFile);
                 amalgamatedDuplicates.Add(filesDuplicates);
+                amalgamatedDuplicatesByFiles.Add((firstFile, secondFile), filesDuplicates);
             }
-            var conflictingSymbolInfo = filesDuplicates.ConflictingSymbols.Find(c => c.Name == symbolName);
-            if (conflictingSymbolInfo is null)
+            if (!filesDuplicates.SymbolsByName.TryGetValue(symbolName, out var conflictingSymbolInfo))
             {
                 conflictingSymbolInfo = new DuplicateInfoForSymbol(symbolName, isEitherBlockScoped);
                 filesDuplicates.ConflictingSymbols.Add(conflictingSymbolInfo);
+                filesDuplicates.SymbolsByName.Add(symbolName, conflictingSymbolInfo);
             }
             if (!isSourcePlainJs)
             {
-                AddDuplicateLocations(conflictingSymbolInfo.FirstFileLocations, source);
+                AddDuplicateLocations(conflictingSymbolInfo.FirstFileLocations, conflictingSymbolInfo.FirstFileSet, source);
             }
             if (!isTargetPlainJs)
             {
-                AddDuplicateLocations(conflictingSymbolInfo.SecondFileLocations, target);
+                AddDuplicateLocations(conflictingSymbolInfo.SecondFileLocations, conflictingSymbolInfo.SecondFileSet, target);
             }
         }
         else
@@ -419,13 +419,14 @@ internal sealed partial class Checker
         }
     }
 
-    private void AddDuplicateLocations(List<NodeRef> locations, SymbolRef symbol)
+    // checker.ts addDuplicateLocations (pushIfUnique; the set holds the list's elements)
+    private void AddDuplicateLocations(List<NodeRef> locations, HashSet<NodeRef> set, SymbolRef symbol)
     {
         if (DeclarationsOf(symbol) is { } declarations)
         {
             foreach (var declaration in declarations)
             {
-                if (!locations.Contains(declaration))
+                if (set.Add(declaration))
                 {
                     locations.Add(declaration);
                 }
@@ -455,6 +456,12 @@ internal sealed partial class Checker
         var err = LookupOrIssueError(errorNode, message, symbolName);
         foreach (var relatedNode in relatedNodes ?? [])
         {
+            // Once the error has five related entries, no later iteration adds one or changes anything (the messages
+            // it would create are compared only); stop before creating them.
+            if (err.RelatedInformation is { Count: >= 5 })
+            {
+                break;
+            }
             var adjustedNode = GetNameOfDeclarationRef(relatedNode);
             if (adjustedNode.IsNone)
             {
@@ -467,8 +474,7 @@ internal sealed partial class Checker
             err.RelatedInformation ??= [];
             var leadingMessage = CreateRelatedForNode(adjustedNode, Diagnostics._0_was_also_declared_here, symbolName);
             var followOnMessage = CreateRelatedForNode(adjustedNode, Diagnostics.and_here);
-            if (err.RelatedInformation.Count >= 5 || err.RelatedInformation.Exists(r =>
-                    DiagnosticCollection.CompareSkipRelatedInformation(r, followOnMessage) == 0 || DiagnosticCollection.CompareSkipRelatedInformation(r, leadingMessage) == 0))
+            if (err.RelatedInformation.Count >= 5 || ContainsRelated(err.RelatedInformation, followOnMessage, leadingMessage))
             {
                 continue;
             }
@@ -476,23 +482,43 @@ internal sealed partial class Checker
         }
     }
 
-    private sealed class DuplicateInfoForFiles(string key, int firstFile, int secondFile)
+    // some(related, r => compareDiagnostics(r, a) === EqualTo || compareDiagnostics(r, b) === EqualTo)
+    private static bool ContainsRelated(List<DiagnosticRelatedInformation> related, DiagnosticRelatedInformation a, DiagnosticRelatedInformation b)
     {
-        public string Key { get; } = key;
+        foreach (var r in related)
+        {
+            if (DiagnosticCollection.CompareSkipRelatedInformation(r, a) == 0 || DiagnosticCollection.CompareSkipRelatedInformation(r, b) == 0)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // checker.ts DuplicateInfoForFiles: the conflicting symbols in a Map keyed by name (insertion order in the list)
+    private sealed class DuplicateInfoForFiles(int firstFile, int secondFile)
+    {
         public int FirstFile { get; } = firstFile;
         public int SecondFile { get; } = secondFile;
         public List<DuplicateInfoForSymbol> ConflictingSymbols { get; } = [];
+        public Dictionary<string, DuplicateInfoForSymbol> SymbolsByName { get; } = new(StringComparer.Ordinal);
     }
 
+    // checker.ts DuplicateInfoForSymbol: the location lists are filled with pushIfUnique (the sets mirror the lists)
     private sealed class DuplicateInfoForSymbol(string name, bool isBlockScoped)
     {
         public string Name { get; } = name;
         public bool IsBlockScoped { get; } = isBlockScoped;
         public List<NodeRef> FirstFileLocations { get; } = [];
         public List<NodeRef> SecondFileLocations { get; } = [];
+        public HashSet<NodeRef> FirstFileSet { get; } = [];
+        public HashSet<NodeRef> SecondFileSet { get; } = [];
     }
 
+    // checker.ts amalgamatedDuplicates: a Map keyed by `${firstFile.path}|${secondFile.path}` (one program file per
+    // path, so the pair of file numbers is the same key); the list keeps the Map's insertion order.
     private List<DuplicateInfoForFiles>? amalgamatedDuplicates;
+    private Dictionary<(int, int), DuplicateInfoForFiles>? amalgamatedDuplicatesByFiles;
 
     // initializeTypeChecker: amalgamatedDuplicates.forEach(...)
     private void ReportAmalgamatedDuplicates()

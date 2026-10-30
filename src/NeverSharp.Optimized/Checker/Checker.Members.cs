@@ -950,6 +950,7 @@ internal sealed partial class Checker
     // checker.ts addInheritedMembers
     private void AddInheritedMembers(SymTable symbols, List<SymbolRef> baseSymbols)
     {
+        symbols.EnsureCapacity(symbols.Count + baseSymbols.Count);
         foreach (var b in baseSymbols)
         {
             if (IsStaticPrivateIdentifierProperty(b))

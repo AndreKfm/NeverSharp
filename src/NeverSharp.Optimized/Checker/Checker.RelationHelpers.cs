@@ -1073,7 +1073,7 @@ internal sealed partial class Checker
         var targetData = Types.Data<TemplateLiteralData>(target);
         if ((Types.Flags(source) & TypeFlags.StringLiteral) != 0)
         {
-            return InferFromLiteralPartsToTemplateLiteral([(string)Types.Literal(source).Value!], [], target);
+            return InferFromLiteralPartsToTemplateLiteral(null, (string)Types.Literal(source).Value!, [], target);
         }
         if ((Types.Flags(source) & TypeFlags.TemplateLiteral) != 0)
         {
@@ -1088,7 +1088,7 @@ internal sealed partial class Checker
                 }
                 return result;
             }
-            return InferFromLiteralPartsToTemplateLiteral(sourceData.Texts, sourceData.Types, target);
+            return InferFromLiteralPartsToTemplateLiteral(sourceData.Texts, "", sourceData.Types, target);
         }
         return null;
     }
@@ -1119,11 +1119,13 @@ internal sealed partial class Checker
     // checker.ts inferFromLiteralPartsToTemplateLiteral: infers from the text parts and type parts of a source literal
     // to a target template literal; the inferred string or template literal types for the target's placeholders, or
     // null if the source doesn't match the target.
-    private Type[]? InferFromLiteralPartsToTemplateLiteral(string[] sourceTexts, Type[] sourceTypes, Type target)
+    // (sourceTexts null: the one text singleText, the texts of a string literal type, without an array)
+    private Type[]? InferFromLiteralPartsToTemplateLiteral(string[]? sourceTexts, string singleText, Type[] sourceTypes, Type target)
     {
-        var lastSourceIndex = sourceTexts.Length - 1;
-        var sourceStartText = sourceTexts[0];
-        var sourceEndText = sourceTexts[lastSourceIndex];
+        var sourceTextCount = sourceTexts?.Length ?? 1;
+        var lastSourceIndex = sourceTextCount - 1;
+        var sourceStartText = SourceTextAt(0);
+        var sourceEndText = SourceTextAt(lastSourceIndex);
         var targetTexts = Types.Data<TemplateLiteralData>(target).Texts;
         var lastTargetIndex = targetTexts.Length - 1;
         var targetStartText = targetTexts[0];
@@ -1134,7 +1136,9 @@ internal sealed partial class Checker
             return null;
         }
         var remainingEndText = sourceEndText[..(sourceEndText.Length - targetEndText.Length)];
-        var matches = new List<Type>();
+        // (one match per placeholder of the target: lastTargetIndex)
+        var matches = new Type[lastTargetIndex];
+        var matchCount = 0;
         var seg = 0;
         var pos = targetStartText.Length;
         for (var i = 1; i < lastTargetIndex; i++)
@@ -1152,7 +1156,7 @@ internal sealed partial class Checker
                         break;
                     }
                     s++;
-                    if (s == sourceTexts.Length)
+                    if (s == sourceTextCount)
                     {
                         return null;
                     }
@@ -1175,9 +1179,11 @@ internal sealed partial class Checker
             }
         }
         AddMatch(lastSourceIndex, GetSourceText(lastSourceIndex).Length);
-        return [.. matches];
+        return matches;
 
-        string GetSourceText(int index) => index < lastSourceIndex ? sourceTexts[index] : remainingEndText;
+        string SourceTextAt(int index) => sourceTexts is null ? singleText : sourceTexts[index];
+
+        string GetSourceText(int index) => index < lastSourceIndex ? SourceTextAt(index) : remainingEndText;
 
         void AddMatch(int s, int p)
         {
@@ -1188,15 +1194,15 @@ internal sealed partial class Checker
             }
             else
             {
-                var texts = new List<string> { SliceText(sourceTexts[seg], pos, sourceTexts[seg].Length) };
+                var texts = new List<string> { SliceText(SourceTextAt(seg), pos, SourceTextAt(seg).Length) };
                 for (var k = seg + 1; k < s; k++)
                 {
-                    texts.Add(sourceTexts[k]);
+                    texts.Add(SourceTextAt(k));
                 }
                 texts.Add(SliceText(GetSourceText(s), 0, p));
                 matchType = GetTemplateLiteralType([.. texts], sourceTypes[seg..s]);
             }
-            matches.Add(matchType);
+            matches[matchCount++] = matchType;
             seg = s;
             pos = p;
         }

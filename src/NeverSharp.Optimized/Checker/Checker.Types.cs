@@ -323,9 +323,18 @@ internal sealed partial class Checker
 
     // ---- union types ----
 
+    // (the builder GetTypeListId reuses on this thread; the id is complete before the next call starts)
+    [ThreadStatic]
+    private static StringBuilder? typeListIdBuilder;
+
     private static string GetTypeListId(ReadOnlySpan<Type> types)
     {
-        var result = new StringBuilder();
+        if (types.Length == 1)
+        {
+            return types[0].Id.ToString(CultureInfo.InvariantCulture);
+        }
+        var result = typeListIdBuilder ??= new StringBuilder();
+        result.Clear();
         var length = types.Length;
         var i = 0;
         while (i < length)
@@ -340,10 +349,10 @@ internal sealed partial class Checker
             {
                 result.Append(',');
             }
-            result.Append(startId.ToString(CultureInfo.InvariantCulture));
+            result.Append(CultureInfo.InvariantCulture, $"{startId}");
             if (count > 1)
             {
-                result.Append(':').Append(count.ToString(CultureInfo.InvariantCulture));
+                result.Append(':').Append(CultureInfo.InvariantCulture, $"{count}");
             }
             i += count;
         }
@@ -1054,20 +1063,40 @@ internal sealed partial class Checker
     // checker.ts removeStringLiteralsMatchedByTemplateLiterals
     private void RemoveStringLiteralsMatchedByTemplateLiterals(List<Type> types)
     {
-        var templates = types.FindAll(IsPatternLiteralType);
-        if (templates.Count > 0)
+        List<Type>? templates = null;
+        foreach (var type in types)
+        {
+            if (IsPatternLiteralType(type))
+            {
+                (templates ??= []).Add(type);
+            }
+        }
+        if (templates is not null)
         {
             var i = types.Count;
             while (i > 0)
             {
                 i--;
                 var t = types[i];
-                if ((Types.Flags(t) & TypeFlags.StringLiteral) != 0 && templates.Exists(template => IsTypeMatchedByTemplateLiteralOrStringMapping(t, template)))
+                if ((Types.Flags(t) & TypeFlags.StringLiteral) != 0 && IsMatchedBySomeTemplate(t, templates))
                 {
                     types.RemoveAt(i);
                 }
             }
         }
+    }
+
+    // some(templates, template => isTypeMatchedByTemplateLiteralOrStringMapping(t, template))
+    private bool IsMatchedBySomeTemplate(Type t, List<Type> templates)
+    {
+        foreach (var template in templates)
+        {
+            if (IsTypeMatchedByTemplateLiteralOrStringMapping(t, template))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     // checker.ts isTypeMatchedByTemplateLiteralOrStringMapping

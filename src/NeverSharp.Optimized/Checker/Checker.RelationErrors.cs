@@ -244,7 +244,7 @@ internal sealed partial class Checker
                         if (targetProp.IsNone)
                         {
                             var indexInfo = GetApplicableIndexInfo(target, nameType);
-                            if (indexInfo is not null && !indexInfo.Declaration.IsNone && !program.IsSourceFileDefaultLibrary(FileAt(indexInfo.Declaration.File)))
+                            if (indexInfo is not null && !indexInfo.Declaration.IsNone && !IsDefaultLibraryFile(indexInfo.Declaration.File))
                             {
                                 issuedElaboration = true;
                                 AddRelatedInfo(reportedDiag, CreateRelatedForNode(indexInfo.Declaration, Diagnostics.The_expected_type_comes_from_this_index_signature));
@@ -256,7 +256,7 @@ internal sealed partial class Checker
                         if (!issuedElaboration && (targetPropDeclarations is { Count: > 0 } || targetSymbolDeclarations is { Count: > 0 }))
                         {
                             var targetNode = targetPropDeclarations is { Count: > 0 } ? targetPropDeclarations[0] : targetSymbolDeclarations![0];
-                            if (!program.IsSourceFileDefaultLibrary(FileAt(targetNode.File)))
+                            if (!IsDefaultLibraryFile(targetNode.File))
                             {
                                 AddRelatedInfo(reportedDiag, CreateRelatedForNode(targetNode, Diagnostics.The_expected_type_comes_from_property_0_which_is_declared_here_on_type_1,
                                     propertyName is not null && (Types.Flags(nameType) & TypeFlags.UniqueESSymbol) == 0 ? Utilities.UnescapeLeadingUnderscores(propertyName) : TypeToString(nameType),
