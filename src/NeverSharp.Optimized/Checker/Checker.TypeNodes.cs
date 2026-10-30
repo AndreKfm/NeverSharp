@@ -623,7 +623,8 @@ internal sealed partial class Checker
     {
         var typeArguments = TypeArgumentsOf(node);
         var store = StoreOf(node);
-        if (!typeArguments.IsNone && store.Length(typeArguments) > 0)
+        // (node.typeArguments: an empty list `T<>` counts)
+        if (!typeArguments.IsNone)
         {
             Error(node, Diagnostics.Type_0_is_not_generic, !symbol.IsNone ? SymbolToString(symbol) : Utilities.DeclarationNameToString(store, store.TypeName(node.Node)));
             return false;
@@ -685,7 +686,9 @@ internal sealed partial class Checker
                     if (!resolved.IsNone && (SymbolFlagsOf(resolved) & SymbolFlags.TypeAlias) != 0)
                     {
                         newAliasSymbol = resolved;
-                        aliasTypeArguments = Types.CreateList(TypeArgumentsFromTypeReferenceNode(node));
+                        // typeArgumentsFromTypeReferenceNode(node) || (typeParameters ? [] : undefined)
+                        var importedAliasArguments = TypeArgumentsFromTypeReferenceNode(node);
+                        aliasTypeArguments = importedAliasArguments.Length > 0 ? Types.CreateList(importedAliasArguments) : TypeList.PresentEmpty;
                     }
                 }
             }

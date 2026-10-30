@@ -487,13 +487,13 @@ internal sealed partial class Checker
     private NodeRef GetDeclarationContainer(NodeRef node)
     {
         var store = StoreOf(node);
-        var n = Utilities.GetRootDeclaration(store, node.Node);
-        for (n = store.Parent(n); !n.IsNone; n = store.Parent(n))
+        // findAncestor(getRootDeclaration(node), ...)!.parent: the first ancestor-or-self that is none of these kinds, then its parent
+        for (var n = Utilities.GetRootDeclaration(store, node.Node); !n.IsNone; n = store.Parent(n))
         {
             if (store.Kind(n) is not (SyntaxKind.VariableDeclaration or SyntaxKind.VariableDeclarationList or SyntaxKind.ImportSpecifier
                 or SyntaxKind.NamedImports or SyntaxKind.NamespaceImport or SyntaxKind.ImportClause))
             {
-                return At(node, n);
+                return At(node, store.Parent(n));
             }
         }
         return NodeRef.None;

@@ -1508,7 +1508,8 @@ internal sealed partial class Checker
     /// <summary>checker.ts getIndexInfosOfType.</summary>
     internal List<IndexInfo> GetIndexInfosOfType(Type type)
     {
-        type = GetApparentType(type);
+        // getIndexInfosOfStructuredType(getReducedApparentType(type)): an intersection reduced to never has none
+        type = GetReducedApparentType(type);
         return (Types.Flags(type) & TypeFlags.Object) != 0 ? ResolveStructuredTypeMembers(type).IndexInfos!
             : (Types.Flags(type) & TypeFlags.UnionOrIntersection) != 0 ? ResolveUnionOrIntersectionTypeMembers(type).IndexInfos!
             : [];

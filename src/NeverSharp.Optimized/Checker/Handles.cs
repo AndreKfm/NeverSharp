@@ -196,6 +196,21 @@ internal readonly struct TypeList : IEquatable<TypeList>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public static TypeList Empty => default;
 
+    /// <summary>
+    /// An empty list that is present (TypeScript's <c>[]</c> where <see cref="Empty"/> also stands for <c>undefined</c>):
+    /// the alias type arguments of a type alias referenced without type arguments through an import
+    /// (getTypeFromTypeAliasReference's <c>typeArgumentsFromTypeReferenceNode(node) || []</c>), which are truthy.
+    /// </summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    public static TypeList PresentEmpty => new(-1, 0);
+
+    /// <summary>Whether the list is present (TypeScript: the array is not undefined): non-empty or <see cref="PresentEmpty"/>.</summary>
+    internal bool IsPresent
+    {
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+        get => Count != 0 || Start != 0;
+    }
+
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public static bool operator ==(TypeList left, TypeList right) => left.Start == right.Start && left.Count == right.Count;
 

@@ -110,7 +110,9 @@ internal sealed partial class Checker
                 var baseConstructorType = GetBaseConstructorTypeOfClass(type);
                 var staticBaseType = GetApparentType(baseConstructorType);
                 CheckBaseTypeAccessibility(staticBaseType, baseTypeNode);
-                CheckExpression(At(node, store.Expression(baseTypeNodeRaw))); // checkSourceElement(baseTypeNode.expression)
+                // (checkSourceElement of an expression checks only its JSDoc; the expression itself is checked by
+                // getBaseConstructorTypeOfClass, of the class's first class-like declaration)
+                CheckSourceElement(At(node, store.Expression(baseTypeNodeRaw)));
                 var typeArguments = store.TypeArguments(baseTypeNodeRaw);
                 if (!typeArguments.IsNone && store.Length(typeArguments) > 0)
                 {

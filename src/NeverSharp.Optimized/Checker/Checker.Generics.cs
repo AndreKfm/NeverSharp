@@ -840,7 +840,7 @@ internal sealed partial class Checker
         }
         if (IsValidESSymbolDeclaration(node))
         {
-            var symbol = IsCommonJsExportPropertyAssignment(StoreOf(node), node.Node) ? GetSymbolOfNode(At(node, StoreOf(node).Left(node.Node))) : NodeSymbol(node);
+            var symbol = IsCommonJsExportPropertyAssignment(StoreOf(node), node.Node) ? GetSymbolOfNode(At(node, StoreOf(node).Left(node.Node))) : GetSymbolOfNode(node);
             if (!symbol.IsNone)
             {
                 if (!uniqueESSymbolTypes.TryGetValue(symbol, out var type))

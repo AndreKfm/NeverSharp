@@ -198,7 +198,7 @@ internal sealed class TypeStore
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal ReadOnlySpan<Type> Elements(TypeList list) => lists.AsSpan(list.Start, list.Count);
+    internal ReadOnlySpan<Type> Elements(TypeList list) => list.Count == 0 ? default : lists.AsSpan(list.Start, list.Count);
 }
 
 /// <summary>

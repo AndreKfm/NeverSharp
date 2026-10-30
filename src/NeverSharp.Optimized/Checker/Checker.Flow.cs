@@ -1184,6 +1184,33 @@ internal sealed partial class Checker
         return Type.None;
     }
 
+    // getSymbolNameForPrivateIdentifier(symbol, description) when a member of that name can exist: the binder's name of a
+    // private member that the (binder) class symbol declares itself (its members or exports), else null
+    private string? PrivateNameDeclaredBy(SymbolRef symbol, string description)
+    {
+        if (symbol.IsTransient)
+        {
+            return null;
+        }
+        var suffix = "@" + description;
+        foreach (var table in (ReadOnlySpan<SymTable?>)[MembersOf(symbol), ExportsOf(symbol)])
+        {
+            if (table is null)
+            {
+                continue;
+            }
+            for (var i = 0; i < table.Count; i++)
+            {
+                var key = table.NameAt(i);
+                if (key.StartsWith("__#", StringComparison.Ordinal) && key.EndsWith(suffix, StringComparison.Ordinal))
+                {
+                    return key;
+                }
+            }
+        }
+        return null;
+    }
+
     // checker.ts getTypeOfDottedName: the dotted function name in an assertion expression must be comprised of
     // identifiers that reference function, method, class or value module symbols; or variable, property or parameter
     // symbols with declarations that have explicit type annotations.
@@ -1216,10 +1243,12 @@ internal sealed partial class Checker
                         {
                             return Type.None;
                         }
-                        // getSymbolNameForPrivateIdentifier(type.symbol, name.escapedText): the member the private
-                        // name declares (the binder's name for it)
-                        var declared = LookupSymbolForPrivateIdentifierDeclaration(At(node, name));
-                        prop = declared.IsNone ? SymbolRef.None : GetPropertyOfType(type, NameOf(declared));
+                        // getSymbolNameForPrivateIdentifier(type.symbol, name.escapedText): `__#<symbol id>@<name>` of the
+                        // type's own symbol. Only the binder names members so, with the id of the class symbol it binds:
+                        // the name exists when type.symbol is a class symbol of the binder that declares the private
+                        // name; a merged (transient) class symbol has an id of its own, so the property is not found.
+                        var privateName = PrivateNameDeclaredBy(typeSymbol, store.Texts.GetString(store.EscapedText(name))!);
+                        prop = privateName is null ? SymbolRef.None : GetPropertyOfType(type, privateName);
                     }
                     else
                     {

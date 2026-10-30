@@ -620,7 +620,7 @@ internal sealed partial class Checker
             if (!sourceAlias.IsNone && sourceAlias == Types.Record(target).AliasSymbol)
             {
                 var sourceAliasArguments = Types.Record(source).AliasTypeArguments;
-                if (sourceAliasArguments.Count > 0)
+                if (sourceAliasArguments.IsPresent)
                 {
                     // Source and target are types originating in the same generic type alias declaration.
                     // Simply infer from source type arguments to target type arguments, with defaults applied.
@@ -1582,7 +1582,7 @@ internal sealed partial class Checker
             return true;
         }
         var sourceAlias = Types.Record(s).AliasSymbol;
-        return !sourceAlias.IsNone && Types.Record(s).AliasTypeArguments.Count > 0 && sourceAlias == Types.Record(t).AliasSymbol;
+        return !sourceAlias.IsNone && Types.Record(s).AliasTypeArguments.IsPresent && sourceAlias == Types.Record(t).AliasSymbol;
     }
 
     // checker.ts hasPrimitiveConstraint

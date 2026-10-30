@@ -1773,7 +1773,8 @@ internal sealed partial class Checker
         // TypeScript 1.0 spec (April 2014)
         // 3.7.4: An object type can contain at most one string index signature and one numeric index signature.
         // 8.5: A class declaration can have at most one string index member declaration and one numeric index member declaration
-        var indexSymbol = nodeSymbol.IsNone ? SymbolRef.None : MembersOf(nodeSymbol)?.Get(InternalSymbolName.Index) ?? SymbolRef.None;
+        // getIndexSymbol: symbol.members ? getIndexSymbolFromSymbolTable(getMembersOfSymbol(symbol)) : undefined
+        var indexSymbol = nodeSymbol.IsNone || MembersOf(nodeSymbol) is null ? SymbolRef.None : GetMembersOfSymbol(nodeSymbol).Get(InternalSymbolName.Index);
         if (indexSymbol.IsNone || DeclarationsOf(indexSymbol) is not { } indexDeclarations)
         {
             return;

@@ -680,7 +680,7 @@ internal sealed partial class Checker
             var targetSymbol = Types.Symbol(target);
             if (((targetFlags & (ObjectFlags.Reference | ObjectFlags.InstantiationExpressionType)) != 0 ||
                 (!targetSymbol.IsNone && (SymbolFlagsOf(targetSymbol) & (SymbolFlags.Method | SymbolFlags.TypeLiteral)) != 0)) &&
-                Types.Record(target).AliasTypeArguments.Count == 0)
+                !Types.Record(target).AliasTypeArguments.IsPresent)
             {
                 var allDeclarations = (objectFlags & (ObjectFlags.Reference | ObjectFlags.InstantiationExpressionType)) != 0 ? [declaration] : DeclarationsOf(Types.Symbol(type))!;
                 typeParameters = Array.FindAll(typeParameters, tp => allDeclarations.Exists(d => IsTypeParameterPossiblyReferenced(tp, d)));
@@ -997,7 +997,7 @@ internal sealed partial class Checker
     private bool IsNonGenericTopLevelType(Type type)
     {
         ref var record = ref Types.Record(type);
-        if (!record.AliasSymbol.IsNone && record.AliasTypeArguments.Count == 0)
+        if (!record.AliasSymbol.IsNone && !record.AliasTypeArguments.IsPresent)
         {
             var declaration = GetDeclarationOfKind(record.AliasSymbol, SyntaxKind.TypeAliasDeclaration);
             if (declaration.IsNone)

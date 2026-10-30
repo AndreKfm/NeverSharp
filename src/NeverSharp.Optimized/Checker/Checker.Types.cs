@@ -352,7 +352,7 @@ internal sealed partial class Checker
 
     private string GetAliasId(SymbolRef aliasSymbol, TypeList aliasTypeArguments) =>
         aliasSymbol.IsNone ? "" : "@" + aliasSymbol.File.ToString(CultureInfo.InvariantCulture) + "." + aliasSymbol.Index.ToString(CultureInfo.InvariantCulture)
-            + (aliasTypeArguments.Count > 0 ? ":" + GetTypeListId(Types.Elements(aliasTypeArguments)) : "");
+            + (aliasTypeArguments.IsPresent ? ":" + GetTypeListId(Types.Elements(aliasTypeArguments)) : "");
 
     private ObjectFlags GetPropagatingFlagsOfTypes(ReadOnlySpan<Type> types, TypeFlags excludeKinds = 0)
     {

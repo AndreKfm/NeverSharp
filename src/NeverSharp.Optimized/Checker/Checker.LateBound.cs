@@ -193,7 +193,10 @@ internal sealed partial class Checker
         {
             return first;
         }
-        var combined = new SymTable(first);
+        // (mergeSymbolTable(combined, first): the merged symbol of each entry, e.g. the late-bound clone of an early
+        // `__index` symbol that lateBindIndexSignature recorded as its merge target)
+        var combined = new SymTable();
+        MergeSymbolTable(combined, first);
         MergeSymbolTable(combined, second);
         return combined;
     }

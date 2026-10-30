@@ -1484,7 +1484,7 @@ internal sealed partial class Checker
                 // is more predictable than other, interned types, which may or may not have an alias depending on
                 // the order in which things were checked.
                 var sourceAlias = c.Types.Record(source).AliasSymbol;
-                if ((sourceFlags & (TypeFlags.Object | TypeFlags.Conditional)) != 0 && !sourceAlias.IsNone && c.Types.Record(source).AliasTypeArguments.Count > 0 &&
+                if ((sourceFlags & (TypeFlags.Object | TypeFlags.Conditional)) != 0 && !sourceAlias.IsNone && c.Types.Record(source).AliasTypeArguments.IsPresent &&
                     sourceAlias == c.Types.Record(target).AliasSymbol && !(c.IsMarkerType(source) || c.IsMarkerType(target)))
                 {
                     var variances = c.GetAliasVariances(sourceAlias);
