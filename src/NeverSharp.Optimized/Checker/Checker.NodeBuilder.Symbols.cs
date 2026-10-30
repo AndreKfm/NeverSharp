@@ -691,6 +691,16 @@ internal sealed partial class Checker
             {
                 return escapedName[1..^1];
             }
+            // A resolver may not be provided for baselines and errors - in those cases we use the fileName in full
+            // (getSourceFileOfNode(getNonAugmentationDeclaration(symbol)).fileName)
+            foreach (var d in DeclarationsOf(symbol) ?? [])
+            {
+                var store = StoreOf(d);
+                if (!IsExternalModuleAugmentation(store, d.Node) && !(store.Kind(d.Node) == SyntaxKind.ModuleDeclaration && Utilities.IsGlobalScopeAugmentation(store, d.Node)))
+                {
+                    return FileNameOfFile(d.File);
+                }
+            }
             return !file.IsNone ? FileNameOfFile(file.File) : escapedName;
         }
         if (file.IsNone)

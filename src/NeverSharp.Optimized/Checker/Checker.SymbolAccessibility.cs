@@ -418,7 +418,7 @@ internal sealed partial class Checker
                     additionalContainers.Add(fileSymbol);
                 }
             }
-            // (getAlternativeContainingModules: re-exports from other files; Gate C programs have one file besides the library: not ported)
+            var reexportContainers = !enclosingDeclaration.IsNone ? GetAlternativeContainingModules(symbol, enclosingDeclaration) : null;
             var objectLiteralContainer = GetVariableDeclarationOfObjectLiteral(container, meaning);
             if (!enclosingDeclaration.IsNone &&
                 (SymbolFlagsOf(container) & GetQualifiedLeftMeaning(meaning)) != 0 &&
@@ -427,6 +427,10 @@ internal sealed partial class Checker
                 // This order expresses a preference for the real container if it is in scope
                 var preferred = new List<SymbolRef> { container };
                 preferred.AddRange(additionalContainers);
+                if (reexportContainers is not null)
+                {
+                    preferred.AddRange(reexportContainers);
+                }
                 if (!objectLiteralContainer.IsNone)
                 {
                     preferred.Add(objectLiteralContainer);
@@ -469,8 +473,76 @@ internal sealed partial class Checker
             {
                 res.Add(objectLiteralContainer);
             }
+            if (reexportContainers is not null)
+            {
+                res.AddRange(reexportContainers);
+            }
             return res;
         }
+    }
+
+    // SymbolLinks.extendedContainersByFile (by file number) and extendedContainers of getAlternativeContainingModules
+    private readonly Dictionary<SymbolRef, Dictionary<int, List<SymbolRef>>> extendedContainersByFile = [];
+    private readonly Dictionary<SymbolRef, List<SymbolRef>> extendedContainers = [];
+
+    // checker.ts getAlternativeContainingModules
+    private List<SymbolRef> GetAlternativeContainingModules(SymbolRef symbol, NodeRef enclosingDeclaration)
+    {
+        var containingFile = enclosingDeclaration.File;
+        List<SymbolRef>? results = null;
+        if (extendedContainersByFile.TryGetValue(symbol, out var byFile) && byFile.TryGetValue(containingFile, out results))
+        {
+            return results;
+        }
+        // Try to make an import using an import already in the enclosing file, if possible
+        // (the synthesized JSX runtime import is not in the list: synthetic names can't be resolved by `resolveExternalModuleName`)
+        foreach (var importRef in program.GetImports(FileAt(containingFile)))
+        {
+            var resolvedModule = ResolveExternalModuleName(enclosingDeclaration, new NodeRef(containingFile, importRef), ignoreErrors: true);
+            if (resolvedModule.IsNone)
+            {
+                continue;
+            }
+            var reference = GetAliasForSymbolInContainer(resolvedModule, symbol);
+            if (reference.IsNone)
+            {
+                continue;
+            }
+            (results ??= []).Add(resolvedModule);
+        }
+        if (results is { Count: > 0 })
+        {
+            if (byFile is null)
+            {
+                extendedContainersByFile[symbol] = byFile = [];
+            }
+            byFile[containingFile] = results;
+            return results;
+        }
+        if (extendedContainers.TryGetValue(symbol, out var cached))
+        {
+            return cached;
+        }
+        // No results from files already being imported by this file - expand search (expensive, but not location-specific, so cached)
+        var files = program.SourceFiles;
+        for (var f = 1; f <= files.Count; f++)
+        {
+            var file = files[f - 1];
+            if (!Utilities.IsExternalModule(file.Store, file.Root))
+            {
+                continue;
+            }
+            var sym = GetSymbolOfDeclaration(new NodeRef(f, file.Root));
+            var reference = GetAliasForSymbolInContainer(sym, symbol);
+            if (reference.IsNone)
+            {
+                continue;
+            }
+            (results ??= []).Add(sym);
+        }
+        results ??= [];
+        extendedContainers[symbol] = results;
+        return results;
     }
 
     // checker.ts getVariableDeclarationOfObjectLiteral

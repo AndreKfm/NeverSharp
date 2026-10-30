@@ -38,6 +38,10 @@ internal sealed partial class Program
     private void ProcessImportedModules(SourceFile file)
     {
         var (imports, moduleAugmentations) = CollectExternalModuleReferences(file);
+        if (imports.Count > 0)
+        {
+            fileImports[file] = imports;
+        }
         var syntheticJsxImport = GetSyntheticJsxImportText(file, options);
         if (imports.Count == 0 && moduleAugmentations.Count == 0 && syntheticJsxImport is null)
         {
@@ -70,6 +74,15 @@ internal sealed partial class Program
             // (noResolve: no resolved file is added to the program.)
         }
     }
+
+    // sourceFile.imports without the synthesized JSX runtime import (kept by the program; the file stores are not written)
+    private readonly Dictionary<SourceFile, List<Node>> fileImports = new(ReferenceEqualityComparer.Instance);
+
+    /// <summary>
+    /// The module specifiers of the file's imports in the order of collectExternalModuleReferences (sourceFile.imports, read
+    /// by checker.ts getAlternativeContainingModules), without the synthesized JSX runtime import.
+    /// </summary>
+    internal IReadOnlyList<Node> GetImports(SourceFile file) => fileImports.TryGetValue(file, out var imports) ? imports : [];
 
     // the files with a synthesized JSX runtime import: its text and the mode it was resolved with
     private readonly Dictionary<SourceFile, (string Text, ModuleKind? Mode)> syntheticJsxImports = new(ReferenceEqualityComparer.Instance);

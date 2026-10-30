@@ -708,6 +708,10 @@ internal sealed partial class Checker
                             : isUncheckedJS ? Diagnostics.Could_not_find_name_0_Did_you_mean_1
                             : Diagnostics.Cannot_find_name_0_Did_you_mean_1;
                         var diagnostic = CreateDiagnosticForNode(errorLocation, message, DiagnosticName(name, nameNode), suggestionName);
+                        // getCanonicalDiagnostic(nameNotFoundMessage, diagnosticName(nameArg)): a later plain "not found" of the
+                        // same name and location is a duplicate of this diagnostic
+                        diagnostic.CanonicalHead = (nameNotFoundMessage.Code,
+                            Utilities.FormatStringFromArgs(Utilities.GetLocaleSpecificMessage(nameNotFoundMessage), [DiagnosticName(name, nameNode)]));
                         // (addErrorOrSuggestion copies a suggestion before the related information is added to the error)
                         if (!suggestionValueDeclaration.IsNone && !isUncheckedJS)
                         {
