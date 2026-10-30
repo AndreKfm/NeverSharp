@@ -417,7 +417,7 @@ internal sealed class TransientSymbolStore
     {
         public SymbolFlags Flags;
         public CheckFlags CheckFlags;
-        public string EscapedName;
+        public int Name;            // escapedName as an id of the checker's NameTable (module CO2)
         public List<NodeRef>? Declarations;
         public NodeRef ValueDeclaration;
         public SymbolRef Parent;
@@ -428,16 +428,26 @@ internal sealed class TransientSymbolStore
     }
 
     private readonly Chunks<TransientSymbolRecord> symbols = new();
+    private readonly NameTable names;
     private int count;
+
+    internal TransientSymbolStore(NameTable names)
+    {
+        this.names = names;
+    }
 
     internal int Count => count;
 
     /// <summary>checker.ts createSymbol(flags, name, checkFlags).</summary>
-    internal SymbolRef Create(SymbolFlags flags, string escapedName, CheckFlags checkFlags = CheckFlags.None)
+    internal SymbolRef Create(SymbolFlags flags, string escapedName, CheckFlags checkFlags = CheckFlags.None) =>
+        Create(flags, names.Intern(escapedName), checkFlags);
+
+    /// <summary>checker.ts createSymbol(flags, name, checkFlags) with the name as a <see cref="NameTable"/> id.</summary>
+    internal SymbolRef Create(SymbolFlags flags, int name, CheckFlags checkFlags = CheckFlags.None)
     {
         count++;
         symbols.EnsureIndex(count);
-        symbols[count] = new TransientSymbolRecord { Flags = flags | SymbolFlags.Transient, CheckFlags = checkFlags, EscapedName = escapedName };
+        symbols[count] = new TransientSymbolRecord { Flags = flags | SymbolFlags.Transient, CheckFlags = checkFlags, Name = name };
         return new SymbolRef(0, count);
     }
 
@@ -482,7 +492,8 @@ internal sealed class Chunks<T>
 /// (<see cref="Checker.TableOf"/>), so the checker sees one table type for binder and transient symbols.
 /// Layout (module CO1): the entries (name, symbol) in insertion order in one array; up to <see cref="LinearLimit"/>
 /// entries are found by a scan, larger tables by an open-addressing index (linear probing, load at most 1/2, entry
-/// number + 1 per slot, 0 free). No per-entry objects.
+/// number + 1 per slot, 0 free). No per-entry objects. Module CO2: names are ids of the checker's <see cref="NameTable"/>,
+/// so the entries hold no references for the collector to trace.
 /// </summary>
 internal sealed class SymTable
 {
@@ -490,22 +501,25 @@ internal sealed class SymTable
 
     private struct Entry
     {
-        public string Name;
+        public int Name;
         public SymbolRef Value;
     }
 
+    private readonly NameTable names;
     private Entry[] entries;
     private int[]? buckets; // null: at most LinearLimit entries, found by a scan
     private int count;
 
-    internal SymTable(int capacity = 0)
+    internal SymTable(NameTable names, int capacity = 0)
     {
+        this.names = names;
         entries = capacity == 0 ? [] : new Entry[capacity];
     }
 
     /// <summary>new Map(other): a copy in the same order.</summary>
     internal SymTable(SymTable other)
     {
+        names = other.names;
         count = other.count;
         entries = other.entries.AsSpan(0, count).ToArray();
         buckets = other.buckets is null ? null : (int[])other.buckets.Clone();
@@ -518,18 +532,34 @@ internal sealed class SymTable
     }
 
     /// <summary>Map.get (None when absent).</summary>
-    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SymbolRef Get(string name)
+    {
+        var id = names.Find(name);
+        return id < 0 ? SymbolRef.None : Get(id);
+    }
+
+    /// <summary>Map.get by name id (None when absent).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal SymbolRef Get(int name)
     {
         var i = Find(name);
         return i >= 0 ? entries[i].Value : SymbolRef.None;
     }
 
+    internal bool Has(string name)
+    {
+        var id = names.Find(name);
+        return id >= 0 && Find(id) >= 0;
+    }
+
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal bool Has(string name) => Find(name) >= 0;
+    internal bool Has(int name) => Find(name) >= 0;
 
     /// <summary>Map.set.</summary>
-    internal void Set(string name, SymbolRef symbol)
+    internal void Set(string name, SymbolRef symbol) => Set(names.Intern(name), symbol);
+
+    /// <summary>Map.set by name id.</summary>
+    internal void Set(int name, SymbolRef symbol)
     {
         var i = Find(name);
         if (i >= 0)
@@ -605,7 +635,8 @@ internal sealed class SymTable
     /// <summary>Map.delete: true when the name was present (the entries after it keep their order).</summary>
     internal bool Delete(string name)
     {
-        var i = Find(name);
+        var id = names.Find(name);
+        var i = id < 0 ? -1 : Find(id);
         if (i < 0)
         {
             return false;
@@ -628,14 +659,18 @@ internal sealed class SymTable
     }
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal string NameAt(int i) => entries[i].Name;
+    internal string NameAt(int i) => names[entries[i].Name];
+
+    /// <summary>The name id of entry <paramref name="i"/>.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal int NameIdAt(int i) => entries[i].Name;
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SymbolRef ValueAt(int i) => entries[i].Value;
 
     // The entry number of the name, -1 when absent.
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private int Find(string name)
+    private int Find(int name)
     {
         var b = buckets;
         var e = entries;
@@ -693,18 +728,70 @@ internal sealed class SymTable
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private static int BucketCountFor(int capacity) => (int)System.Numerics.BitOperations.RoundUpToPowerOf2((uint)Math.Max(capacity * 2, 32));
 
-    // FNV-1a over the UTF-16 code units, with a final mix for the low bits the index uses
+    // a mix of the name id for the low bits the index uses
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private static int Hash(string s)
+    private static int Hash(int name)
     {
-        var h = 2166136261u;
-        foreach (var c in s)
-        {
-            h = (h ^ c) * 16777619u;
-        }
+        var h = (uint)name * 0x9E3779B1u;
         h ^= h >> 15;
-        h *= 0x85EBCA6Bu;
-        h ^= h >> 13;
         return (int)(h & 0x7FFFFFFF);
+    }
+}
+
+/// <summary>
+/// The escaped names of one checker as dense ids (module CO2): one string per distinct name, symbol tables and transient
+/// symbols store the id. Strings are read back only where text is produced or compared as text.
+/// </summary>
+internal sealed class NameTable
+{
+    private readonly Dictionary<string, int> ids = new(StringComparer.Ordinal);
+    private string[] names = new string[1024];
+    private int count;
+
+    internal int Count => count;
+
+    /// <summary>The name of an id.</summary>
+    internal string this[int id]
+    {
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+        get => names[id];
+    }
+
+    /// <summary>The id of a name, added if new.</summary>
+    internal int Intern(string name)
+    {
+        ref var id = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(ids, name, out var exists);
+        if (!exists)
+        {
+            id = Add(name);
+        }
+        return id;
+    }
+
+    /// <summary>The id of a name given by its characters, added if new.</summary>
+    internal int Intern(ReadOnlySpan<char> name)
+    {
+        var lookup = ids.GetAlternateLookup<ReadOnlySpan<char>>();
+        if (lookup.TryGetValue(name, out var id))
+        {
+            return id;
+        }
+        var text = name.ToString();
+        id = Add(text);
+        ids.Add(text, id);
+        return id;
+    }
+
+    /// <summary>The id of a name, -1 when no table of this checker has it.</summary>
+    internal int Find(string name) => ids.TryGetValue(name, out var id) ? id : -1;
+
+    private int Add(string name)
+    {
+        if (count == names.Length)
+        {
+            Array.Resize(ref names, count * 2);
+        }
+        names[count] = name;
+        return count++;
     }
 }

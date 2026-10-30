@@ -57,7 +57,8 @@ internal sealed partial class Checker
         }
         Types = new TypeStore();
         Signatures = new SignatureStore();
-        TransientSymbols = new TransientSymbolStore();
+        TransientSymbols = new TransientSymbolStore(Names);
+        emptySymbols = new SymTable(Names);
         ValueSymbolLinks = new SymbolLinkStore<ValueSymbolLinks>(files.Count);
         AliasSymbolLinks = new SymbolLinkStore<AliasSymbolLinks>(files.Count);
         ExportTypeLinks = new SymbolLinkStore<ExportTypeLinks>(files.Count);
@@ -66,7 +67,7 @@ internal sealed partial class Checker
         SymbolNodeLinks = new NodeLinkStore<SymbolNodeLinks>(files.Count);
         TypeNodeLinks = new NodeLinkStore<TypeNodeLinks>(files.Count);
         SignatureLinks = new NodeLinkStore<SignatureLinks>(files.Count);
-        binderNames = new string?[files.Count + 1][];
+        binderNames = new int[files.Count + 1][];
         for (var i = 0; i < binderNames.Length; i++)
         {
             binderNames[i] = [];
@@ -80,7 +81,7 @@ internal sealed partial class Checker
         noUncheckedSideEffectImports = true; // compilerOptions.noUncheckedSideEffectImports !== false (the option is not in Track O's options yet)
 
         // createTypeChecker's symbols, in TypeScript's order
-        globals = new SymTable();
+        globals = new SymTable(Names);
         undefinedSymbol = CreateSymbol(SymbolFlags.Property, "undefined");
         TransientSymbols.Record(undefinedSymbol).Declarations = [];
         globalThisSymbol = CreateSymbol(SymbolFlags.Module, "globalThis", CheckFlags.Readonly);
@@ -98,6 +99,9 @@ internal sealed partial class Checker
     internal Program Program => program;
 
     internal CompilerOptions CompilerOptions => compilerOptions;
+
+    /// <summary>The escaped names of this checker's symbols and symbol tables as ids (module CO2).</summary>
+    internal NameTable Names { get; } = new();
 
     internal TypeStore Types { get; }
 

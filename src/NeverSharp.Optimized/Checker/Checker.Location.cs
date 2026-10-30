@@ -212,7 +212,7 @@ internal sealed partial class Checker
             TransientSymbols.Record(meta).Parent = symbol;
             var importMeta = GetGlobalType("ImportMeta", 0, reportErrors: true);
             ValueSymbolLinks.Get(meta).ResolvedType = importMeta.IsNone ? errorType : importMeta;
-            var members = new SymTable();
+            var members = new SymTable(Names);
             members.Set("meta", meta);
             TransientSymbols.Record(symbol).Members = members;
             importMetaExpressionMetaSymbol = meta;

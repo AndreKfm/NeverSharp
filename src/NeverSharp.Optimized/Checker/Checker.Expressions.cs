@@ -439,7 +439,7 @@ internal sealed partial class Checker
         {
             return type;
         }
-        var members = new SymTable();
+        var members = new SymTable(Names);
         foreach (var prop in GetPropertiesOfObjectType(type))
         {
             members.Set(NameOf(prop), prop);

@@ -374,7 +374,7 @@ internal sealed partial class Checker
         }
         var resolved = ResolveStructuredTypeMembers(type);
         // transformTypeOfMembers
-        var members = new SymTable();
+        var members = new SymTable(Names);
         foreach (var property in GetPropertiesOfObjectType(type))
         {
             var original = GetTypeOfSymbol(property);
@@ -835,7 +835,7 @@ internal sealed partial class Checker
             }
             if (requireOptionalProperties || ((SymbolFlagsOf(targetProp) & SymbolFlags.Optional) == 0 && (GetCheckFlags(targetProp) & CheckFlags.Partial) == 0))
             {
-                var sourceProp = GetPropertyOfType(source, NameOf(targetProp));
+                var sourceProp = GetPropertyOfType(source, NameIdOf(targetProp));
                 if (sourceProp.IsNone)
                 {
                     result.Add(targetProp);

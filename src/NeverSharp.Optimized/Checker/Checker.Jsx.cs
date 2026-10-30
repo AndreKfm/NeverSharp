@@ -332,8 +332,8 @@ internal sealed partial class Checker
     private Type CreateJsxAttributesTypeFromAttributesProperty(NodeRef openingLikeElement, CheckMode checkMode = CheckMode.Normal)
     {
         var store = StoreOf(openingLikeElement);
-        var allAttributesTable = strictNullChecks ? new SymTable() : null;
-        var attributesTable = new SymTable();
+        var allAttributesTable = strictNullChecks ? new SymTable(Names) : null;
+        var attributesTable = new SymTable(Names);
         var spread = emptyJsxObjectType;
         var hasSpreadAnyType = false;
         var typeToIntersect = Type.None;
@@ -357,7 +357,7 @@ internal sealed partial class Checker
                 {
                     var exprType = CheckJsxAttribute(attributeDecl, checkMode);
                     objectFlags |= Types.ObjectFlagsOf(exprType) & ObjectFlags.PropagatingFlags;
-                    var attributeSymbol = CreateSymbol(SymbolFlags.Property | SymbolFlagsOf(member), NameOf(member));
+                    var attributeSymbol = CreateSymbol(SymbolFlags.Property | SymbolFlagsOf(member), NameIdOf(member));
                     ref var attributeRecord = ref TransientSymbols.Record(attributeSymbol);
                     attributeRecord.Declarations = DeclarationsOf(member);
                     attributeRecord.Parent = ParentOf(member);
@@ -400,7 +400,7 @@ internal sealed partial class Checker
                     if (attributesTable.Count > 0)
                     {
                         spread = GetSpreadType(spread, CreateJsxAttributesTypeHelper(), attributesSymbol, objectFlags, isReadonly: false);
-                        attributesTable = new SymTable();
+                        attributesTable = new SymTable(Names);
                     }
                     var exprType = GetReducedType(CheckExpression(At(attributes, store.Expression(attributeNode)), checkMode & CheckMode.Inferential));
                     if (IsTypeAny(exprType))
@@ -458,7 +458,7 @@ internal sealed partial class Checker
                     : CreateArrayType(GetUnionType([.. childrenTypes]));
                 ValueSymbolLinks.Get(childrenPropSymbol).ResolvedType = childrenType;
                 // (the fake property declaration of the children: not created, see the file header)
-                var childPropMap = new SymTable();
+                var childPropMap = new SymTable(Names);
                 childPropMap.Set(jsxChildrenPropertyName, childrenPropSymbol);
                 spread = GetSpreadType(spread, CreateAnonymousType(attributesSymbol, childPropMap), attributesSymbol,
                     objectFlags | GetPropagatingFlagsOfTypes(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(childrenTypes)), isReadonly: false);

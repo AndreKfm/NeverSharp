@@ -540,7 +540,7 @@ internal sealed partial class Checker
         }
         // Keep the flags from the symbol we're instantiating.  Mark that is instantiated, and
         // also transient so that we can just store data on it directly.
-        var result = CreateSymbol(SymbolFlagsOf(symbol), NameOf(symbol),
+        var result = CreateSymbol(SymbolFlagsOf(symbol), NameIdOf(symbol),
             CheckFlags.Instantiated | (checkFlags & (CheckFlags.Readonly | CheckFlags.Late | CheckFlags.OptionalParameter | CheckFlags.RestParameter)));
         ref var record = ref TransientSymbols.Record(result);
         record.Declarations = DeclarationsOf(symbol);
@@ -1141,10 +1141,10 @@ internal sealed partial class Checker
     // checker.ts createSymbolTable(symbols)
     private SymTable CreateSymbolTable(List<SymbolRef> symbols)
     {
-        var result = new SymTable(symbols.Count);
+        var result = new SymTable(Names, symbols.Count);
         foreach (var s in symbols)
         {
-            result.Set(NameOf(s), s);
+            result.Set(NameIdOf(s), s);
         }
         return result;
     }
@@ -1154,10 +1154,10 @@ internal sealed partial class Checker
     // "this" references, thus needing no instantiation.
     private SymTable CreateInstantiatedSymbolTable(List<SymbolRef> symbols, TypeMapper mapper, bool mappingThisOnly)
     {
-        var result = new SymTable(symbols.Count);
+        var result = new SymTable(Names, symbols.Count);
         foreach (var symbol in symbols)
         {
-            result.Set(NameOf(symbol), mappingThisOnly && IsThisless(symbol) ? symbol : InstantiateSymbol(symbol, mapper));
+            result.Set(NameIdOf(symbol), mappingThisOnly && IsThisless(symbol) ? symbol : InstantiateSymbol(symbol, mapper));
         }
         return result;
     }

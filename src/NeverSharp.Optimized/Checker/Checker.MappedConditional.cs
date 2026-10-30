@@ -238,7 +238,7 @@ internal sealed partial class Checker
     // checker.ts resolveMappedTypeMembers: the members of a mapped type { [P in K]: T }
     private void ResolveMappedTypeMembers(Type type)
     {
-        var members = new SymTable();
+        var members = new SymTable(Names);
         List<IndexInfo>? indexInfos = null;
         // Resolve upfront such that recursive references see an empty object type.
         SetStructuredTypeMembers(type, emptySymbols, null, null, null);

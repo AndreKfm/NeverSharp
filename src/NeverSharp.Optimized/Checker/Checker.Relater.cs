@@ -636,7 +636,7 @@ internal sealed partial class Checker
             foreach (var t in types)
             {
                 var type = c.GetApparentType(t);
-                var prop = (c.Types.Flags(type) & TypeFlags.UnionOrIntersection) != 0 ? c.GetPropertyOfUnionOrIntersectionType(type, name, false) : c.GetPropertyOfObjectType(type, name);
+                var prop = (c.Types.Flags(type) & TypeFlags.UnionOrIntersection) != 0 ? c.GetPropertyOfUnionOrIntersectionType(type, c.Names.Intern(name), false) : c.GetPropertyOfObjectType(type, name);
                 var propType = !prop.IsNone ? c.GetTypeOfSymbol(prop) : Type.None;
                 if (propType.IsNone)
                 {
@@ -2230,7 +2230,7 @@ internal sealed partial class Checker
                     for (var i = 0; i < sourcePropertiesFiltered.Count; i++)
                     {
                         var sourceProperty = sourcePropertiesFiltered[i];
-                        var targetProperty = c.GetPropertyOfType(type, c.NameOf(sourceProperty));
+                        var targetProperty = c.GetPropertyOfType(type, c.NameIdOf(sourceProperty));
                         if (targetProperty.IsNone)
                         {
                             matched = false;
@@ -2689,7 +2689,7 @@ internal sealed partial class Checker
             {
                 foreach (var sourceProp in ExcludeProperties(c.GetPropertiesOfType(source), excludedProperties))
                 {
-                    if (c.GetPropertyOfObjectType(target, c.NameOf(sourceProp)).IsNone)
+                    if (c.GetPropertyOfObjectType(target, c.NameIdOf(sourceProp)).IsNone)
                     {
                         if (reportErrors)
                         {
@@ -2739,7 +2739,7 @@ internal sealed partial class Checker
             var result = Ternary.True;
             foreach (var sourceProp in sourceProperties)
             {
-                var targetProp = c.GetPropertyOfObjectType(target, c.NameOf(sourceProp));
+                var targetProp = c.GetPropertyOfObjectType(target, c.NameIdOf(sourceProp));
                 if (targetProp.IsNone)
                 {
                     return Ternary.False;

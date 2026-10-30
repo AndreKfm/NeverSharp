@@ -2914,7 +2914,7 @@ internal sealed partial class Checker
     /// </summary>
     private SymbolRef CloneTypeAsModuleType(SymbolRef symbol, Type moduleType, NodeRef referenceParent)
     {
-        var result = CreateSymbol(SymbolFlagsOf(symbol), NameOf(symbol));
+        var result = CreateSymbol(SymbolFlagsOf(symbol), NameIdOf(symbol));
         ref var r = ref TransientSymbols.Record(result);
         var declarations = DeclarationsOf(symbol);
         r.Declarations = declarations is null ? [] : [.. declarations];
@@ -3003,7 +3003,7 @@ internal sealed partial class Checker
         {
             return valueSymbol;
         }
-        var result = CreateSymbol(SymbolFlagsOf(valueSymbol) | SymbolFlagsOf(typeSymbol), NameOf(valueSymbol));
+        var result = CreateSymbol(SymbolFlagsOf(valueSymbol) | SymbolFlagsOf(typeSymbol), NameIdOf(valueSymbol));
         var declarations = new List<NodeRef>();
         foreach (var d in DeclarationsOf(valueSymbol) ?? [])
         {

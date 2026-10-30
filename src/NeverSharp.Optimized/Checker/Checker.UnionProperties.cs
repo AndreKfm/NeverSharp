@@ -34,8 +34,9 @@ internal sealed partial class Checker
     private readonly Dictionary<SymbolRef, bool> discriminantProperties = [];
 
     // checker.ts createUnionOrIntersectionProperty
-    private SymbolRef CreateUnionOrIntersectionProperty(Type containingType, string name, bool skipObjectFunctionPropertyAugment)
+    private SymbolRef CreateUnionOrIntersectionProperty(Type containingType, int nameId, bool skipObjectFunctionPropertyAugment)
     {
+        var name = Names[nameId];
         var propFlags = SymbolFlags.None;
         var singleProp = SymbolRef.None;
         List<SymbolRef>? propSet = null;
@@ -53,7 +54,7 @@ internal sealed partial class Checker
             var type = GetApparentType(current);
             if (!(IsErrorType(type) || (Types.Flags(type) & TypeFlags.Never) != 0))
             {
-                var prop = GetPropertyOfType(type, name, skipObjectFunctionPropertyAugment);
+                var prop = GetPropertyOfType(type, nameId, skipObjectFunctionPropertyAugment);
                 var modifiers = !prop.IsNone ? GetDeclarationModifierFlagsFromSymbol(prop) : 0;
                 if (!prop.IsNone)
                 {
@@ -241,7 +242,7 @@ internal sealed partial class Checker
         {
             propTypes.AddRange(indexTypes);
         }
-        var result = CreateSymbol(propFlags | (optionalFlag ?? 0), name, syntheticFlag | checkFlags);
+        var result = CreateSymbol(propFlags | (optionalFlag ?? 0), nameId, syntheticFlag | checkFlags);
         ValueSymbolLinks.Get(result).ContainingType = containingType;
         if (!hasNonUniformValueDeclaration && !firstValueDeclaration.IsNone)
         {
@@ -344,7 +345,7 @@ internal sealed partial class Checker
     // checker.ts createSymbolWithType
     private SymbolRef CreateSymbolWithType(SymbolRef source, Type type)
     {
-        var symbol = CreateSymbol(SymbolFlagsOf(source), NameOf(source), GetCheckFlags(source) & CheckFlags.Readonly);
+        var symbol = CreateSymbol(SymbolFlagsOf(source), NameIdOf(source), GetCheckFlags(source) & CheckFlags.Readonly);
         ref var record = ref TransientSymbols.Record(symbol);
         record.Declarations = DeclarationsOf(source);
         record.Parent = ParentOf(source);
@@ -366,7 +367,10 @@ internal sealed partial class Checker
 
     // checker.ts getUnionOrIntersectionProperty: the property, which may be present in some constituents only (a
     // partial property of a union type, needed to identify discriminant properties).
-    private SymbolRef GetUnionOrIntersectionProperty(Type type, string name, bool skipObjectFunctionPropertyAugment)
+    private SymbolRef GetUnionOrIntersectionProperty(Type type, string name, bool skipObjectFunctionPropertyAugment) =>
+        GetUnionOrIntersectionProperty(type, Names.Intern(name), skipObjectFunctionPropertyAugment);
+
+    private SymbolRef GetUnionOrIntersectionProperty(Type type, int name, bool skipObjectFunctionPropertyAugment)
     {
         var cache = skipObjectFunctionPropertyAugment ? Types.Union(type).PropertyCacheWithoutObjectFunctionPropertyAugment : Types.Union(type).PropertyCache;
         var property = cache?.Get(name) ?? SymbolRef.None;
@@ -379,11 +383,11 @@ internal sealed partial class Checker
                 ref var data = ref Types.Union(type);
                 if (skipObjectFunctionPropertyAugment)
                 {
-                    (data.PropertyCacheWithoutObjectFunctionPropertyAugment ??= new SymTable()).Set(name, property);
+                    (data.PropertyCacheWithoutObjectFunctionPropertyAugment ??= new SymTable(Names)).Set(name, property);
                     // Propagate an entry from the non-augmented cache to the augmented cache unless the property is partial.
                     if ((GetCheckFlags(property) & CheckFlags.Partial) == 0)
                     {
-                        data.PropertyCache ??= new SymTable();
+                        data.PropertyCache ??= new SymTable(Names);
                         if (!data.PropertyCache.Has(name))
                         {
                             data.PropertyCache.Set(name, property);
@@ -392,7 +396,7 @@ internal sealed partial class Checker
                 }
                 else
                 {
-                    (data.PropertyCache ??= new SymTable()).Set(name, property);
+                    (data.PropertyCache ??= new SymTable(Names)).Set(name, property);
                 }
             }
         }
@@ -400,7 +404,7 @@ internal sealed partial class Checker
     }
 
     /// <summary>checker.ts getPropertyOfUnionOrIntersectionType: partial properties of union types filtered out.</summary>
-    private SymbolRef GetPropertyOfUnionOrIntersectionType(Type type, string name, bool skipObjectFunctionPropertyAugment)
+    private SymbolRef GetPropertyOfUnionOrIntersectionType(Type type, int name, bool skipObjectFunctionPropertyAugment)
     {
         var property = GetUnionOrIntersectionProperty(type, name, skipObjectFunctionPropertyAugment);
         // We need to filter out partial properties in union types
@@ -424,7 +428,7 @@ internal sealed partial class Checker
         // (createSymbolTable(): a reused table, cleared when the result is taken)
         if (scratchTablesInUse == scratchTables.Count)
         {
-            scratchTables.Add(new SymTable());
+            scratchTables.Add(new SymTable(Names));
         }
         var members = scratchTables[scratchTablesInUse++];
         var isUnion = (Types.Flags(type) & TypeFlags.Union) != 0;
@@ -440,15 +444,15 @@ internal sealed partial class Checker
                 // the same as none)
                 members.EnsureCapacity(properties.Count);
                 ref var data = ref Types.Union(type);
-                (data.PropertyCache ??= new SymTable(properties.Count)).EnsureCapacity(properties.Count);
+                (data.PropertyCache ??= new SymTable(Names, properties.Count)).EnsureCapacity(properties.Count);
                 if (isIntersection)
                 {
-                    (data.PropertyCacheWithoutObjectFunctionPropertyAugment ??= new SymTable(properties.Count)).EnsureCapacity(properties.Count);
+                    (data.PropertyCacheWithoutObjectFunctionPropertyAugment ??= new SymTable(Names, properties.Count)).EnsureCapacity(properties.Count);
                 }
             }
             foreach (var prop in properties)
             {
-                var name = NameOf(prop);
+                var name = NameIdOf(prop);
                 if (!members.Has(name))
                 {
                     var combinedProp = GetPropertyOfUnionOrIntersectionType(type, name, isIntersection);

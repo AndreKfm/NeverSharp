@@ -650,7 +650,7 @@ internal sealed partial class Checker
     }
 
     // checker.ts getUnionOrIntersectionProperty (the property of the union as getPropertyOfType creates it)
-    private SymbolRef GetUnionOrIntersectionProperty(Type type, string name) => GetPropertyOfUnionOrIntersectionType(type, name, skipObjectFunctionPropertyAugment: false);
+    private SymbolRef GetUnionOrIntersectionProperty(Type type, string name) => GetPropertyOfUnionOrIntersectionType(type, Names.Intern(name), skipObjectFunctionPropertyAugment: false);
 
     // checker.ts isOrContainsMatchingReference
     private bool IsOrContainsMatchingReference(NodeRef source, NodeRef target) => IsMatchingReference(source, target) || ContainsMatchingReference(source, target);

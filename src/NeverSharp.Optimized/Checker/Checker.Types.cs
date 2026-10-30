@@ -161,7 +161,7 @@ internal sealed partial class Checker
         emptyFreshJsxObjectType = CreateAnonymousType(SymbolRef.None, emptySymbols);
         Types.Record(emptyFreshJsxObjectType).ObjectFlags |= ObjectFlags.JsxAttributes | ObjectFlags.FreshLiteral | ObjectFlags.ObjectLiteral | ObjectFlags.ContainsObjectOrArrayLiteral;
         emptyTypeLiteralSymbol = CreateSymbol(SymbolFlags.TypeLiteral, InternalSymbolName.Type);
-        TransientSymbols.Record(emptyTypeLiteralSymbol).Members = new SymTable();
+        TransientSymbols.Record(emptyTypeLiteralSymbol).Members = new SymTable(Names);
         emptyTypeLiteralType = CreateAnonymousType(emptyTypeLiteralSymbol, emptySymbols);
         unknownEmptyObjectType = CreateAnonymousType(SymbolRef.None, emptySymbols);
         unknownUnionType = strictNullChecks ? GetUnionType([undefinedType, nullType, unknownEmptyObjectType]) : unknownType;

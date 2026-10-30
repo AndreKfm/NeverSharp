@@ -312,8 +312,8 @@ internal sealed partial class Checker
         var inDestructuringPattern = Utilities.IsAssignmentTarget(store, n);
         // Grammar checking
         CheckGrammarObjectLiteralExpression(node, inDestructuringPattern);
-        var allPropertiesTable = strictNullChecks ? new SymTable() : null;
-        var propertiesTable = new SymTable();
+        var allPropertiesTable = strictNullChecks ? new SymTable(Names) : null;
+        var propertiesTable = new SymTable(Names);
         var propertiesArray = new List<SymbolRef>();
         var spread = emptyObjectType;
         PushCachedContextualType(node);
@@ -387,7 +387,7 @@ internal sealed partial class Checker
                 var memberFlags = SymbolFlagsOf(member);
                 var prop = !nameType.IsNone
                     ? CreateSymbol(SymbolFlags.Property | memberFlags, GetPropertyNameFromType(nameType), checkFlags | CheckFlags.Late)
-                    : CreateSymbol(SymbolFlags.Property | memberFlags, NameOf(member), checkFlags);
+                    : CreateSymbol(SymbolFlags.Property | memberFlags, NameIdOf(member), checkFlags);
                 if (!nameType.IsNone)
                 {
                     ValueSymbolLinks.Get(prop).NameType = nameType;
@@ -442,7 +442,7 @@ internal sealed partial class Checker
                 {
                     spread = GetSpreadType(spread, CreateObjectLiteralType(), NodeSymbol(node), objectFlags, inConstContext);
                     propertiesArray = [];
-                    propertiesTable = new SymTable();
+                    propertiesTable = new SymTable(Names);
                     hasComputedStringProperty = false;
                     hasComputedNumberProperty = false;
                     hasComputedSymbolProperty = false;
@@ -517,7 +517,7 @@ internal sealed partial class Checker
             {
                 spread = GetSpreadType(spread, CreateObjectLiteralType(), NodeSymbol(node), objectFlags, inConstContext);
                 propertiesArray = [];
-                propertiesTable = new SymTable();
+                propertiesTable = new SymTable(Names);
                 hasComputedStringProperty = false;
                 hasComputedNumberProperty = false;
             }
@@ -679,7 +679,7 @@ internal sealed partial class Checker
             return type;
         }
         // getAnonymousPartialType: gets the type as if it had been spread, but where everything in the spread is made optional
-        var members = new SymTable();
+        var members = new SymTable(Names);
         foreach (var prop in GetPropertiesOfType(firstType))
         {
             if ((GetDeclarationModifierFlagsFromSymbol(prop) & (ModifierFlags.Private | ModifierFlags.Protected)) != 0)
@@ -690,7 +690,7 @@ internal sealed partial class Checker
             {
                 var flags = SymbolFlagsOf(prop);
                 var isSetonlyAccessor = (flags & SymbolFlags.SetAccessor) != 0 && (flags & SymbolFlags.GetAccessor) == 0;
-                var result = CreateSymbol(SymbolFlags.Property | SymbolFlags.Optional, NameOf(prop), (GetCheckFlags(prop) & CheckFlags.Late) | (isReadonly ? CheckFlags.Readonly : CheckFlags.None));
+                var result = CreateSymbol(SymbolFlags.Property | SymbolFlags.Optional, NameIdOf(prop),(GetCheckFlags(prop) & CheckFlags.Late) | (isReadonly ? CheckFlags.Readonly : CheckFlags.None));
                 var propType = isSetonlyAccessor ? undefinedType : AddOptionality(GetTypeOfSymbol(prop), isProperty: true); // (before the links are written)
                 ValueSymbolLinks.Get(result).ResolvedType = propType;
                 TransientSymbols.Record(result).Declarations = DeclarationsOf(prop);
@@ -764,7 +764,7 @@ internal sealed partial class Checker
             }
             return GetIntersectionType([left, right]);
         }
-        var members = new SymTable();
+        var members = new SymTable(Names);
         var skippedPrivateMembers = new HashSet<string>(StringComparer.Ordinal);
         var indexInfos = left == emptyObjectType ? GetIndexInfosOfType(right) : GetUnionIndexInfos([left, right]);
         foreach (var rightProp in GetPropertiesOfType(right))
@@ -859,7 +859,7 @@ internal sealed partial class Checker
         {
             return prop;
         }
-        var result = CreateSymbol(SymbolFlags.Property | (flags & SymbolFlags.Optional), NameOf(prop), (GetCheckFlags(prop) & CheckFlags.Late) | (isReadonly ? CheckFlags.Readonly : CheckFlags.None));
+        var result = CreateSymbol(SymbolFlags.Property | (flags & SymbolFlags.Optional), NameIdOf(prop),(GetCheckFlags(prop) & CheckFlags.Late) | (isReadonly ? CheckFlags.Readonly : CheckFlags.None));
         var propType = isSetonlyAccessor ? undefinedType : GetTypeOfSymbol(prop); // (before the links are written)
         ValueSymbolLinks.Get(result).ResolvedType = propType;
         TransientSymbols.Record(result).Declarations = DeclarationsOf(prop);
@@ -1075,7 +1075,7 @@ internal sealed partial class Checker
     // checker.ts transformTypeOfMembers
     private SymTable TransformTypeOfMembers(Type type, Func<Type, Type> f)
     {
-        var members = new SymTable();
+        var members = new SymTable(Names);
         foreach (var property in GetPropertiesOfObjectType(type))
         {
             var original = GetTypeOfSymbol(property);
@@ -1121,7 +1121,7 @@ internal sealed partial class Checker
     {
         if (context.ResolvedProperties is null)
         {
-            var names = new SymTable();
+            var names = new SymTable(Names);
             foreach (var t in GetSiblingsOfContext(context))
             {
                 if (IsObjectLiteralType(t) && (Types.ObjectFlagsOf(t) & ObjectFlags.ContainsSpread) == 0)
@@ -1173,7 +1173,7 @@ internal sealed partial class Checker
     // checker.ts getWidenedTypeOfObjectLiteral
     private Type GetWidenedTypeOfObjectLiteral(Type type, WideningContext? context)
     {
-        var members = new SymTable();
+        var members = new SymTable(Names);
         foreach (var prop in GetPropertiesOfObjectType(type))
         {
             members.Set(NameOf(prop), GetWidenedProperty(prop, context));

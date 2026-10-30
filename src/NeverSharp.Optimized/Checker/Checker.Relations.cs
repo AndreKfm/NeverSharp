@@ -1317,7 +1317,7 @@ internal sealed partial class Checker
             var containingType = ValueSymbolLinks.Get(prop).ContainingType;
             foreach (var t in Types.Elements(Types.Union(containingType).Types).ToArray())
             {
-                var p = GetPropertyOfType(t, NameOf(prop));
+                var p = GetPropertyOfType(t, NameIdOf(prop));
                 if (!p.IsNone && ForEachProperty(p, callback))
                 {
                     return true;

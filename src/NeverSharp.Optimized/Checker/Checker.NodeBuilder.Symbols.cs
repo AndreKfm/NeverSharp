@@ -269,7 +269,7 @@ internal sealed partial class Checker
             {
                 existingFakeScope = context.FakeScope.Parent;
             }
-            var locals = existingFakeScope?.Locals ?? new SymTable();
+            var locals = existingFakeScope?.Locals ?? new SymTable(Names);
             List<string>? newLocals = null;
             List<(string Name, SymbolRef OldSymbol)>? oldLocals = null;
             addAll((name, symbol) =>
@@ -292,10 +292,10 @@ internal sealed partial class Checker
             {
                 // Use a Block for this; the type of the node doesn't matter so long as it
                 // has locals, and this is cheaper/easier than using a function-ish Node.
-                var fakeScope = new FakeScope { Kind = kind, Parent = context.FakeScope };
+                var fakeScope = new FakeScope { Kind = kind, Parent = context.FakeScope, Locals = new SymTable(Names) };
                 for (var i = 0; i < locals.Count; i++)
                 {
-                    fakeScope.Locals.Set(locals.NameAt(i), locals.ValueAt(i));
+                    fakeScope.Locals.Set(locals.NameIdAt(i), locals.ValueAt(i));
                 }
                 context.FakeScope = fakeScope;
                 return null;

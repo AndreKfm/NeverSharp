@@ -130,7 +130,7 @@ internal sealed partial class Checker
         // members/exports of the symbol.
         cache[symbol] = earlySymbols ?? emptySymbols;
         // fill in any as-yet-unresolved late-bound members.
-        var lateSymbols = new SymTable();
+        var lateSymbols = new SymTable(Names);
         foreach (var decl in DeclarationsOf(symbol) ?? [])
         {
             var store = StoreOf(decl);
@@ -195,7 +195,7 @@ internal sealed partial class Checker
         }
         // (mergeSymbolTable(combined, first): the merged symbol of each entry, e.g. the late-bound clone of an early
         // `__index` symbol that lateBindIndexSignature recorded as its merge target)
-        var combined = new SymTable();
+        var combined = new SymTable(Names);
         MergeSymbolTable(combined, first);
         MergeSymbolTable(combined, second);
         return combined;

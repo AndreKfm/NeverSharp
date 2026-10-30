@@ -1036,7 +1036,7 @@ internal sealed partial class Checker
         var exports = (flags & SymbolFlags.ObjectLiteral) != 0 ? GetMembersOfSymbol(symbol) : GetExportsOfSymbol(symbol);
         if (symbol == globalThisSymbol)
         {
-            var varsOnly = new SymTable();
+            var varsOnly = new SymTable(Names);
             for (var i = 0; i < exports.Count; i++)
             {
                 var p = exports.ValueAt(i);
@@ -1061,7 +1061,7 @@ internal sealed partial class Checker
             }
             if ((Types.Flags(baseConstructorType) & (TypeFlags.Object | TypeFlags.Intersection | TypeFlags.TypeVariable)) != 0)
             {
-                var combined = new SymTable();
+                var combined = new SymTable(Names);
                 for (var i = 0; i < exports.Count; i++)
                 {
                     var id = exports.NameAt(i);
@@ -1322,6 +1322,13 @@ internal sealed partial class Checker
     /// <summary>checker.ts getPropertyOfObjectType.</summary>
     internal SymbolRef GetPropertyOfObjectType(Type type, string name)
     {
+        var id = Names.Find(name);
+        return id < 0 ? SymbolRef.None : GetPropertyOfObjectType(type, id);
+    }
+
+    /// <summary>checker.ts getPropertyOfObjectType with the name as an id of <see cref="Names"/>.</summary>
+    internal SymbolRef GetPropertyOfObjectType(Type type, int name)
+    {
         if ((Types.Flags(type) & TypeFlags.Object) != 0)
         {
             var resolved = ResolveStructuredTypeMembers(type);
@@ -1369,7 +1376,11 @@ internal sealed partial class Checker
     // (getConstraintOfTypeParameter: Checker.Instantiate.cs, module C3)
 
     /// <summary>checker.ts getPropertyOfType.</summary>
-    internal SymbolRef GetPropertyOfType(Type type, string name, bool skipObjectFunctionPropertyAugment = false)
+    internal SymbolRef GetPropertyOfType(Type type, string name, bool skipObjectFunctionPropertyAugment = false) =>
+        type.IsNone ? SymbolRef.None : GetPropertyOfType(type, Names.Intern(name), skipObjectFunctionPropertyAugment);
+
+    /// <summary>checker.ts getPropertyOfType with the name as an id of <see cref="Names"/>.</summary>
+    internal SymbolRef GetPropertyOfType(Type type, int name, bool skipObjectFunctionPropertyAugment = false)
     {
         if (type.IsNone)
         {
@@ -2059,7 +2070,7 @@ internal sealed partial class Checker
                 record.Exports = new SymTable(fileExports);
             }
             ValueSymbolLinks.Get(result).Target = fileSymbol;
-            var moduleMembers = new SymTable();
+            var moduleMembers = new SymTable(Names);
             moduleMembers.Set("exports", result);
             return CreateAnonymousType(symbol, moduleMembers);
         }
@@ -2366,8 +2377,8 @@ internal sealed partial class Checker
         }
         var inferred = target.IsTransient ? target : CloneSymbol(target);
         ref var record = ref TransientSymbols.Record(inferred);
-        record.Exports ??= new SymTable();
-        record.Members ??= new SymTable();
+        record.Exports ??= new SymTable(Names);
+        record.Members ??= new SymTable(Names);
         record.Flags |= SymbolFlagsOf(source) & SymbolFlags.Class;
         var exports = record.Exports;
         var members = record.Members;
@@ -2615,7 +2626,7 @@ internal sealed partial class Checker
         {
             return Type.None;
         }
-        var exports = new SymTable();
+        var exports = new SymTable(Names);
         var d = decl.Node;
         while (store.Kind(d) is SyntaxKind.BinaryExpression or SyntaxKind.PropertyAccessExpression)
         {
@@ -2739,7 +2750,7 @@ internal sealed partial class Checker
         if ((Types.Flags(type) & TypeFlags.Object) != 0 && kind == AssignmentDeclarationKind.ModuleExports && NameOf(symbol) == InternalSymbolName.ExportEquals)
         {
             var exportedType = ResolveStructuredTypeMembers(type);
-            var members = new SymTable();
+            var members = new SymTable(Names);
             var exportedMembers = exportedType.Members;
             if (exportedMembers is not null)
             {
@@ -2755,7 +2766,7 @@ internal sealed partial class Checker
                 sourceExports = ExportsOf(resolvedSymbol);
                 if (sourceExports is null)
                 {
-                    sourceExports = TransientSymbols.Record(resolvedSymbol).Exports = new SymTable();
+                    sourceExports = TransientSymbols.Record(resolvedSymbol).Exports = new SymTable(Names);
                 }
             }
             else

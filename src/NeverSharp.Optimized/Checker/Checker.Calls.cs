@@ -300,7 +300,7 @@ internal sealed partial class Checker
     {
         if (!decoratorContextOverrideTypeCache.TryGetValue((isPrivate, isStatic, nameType), out var overrideType))
         {
-            var members = new SymTable();
+            var members = new SymTable(Names);
             members.Set("name", CreateProperty("name", nameType));
             members.Set("private", CreateProperty("private", isPrivate ? trueType : falseType));
             members.Set("static", CreateProperty("static", isStatic ? trueType : falseType));
@@ -3009,7 +3009,7 @@ internal sealed partial class Checker
     // checker.ts createDefaultPropertyWrapperForModule
     private Type CreateDefaultPropertyWrapperForModule(SymbolRef symbol, SymbolRef originalSymbol, SymbolRef anonymousSymbol = default)
     {
-        var memberTable = new SymTable();
+        var memberTable = new SymTable(Names);
         var newSymbol = CreateSymbol(SymbolFlags.Alias, InternalSymbolName.Default);
         TransientSymbols.Record(newSymbol).Parent = originalSymbol;
         var nameType = GetStringLiteralType("default");

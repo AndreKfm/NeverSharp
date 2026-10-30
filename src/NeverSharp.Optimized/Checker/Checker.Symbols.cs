@@ -19,7 +19,7 @@ namespace NeverSharp.Optimized;
 internal sealed partial class Checker
 {
     private readonly SymTable globals;
-    private readonly SymTable emptySymbols = new();
+    private readonly SymTable emptySymbols;
     private readonly Dictionary<SymbolRef, SymbolRef> mergedSymbols = [];
     private readonly SymbolRef undefinedSymbol;
     private readonly SymbolRef globalThisSymbol;
@@ -29,7 +29,7 @@ internal sealed partial class Checker
     private readonly SymbolRef resolvingSymbol;
 
     // Caches of binder data in checker-owned form (the binder stores are shared and read-only).
-    private readonly string?[][] binderNames;
+    private readonly int[][] binderNames; // [file][symbol index] -> name id + 1 (0: not read yet)
     private readonly Dictionary<long, SymTable> binderTables = [];
     private readonly Dictionary<SymbolRef, List<NodeRef>?> binderDeclarations = [];
 
@@ -46,11 +46,14 @@ internal sealed partial class Checker
         symbol.IsTransient ? TransientSymbols.Record(symbol).Flags : BindingOf(symbol.File).Flags(symbol.BinderSymbol);
 
     /// <summary>symbol.escapedName.</summary>
-    internal string NameOf(SymbolRef symbol)
+    internal string NameOf(SymbolRef symbol) => Names[NameIdOf(symbol)];
+
+    /// <summary>symbol.escapedName as an id of <see cref="Names"/>.</summary>
+    internal int NameIdOf(SymbolRef symbol)
     {
         if (symbol.IsTransient)
         {
-            return TransientSymbols.Record(symbol).EscapedName;
+            return TransientSymbols.Record(symbol).Name;
         }
         var names = binderNames[symbol.File];
         if (symbol.Index >= names.Length)
@@ -58,26 +61,13 @@ internal sealed partial class Checker
             Array.Resize(ref names, Math.Max(symbol.Index + 1, names.Length * 2));
             binderNames[symbol.File] = names;
         }
-        return names[symbol.Index] ??= InternBinderName(StoreOf(symbol.File).Texts, BindingOf(symbol.File).Name(symbol.BinderSymbol));
-    }
-
-    // The names of binder symbols, one string per distinct name in this checker (looked up by the text's characters)
-    private readonly Dictionary<string, string> binderNameStrings = new(StringComparer.Ordinal);
-
-    private string InternBinderName(TextTable texts, TextRef text)
-    {
-        if (text.IsNone)
+        ref var slot = ref names[symbol.Index];
+        if (slot == 0)
         {
-            return "";
+            var text = BindingOf(symbol.File).Name(symbol.BinderSymbol);
+            slot = (text.IsNone ? Names.Intern("") : Names.Intern(StoreOf(symbol.File).Texts.Span(text))) + 1;
         }
-        var lookup = binderNameStrings.GetAlternateLookup<ReadOnlySpan<char>>();
-        if (lookup.TryGetValue(texts.Span(text), out var interned))
-        {
-            return interned;
-        }
-        var name = texts.GetString(text) ?? "";
-        binderNameStrings.TryAdd(name, name);
-        return name;
+        return slot - 1;
     }
 
     /// <summary>symbol.declarations (null when undefined; the list must not be modified).</summary>
@@ -177,11 +167,11 @@ internal sealed partial class Checker
             return cached;
         }
         var binding = BindingOf(file);
-        var result = new SymTable(binding.Count(table));
+        var result = new SymTable(Names, binding.Count(table));
         foreach (var (_, symbol) in binding.Entries(table))
         {
             var reference = new SymbolRef(file, symbol.Index);
-            result.Set(NameOf(reference), reference);
+            result.Set(NameIdOf(reference), reference);
         }
         binderTables[key] = result;
         return result;
@@ -218,12 +208,16 @@ internal sealed partial class Checker
     internal SymbolRef CreateSymbol(SymbolFlags flags, string name, CheckFlags checkFlags = CheckFlags.None) =>
         TransientSymbols.Create(flags, name, checkFlags);
 
+    /// <summary>checker.ts createSymbol(flags, name, checkFlags) with the name as an id of <see cref="Names"/>.</summary>
+    internal SymbolRef CreateSymbol(SymbolFlags flags, int name, CheckFlags checkFlags = CheckFlags.None) =>
+        TransientSymbols.Create(flags, name, checkFlags);
+
     private void RecordMergedSymbol(SymbolRef target, SymbolRef source) => mergedSymbols[source] = target;
 
     /// <summary>checker.ts cloneSymbol.</summary>
     private SymbolRef CloneSymbol(SymbolRef symbol)
     {
-        var result = CreateSymbol(SymbolFlagsOf(symbol), NameOf(symbol));
+        var result = TransientSymbols.Create(SymbolFlagsOf(symbol), NameIdOf(symbol));
         ref var r = ref TransientSymbols.Record(result);
         var declarations = DeclarationsOf(symbol);
         r.Declarations = declarations is null ? [] : [.. declarations];
@@ -346,13 +340,13 @@ internal sealed partial class Checker
             var sourceMembers = MembersOf(source);
             if (sourceMembers is not null)
             {
-                var targetMembers = TransientSymbols.Record(target).Members ??= new SymTable();
+                var targetMembers = TransientSymbols.Record(target).Members ??= new SymTable(Names);
                 MergeSymbolTable(targetMembers, sourceMembers, unidirectional);
             }
             var sourceExports = ExportsOf(source);
             if (sourceExports is not null)
             {
-                var targetExports = TransientSymbols.Record(target).Exports ??= new SymTable();
+                var targetExports = TransientSymbols.Record(target).Exports ??= new SymTable(Names);
                 MergeSymbolTable(targetExports, sourceExports, unidirectional, target);
             }
             if (!unidirectional)
@@ -880,7 +874,7 @@ internal sealed partial class Checker
         var exportStars = symbolExports.Get(InternalSymbolName.ExportStar);
         if (!exportStars.IsNone)
         {
-            var nestedSymbols = new SymTable();
+            var nestedSymbols = new SymTable(Names);
             var lookupTable = new Dictionary<string, (string SpecifierText, List<NodeRef>? ExportsWithDuplicate)>();
             var order = new List<string>();
             foreach (var node in DeclarationsOf(exportStars) ?? [])
@@ -972,7 +966,7 @@ internal sealed partial class Checker
         var merged = exported.IsTransient ? exported : CloneSymbol(exported);
         ref var record = ref TransientSymbols.Record(merged);
         record.Flags |= SymbolFlags.ValueModule;
-        record.Exports ??= new SymTable();
+        record.Exports ??= new SymTable(Names);
         var mergedExports = record.Exports;
         var moduleExports = ExportsOf(moduleSymbol)!;
         for (var i = 0; i < moduleExports.Count; i++)

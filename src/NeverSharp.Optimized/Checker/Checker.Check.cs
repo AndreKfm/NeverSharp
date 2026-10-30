@@ -108,7 +108,7 @@ internal sealed partial class Checker
         }
         var store = StoreOf(node);
         var symbol = CreateSymbol(SymbolFlags.ObjectLiteral, InternalSymbolName.ImportAttributes);
-        var members = new SymTable();
+        var members = new SymTable(Names);
         foreach (var attr in store.Nodes(store.Elements(node.Node)))
         {
             var member = CreateSymbol(SymbolFlags.Property, GetNameFromImportAttribute(store, attr));

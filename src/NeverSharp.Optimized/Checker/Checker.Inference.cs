@@ -273,7 +273,7 @@ internal sealed partial class Checker
     // every property of type any
     private Type CreateEmptyObjectTypeFromStringLiteral(Type type)
     {
-        var members = new SymTable();
+        var members = new SymTable(Names);
         ForEachType(type, t =>
         {
             if ((Types.Flags(t) & TypeFlags.StringLiteral) == 0)
@@ -468,7 +468,7 @@ internal sealed partial class Checker
             var inferred = InferReverseMappedType(indexInfo.Type, mappedType, constraintType);
             indexInfos.Add(new IndexInfo { KeyType = stringType, Type = inferred.IsNone ? unknownType : inferred, IsReadonly = readonlyMask && indexInfo.IsReadonly });
         }
-        var members = new SymTable();
+        var members = new SymTable(Names);
         var limitedConstraint = GetLimitedConstraint(mappedType, constraintType);
         foreach (var prop in GetPropertiesOfType(source))
         {
@@ -484,7 +484,7 @@ internal sealed partial class Checker
                 }
             }
             var checkFlags = CheckFlags.ReverseMapped | (readonlyMask && IsReadonlySymbol(prop) ? CheckFlags.Readonly : CheckFlags.None);
-            var inferredProp = CreateSymbol(SymbolFlags.Property | (SymbolFlagsOf(prop) & optionalMask), NameOf(prop), checkFlags);
+            var inferredProp = CreateSymbol(SymbolFlags.Property | (SymbolFlagsOf(prop) & optionalMask), NameIdOf(prop), checkFlags);
             TransientSymbols.Record(inferredProp).Declarations = DeclarationsOf(prop);
             var nameType = ValueSymbolLinks.Has(prop) ? ValueSymbolLinks.Get(prop).NameType : Type.None;
             ValueSymbolLinks.Get(inferredProp).NameType = nameType;
@@ -1485,7 +1485,7 @@ internal sealed partial class Checker
             var properties = c.GetPropertiesOfObjectType(target);
             foreach (var targetProp in properties.ToArray())
             {
-                var sourceProp = c.GetPropertyOfType(source, c.NameOf(targetProp));
+                var sourceProp = c.GetPropertyOfType(source, c.NameIdOf(targetProp));
                 if (!sourceProp.IsNone)
                 {
                     InferFromTypes(c.RemoveMissingType(c.GetTypeOfSymbol(sourceProp), (c.SymbolFlagsOf(sourceProp) & SymbolFlags.Optional) != 0),

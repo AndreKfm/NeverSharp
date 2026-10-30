@@ -36,7 +36,7 @@ internal sealed partial class Checker
     private sealed class FakeScope
     {
         public required string Kind;
-        public SymTable Locals = new();
+        public required SymTable Locals;
         public FakeScope? Parent;
     }
 
@@ -103,7 +103,7 @@ internal sealed partial class Checker
                         {
                             if ((SymbolFlagsOf(members.ValueAt(i)) & (SymbolFlags.Type & ~SymbolFlags.Assignment)) != 0)
                             {
-                                (table ??= new SymTable()).Set(members.NameAt(i), members.ValueAt(i));
+                                (table ??= new SymTable(Names)).Set(members.NameIdAt(i), members.ValueAt(i));
                             }
                         }
                     }

@@ -442,7 +442,7 @@ internal sealed partial class Checker
             }
             return GetTypeAliasInstantiation(omitTypeAlias, [source, omitKeyType]);
         }
-        var members = new SymTable();
+        var members = new SymTable(Names);
         foreach (var prop in spreadableProperties)
         {
             members.Set(NameOf(prop), GetSpreadSymbol(prop, isReadonly: false));
@@ -658,7 +658,7 @@ internal sealed partial class Checker
     private Type GetTypeFromObjectBindingPattern(NodeRef pattern, bool includePatternInType, bool reportErrors)
     {
         var store = StoreOf(pattern);
-        var members = new SymTable();
+        var members = new SymTable(Names);
         IndexInfo? stringIndexInfo = null;
         var objectFlags = ObjectFlags.ObjectLiteral | ObjectFlags.ContainsObjectOrArrayLiteral;
         foreach (var e in store.Nodes(store.Elements(pattern.Node)))
