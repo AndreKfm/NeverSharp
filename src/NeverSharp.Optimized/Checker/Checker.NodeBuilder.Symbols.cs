@@ -1112,7 +1112,7 @@ internal sealed partial class Checker
             return SIdentifier("(Missing type parameter)");
         }
         var declarations = symbol.IsNone ? null : DeclarationsOf(symbol);
-        var decl = declarations is { Count: > 0 } ? declarations[0] : NodeRef.None;
+        var decl = declarations is { Count: > 0 } d ? d[0] : NodeRef.None;
         if (!decl.IsNone && Kind(decl) == SyntaxKind.TypeParameter)
         {
             result = SetTextRange(context, result, At(decl, StoreOf(decl).Name(decl.Node)));
@@ -1332,15 +1332,15 @@ internal sealed partial class Checker
                 // if the symbol is synthesized, it will only be referenced externally it must print as `default`
                 declarations is null ||
                 // if not in the same binding context (source file, module declaration), it must print as `default`
-                (!context.EnclosingDeclaration.IsNone && FindDefaultBindingContext(declarations[0]) != FindDefaultBindingContext(context.EnclosingDeclaration))))
+                (!context.EnclosingDeclaration.IsNone && FindDefaultBindingContext(declarations.Value[0]) != FindDefaultBindingContext(context.EnclosingDeclaration))))
         {
             return "default";
         }
-        if (declarations is { Count: > 0 })
+        if (declarations is { Count: > 0 } list)
         {
             var declaration = NodeRef.None;
             var name = NodeRef.None;
-            foreach (var d in declarations)
+            foreach (var d in list)
             {
                 // Try using a declaration with a name, first
                 var n = GetNameOfDeclarationRef(d);
@@ -1372,7 +1372,7 @@ internal sealed partial class Checker
                 }
                 return Utilities.DeclarationNameToString(StoreOf(name), name.Node);
             }
-            declaration = declarations[0]; // Declaration may be nameless, but we'll try anyway
+            declaration = list[0]; // Declaration may be nameless, but we'll try anyway
             var parent = Parent(declaration);
             if (!parent.IsNone && Kind(parent) == SyntaxKind.VariableDeclaration)
             {
@@ -1614,7 +1614,7 @@ internal sealed partial class Checker
         if (decl.IsNone)
         {
             var declarations = DeclarationsOf(symbol);
-            decl = declarations is { Count: > 0 } ? declarations[0] : NodeRef.None;
+            decl = declarations is { Count: > 0 } d ? d[0] : NodeRef.None;
         }
         if (!CanPossiblyExpandType(type, context) && !decl.IsNone)
         {

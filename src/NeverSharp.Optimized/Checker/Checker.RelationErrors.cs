@@ -255,7 +255,7 @@ internal sealed partial class Checker
                         var targetSymbolDeclarations = targetSymbol.IsNone ? null : DeclarationsOf(targetSymbol);
                         if (!issuedElaboration && (targetPropDeclarations is { Count: > 0 } || targetSymbolDeclarations is { Count: > 0 }))
                         {
-                            var targetNode = targetPropDeclarations is { Count: > 0 } ? targetPropDeclarations[0] : targetSymbolDeclarations![0];
+                            var targetNode = targetPropDeclarations is { Count: > 0 } tpd ? tpd[0] : targetSymbolDeclarations!.Value[0];
                             if (!IsDefaultLibraryFile(targetNode.File))
                             {
                                 AddRelatedInfo(reportedDiag, CreateRelatedForNode(targetNode, Diagnostics.The_expected_type_comes_from_property_0_which_is_declared_here_on_type_1,

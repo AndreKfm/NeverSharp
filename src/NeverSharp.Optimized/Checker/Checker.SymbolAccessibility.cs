@@ -237,7 +237,7 @@ internal sealed partial class Checker
     private bool IsUmdExportSymbol(SymbolRef symbol)
     {
         var declarations = DeclarationsOf(symbol);
-        return declarations is { Count: > 0 } && Kind(declarations[0]) == SyntaxKind.NamespaceExportDeclaration;
+        return declarations is { Count: > 0 } d && Kind(d[0]) == SyntaxKind.NamespaceExportDeclaration;
     }
 
     // utilities.ts isNamespaceReexportDeclaration: `export * as ns from "..."`
@@ -552,9 +552,9 @@ internal sealed partial class Checker
         // from the symbol of the declaration it is being assigned to. Since we can use the declaration to refer to the literal, however,
         // we'd like to make that connection here - potentially causing us to paint the declaration's visibility, and therefore the literal.
         var declarations = DeclarationsOf(symbol);
-        if ((meaning & SymbolFlags.Value) != 0 && declarations is { Count: > 0 })
+        if ((meaning & SymbolFlags.Value) != 0 && declarations is { Count: > 0 } list)
         {
-            var firstDecl = declarations[0];
+            var firstDecl = list[0];
             var parent = Parent(firstDecl);
             if (!parent.IsNone && Kind(parent) == SyntaxKind.VariableDeclaration)
             {

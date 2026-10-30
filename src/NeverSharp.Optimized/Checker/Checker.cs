@@ -86,10 +86,10 @@ internal sealed partial class Checker
         // createTypeChecker's symbols, in TypeScript's order
         globals = new SymTable(Names);
         undefinedSymbol = CreateSymbol(SymbolFlags.Property, "undefined");
-        TransientSymbols.Record(undefinedSymbol).Declarations = [];
+        TransientSymbols.Record(undefinedSymbol).Declarations = NewDeclarations([]);
         globalThisSymbol = CreateSymbol(SymbolFlags.Module, "globalThis", CheckFlags.Readonly);
         TransientSymbols.Record(globalThisSymbol).Exports = globals;
-        TransientSymbols.Record(globalThisSymbol).Declarations = [];
+        TransientSymbols.Record(globalThisSymbol).Declarations = NewDeclarations([]);
         globals.Set("globalThis", globalThisSymbol);
         argumentsSymbol = CreateSymbol(SymbolFlags.Property, "arguments");
         requireSymbol = CreateSymbol(SymbolFlags.Property, "require");
@@ -645,7 +645,7 @@ internal sealed partial class Checker
     internal string IntrinsicName(Type type) => Types.IntrinsicName(type);
 
     /// <summary>The declarations of a symbol (types.ts Symbol.declarations; null when undefined).</summary>
-    internal List<NodeRef>? Declarations(SymbolRef symbol) => DeclarationsOf(symbol);
+    internal List<NodeRef>? Declarations(SymbolRef symbol) => DeclarationsOf(symbol) is { } declarations ? [.. declarations] : null;
 }
 
 /// <summary>

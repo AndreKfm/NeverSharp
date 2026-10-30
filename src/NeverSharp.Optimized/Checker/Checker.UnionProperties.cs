@@ -209,7 +209,10 @@ internal sealed partial class Checker
             }
             if (DeclarationsOf(prop) is { } propDeclarations)
             {
-                declarations.AddRange(propDeclarations);
+                foreach (var d in propDeclarations)
+                {
+                    declarations.Add(d);
+                }
                 hasDeclarations = true;
             }
             var type = GetTypeOfSymbol(prop);
@@ -254,7 +257,8 @@ internal sealed partial class Checker
                 TransientSymbols.Record(result).Parent = ParentOf(declarationSymbol);
             }
         }
-        TransientSymbols.Record(result).Declarations = hasDeclarations ? declarations : null;
+        var declarationRef = hasDeclarations ? NewDeclarations(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(declarations)) : default;
+        TransientSymbols.Record(result).Declarations = declarationRef;
         ValueSymbolLinks.Get(result).NameType = nameType;
         if (propTypes.Count > 2)
         {
@@ -347,7 +351,7 @@ internal sealed partial class Checker
     {
         var symbol = CreateSymbol(SymbolFlagsOf(source), NameIdOf(source), GetCheckFlags(source) & CheckFlags.Readonly);
         ref var record = ref TransientSymbols.Record(symbol);
-        record.Declarations = DeclarationsOf(source);
+        record.Declarations = DeclRefOf(source);
         record.Parent = ParentOf(source);
         var valueDeclaration = ValueDeclarationOf(source);
         if (!valueDeclaration.IsNone)

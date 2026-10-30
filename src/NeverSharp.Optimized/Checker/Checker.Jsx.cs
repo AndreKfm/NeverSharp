@@ -359,7 +359,7 @@ internal sealed partial class Checker
                     objectFlags |= Types.ObjectFlagsOf(exprType) & ObjectFlags.PropagatingFlags;
                     var attributeSymbol = CreateSymbol(SymbolFlags.Property | SymbolFlagsOf(member), NameIdOf(member));
                     ref var attributeRecord = ref TransientSymbols.Record(attributeSymbol);
-                    attributeRecord.Declarations = DeclarationsOf(member);
+                    attributeRecord.Declarations = DeclRefOf(member);
                     attributeRecord.Parent = ParentOf(member);
                     var valueDeclaration = ValueDeclarationOf(member);
                     if (!valueDeclaration.IsNone)
@@ -1571,8 +1571,9 @@ internal sealed partial class Checker
             return cached;
         }
         var copy = CreateSymbol(SymbolFlags.Signature, InternalSymbolName.Index);
+        var declarationRef = NewDeclarations(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(declarationList));
         ref var record = ref TransientSymbols.Record(copy);
-        record.Declarations = declarationList;
+        record.Declarations = declarationRef;
         var aliasSymbol = Types.Record(type).AliasSymbol;
         record.Parent = !aliasSymbol.IsNone ? aliasSymbol : !Types.Symbol(type).IsNone ? Types.Symbol(type) : GetSymbolAtLocation(Parent(declarationList[0]));
         filteredIndexSymbolCache[(symbol, nodeListId)] = copy;

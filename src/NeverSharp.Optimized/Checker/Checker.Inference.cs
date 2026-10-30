@@ -287,7 +287,7 @@ internal sealed partial class Checker
             if (!symbol.IsNone)
             {
                 ref var record = ref TransientSymbols.Record(literalProp);
-                record.Declarations = DeclarationsOf(symbol);
+                record.Declarations = DeclRefOf(symbol);
                 record.ValueDeclaration = ValueDeclarationOf(symbol);
             }
             members.Set(name, literalProp);
@@ -485,7 +485,7 @@ internal sealed partial class Checker
             }
             var checkFlags = CheckFlags.ReverseMapped | (readonlyMask && IsReadonlySymbol(prop) ? CheckFlags.Readonly : CheckFlags.None);
             var inferredProp = CreateSymbol(SymbolFlags.Property | (SymbolFlagsOf(prop) & optionalMask), NameIdOf(prop), checkFlags);
-            TransientSymbols.Record(inferredProp).Declarations = DeclarationsOf(prop);
+            TransientSymbols.Record(inferredProp).Declarations = DeclRefOf(prop);
             var nameType = ValueSymbolLinks.Has(prop) ? ValueSymbolLinks.Get(prop).NameType : Type.None;
             ValueSymbolLinks.Get(inferredProp).NameType = nameType;
             var propertyType = GetTypeOfSymbol(prop);

@@ -1977,9 +1977,9 @@ internal sealed partial class Checker
         {
             context.EnclosingDeclaration = valueDeclaration;
         }
-        else if (declarations is { Count: > 0 })
+        else if (declarations is { Count: > 0 } list)
         {
-            context.EnclosingDeclaration = declarations[0];
+            context.EnclosingDeclaration = list[0];
         }
         else
         {
@@ -2225,9 +2225,9 @@ internal sealed partial class Checker
     {
         var symbol = Types.Symbol(type);
         var declarations = symbol.IsNone ? null : DeclarationsOf(symbol);
-        if (!symbol.IsNone && (SymbolFlagsOf(symbol) & SymbolFlags.TypeLiteral) != 0 && declarations is { Count: > 0 })
+        if (!symbol.IsNone && (SymbolFlagsOf(symbol) & SymbolFlags.TypeLiteral) != 0 && declarations is { Count: > 0 } list)
         {
-            var node = Parent(declarations[0]);
+            var node = Parent(list[0]);
             while (!node.IsNone && Kind(node) == SyntaxKind.ParenthesizedType)
             {
                 node = Parent(node);

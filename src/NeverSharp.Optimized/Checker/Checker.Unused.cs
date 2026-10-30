@@ -228,7 +228,7 @@ internal sealed partial class Checker
         // this ensures that all uses have been accounted for.
         var symbol = GetSymbolOfDeclaration(node);
         var declarations = symbol.IsNone ? null : DeclarationsOf(symbol);
-        if (declarations is null || declarations[^1] != node)
+        if (declarations is not { } list || list[^1] != node)
         {
             return;
         }

@@ -31,7 +31,9 @@ internal sealed partial class Checker
     // Caches of binder data in checker-owned form (the binder stores are shared and read-only).
     private readonly SymbolSlots binderNames; // binder symbol -> name id + 1 (0: not read yet)
     private readonly Dictionary<long, SymTable> binderTables = [];
-    private readonly Dictionary<SymbolRef, List<NodeRef>?> binderDeclarations = [];
+
+    // The declarations arrays of transient symbols that are not a binder symbol's (module CO2)
+    internal DeclarationStore DeclarationLists { get; } = new();
 
     // ---- symbol accessors (binder or transient) ----
 
@@ -64,34 +66,60 @@ internal sealed partial class Checker
         return slot - 1;
     }
 
-    /// <summary>symbol.declarations (null when undefined; the list must not be modified).</summary>
-    internal List<NodeRef>? DeclarationsOf(SymbolRef symbol)
+    /// <summary>symbol.declarations (null when undefined; module CO2: a view, the binder's chain read in place).</summary>
+    internal Decls? DeclarationsOf(SymbolRef symbol) => symbol.IsNone ? null : ViewOf(DeclRefOf(symbol));
+
+    /// <summary>symbol.declarations as a reference (assigning it to a transient symbol shares the array).</summary>
+    internal DeclRef DeclRefOf(SymbolRef symbol) =>
+        symbol.IsNone ? default
+        : symbol.IsTransient ? TransientSymbols.Record(symbol).Declarations
+        : BindingOf(symbol.File).Declarations(symbol.BinderSymbol).IsUndefined ? default
+        : new DeclRef(symbol.File, symbol.Index);
+
+    /// <summary>The declarations a reference stands for (null when undefined).</summary>
+    internal Decls? ViewOf(DeclRef declarations)
     {
-        if (symbol.IsNone)
+        if (declarations.File > 0)
         {
-            return null;
+            var chain = BindingOf(declarations.File).Declarations(new SymbolRef(declarations.File, declarations.Index).BinderSymbol);
+            return chain.IsUndefined ? null : new Decls(chain, declarations.File);
         }
-        if (symbol.IsTransient)
-        {
-            return TransientSymbols.Record(symbol).Declarations;
-        }
-        if (binderDeclarations.TryGetValue(symbol, out var cached))
-        {
-            return cached;
-        }
-        var chain = BindingOf(symbol.File).Declarations(symbol.BinderSymbol);
-        List<NodeRef>? result = null;
-        if (!chain.IsUndefined)
-        {
-            result = [];
-            foreach (var node in chain)
-            {
-                result.Add(new NodeRef(symbol.File, node));
-            }
-        }
-        binderDeclarations[symbol] = result;
-        return result;
+        return declarations.Index == 0 ? null : DeclarationLists.View(declarations);
     }
+
+    /// <summary>
+    /// `(symbol.declarations ??= []).push(...declarations)` on a transient symbol whose declarations are the checker's
+    /// own array (or undefined).
+    /// </summary>
+    internal void AddDeclarations(SymbolRef symbol, Decls declarations)
+    {
+        if (TransientSymbols.Record(symbol).Declarations.IsUndefined)
+        {
+            TransientSymbols.Record(symbol).Declarations = DeclarationLists.Create([]);
+        }
+        var list = TransientSymbols.Record(symbol).Declarations;
+        foreach (var node in declarations)
+        {
+            DeclarationLists.Add(list, node);
+        }
+    }
+
+    /// <summary>`(symbol.declarations ??= []).push(declaration)` on a transient symbol (see AddDeclarations).</summary>
+    internal void AddDeclaration(SymbolRef symbol, NodeRef declaration)
+    {
+        if (TransientSymbols.Record(symbol).Declarations.IsUndefined)
+        {
+            TransientSymbols.Record(symbol).Declarations = DeclarationLists.Create([]);
+        }
+        DeclarationLists.Add(TransientSymbols.Record(symbol).Declarations, declaration);
+    }
+
+    /// <summary>A new declarations array of the checker with these declarations.</summary>
+    internal DeclRef NewDeclarations(ReadOnlySpan<NodeRef> declarations) => DeclarationLists.Create(declarations);
+
+    /// <summary>A new declarations array of the checker with a copy of these declarations (`[...declarations]`).</summary>
+    internal DeclRef CopyDeclarations(Decls? declarations) =>
+        declarations is { } d ? DeclarationLists.CreateCopy(d) : DeclarationLists.Create([]);
 
     /// <summary>symbol.valueDeclaration.</summary>
     internal NodeRef ValueDeclarationOf(SymbolRef symbol)
@@ -213,8 +241,7 @@ internal sealed partial class Checker
     {
         var result = TransientSymbols.Create(SymbolFlagsOf(symbol), NameIdOf(symbol));
         ref var r = ref TransientSymbols.Record(result);
-        var declarations = DeclarationsOf(symbol);
-        r.Declarations = declarations is null ? [] : [.. declarations];
+        r.Declarations = CopyDeclarations(DeclarationsOf(symbol));
         r.Parent = ParentOf(symbol);
         r.ValueDeclaration = ValueDeclarationOf(symbol);
         r.ConstEnumOnlyModule = ConstEnumOnlyModuleOf(symbol);
@@ -329,7 +356,7 @@ internal sealed partial class Checker
             }
             if (DeclarationsOf(source) is { } sourceDeclarations)
             {
-                (TransientSymbols.Record(target).Declarations ??= []).AddRange(sourceDeclarations);
+                AddDeclarations(target, sourceDeclarations);
             }
             var sourceMembers = MembersOf(source);
             if (sourceMembers is not null)
@@ -356,7 +383,7 @@ internal sealed partial class Checker
             if (target != globalThisSymbol)
             {
                 var sourceDeclarations = DeclarationsOf(source);
-                Error(sourceDeclarations is { Count: > 0 } ? GetNameOfDeclarationRef(sourceDeclarations[0]) : NodeRef.None,
+                Error(sourceDeclarations is { Count: > 0 } sd ? GetNameOfDeclarationRef(sd[0]) : NodeRef.None,
                     Diagnostics.Cannot_augment_module_0_with_value_exports_because_it_resolves_to_a_non_module_entity, SymbolToString(target));
             }
         }
@@ -378,8 +405,8 @@ internal sealed partial class Checker
             : Diagnostics.Duplicate_identifier_0;
         var sourceDeclarations = DeclarationsOf(source);
         var targetDeclarations = DeclarationsOf(target);
-        var sourceSymbolFile = sourceDeclarations is { Count: > 0 } ? sourceDeclarations[0].File : 0;
-        var targetSymbolFile = targetDeclarations is { Count: > 0 } ? targetDeclarations[0].File : 0;
+        var sourceSymbolFile = sourceDeclarations is { Count: > 0 } sd ? sd[0].File : 0;
+        var targetSymbolFile = targetDeclarations is { Count: > 0 } td ? td[0].File : 0;
         var isSourcePlainJs = sourceSymbolFile != 0 && Program.IsPlainJsFile(FileAt(sourceSymbolFile), compilerOptions.CheckJs);
         var isTargetPlainJs = targetSymbolFile != 0 && Program.IsPlainJsFile(FileAt(targetSymbolFile), compilerOptions.CheckJs);
         var symbolName = SymbolToString(source);
@@ -452,7 +479,7 @@ internal sealed partial class Checker
         }
     }
 
-    private void AddDuplicateDeclarationError(NodeRef node, DiagnosticMessage message, string symbolName, List<NodeRef>? relatedNodes)
+    private void AddDuplicateDeclarationError(NodeRef node, DiagnosticMessage message, string symbolName, IEnumerable<NodeRef>? relatedNodes)
     {
         // (getExpandoInitializer / getNameOfExpando: JavaScript expando declarations, module C9)
         var errorNode = GetNameOfDeclarationRef(node);
@@ -598,7 +625,7 @@ internal sealed partial class Checker
         var moduleAugmentation = Parent(moduleName);
         var augmentationSymbol = NodeSymbol(moduleAugmentation);
         var augmentationDeclarations = DeclarationsOf(augmentationSymbol);
-        if (augmentationDeclarations is null || augmentationDeclarations[0] != moduleAugmentation)
+        if (augmentationDeclarations is not { } ad || ad[0] != moduleAugmentation)
         {
             // this is a combined symbol for multiple augmentations within the same file.
             // its symbol already has accumulated information for all declarations
@@ -808,11 +835,11 @@ internal sealed partial class Checker
     private bool IsExportDefaultSymbol(SymbolRef symbol)
     {
         var declarations = DeclarationsOf(symbol);
-        if (symbol.IsNone || declarations is not { Count: > 0 })
+        if (symbol.IsNone || declarations is not { Count: > 0 } list)
         {
             return false;
         }
-        var first = declarations[0];
+        var first = list[0];
         return (Utilities.GetSyntacticModifierFlagsUncached(StoreOf(first), first.Node) & ModifierFlags.Default) != 0;
     }
 

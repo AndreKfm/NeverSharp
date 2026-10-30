@@ -820,7 +820,7 @@ internal sealed partial class Checker
             return false;
         }
         var declarations = suggestion.IsNone ? null : DeclarationsOf(suggestion);
-        var declarationFile = declarations is { Count: > 0 } ? At(declarations[0], Utilities.RootOf(StoreOf(declarations[0]), declarations[0].Node)) : NodeRef.None;
+        var declarationFile = declarations is { Count: > 0 } d ? At(d[0], Utilities.RootOf(StoreOf(d[0]), d[0].Node)) : NodeRef.None;
         var valueDeclaration = suggestion.IsNone ? NodeRef.None : ValueDeclarationOf(suggestion);
         var suggestionHasNoExtendsOrDecorators = valueDeclaration.IsNone || !Utilities.IsClassLike(StoreOf(valueDeclaration), valueDeclaration.Node) ||
             StoreOf(valueDeclaration).HeritageClauses(valueDeclaration.Node) is { IsNone: false } heritage && StoreOf(valueDeclaration).Length(heritage) > 0 ||

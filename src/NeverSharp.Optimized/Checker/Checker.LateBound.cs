@@ -87,14 +87,13 @@ internal sealed partial class Checker
         // (note: unlike `addDeclarationToLateBoundSymbol` we do not set up a `.lateSymbol` on `decl`'s links,
         // since that would point at an index symbol and not a single property symbol, like most consumers would expect)
         var declSymbol = NodeSymbol(decl);
-        ref var record = ref TransientSymbols.Record(indexSymbol);
-        if (record.Declarations is null)
+        if (TransientSymbols.Record(indexSymbol).Declarations.IsUndefined)
         {
-            record.Declarations = [decl];
+            TransientSymbols.Record(indexSymbol).Declarations = NewDeclarations([decl]);
         }
         else if (declSymbol.IsNone || declSymbol.IsTransient || BindingOf(declSymbol.File).IsReplaceableByMethod(declSymbol.BinderSymbol) != true)
         {
-            record.Declarations.Add(decl);
+            AddDeclaration(indexSymbol, decl);
         }
     }
 
@@ -266,13 +265,13 @@ internal sealed partial class Checker
         ref var record = ref TransientSymbols.Record(symbol);
         record.Flags |= symbolFlags;
         lateSymbolsOfEarlySymbols[memberSymbol] = symbol;
-        if (record.Declarations is null)
+        if (record.Declarations.IsUndefined)
         {
-            record.Declarations = [member];
+            record.Declarations = NewDeclarations([member]);
         }
         else if (memberSymbol.IsNone || memberSymbol.IsTransient || BindingOf(memberSymbol.File).IsReplaceableByMethod(memberSymbol.BinderSymbol) != true)
         {
-            record.Declarations.Add(member);
+            AddDeclaration(symbol, member);
         }
         if ((symbolFlags & SymbolFlags.Value) != 0)
         {

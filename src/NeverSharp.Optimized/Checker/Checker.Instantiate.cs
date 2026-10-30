@@ -548,7 +548,7 @@ internal sealed partial class Checker
         var result = CreateSymbol(SymbolFlagsOf(symbol), NameIdOf(symbol),
             CheckFlags.Instantiated | (checkFlags & (CheckFlags.Readonly | CheckFlags.Late | CheckFlags.OptionalParameter | CheckFlags.RestParameter)));
         ref var record = ref TransientSymbols.Record(result);
-        record.Declarations = DeclarationsOf(symbol);
+        record.Declarations = DeclRefOf(symbol);
         record.Parent = ParentOf(symbol);
         record.ValueDeclaration = ValueDeclarationOf(symbol);
         var nameType = ValueSymbolLinks.Has(symbol) ? ValueSymbolLinks.Get(symbol).NameType : Type.None;
@@ -668,7 +668,7 @@ internal sealed partial class Checker
         var objectFlags = Types.ObjectFlagsOf(type);
         var declaration = (objectFlags & ObjectFlags.Reference) != 0 ? typeData.Node
             : (objectFlags & ObjectFlags.InstantiationExpressionType) != 0 ? typeData.Node
-            : DeclarationsOf(Types.Symbol(type))![0];
+            : DeclarationsOf(Types.Symbol(type))!.Value[0];
         var target = (objectFlags & ObjectFlags.Reference) != 0 ? GetCachedNodeType(declaration)
             : (objectFlags & ObjectFlags.Instantiated) != 0 ? typeData.Target
             : type;
@@ -687,7 +687,7 @@ internal sealed partial class Checker
                 (!targetSymbol.IsNone && (SymbolFlagsOf(targetSymbol) & (SymbolFlags.Method | SymbolFlags.TypeLiteral)) != 0)) &&
                 !Types.Record(target).AliasTypeArguments.IsPresent)
             {
-                var allDeclarations = (objectFlags & (ObjectFlags.Reference | ObjectFlags.InstantiationExpressionType)) != 0 ? [declaration] : DeclarationsOf(Types.Symbol(type))!;
+                var allDeclarations = (objectFlags & (ObjectFlags.Reference | ObjectFlags.InstantiationExpressionType)) != 0 ? [declaration] : DeclarationsOf(Types.Symbol(type))!.Value;
                 typeParameters = Array.FindAll(typeParameters, tp => allDeclarations.Exists(d => IsTypeParameterPossiblyReferenced(tp, d)));
             }
             outerTypeParametersOfDeclarations[declaration] = typeParameters;
@@ -776,13 +776,13 @@ internal sealed partial class Checker
         // we consider the type parameter possibly referenced.
         var symbol = Types.Symbol(tp);
         var declarations = symbol.IsNone ? null : DeclarationsOf(symbol);
-        if (declarations is not { Count: 1 })
+        if (declarations is not { Count: 1 } tpDeclarations)
         {
             return true;
         }
         var store = StoreOf(node);
         var tpData = Types.TypeParameter(tp);
-        var tpDeclaration = declarations[0];
+        var tpDeclaration = tpDeclarations[0];
         var container = Parent(tpDeclaration);
         for (var n = node; n != container; n = Parent(n))
         {
@@ -1180,9 +1180,9 @@ internal sealed partial class Checker
     private bool IsThisless(SymbolRef symbol)
     {
         var declarations = DeclarationsOf(symbol);
-        if (declarations is { Count: 1 })
+        if (declarations is { Count: 1 } single)
         {
-            var declaration = declarations[0];
+            var declaration = single[0];
             var store = StoreOf(declaration);
             switch (store.Kind(declaration.Node))
             {

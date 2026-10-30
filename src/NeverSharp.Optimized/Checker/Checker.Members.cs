@@ -1206,9 +1206,9 @@ internal sealed partial class Checker
                         }
                     }
                     var typeParameterDeclarations = DeclarationsOf(Types.Symbol(baseConstructorType));
-                    if (err is not null && typeParameterDeclarations is { Count: > 0 })
+                    if (err is not null && typeParameterDeclarations is { Count: > 0 } tpDeclarations)
                     {
-                        AddRelatedInfo(err, CreateRelatedForNode(typeParameterDeclarations[0], Diagnostics.Did_you_mean_for_0_to_be_constrained_to_type_new_args_Colon_any_1,
+                        AddRelatedInfo(err, CreateRelatedForNode(tpDeclarations[0], Diagnostics.Did_you_mean_for_0_to_be_constrained_to_type_new_args_Colon_any_1,
                             SymbolToString(Types.Symbol(baseConstructorType)), TypeToString(ctorReturn)));
                     }
                 }
@@ -1650,8 +1650,7 @@ internal sealed partial class Checker
     internal List<Signature> GetSignaturesOfSymbol(SymbolRef symbol)
     {
         var result = new List<Signature>();
-        var declarations = symbol.IsNone ? null : DeclarationsOf(symbol);
-        if (declarations is null)
+        if ((symbol.IsNone ? null : DeclarationsOf(symbol)) is not { } declarations)
         {
             return result;
         }
@@ -2052,8 +2051,7 @@ internal sealed partial class Checker
             var fileSymbol = GetSymbolOfDeclaration(At(moduleDeclaration, Utilities.RootOf(StoreOf(moduleDeclaration), moduleDeclaration.Node)));
             var result = CreateSymbol(SymbolFlagsOf(fileSymbol), "exports");
             ref var record = ref TransientSymbols.Record(result);
-            var fileDeclarations = DeclarationsOf(fileSymbol);
-            record.Declarations = fileDeclarations is null ? [] : [.. fileDeclarations];
+            record.Declarations = CopyDeclarations(DeclarationsOf(fileSymbol));
             record.Parent = symbol;
             record.ValueDeclaration = ValueDeclarationOf(fileSymbol);
             var fileMembers = MembersOf(fileSymbol);
@@ -2785,7 +2783,7 @@ internal sealed partial class Checker
                         ValueSymbolLinks.Get(union).ResolvedType = GetUnionType([GetTypeOfSymbol(s), GetTypeOfSymbol(exportedMember)]);
                         ref var unionRecord = ref TransientSymbols.Record(union);
                         unionRecord.ValueDeclaration = ValueDeclarationOf(exportedMember);
-                        unionRecord.Declarations = [.. DeclarationsOf(exportedMember) ?? [], .. DeclarationsOf(s) ?? []];
+                        unionRecord.Declarations = NewDeclarations([.. DeclarationsOf(exportedMember) ?? [], .. DeclarationsOf(s) ?? []]);
                         members.Set(name, union);
                     }
                     else
@@ -3028,13 +3026,13 @@ internal sealed partial class Checker
     }
 
     // checker.ts isDuplicatedCommonJSExport
-    private bool IsDuplicatedCommonJSExport(List<NodeRef>? declarations)
+    private bool IsDuplicatedCommonJSExport(Decls? declarations)
     {
-        if (declarations is not { Count: > 1 })
+        if (declarations is not { Count: > 1 } list)
         {
             return false;
         }
-        foreach (var d in declarations)
+        foreach (var d in list)
         {
             var store = StoreOf(d);
             if (!Utilities.IsInJSFile(store, d.Node) || !Utilities.IsAccessExpression(store, d.Node) ||

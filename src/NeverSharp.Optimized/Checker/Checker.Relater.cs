@@ -715,7 +715,7 @@ internal sealed partial class Checker
                             {
                                 // use the property's value declaration if the property is assigned inside the literal itself
                                 var objectLiteralDeclarations = c.DeclarationsOf(c.Types.Symbol(source));
-                                var objectLiteralDeclaration = objectLiteralDeclarations is { Count: > 0 } ? objectLiteralDeclarations[0] : NodeRef.None;
+                                var objectLiteralDeclaration = objectLiteralDeclarations is { Count: > 0 } old ? old[0] : NodeRef.None;
                                 string? suggestion = null;
                                 var valueDeclaration = c.ValueDeclarationOf(prop);
                                 if (!valueDeclaration.IsNone && !objectLiteralDeclaration.IsNone && IsAncestorOrSelf(valueDeclaration, objectLiteralDeclaration) && objectLiteralDeclaration.File == errorNode.File)

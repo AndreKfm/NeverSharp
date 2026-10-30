@@ -304,7 +304,7 @@ internal sealed partial class Checker
                     mappedSymbolLinks[prop] = (type, keyType, modifiersProp);
                     if (!modifiersProp.IsNone)
                     {
-                        TransientSymbols.Record(prop).Declarations = shouldLinkPropDeclarations ? DeclarationsOf(modifiersProp) : null;
+                        TransientSymbols.Record(prop).Declarations = shouldLinkPropDeclarations ? DeclRefOf(modifiersProp) : default;
                     }
                     members.Set(propName, prop);
                 }

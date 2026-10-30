@@ -46,7 +46,7 @@ internal sealed partial class Checker
     // ---- deprecations ----
 
     // checker.ts addDeprecatedSuggestionWorker
-    private void AddDeprecatedSuggestionWorker(List<NodeRef> declarations, ProgramDiagnostic diagnostic)
+    private void AddDeprecatedSuggestionWorker(Decls declarations, ProgramDiagnostic diagnostic)
     {
         foreach (var declaration in declarations)
         {
@@ -80,7 +80,7 @@ internal sealed partial class Checker
     private bool IsDeprecatedDeclaration(NodeRef declaration) => (Utilities.GetCombinedNodeFlags(StoreOf(declaration), declaration.Node) & NodeFlags.Deprecated) != 0;
 
     // checker.ts addDeprecatedSuggestion
-    private void AddDeprecatedSuggestion(NodeRef location, List<NodeRef> declarations, string deprecatedEntity) =>
+    private void AddDeprecatedSuggestion(NodeRef location, Decls declarations, string deprecatedEntity) =>
         AddDeprecatedSuggestionWorker(declarations, CreateDiagnosticForNode(location, Diagnostics._0_is_deprecated, deprecatedEntity));
 
     // checker.ts addDeprecatedSuggestionWithSignature
@@ -1057,10 +1057,10 @@ internal sealed partial class Checker
         }
         if (hasOverloads)
         {
-            if (declarations is not null)
+            if (declarations is { } overloadDeclarations)
             {
-                CheckFlagAgreementBetweenOverloads(declarations, bodyDeclaration, flagsToCheck, someNodeFlags, allNodeFlags);
-                CheckQuestionTokenAgreementBetweenOverloads(declarations, bodyDeclaration, someHaveQuestionToken, allHaveQuestionToken);
+                CheckFlagAgreementBetweenOverloads(overloadDeclarations, bodyDeclaration, flagsToCheck, someNodeFlags, allNodeFlags);
+                CheckQuestionTokenAgreementBetweenOverloads(overloadDeclarations, bodyDeclaration, someHaveQuestionToken, allHaveQuestionToken);
             }
             if (!bodyDeclaration.IsNone)
             {
@@ -1083,7 +1083,7 @@ internal sealed partial class Checker
             }
         }
 
-        NodeRef GetCanonicalOverload(List<NodeRef> overloads, NodeRef implementation)
+        NodeRef GetCanonicalOverload(IReadOnlyList<NodeRef> overloads, NodeRef implementation)
         {
             // Consider the canonical set of flags to be the flags of the bodyDeclaration or the first declaration
             // Error on all deviations from this canonical set of flags
@@ -1094,7 +1094,7 @@ internal sealed partial class Checker
             return implementationSharesContainerWithFirstOverload ? implementation : overloads[0];
         }
 
-        void CheckFlagAgreementBetweenOverloads(List<NodeRef> overloads, NodeRef implementation, ModifierFlags flagsToCheck, ModifierFlags someOverloadFlags, ModifierFlags allOverloadFlags)
+        void CheckFlagAgreementBetweenOverloads(Decls overloads, NodeRef implementation, ModifierFlags flagsToCheck, ModifierFlags someOverloadFlags, ModifierFlags allOverloadFlags)
         {
             // Error if some overloads have a flag that is not shared by all overloads. To find the
             // deviations, we XOR someOverloadFlags with allOverloadFlags
@@ -1161,7 +1161,7 @@ internal sealed partial class Checker
             }
         }
 
-        void CheckQuestionTokenAgreementBetweenOverloads(List<NodeRef> overloads, NodeRef implementation, bool someHaveQuestionToken, bool allHaveQuestionToken)
+        void CheckQuestionTokenAgreementBetweenOverloads(Decls overloads, NodeRef implementation, bool someHaveQuestionToken, bool allHaveQuestionToken)
         {
             if (someHaveQuestionToken != allHaveQuestionToken)
             {

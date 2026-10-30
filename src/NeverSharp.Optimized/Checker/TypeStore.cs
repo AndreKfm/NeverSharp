@@ -418,7 +418,7 @@ internal sealed class TransientSymbolStore
         public SymbolFlags Flags;
         public CheckFlags CheckFlags;
         public int Name;            // escapedName as an id of the checker's NameTable (module CO2)
-        public List<NodeRef>? Declarations;
+        public DeclRef Declarations; // (module CO2: a binder symbol's chain or a list of the checker's DeclarationStore)
         public NodeRef ValueDeclaration;
         public SymbolRef Parent;
         public SymTable? Members;   // checker-owned symbol tables (C1: SymTable, an ordered map like TypeScript's Map)
@@ -735,6 +735,345 @@ internal sealed class SymTable
         var h = (uint)name * 0x9E3779B1u;
         h ^= h >> 15;
         return (int)(h & 0x7FFFFFFF);
+    }
+}
+
+/// <summary>
+/// symbol.declarations of a transient symbol as a reference (module CO2): the declarations array of binder symbol
+/// (<see cref="File"/>, <see cref="Index"/>) when it is shared with it (TypeScript assigns
+/// <c>result.declarations = symbol.declarations</c>), else a list of the checker's <see cref="DeclarationStore"/>.
+/// Copying the reference shares the array, as in TypeScript; nothing here is traced by the collector.
+/// </summary>
+internal readonly struct DeclRef
+{
+    internal readonly int File;  // > 0: the binder symbol's declarations; 0: a DeclarationStore list (Index 0: undefined)
+    internal readonly int Index;
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal DeclRef(int file, int index)
+    {
+        File = file;
+        Index = index;
+    }
+
+    internal bool IsUndefined
+    {
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+        get => File == 0 && Index == 0;
+    }
+}
+
+/// <summary>
+/// The declaration arrays the checker creates (module CO2): per list (start, count, capacity) in one append-only arena of
+/// node references; appending to a full list moves it to the arena's end (its old range stays unused).
+/// </summary>
+internal sealed class DeclarationStore
+{
+    private struct ListRecord
+    {
+        public int Start;
+        public int Count;
+        public int Capacity;
+    }
+
+    private ListRecord[] lists = new ListRecord[256]; // [0] unused
+    private int listCount;
+    private NodeRef[] nodes = new NodeRef[1024];
+    private int nodesUsed;
+
+    /// <summary>A new list with these declarations (a copy).</summary>
+    internal DeclRef Create(ReadOnlySpan<NodeRef> items)
+    {
+        if (listCount + 1 == lists.Length)
+        {
+            Array.Resize(ref lists, lists.Length * 2);
+        }
+        var start = Reserve(items.Length);
+        items.CopyTo(nodes.AsSpan(start));
+        listCount++;
+        lists[listCount] = new ListRecord { Start = start, Count = items.Length, Capacity = items.Length };
+        return new DeclRef(0, listCount);
+    }
+
+    /// <summary>A new list with the declarations of a view (a copy).</summary>
+    internal DeclRef CreateCopy(Decls items)
+    {
+        if (listCount + 1 == lists.Length)
+        {
+            Array.Resize(ref lists, lists.Length * 2);
+        }
+        var start = Reserve(items.Count);
+        var i = start;
+        foreach (var node in items)
+        {
+            nodes[i++] = node;
+        }
+        listCount++;
+        lists[listCount] = new ListRecord { Start = start, Count = items.Count, Capacity = items.Count };
+        return new DeclRef(0, listCount);
+    }
+
+    /// <summary>declarations.push(node) on a list of this store.</summary>
+    internal void Add(DeclRef list, NodeRef node)
+    {
+        if (list.File != 0 || list.Index == 0)
+        {
+            throw new InvalidOperationException("only the checker's own declaration lists are appended to");
+        }
+        ref var r = ref lists[list.Index];
+        if (r.Count == r.Capacity)
+        {
+            var capacity = Math.Max(4, r.Capacity * 2);
+            if (r.Start + r.Capacity == nodesUsed)
+            {
+                // the last range of the arena grows in place
+                Reserve(capacity - r.Capacity);
+            }
+            else
+            {
+                var start = Reserve(capacity);
+                nodes.AsSpan(r.Start, r.Count).CopyTo(nodes.AsSpan(start));
+                r.Start = start;
+            }
+            r.Capacity = capacity;
+        }
+        nodes[r.Start + r.Count] = node;
+        r.Count++;
+    }
+
+    /// <summary>The declarations of a list of this store as they are now.</summary>
+    internal Decls View(DeclRef list)
+    {
+        ref var r = ref lists[list.Index];
+        return new Decls(nodes, r.Start, r.Count);
+    }
+
+    private int Reserve(int length)
+    {
+        if (nodesUsed + length > nodes.Length)
+        {
+            Array.Resize(ref nodes, Math.Max(nodes.Length * 2, nodesUsed + length));
+        }
+        var start = nodesUsed;
+        nodesUsed += length;
+        return start;
+    }
+}
+
+/// <summary>
+/// A view of a declarations array (module CO2): a binder symbol's chain or a range of the checker's
+/// <see cref="DeclarationStore"/> (or of an array of its own), read like the <c>List</c> it replaces. Views live on
+/// the stack; a view taken before the list is appended to does not see the new declaration.
+/// </summary>
+[System.Runtime.CompilerServices.CollectionBuilder(typeof(Decls), nameof(Create))]
+internal readonly struct Decls : IReadOnlyList<NodeRef>
+{
+    private readonly BinderStore.NodeChain chain; // isChain: the binder's declarations of a symbol of file
+    private readonly int file;
+    private readonly NodeRef[]? array;
+    private readonly int start;
+    private readonly int count;
+    private readonly bool isChain;
+
+    internal Decls(NodeRef[] array, int start, int count)
+    {
+        this.array = array;
+        this.start = start;
+        this.count = count;
+    }
+
+    internal Decls(BinderStore.NodeChain chain, int file)
+    {
+        this.chain = chain;
+        this.file = file;
+        isChain = true;
+    }
+
+    /// <summary>A view of these declarations (a copy; collection expressions).</summary>
+    internal static Decls Create(ReadOnlySpan<NodeRef> items) => items.IsEmpty ? default : new Decls(items.ToArray(), 0, items.Length);
+
+    // (a chain is counted when asked: most readers take the first declaration or enumerate)
+    public int Count
+    {
+        get
+        {
+            if (!isChain)
+            {
+                return count;
+            }
+            var n = 0;
+            foreach (var _ in chain)
+            {
+                n++;
+            }
+            return n;
+        }
+    }
+
+    public NodeRef this[int index]
+    {
+        get
+        {
+            if (!isChain)
+            {
+                if ((uint)index >= (uint)count)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(index));
+                }
+                return array![start + index];
+            }
+            foreach (var node in chain)
+            {
+                if (index-- == 0)
+                {
+                    return new NodeRef(file, node);
+                }
+            }
+            throw new ArgumentOutOfRangeException(nameof(index));
+        }
+    }
+
+    public Enumerator GetEnumerator() => new(this);
+
+    IEnumerator<NodeRef> IEnumerable<NodeRef>.GetEnumerator() => GetEnumerator();
+
+    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+
+    /// <summary>List.Find (NodeRef.None when no declaration matches).</summary>
+    internal NodeRef Find(Predicate<NodeRef> match)
+    {
+        foreach (var node in this)
+        {
+            if (match(node))
+            {
+                return node;
+            }
+        }
+        return NodeRef.None;
+    }
+
+    internal bool Exists(Predicate<NodeRef> match) => FindIndex(match) >= 0;
+
+    internal bool TrueForAll(Predicate<NodeRef> match)
+    {
+        foreach (var node in this)
+        {
+            if (!match(node))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    internal int FindIndex(Predicate<NodeRef> match)
+    {
+        var i = 0;
+        foreach (var node in this)
+        {
+            if (match(node))
+            {
+                return i;
+            }
+            i++;
+        }
+        return -1;
+    }
+
+    internal bool Contains(NodeRef value) => IndexOf(value) >= 0;
+
+    /// <summary>List.FindAll (a new list).</summary>
+    internal List<NodeRef> FindAll(Predicate<NodeRef> match)
+    {
+        var result = new List<NodeRef>();
+        foreach (var node in this)
+        {
+            if (match(node))
+            {
+                result.Add(node);
+            }
+        }
+        return result;
+    }
+
+    internal int IndexOf(NodeRef value)
+    {
+        var i = 0;
+        foreach (var node in this)
+        {
+            if (node == value)
+            {
+                return i;
+            }
+            i++;
+        }
+        return -1;
+    }
+
+    internal struct Enumerator : IEnumerator<NodeRef>
+    {
+        private readonly Decls decls;
+        private BinderStore.NodeChain.Enumerator chainEnumerator;
+        private int index;
+        private NodeRef current;
+
+        internal Enumerator(Decls decls)
+        {
+            this.decls = decls;
+            chainEnumerator = decls.isChain ? decls.chain.GetEnumerator() : default;
+            index = -1;
+        }
+
+        public readonly NodeRef Current => current;
+
+        readonly object System.Collections.IEnumerator.Current => current;
+
+        public bool MoveNext()
+        {
+            if (decls.isChain)
+            {
+                if (chainEnumerator.MoveNext())
+                {
+                    current = new NodeRef(decls.file, chainEnumerator.Current);
+                    return true;
+                }
+                return false;
+            }
+            if (++index < decls.count)
+            {
+                current = decls.array![decls.start + index];
+                return true;
+            }
+            return false;
+        }
+
+        public void Reset() => throw new NotSupportedException();
+
+        public readonly void Dispose()
+        {
+        }
+    }
+}
+
+/// <summary>
+/// The List members the checker reads on a declarations view it has checked for undefined (module CO2: the view is a
+/// nullable struct, which flow analysis does not unwrap; on undefined they throw, as the List members did).
+/// </summary>
+internal static class DeclsExtensions
+{
+    extension(Decls? declarations)
+    {
+        internal int Count => declarations!.Value.Count;
+
+        internal NodeRef Find(Predicate<NodeRef> match) => declarations!.Value.Find(match);
+
+        internal bool Exists(Predicate<NodeRef> match) => declarations!.Value.Exists(match);
+
+        internal bool TrueForAll(Predicate<NodeRef> match) => declarations!.Value.TrueForAll(match);
+
+        internal bool Contains(NodeRef value) => declarations!.Value.Contains(value);
+
+        internal int IndexOf(NodeRef value) => declarations!.Value.IndexOf(value);
     }
 }
 

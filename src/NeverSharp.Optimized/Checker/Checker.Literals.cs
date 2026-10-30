@@ -228,7 +228,7 @@ internal sealed partial class Checker
             return true;
         }
         var declarations = DeclarationsOf(symbol);
-        var firstDecl = declarations is { Count: > 0 } ? declarations[0] : NodeRef.None;
+        var firstDecl = declarations is { Count: > 0 } d ? d[0] : NodeRef.None;
         if (firstDecl.IsNone)
         {
             return false;
@@ -258,7 +258,7 @@ internal sealed partial class Checker
             return true;
         }
         var declarations = DeclarationsOf(symbol);
-        var firstDecl = declarations is { Count: > 0 } ? declarations[0] : NodeRef.None;
+        var firstDecl = declarations is { Count: > 0 } d ? d[0] : NodeRef.None;
         if (firstDecl.IsNone)
         {
             return false;
@@ -272,7 +272,7 @@ internal sealed partial class Checker
     private bool IsSymbolWithComputedName(SymbolRef symbol)
     {
         var declarations = DeclarationsOf(symbol);
-        var firstDecl = declarations is { Count: > 0 } ? declarations[0] : NodeRef.None;
+        var firstDecl = declarations is { Count: > 0 } d ? d[0] : NodeRef.None;
         if (firstDecl.IsNone)
         {
             return false;
@@ -296,7 +296,7 @@ internal sealed partial class Checker
                 propTypes.Add(GetTypeOfSymbol(properties[i]));
                 if (IsSymbolWithComputedName(properties[i]))
                 {
-                    (components ??= []).Add(DeclarationsOf(properties[i])![0]);
+                    (components ??= []).Add(DeclarationsOf(properties[i])!.Value[0]);
                 }
             }
         }
@@ -413,7 +413,7 @@ internal sealed partial class Checker
                     }
                 }
                 ref var propRecord = ref TransientSymbols.Record(prop);
-                propRecord.Declarations = DeclarationsOf(member);
+                propRecord.Declarations = DeclRefOf(member);
                 propRecord.Parent = ParentOf(member);
                 var valueDeclaration = ValueDeclarationOf(member);
                 if (!valueDeclaration.IsNone)
@@ -693,7 +693,7 @@ internal sealed partial class Checker
                 var result = CreateSymbol(SymbolFlags.Property | SymbolFlags.Optional, NameIdOf(prop),(GetCheckFlags(prop) & CheckFlags.Late) | (isReadonly ? CheckFlags.Readonly : CheckFlags.None));
                 var propType = isSetonlyAccessor ? undefinedType : AddOptionality(GetTypeOfSymbol(prop), isProperty: true); // (before the links are written)
                 ValueSymbolLinks.Get(result).ResolvedType = propType;
-                TransientSymbols.Record(result).Declarations = DeclarationsOf(prop);
+                TransientSymbols.Record(result).Declarations = DeclRefOf(prop);
                 var nameType = GetNameTypeOfSymbol(prop); // (before the links are written: the call can grow them)
                 ValueSymbolLinks.Get(result).NameType = nameType;
                 members.Set(NameOf(prop), result);
@@ -791,9 +791,7 @@ internal sealed partial class Checker
                 var rightType = GetTypeOfSymbol(rightProp);
                 if ((SymbolFlagsOf(rightProp) & SymbolFlags.Optional) != 0)
                 {
-                    var declarations = new List<NodeRef>();
-                    declarations.AddRange(DeclarationsOf(leftProp) ?? []);
-                    declarations.AddRange(DeclarationsOf(rightProp) ?? []);
+                    List<NodeRef> declarations = [.. DeclarationsOf(leftProp) ?? [], .. DeclarationsOf(rightProp) ?? []];
                     var flags = SymbolFlags.Property | (SymbolFlagsOf(leftProp) & SymbolFlags.Optional);
                     var result = CreateSymbol(flags, name);
                     // Optimization: avoid calculating the union type if spreading into the exact same type.
@@ -805,7 +803,8 @@ internal sealed partial class Checker
                     var rightTypeWithoutUndefined = RemoveMissingOrUndefinedType(rightType);
                     var propType = leftTypeWithoutUndefined == rightTypeWithoutUndefined ? leftType : GetUnionType([leftType, rightTypeWithoutUndefined], UnionReduction.Subtype); // (before the links are written)
                     ValueSymbolLinks.Get(result).ResolvedType = propType;
-                    TransientSymbols.Record(result).Declarations = declarations;
+                    var declarationRef = NewDeclarations(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(declarations));
+                    TransientSymbols.Record(result).Declarations = declarationRef;
                     var nameType = GetNameTypeOfSymbol(leftProp); // (before the links are written: the call can grow them)
                     ValueSymbolLinks.Get(result).NameType = nameType;
                     members.Set(name, result);
@@ -862,7 +861,7 @@ internal sealed partial class Checker
         var result = CreateSymbol(SymbolFlags.Property | (flags & SymbolFlags.Optional), NameIdOf(prop),(GetCheckFlags(prop) & CheckFlags.Late) | (isReadonly ? CheckFlags.Readonly : CheckFlags.None));
         var propType = isSetonlyAccessor ? undefinedType : GetTypeOfSymbol(prop); // (before the links are written)
         ValueSymbolLinks.Get(result).ResolvedType = propType;
-        TransientSymbols.Record(result).Declarations = DeclarationsOf(prop);
+        TransientSymbols.Record(result).Declarations = DeclRefOf(prop);
         var nameType = GetNameTypeOfSymbol(prop); // (before the links are written: the call can grow them)
         ValueSymbolLinks.Get(result).NameType = nameType;
         return result;

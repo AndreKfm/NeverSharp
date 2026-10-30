@@ -885,7 +885,7 @@ internal sealed partial class Checker
             // While usually the alias will have been marked during the pass by the full typecheck, we may still need to calculate the alias declaration now
             var declarations = DeclarationsOf(symbol);
             var immediate = !GetDeclarationOfAliasSymbol(symbol).IsNone ? GetImmediateAliasedSymbol(symbol) : SymbolRef.None;
-            MarkSymbolOfAliasDeclarationIfTypeOnly(declarations is { Count: > 0 } ? declarations[0] : NodeRef.None, immediate, resolved, overwriteEmpty: true);
+            MarkSymbolOfAliasDeclarationIfTypeOnly(declarations is { Count: > 0 } d ? d[0] : NodeRef.None, immediate, resolved, overwriteEmpty: true);
         }
         ref var links = ref AliasSymbolLinks.Get(symbol);
         if (links.TypeOnlyState != 2)
@@ -2271,8 +2271,7 @@ internal sealed partial class Checker
     /// <summary>checker.ts getDeclarationOfAliasSymbol (the last alias declaration).</summary>
     internal NodeRef GetDeclarationOfAliasSymbol(SymbolRef symbol)
     {
-        var declarations = DeclarationsOf(symbol);
-        if (declarations is null)
+        if (DeclarationsOf(symbol) is not { } declarations)
         {
             return NodeRef.None;
         }
@@ -2916,8 +2915,7 @@ internal sealed partial class Checker
     {
         var result = CreateSymbol(SymbolFlagsOf(symbol), NameIdOf(symbol));
         ref var r = ref TransientSymbols.Record(result);
-        var declarations = DeclarationsOf(symbol);
-        r.Declarations = declarations is null ? [] : [.. declarations];
+        r.Declarations = CopyDeclarations(DeclarationsOf(symbol));
         r.Parent = ParentOf(symbol);
         ref var links = ref ExportTypeLinks.Get(result);
         links.Target = symbol;
@@ -3027,8 +3025,9 @@ internal sealed partial class Checker
         var valueDeclaration = ValueDeclarationOf(valueSymbol);
         var members = MembersOf(typeSymbol);
         var exports = ExportsOf(valueSymbol);
+        var declarationRef = NewDeclarations(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(declarations));
         ref var r = ref TransientSymbols.Record(result);
-        r.Declarations = declarations;
+        r.Declarations = declarationRef;
         r.Parent = parent;
         if (!valueDeclaration.IsNone)
         {
