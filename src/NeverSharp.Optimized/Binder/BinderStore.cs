@@ -484,6 +484,13 @@ internal sealed unsafe class BinderStore
     /// <summary>types.ts: SourceFile.symbolCount.</summary>
     internal int SymbolCount { get; set; }
 
+    /// <summary>
+    /// The number of symbol records including record 0 (the symbols have indices 1..SymbolRecordCount-1; unlike
+    /// <see cref="SymbolCount"/> it includes the symbols bound after the file's main pass, e.g. JSDoc typedefs). Read by
+    /// the checker's per-symbol tables (module CO2).
+    /// </summary>
+    internal int SymbolRecordCount => symbolsUsed;
+
     /// <summary>types.ts: SourceFile.commonJsModuleIndicator (set by the binder; None when undefined).</summary>
     internal Node CommonJsModuleIndicator
     {

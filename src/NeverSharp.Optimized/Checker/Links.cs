@@ -15,41 +15,95 @@ using NeverSharp.Generated;
 namespace NeverSharp.Optimized;
 
 /// <summary>
+/// One int per symbol of a checker's program (module CO2): binder symbol <c>i</c> of file <c>f</c> at
+/// <c>bases[f] + i</c> (the file regions are sized by the files' symbol record counts; binder indices are dense),
+/// transient symbols after the last file. The ints live in pages of <see cref="Size"/> allocated on first write, so a
+/// checker has a few hundred arrays per kind instead of one per file, and none of them holds references.
+/// </summary>
+internal sealed class SymbolSlots
+{
+    private const int Shift = 14;
+    private const int Size = 1 << Shift;
+    private const int Mask = Size - 1;
+
+    private readonly int[] bases; // [file] -> start of its region; [0] -> start of the transient symbols
+    private int[]?[] pages;
+
+    internal SymbolSlots(int[] bases)
+    {
+        this.bases = bases;
+        pages = new int[]?[(bases[0] >> Shift) + 16];
+    }
+
+    /// <summary>The regions of the program's files (shared by the slot tables of one checker).</summary>
+    internal static int[] Bases(Program program)
+    {
+        var files = program.SourceFiles;
+        var bases = new int[files.Count + 2];
+        var next = 0;
+        for (var i = 0; i < files.Count; i++)
+        {
+            bases[i + 1] = next;
+            next = checked(next + files[i].Binding!.SymbolRecordCount);
+        }
+        bases[files.Count + 1] = next; // the end of the last file's region
+        bases[0] = next;
+        return bases;
+    }
+
+    /// <summary>The slot of <paramref name="symbol"/> (its page allocated if needed).</summary>
+    internal ref int Slot(SymbolRef symbol)
+    {
+        var i = bases[symbol.File] + symbol.Index;
+        if (symbol.File != 0 && i >= bases[symbol.File + 1])
+        {
+            throw new InvalidOperationException("binder symbol index beyond its file's symbol count");
+        }
+        var p = i >> Shift;
+        if (p >= pages.Length)
+        {
+            Array.Resize(ref pages, Math.Max(p + 1, pages.Length * 2));
+        }
+        var page = pages[p] ??= new int[Size];
+        return ref page[i & Mask];
+    }
+
+    /// <summary>The value of <paramref name="symbol"/>'s slot (0 when it has none).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal int Peek(SymbolRef symbol)
+    {
+        // (no region check: a slot is only written through Slot, which checks it)
+        var i = bases[symbol.File] + symbol.Index;
+        var p = i >> Shift;
+        return p < pages.Length && pages[p] is { } page ? page[i & Mask] : 0;
+    }
+}
+
+/// <summary>
 /// typescript-go's <c>core.LinkStore[*ast.Symbol, V]</c> for one link kind <typeparamref name="T"/>: the links of a
-/// symbol, created zeroed on first access. Keyed by <see cref="SymbolRef"/>: per file (0 = transient symbols) a dense
-/// slot array indexed by the symbol's index (binder symbol indices are dense per file), the records in one array in
-/// creation order. Only symbols that have links of this kind cost a record.
+/// symbol, created zeroed on first access. Keyed by <see cref="SymbolRef"/> through the checker's
+/// <see cref="SymbolSlots"/> layout (module CO2; before: a slot array per file), the records in chunks in creation
+/// order. Only symbols that have links of this kind cost a record.
 /// </summary>
 internal sealed class SymbolLinkStore<T>
     where T : struct
 {
-    private int[][] slots;           // [file][symbol index] -> record index (0: none)
+    private readonly SymbolSlots slots; // record index (0: none)
     private readonly Chunks<T> records = new(); // records[0] unused
     private int count;
 
-    internal SymbolLinkStore(int fileCount)
+    internal SymbolLinkStore(int[] slotBases)
     {
-        slots = new int[fileCount + 1][];
-        for (var i = 0; i < slots.Length; i++)
-        {
-            slots[i] = [];
-        }
+        slots = new SymbolSlots(slotBases);
     }
 
     /// <summary>The links of <paramref name="symbol"/>, created zeroed if it has none (getSymbolLinks).</summary>
     internal ref T Get(SymbolRef symbol)
     {
-        var fileSlots = slots[symbol.File];
-        if (symbol.Index >= fileSlots.Length)
-        {
-            var grown = new int[Math.Max(symbol.Index + 1, fileSlots.Length * 2)];
-            fileSlots.CopyTo(grown, 0);
-            slots[symbol.File] = fileSlots = grown;
-        }
-        var slot = fileSlots[symbol.Index];
+        ref var slot = ref slots.Slot(symbol);
         if (slot == 0)
         {
-            slot = fileSlots[symbol.Index] = ++count;
+            slot = ++count;
             records.EnsureIndex(slot);
         }
         return ref records[slot];
@@ -57,50 +111,36 @@ internal sealed class SymbolLinkStore<T>
 
     /// <summary>Whether <paramref name="symbol"/> has links of this kind (typescript-go LinkStore.Has).</summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal bool Has(SymbolRef symbol)
-    {
-        var fileSlots = slots[symbol.File];
-        return symbol.Index < fileSlots.Length && fileSlots[symbol.Index] != 0;
-    }
-
-    /// <summary>Grows the per-file tables when the program has more files (not needed by C0's programs).</summary>
-    internal void EnsureFiles(int fileCount)
-    {
-        if (fileCount + 1 > slots.Length)
-        {
-            var old = slots.Length;
-            Array.Resize(ref slots, fileCount + 1);
-            for (var i = old; i < slots.Length; i++)
-            {
-                slots[i] = [];
-            }
-        }
-    }
+    internal bool Has(SymbolRef symbol) => slots.Peek(symbol) != 0;
 }
 
 /// <summary>
 /// typescript-go's <c>core.LinkStore[*ast.Node, V]</c> for one link kind <typeparamref name="T"/>: the links of a node,
 /// created zeroed on first access. Node handles are record offsets (sparse), so per file an open-addressing map from
-/// node handle to record index (linear probing, load at most 1/2, as the binder's node maps), the records in one array.
+/// node handle to record index (linear probing, load at most 1/2, as the binder's node maps; module CO2: one array of
+/// (handle, record) pairs per file instead of two), the records in one array.
 /// </summary>
 internal sealed class NodeLinkStore<T>
     where T : struct
 {
-    private int[][] keys;            // [file] -> node handles (0: free slot)
-    private int[][] values;          // [file] -> record index
-    private int[] counts;
+    private struct Entry
+    {
+        public int Node; // 0: free
+        public int Record;
+    }
+
+    private readonly Entry[][] maps; // [file]
+    private readonly int[] counts;
     private T[] records = new T[64]; // records[0] unused
     private int count;
 
     internal NodeLinkStore(int fileCount)
     {
-        keys = new int[fileCount + 1][];
-        values = new int[fileCount + 1][];
+        maps = new Entry[fileCount + 1][];
         counts = new int[fileCount + 1];
-        for (var i = 0; i < keys.Length; i++)
+        for (var i = 0; i < maps.Length; i++)
         {
-            keys[i] = [];
-            values[i] = [];
+            maps[i] = [];
         }
     }
 
@@ -108,26 +148,28 @@ internal sealed class NodeLinkStore<T>
     internal ref T Get(NodeRef node)
     {
         var file = node.File;
-        if ((counts[file] + 1) * 2 > keys[file].Length)
+        if ((counts[file] + 1) * 2 > maps[file].Length)
         {
             Grow(file);
         }
-        var k = keys[file];
-        var mask = k.Length - 1;
-        for (var i = Slot(node.Node.Index, k.Length); ; i = (i + 1) & mask)
+        var map = maps[file];
+        var mask = map.Length - 1;
+        var handle = node.Node.Index;
+        for (var i = Slot(handle, map.Length); ; i = (i + 1) & mask)
         {
-            if (k[i] == node.Node.Index)
+            ref var entry = ref map[i];
+            if (entry.Node == handle)
             {
-                return ref records[values[file][i]];
+                return ref records[entry.Record];
             }
-            if (k[i] == 0)
+            if (entry.Node == 0)
             {
                 if (count + 1 == records.Length)
                 {
                     Array.Resize(ref records, records.Length * 2);
                 }
-                k[i] = node.Node.Index;
-                values[file][i] = ++count;
+                entry.Node = handle;
+                entry.Record = ++count;
                 counts[file]++;
                 return ref records[count];
             }
@@ -138,19 +180,20 @@ internal sealed class NodeLinkStore<T>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal bool Has(NodeRef node)
     {
-        var k = keys[node.File];
-        if (k.Length == 0)
+        var map = maps[node.File];
+        if (map.Length == 0)
         {
             return false;
         }
-        var mask = k.Length - 1;
-        for (var i = Slot(node.Node.Index, k.Length); ; i = (i + 1) & mask)
+        var mask = map.Length - 1;
+        var handle = node.Node.Index;
+        for (var i = Slot(handle, map.Length); ; i = (i + 1) & mask)
         {
-            if (k[i] == node.Node.Index)
+            if (map[i].Node == handle)
             {
                 return true;
             }
-            if (k[i] == 0)
+            if (map[i].Node == 0)
             {
                 return false;
             }
@@ -162,28 +205,24 @@ internal sealed class NodeLinkStore<T>
 
     private void Grow(int file)
     {
-        var oldKeys = keys[file];
-        var oldValues = values[file];
-        var capacity = Math.Max(16, oldKeys.Length * 2);
-        var newKeys = new int[capacity];
-        var newValues = new int[capacity];
+        var old = maps[file];
+        var capacity = Math.Max(16, old.Length * 2);
+        var grown = new Entry[capacity];
         var mask = capacity - 1;
-        for (var j = 0; j < oldKeys.Length; j++)
+        foreach (var entry in old)
         {
-            if (oldKeys[j] == 0)
+            if (entry.Node == 0)
             {
                 continue;
             }
-            var i = Slot(oldKeys[j], capacity);
-            while (newKeys[i] != 0)
+            var i = Slot(entry.Node, capacity);
+            while (grown[i].Node != 0)
             {
                 i = (i + 1) & mask;
             }
-            newKeys[i] = oldKeys[j];
-            newValues[i] = oldValues[j];
+            grown[i] = entry;
         }
-        keys[file] = newKeys;
-        values[file] = newValues;
+        maps[file] = grown;
     }
 }
 

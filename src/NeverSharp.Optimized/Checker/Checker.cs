@@ -55,23 +55,26 @@ internal sealed partial class Checker
         {
             fileIndex[files[i]] = i + 1;
         }
+        // (initializeTypeChecker binds the files; done first here, as the per-symbol tables are laid out by the files'
+        // symbol counts)
+        foreach (var file in files)
+        {
+            Binder.BindSourceFile(file, compilerOptions);
+        }
+        symbolSlotBases = SymbolSlots.Bases(program);
         Types = new TypeStore();
         Signatures = new SignatureStore();
         TransientSymbols = new TransientSymbolStore(Names);
         emptySymbols = new SymTable(Names);
-        ValueSymbolLinks = new SymbolLinkStore<ValueSymbolLinks>(files.Count);
-        AliasSymbolLinks = new SymbolLinkStore<AliasSymbolLinks>(files.Count);
-        ExportTypeLinks = new SymbolLinkStore<ExportTypeLinks>(files.Count);
-        DeclaredTypeLinks = new SymbolLinkStore<DeclaredTypeLinks>(files.Count);
+        ValueSymbolLinks = new SymbolLinkStore<ValueSymbolLinks>(symbolSlotBases);
+        AliasSymbolLinks = new SymbolLinkStore<AliasSymbolLinks>(symbolSlotBases);
+        ExportTypeLinks = new SymbolLinkStore<ExportTypeLinks>(symbolSlotBases);
+        DeclaredTypeLinks = new SymbolLinkStore<DeclaredTypeLinks>(symbolSlotBases);
         NodeLinks = new NodeLinkStore<NodeLinks>(files.Count);
         SymbolNodeLinks = new NodeLinkStore<SymbolNodeLinks>(files.Count);
         TypeNodeLinks = new NodeLinkStore<TypeNodeLinks>(files.Count);
         SignatureLinks = new NodeLinkStore<SignatureLinks>(files.Count);
-        binderNames = new int[files.Count + 1][];
-        for (var i = 0; i < binderNames.Length; i++)
-        {
-            binderNames[i] = [];
-        }
+        binderNames = new SymbolSlots(symbolSlotBases);
 
         languageVersion = compilerOptions.GetEmitScriptTarget();
         moduleKind = compilerOptions.GetEmitModuleKind();
@@ -102,6 +105,9 @@ internal sealed partial class Checker
 
     /// <summary>The escaped names of this checker's symbols and symbol tables as ids (module CO2).</summary>
     internal NameTable Names { get; } = new();
+
+    // The layout of the per-symbol tables (SymbolSlots.Bases), shared by the symbol link stores.
+    private readonly int[] symbolSlotBases;
 
     internal TypeStore Types { get; }
 

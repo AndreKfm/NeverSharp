@@ -29,7 +29,7 @@ internal sealed partial class Checker
     private readonly SymbolRef resolvingSymbol;
 
     // Caches of binder data in checker-owned form (the binder stores are shared and read-only).
-    private readonly int[][] binderNames; // [file][symbol index] -> name id + 1 (0: not read yet)
+    private readonly SymbolSlots binderNames; // binder symbol -> name id + 1 (0: not read yet)
     private readonly Dictionary<long, SymTable> binderTables = [];
     private readonly Dictionary<SymbolRef, List<NodeRef>?> binderDeclarations = [];
 
@@ -55,13 +55,7 @@ internal sealed partial class Checker
         {
             return TransientSymbols.Record(symbol).Name;
         }
-        var names = binderNames[symbol.File];
-        if (symbol.Index >= names.Length)
-        {
-            Array.Resize(ref names, Math.Max(symbol.Index + 1, names.Length * 2));
-            binderNames[symbol.File] = names;
-        }
-        ref var slot = ref names[symbol.Index];
+        ref var slot = ref binderNames.Slot(symbol);
         if (slot == 0)
         {
             var text = BindingOf(symbol.File).Name(symbol.BinderSymbol);
