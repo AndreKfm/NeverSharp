@@ -1248,7 +1248,7 @@ internal sealed partial class Checker
         }
         var moduleExports = ExportsOf(moduleSymbol);
         var exportEqualsSymbol = moduleExports?.Get(InternalSymbolName.ExportEquals) ?? SymbolRef.None;
-        if (!exportEqualsSymbol.IsNone && HasExportedMembers(moduleExports!))
+        if (!exportEqualsSymbol.IsNone && HasExportedMembers(moduleExports!.Value))
         {
             var declaration = GetDeclarationOfAliasSymbol(exportEqualsSymbol);
             if (declaration.IsNone)

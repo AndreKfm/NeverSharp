@@ -54,8 +54,8 @@ internal sealed class TypeStore
     {
         public TypeList Types;
         public Type Origin;
-        public SymTable? PropertyCache;                                     // types.ts propertyCache
-        public SymTable? PropertyCacheWithoutObjectFunctionPropertyAugment; // types.ts propertyCacheWithoutObjectFunctionPropertyAugment
+        public SymTable PropertyCache;                                       // types.ts propertyCache (IsNone: undefined)
+        public SymTable PropertyCacheWithoutObjectFunctionPropertyAugment;  // types.ts propertyCacheWithoutObjectFunctionPropertyAugment
         public ItemRange<SymbolRef> ResolvedProperties;                     // types.ts resolvedProperties (module CO3: a stored list)
         public bool HasResolvedProperties;                                  // resolvedProperties !== undefined
         public int ResolvedMembers;                                         // the object data record of the resolved members (module CO3; 0: not resolved)
@@ -290,7 +290,7 @@ internal readonly struct ObjectTypeData
     }
 
     public ref bool MembersResolved => ref Record.MembersResolved;
-    public ref SymTable? Members => ref Record.Members;
+    public ref SymTable Members => ref Record.Members;
     public ref ItemRange<SymbolRef> Properties => ref Record.Properties;
     public ref ItemRange<Signature> CallSignatures => ref Record.CallSignatures;
     public ref ItemRange<Signature> ConstructSignatures => ref Record.ConstructSignatures;
@@ -340,7 +340,7 @@ internal struct ObjectTypeRecord
 {
     // ResolvedType (resolveStructuredTypeMembers)
     public bool MembersResolved;
-    public SymTable? Members;
+    public SymTable Members; // (set when the members are resolved)
     public ItemRange<SymbolRef> Properties;
     public ItemRange<Signature> CallSignatures;
     public ItemRange<Signature> ConstructSignatures;
@@ -586,8 +586,8 @@ internal sealed class TransientSymbolStore
         public DeclRef Declarations; // (module CO2: a binder symbol's chain or a list of the checker's DeclarationStore)
         public NodeRef ValueDeclaration;
         public SymbolRef Parent;
-        public SymTable? Members;   // checker-owned symbol tables (C1: SymTable, an ordered map like TypeScript's Map)
-        public SymTable? Exports;
+        public SymTable Members;    // checker-owned symbol tables (C1: SymTable, an ordered map like TypeScript's Map; CO3: IsNone = undefined)
+        public SymTable Exports;
         public bool ConstEnumOnlyModule;
         public SymbolRef ExportSymbol;
     }
@@ -652,257 +652,6 @@ internal sealed class Chunks<T>
 }
 
 
-/// <summary>
-/// A symbol table the checker owns (types.ts SymbolTable: a Map from escaped name to symbol, iterated in insertion
-/// order; Map.set on an existing key keeps its position). Binder tables are read through a cached copy of this kind
-/// (<see cref="Checker.TableOf"/>), so the checker sees one table type for binder and transient symbols.
-/// Layout (module CO1): the entries (name, symbol) in insertion order in one array; up to <see cref="LinearLimit"/>
-/// entries are found by a scan, larger tables by an open-addressing index (linear probing, load at most 1/2, entry
-/// number + 1 per slot, 0 free). No per-entry objects. Module CO2: names are ids of the checker's <see cref="NameTable"/>,
-/// so the entries hold no references for the collector to trace.
-/// </summary>
-internal sealed class SymTable
-{
-    private const int LinearLimit = 8;
-
-    private struct Entry
-    {
-        public int Name;
-        public SymbolRef Value;
-    }
-
-    private readonly NameTable names;
-    private Entry[] entries;
-    private int[]? buckets; // null: at most LinearLimit entries, found by a scan
-    private int count;
-
-    internal SymTable(NameTable names, int capacity = 0)
-    {
-        this.names = names;
-        entries = capacity == 0 ? [] : new Entry[capacity];
-    }
-
-    /// <summary>new Map(other): a copy in the same order.</summary>
-    internal SymTable(SymTable other)
-    {
-        names = other.names;
-        count = other.count;
-        entries = other.entries.AsSpan(0, count).ToArray();
-        buckets = other.buckets is null ? null : (int[])other.buckets.Clone();
-    }
-
-    internal int Count
-    {
-        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-        get => count;
-    }
-
-    /// <summary>Map.get (None when absent).</summary>
-    internal SymbolRef Get(string name)
-    {
-        var id = names.Find(name);
-        return id < 0 ? SymbolRef.None : Get(id);
-    }
-
-    /// <summary>Map.get by name id (None when absent).</summary>
-    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal SymbolRef Get(int name)
-    {
-        var i = Find(name);
-        return i >= 0 ? entries[i].Value : SymbolRef.None;
-    }
-
-    internal bool Has(string name)
-    {
-        var id = names.Find(name);
-        return id >= 0 && Find(id) >= 0;
-    }
-
-    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal bool Has(int name) => Find(name) >= 0;
-
-    /// <summary>Map.set.</summary>
-    internal void Set(string name, SymbolRef symbol) => Set(names.Intern(name), symbol);
-
-    /// <summary>Map.set by name id.</summary>
-    internal void Set(int name, SymbolRef symbol)
-    {
-        var i = Find(name);
-        if (i >= 0)
-        {
-            entries[i].Value = symbol;
-            return;
-        }
-        if (count == entries.Length)
-        {
-            Resize(Math.Max(4, count * 2));
-        }
-        entries[count] = new Entry { Name = name, Value = symbol };
-        count++;
-        if (buckets is not null)
-        {
-            if (count * 2 > buckets.Length)
-            {
-                Rehash(buckets.Length * 2);
-            }
-            else
-            {
-                Insert(buckets, count - 1);
-            }
-        }
-        else if (count > LinearLimit)
-        {
-            Rehash(BucketCountFor(entries.Length));
-        }
-    }
-
-    /// <summary>Makes room for <paramref name="capacity"/> entries (no change to the contents).</summary>
-    internal void EnsureCapacity(int capacity)
-    {
-        if (capacity > entries.Length)
-        {
-            Resize(capacity);
-            if (buckets is not null && capacity * 2 > buckets.Length)
-            {
-                Rehash(BucketCountFor(capacity));
-            }
-        }
-    }
-
-    /// <summary>Map.clear (the arrays are kept for reuse).</summary>
-    internal void Clear()
-    {
-        if (buckets is not null)
-        {
-            if (count * 8 >= buckets.Length)
-            {
-                Array.Clear(buckets);
-            }
-            else
-            {
-                // A large index of a table reused with few entries: free just their slots, the last entry first (with
-                // linear probing and no deletions, the probe path of an entry only crosses slots of earlier entries).
-                var mask = buckets.Length - 1;
-                for (var entry = count - 1; entry >= 0; entry--)
-                {
-                    var slot = Hash(entries[entry].Name) & mask;
-                    while (buckets[slot] != entry + 1)
-                    {
-                        slot = (slot + 1) & mask;
-                    }
-                    buckets[slot] = 0;
-                }
-            }
-        }
-        Array.Clear(entries, 0, count);
-        count = 0;
-    }
-
-    /// <summary>Map.delete: true when the name was present (the entries after it keep their order).</summary>
-    internal bool Delete(string name)
-    {
-        var id = names.Find(name);
-        var i = id < 0 ? -1 : Find(id);
-        if (i < 0)
-        {
-            return false;
-        }
-        Array.Copy(entries, i + 1, entries, i, count - i - 1);
-        count--;
-        entries[count] = default;
-        if (buckets is not null)
-        {
-            if (count <= LinearLimit)
-            {
-                buckets = null;
-            }
-            else
-            {
-                Rehash(buckets.Length);
-            }
-        }
-        return true;
-    }
-
-    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal string NameAt(int i) => names[entries[i].Name];
-
-    /// <summary>The name id of entry <paramref name="i"/>.</summary>
-    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal int NameIdAt(int i) => entries[i].Name;
-
-    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    internal SymbolRef ValueAt(int i) => entries[i].Value;
-
-    // The entry number of the name, -1 when absent.
-    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private int Find(int name)
-    {
-        var b = buckets;
-        var e = entries;
-        if (b is null)
-        {
-            for (var i = 0; i < count; i++)
-            {
-                if (e[i].Name == name)
-                {
-                    return i;
-                }
-            }
-            return -1;
-        }
-        var mask = b.Length - 1;
-        for (var slot = Hash(name) & mask; ; slot = (slot + 1) & mask)
-        {
-            var entry = b[slot];
-            if (entry == 0)
-            {
-                return -1;
-            }
-            if (e[entry - 1].Name == name)
-            {
-                return entry - 1;
-            }
-        }
-    }
-
-    private void Resize(int capacity) => Array.Resize(ref entries, capacity);
-
-    private void Rehash(int bucketCount)
-    {
-        var b = new int[bucketCount];
-        for (var i = 0; i < count; i++)
-        {
-            Insert(b, i);
-        }
-        buckets = b;
-    }
-
-    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private void Insert(int[] b, int entry)
-    {
-        var mask = b.Length - 1;
-        var slot = Hash(entries[entry].Name) & mask;
-        while (b[slot] != 0)
-        {
-            slot = (slot + 1) & mask;
-        }
-        b[slot] = entry + 1;
-    }
-
-    // a power of two with load at most 1/2
-    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private static int BucketCountFor(int capacity) => (int)System.Numerics.BitOperations.RoundUpToPowerOf2((uint)Math.Max(capacity * 2, 32));
-
-    // a mix of the name id for the low bits the index uses
-    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    private static int Hash(int name)
-    {
-        var h = (uint)name * 0x9E3779B1u;
-        h ^= h >> 15;
-        return (int)(h & 0x7FFFFFFF);
-    }
-}
 
 /// <summary>
 /// symbol.declarations of a transient symbol as a reference (module CO2): the declarations array of binder symbol
@@ -1426,8 +1175,12 @@ internal sealed class NameTable
     private readonly Dictionary<string, int> ids = new(StringComparer.Ordinal);
     private string[] names = new string[1024];
     private int count;
+    private SymTableStore? tables;
 
     internal int Count => count;
+
+    /// <summary>The symbol tables of the checker these names belong to (module CO3).</summary>
+    internal SymTableStore Tables => tables ??= new SymTableStore(this);
 
     /// <summary>The name of an id.</summary>
     internal string this[int id]

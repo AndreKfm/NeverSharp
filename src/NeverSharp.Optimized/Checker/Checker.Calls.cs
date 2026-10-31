@@ -2832,9 +2832,9 @@ internal sealed partial class Checker
         {
             var jsSymbol = GetSymbolOfExpando(node, allowDeclaration: false);
             var jsExports = jsSymbol.IsNone ? null : ExportsOf(jsSymbol);
-            if (jsExports is { Count: > 0 })
+            if (jsExports is { Count: > 0 } exportsTable)
             {
-                var jsAssignmentType = CreateAnonymousType(jsSymbol, jsExports);
+                var jsAssignmentType = CreateAnonymousType(jsSymbol, exportsTable);
                 Types.Record(jsAssignmentType).ObjectFlags |= ObjectFlags.JSLiteral;
                 return GetIntersectionType([returnType, jsAssignmentType]);
             }

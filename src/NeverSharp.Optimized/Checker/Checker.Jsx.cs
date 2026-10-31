@@ -332,7 +332,7 @@ internal sealed partial class Checker
     private Type CreateJsxAttributesTypeFromAttributesProperty(NodeRef openingLikeElement, CheckMode checkMode = CheckMode.Normal)
     {
         var store = StoreOf(openingLikeElement);
-        var allAttributesTable = strictNullChecks ? new SymTable(Names) : null;
+        SymTable? allAttributesTable = strictNullChecks ? new SymTable(Names) : null;
         var attributesTable = new SymTable(Names);
         var spread = emptyJsxObjectType;
         var hasSpreadAnyType = false;
@@ -410,9 +410,9 @@ internal sealed partial class Checker
                     if (IsValidSpreadType(exprType))
                     {
                         spread = GetSpreadType(spread, exprType, attributesSymbol, objectFlags, isReadonly: false);
-                        if (allAttributesTable is not null)
+                        if (allAttributesTable is { } allTable)
                         {
-                            CheckSpreadPropOverrides(exprType, allAttributesTable, attributeDecl);
+                            CheckSpreadPropOverrides(exprType, allTable, attributeDecl);
                         }
                     }
                     else
@@ -1442,10 +1442,9 @@ internal sealed partial class Checker
     private Signature CreateSignatureForJSXIntrinsic(NodeRef node, Type result)
     {
         var ns = GetJsxNamespaceAt(node);
-        var exports = ns.IsNone ? null : GetExportsOfSymbol(ns);
         // We fake up a SFC signature for each intrinsic, however a more specific per-element signature drawn from the JSX declaration
         // file would probably be preferable.
-        var typeSymbol = exports is null ? SymbolRef.None : GetSymbol(exports, JsxElement, SymbolFlags.Type);
+        var typeSymbol = ns.IsNone ? SymbolRef.None : GetSymbol(GetExportsOfSymbol(ns), JsxElement, SymbolFlags.Type);
         var parameterSymbol = CreateSymbol(SymbolFlags.FunctionScopedVariable, "props");
         ValueSymbolLinks.Get(parameterSymbol).ResolvedType = result;
         var returnType = typeSymbol.IsNone ? errorType : GetDeclaredTypeOfSymbol(typeSymbol);
@@ -1546,7 +1545,7 @@ internal sealed partial class Checker
             return SymbolRef.None;
         }
         var members = ResolveStructuredTypeMembers(type).Members;
-        if (members is null)
+        if (members.IsNone)
         {
             return SymbolRef.None;
         }

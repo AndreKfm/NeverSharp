@@ -312,7 +312,7 @@ internal sealed partial class Checker
         var inDestructuringPattern = Utilities.IsAssignmentTarget(store, n);
         // Grammar checking
         CheckGrammarObjectLiteralExpression(node, inDestructuringPattern);
-        var allPropertiesTable = strictNullChecks ? new SymTable(Names) : null;
+        SymTable? allPropertiesTable = strictNullChecks ? new SymTable(Names) : null;
         var propertiesTable = new SymTable(Names);
         var propertiesArray = new List<SymbolRef>();
         var spread = emptyObjectType;
@@ -451,9 +451,9 @@ internal sealed partial class Checker
                 if (IsValidSpreadType(type))
                 {
                     var mergedType = TryMergeUnionOfObjectTypeAndEmptyObject(type, inConstContext);
-                    if (allPropertiesTable is not null)
+                    if (allPropertiesTable is { } allTable)
                     {
-                        CheckSpreadPropOverrides(mergedType, allPropertiesTable, memberDecl);
+                        CheckSpreadPropOverrides(mergedType, allTable, memberDecl);
                     }
                     offset = propertiesArray.Count;
                     if (IsErrorType(spread))

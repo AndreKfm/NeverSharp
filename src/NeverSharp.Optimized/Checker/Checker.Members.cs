@@ -2373,20 +2373,18 @@ internal sealed partial class Checker
         }
         var inferred = target.IsTransient ? target : CloneSymbol(target);
         ref var record = ref TransientSymbols.Record(inferred);
-        record.Exports ??= new SymTable(Names);
-        record.Members ??= new SymTable(Names);
+        var exports = SymTable.OrNew(ref record.Exports, Names);
+        var members = SymTable.OrNew(ref record.Members, Names);
         record.Flags |= SymbolFlagsOf(source) & SymbolFlags.Class;
-        var exports = record.Exports;
-        var members = record.Members;
         var sourceExports = ExportsOf(source);
-        if (sourceExports is { Count: > 0 })
+        if (sourceExports is { Count: > 0 } sourceExportsTable)
         {
-            MergeSymbolTable(exports, sourceExports);
+            MergeSymbolTable(exports, sourceExportsTable);
         }
         var sourceMembers = MembersOf(source);
-        if (sourceMembers is { Count: > 0 })
+        if (sourceMembers is { Count: > 0 } sourceMembersTable)
         {
-            MergeSymbolTable(members, sourceMembers);
+            MergeSymbolTable(members, sourceMembersTable);
         }
         inferredClassSymbols[(source, inferred)] = inferred;
         return inferred;
@@ -2628,17 +2626,17 @@ internal sealed partial class Checker
         {
             var s = GetSymbolOfNode(At(decl, d));
             var sExports = s.IsNone ? null : ExportsOf(s);
-            if (sExports is { Count: > 0 })
+            if (sExports is { Count: > 0 } sExportsTable)
             {
-                MergeSymbolTable(exports, sExports);
+                MergeSymbolTable(exports, sExportsTable);
             }
             d = store.Kind(d) == SyntaxKind.BinaryExpression ? store.Parent(d) : store.Parent(store.Parent(d));
         }
         var last = GetSymbolOfNode(At(decl, d));
         var lastExports = last.IsNone ? null : ExportsOf(last);
-        if (lastExports is { Count: > 0 })
+        if (lastExports is { Count: > 0 } lastExportsTable)
         {
-            MergeSymbolTable(exports, lastExports);
+            MergeSymbolTable(exports, lastExportsTable);
         }
         var type = CreateAnonymousType(symbol, exports);
         Types.Record(type).ObjectFlags |= ObjectFlags.JSLiteral;
@@ -2748,7 +2746,7 @@ internal sealed partial class Checker
             var exportedType = ResolveStructuredTypeMembers(type);
             var members = new SymTable(Names);
             var exportedMembers = exportedType.Members;
-            if (exportedMembers is not null)
+            if (!exportedMembers.IsNone)
             {
                 for (var i = 0; i < exportedMembers.Count; i++)
                 {

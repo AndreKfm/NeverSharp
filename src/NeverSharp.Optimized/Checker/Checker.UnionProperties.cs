@@ -377,7 +377,7 @@ internal sealed partial class Checker
     private SymbolRef GetUnionOrIntersectionProperty(Type type, int name, bool skipObjectFunctionPropertyAugment)
     {
         var cache = skipObjectFunctionPropertyAugment ? Types.Union(type).PropertyCacheWithoutObjectFunctionPropertyAugment : Types.Union(type).PropertyCache;
-        var property = cache?.Get(name) ?? SymbolRef.None;
+        var property = cache.IsNone ? SymbolRef.None : cache.Get(name);
         if (property.IsNone)
         {
             property = CreateUnionOrIntersectionProperty(type, name, skipObjectFunctionPropertyAugment);
@@ -387,20 +387,20 @@ internal sealed partial class Checker
                 ref var data = ref Types.Union(type);
                 if (skipObjectFunctionPropertyAugment)
                 {
-                    (data.PropertyCacheWithoutObjectFunctionPropertyAugment ??= new SymTable(Names)).Set(name, property);
+                    SymTable.OrNew(ref data.PropertyCacheWithoutObjectFunctionPropertyAugment, Names).Set(name, property);
                     // Propagate an entry from the non-augmented cache to the augmented cache unless the property is partial.
                     if ((GetCheckFlags(property) & CheckFlags.Partial) == 0)
                     {
-                        data.PropertyCache ??= new SymTable(Names);
-                        if (!data.PropertyCache.Has(name))
+                        var propertyCache = SymTable.OrNew(ref data.PropertyCache, Names);
+                        if (!propertyCache.Has(name))
                         {
-                            data.PropertyCache.Set(name, property);
+                            propertyCache.Set(name, property);
                         }
                     }
                 }
                 else
                 {
-                    (data.PropertyCache ??= new SymTable(Names)).Set(name, property);
+                    SymTable.OrNew(ref data.PropertyCache, Names).Set(name, property);
                 }
             }
         }
@@ -450,10 +450,10 @@ internal sealed partial class Checker
                 // the same as none)
                 members.EnsureCapacity(properties.Count);
                 ref var data = ref Types.Union(type);
-                (data.PropertyCache ??= new SymTable(Names, properties.Count)).EnsureCapacity(properties.Count);
+                SymTable.OrNew(ref data.PropertyCache, Names).EnsureCapacity(properties.Count);
                 if (isIntersection)
                 {
-                    (data.PropertyCacheWithoutObjectFunctionPropertyAugment ??= new SymTable(Names, properties.Count)).EnsureCapacity(properties.Count);
+                    SymTable.OrNew(ref data.PropertyCacheWithoutObjectFunctionPropertyAugment, Names).EnsureCapacity(properties.Count);
                 }
             }
             foreach (var prop in properties)

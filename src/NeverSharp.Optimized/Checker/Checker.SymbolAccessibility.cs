@@ -61,9 +61,9 @@ internal sealed partial class Checker
             if (Utilities.CanHaveLocals(store, n) && !IsGlobalSourceFile(location))
             {
                 var locals = LocalsOf(location);
-                if (locals is not null)
+                if (locals is { } localsTable)
                 {
-                    var result = callback(locals, false, true);
+                    var result = callback(localsTable, false, true);
                     if (result is not null)
                     {
                         return result;
@@ -107,9 +107,9 @@ internal sealed partial class Checker
                             }
                         }
                     }
-                    if (table is not null)
+                    if (table is { } typeTable)
                     {
-                        var result = callback(table, false, false);
+                        var result = callback(typeTable, false, false);
                         if (result is not null)
                         {
                             return result;
@@ -212,7 +212,7 @@ internal sealed partial class Checker
                 }
             }
             // If there's no result and we're looking at the global symbol table, treat `globalThis` like an alias and try to lookup thru that
-            return ReferenceEquals(symbols, globals) ? GetCandidateListForSymbol(globalThisSymbol, globalThisSymbol, ignoreQualification) : null;
+            return symbols == globals ?GetCandidateListForSymbol(globalThisSymbol, globalThisSymbol, ignoreQualification) : null;
         }
 
         List<SymbolRef>? GetCandidateListForSymbol(SymbolRef symbolFromSymbolTable, SymbolRef resolvedImportedSymbol, bool ignoreQualification)

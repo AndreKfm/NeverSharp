@@ -159,7 +159,7 @@ internal sealed partial class Checker
     {
         if (symbol.IsTransient)
         {
-            return TransientSymbols.Record(symbol).Members;
+            return TransientSymbols.Record(symbol).Members.OrNull;
         }
         var table = BindingOf(symbol.File).Members(symbol.BinderSymbol);
         return table.IsNone ? null : TableOf(symbol.File, table);
@@ -170,7 +170,7 @@ internal sealed partial class Checker
     {
         if (symbol.IsTransient)
         {
-            return TransientSymbols.Record(symbol).Exports;
+            return TransientSymbols.Record(symbol).Exports.OrNull;
         }
         var table = BindingOf(symbol.File).Exports(symbol.BinderSymbol);
         return table.IsNone ? null : TableOf(symbol.File, table);
@@ -359,16 +359,16 @@ internal sealed partial class Checker
                 AddDeclarations(target, sourceDeclarations);
             }
             var sourceMembers = MembersOf(source);
-            if (sourceMembers is not null)
+            if (sourceMembers is { } sourceMembersTable)
             {
-                var targetMembers = TransientSymbols.Record(target).Members ??= new SymTable(Names);
-                MergeSymbolTable(targetMembers, sourceMembers, unidirectional);
+                var targetMembers = SymTable.OrNew(ref TransientSymbols.Record(target).Members, Names);
+                MergeSymbolTable(targetMembers, sourceMembersTable, unidirectional);
             }
             var sourceExports = ExportsOf(source);
-            if (sourceExports is not null)
+            if (sourceExports is { } sourceExportsTable)
             {
-                var targetExports = TransientSymbols.Record(target).Exports ??= new SymTable(Names);
-                MergeSymbolTable(targetExports, sourceExports, unidirectional, target);
+                var targetExports = SymTable.OrNew(ref TransientSymbols.Record(target).Exports, Names);
+                MergeSymbolTable(targetExports, sourceExportsTable, unidirectional, target);
             }
             if (!unidirectional)
             {
@@ -987,8 +987,7 @@ internal sealed partial class Checker
         var merged = exported.IsTransient ? exported : CloneSymbol(exported);
         ref var record = ref TransientSymbols.Record(merged);
         record.Flags |= SymbolFlags.ValueModule;
-        record.Exports ??= new SymTable(Names);
-        var mergedExports = record.Exports;
+        var mergedExports = SymTable.OrNew(ref record.Exports, Names);
         var moduleExports = ExportsOf(moduleSymbol)!;
         for (var i = 0; i < moduleExports.Count; i++)
         {
