@@ -1557,21 +1557,28 @@ internal static partial class Utilities
             return ModifierFlags.None;
         }
 
-        if ((store.ModifierFlagsCache(node) & ModifierFlags.HasComputedFlags) == 0)
+        // node.modifierFlagsCache: while a checker runs on this thread the file's store is shared with the other checkers
+        // of the program and is not written (a new side entry can grow the store's side table under a concurrent reader,
+        // as b42ecc2's jsDoc lists); the flags are a function of the node's syntax, so they are computed again instead.
+        var cached = store.ModifierFlagsCache(node);
+        var flags = cached;
+        if ((flags & ModifierFlags.HasComputedFlags) == 0)
         {
-            store.SetModifierFlagsCache(node, GetSyntacticModifierFlagsNoCache(store, node) | ModifierFlags.HasComputedFlags);
+            flags = GetSyntacticModifierFlagsNoCache(store, node) | ModifierFlags.HasComputedFlags;
         }
 
-        if (alwaysIncludeJSDoc == true || includeJSDoc && IsInJSFile(store, node))
+        var effective = alwaysIncludeJSDoc == true || includeJSDoc && IsInJSFile(store, node);
+        if (effective && (flags & ModifierFlags.HasComputedJSDocModifiers) == 0 && !store.Parent(node).IsNone)
         {
-            if ((store.ModifierFlagsCache(node) & ModifierFlags.HasComputedJSDocModifiers) == 0 && !store.Parent(node).IsNone)
-            {
-                store.SetModifierFlagsCache(node, store.ModifierFlagsCache(node) | (GetRawJSDocModifierFlagsNoCache(store, node) | ModifierFlags.HasComputedJSDocModifiers));
-            }
-            return SelectEffectiveModifierFlags(store.ModifierFlagsCache(node));
+            flags |= GetRawJSDocModifierFlagsNoCache(store, node) | ModifierFlags.HasComputedJSDocModifiers;
         }
 
-        return SelectSyntacticModifierFlags(store.ModifierFlagsCache(node));
+        if (flags != cached && UtilitiesPublic.CheckerEmptyJsDocLists is null)
+        {
+            store.SetModifierFlagsCache(node, flags);
+        }
+
+        return effective ? SelectEffectiveModifierFlags(flags) : SelectSyntacticModifierFlags(flags);
     }
 
     /// <summary>
