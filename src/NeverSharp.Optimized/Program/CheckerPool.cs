@@ -8,7 +8,8 @@
 // Modified: translated from Go to C#; module C10 (the check driver). No tracing, no project-system pools, no locks
 // (each checker is used by one work item at a time by construction). Ported: newCheckerPoolWithTracing, createCheckers,
 // forEachCheckerGroupDo, GetGlobalDiagnostics; program.go GetSemanticDiagnostics with no file, GetGlobalDiagnostics.
-// Module CO4: each work item creates its own checker (no wait for the other checkers' construction).
+// Module CO4: each work item creates its own checker (no wait for the other checkers' construction), and the program's
+// imports are resolved before binding (in parallel unless single-threaded).
 
 namespace NeverSharp.Optimized;
 
@@ -33,6 +34,9 @@ internal sealed class CheckerPool
         checkerCount = Math.Max(Math.Min(Math.Min(checkerCount, program.SourceFiles.Count), 256), 1);
         checkers = new Checker?[checkerCount];
 
+        // The imports of the program's files (module CO4: resolved after the program's walk, parallel unless
+        // single-threaded), before the files are bound, as in the walk, and before any checker reads them.
+        program.ResolveImportedModules(singleThreaded);
         // checker.NewChecker calls program.BindSourceFiles (parallel unless single-threaded) before anything else.
         program.BindSourceFiles(singleThreaded);
 

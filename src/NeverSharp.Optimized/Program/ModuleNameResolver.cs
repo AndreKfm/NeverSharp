@@ -54,13 +54,14 @@ internal sealed class ResolvedModuleFull
 
 /// <summary>
 /// moduleNameResolver.ts createModuleResolutionCache: the per-directory resolution cache and the package.json info cache
-/// of one program (createProgram creates one when the host has no resolveModuleNames). Not thread-safe: the program
-/// resolves while it is built, on one thread.
+/// of one program (createProgram creates one when the host has no resolveModuleNames). Safe for concurrent use (module
+/// CO4: the program resolves its files' imports in parallel): an entry is the same whichever file computes it first, so a
+/// race only computes an entry twice.
 /// </summary>
 internal sealed class ModuleResolutionCache
 {
-    private readonly Dictionary<(string Directory, string Name, ModuleKind? Mode), ResolvedModuleFull?> directoryCache = [];
-    private readonly Dictionary<string, PackageJsonInfoCacheEntry> packageJsonInfoCache = new(StringComparer.Ordinal);
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<(string Directory, string Name, ModuleKind? Mode), ResolvedModuleFull?> directoryCache = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, PackageJsonInfoCacheEntry> packageJsonInfoCache = new(StringComparer.Ordinal);
     private readonly string currentDirectory;
     private readonly Func<string, string> getCanonicalFileName;
 

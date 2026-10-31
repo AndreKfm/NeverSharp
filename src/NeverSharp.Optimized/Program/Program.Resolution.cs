@@ -34,18 +34,80 @@ internal sealed partial class Program
     internal ResolvedModuleFull? GetResolvedModule(SourceFile file, string moduleName, ModuleKind? mode) =>
         resolvedModules.TryGetValue(file, out var resolutions) && resolutions.TryGetValue((moduleName, mode), out var resolved) ? resolved : null;
 
-    /// <summary>program.ts processImportedModules (noResolve: the resolved files are recorded, never added).</summary>
-    private void ProcessImportedModules(SourceFile file)
+    // The files whose imports processImportedModules records, in the order the program found them (module CO4: resolved
+    // by ResolveImportedModules once the program's files are known).
+    private readonly List<SourceFile> importedModuleFiles = [];
+    private bool importedModulesResolved;
+
+    /// <summary>
+    /// program.ts processImportedModules for every file of the program (noResolve: the resolutions are recorded, no
+    /// resolved file is added, so the program's files and their order do not depend on them). Module CO4: run once the
+    /// program's files are known, before anything reads the resolutions (the checker pool before binding; a checker's
+    /// constructor otherwise), instead of inside the walk over the files. The files are independent: each writes only
+    /// its own parents (before it is bound) and its own entries, and the resolution cache and the host are safe for
+    /// concurrent use; so unless <paramref name="singleThreaded"/> each file is a work item of its own, as
+    /// typescript-go's file loader resolves each file's imports in the file's task. Recorded in the program's file
+    /// order either way; a second call does nothing.
+    /// </summary>
+    internal void ResolveImportedModules(bool singleThreaded)
+    {
+        if (importedModulesResolved)
+        {
+            return;
+        }
+        importedModulesResolved = true;
+        var files = importedModuleFiles;
+        var results = new ImportedModules[files.Count];
+        if (singleThreaded || files.Count < 2)
+        {
+            for (var i = 0; i < files.Count; i++)
+            {
+                results[i] = CollectImportedModules(files[i]);
+            }
+        }
+        else
+        {
+            var tasks = new Task[files.Count];
+            for (var i = 0; i < files.Count; i++)
+            {
+                var index = i;
+                tasks[i] = Task.Run(() => results[index] = CollectImportedModules(files[index]));
+            }
+            Task.WaitAll(tasks);
+        }
+        for (var i = 0; i < files.Count; i++)
+        {
+            var file = files[i];
+            var result = results[i];
+            if (result.Imports.Count > 0)
+            {
+                fileImports[file] = result.Imports;
+            }
+            if (result.Resolutions is not null)
+            {
+                resolvedModules[file] = result.Resolutions;
+            }
+            if (result.SyntheticJsxImport is { } syntheticJsxImport)
+            {
+                syntheticJsxImports[file] = syntheticJsxImport;
+            }
+        }
+    }
+
+    // What processImportedModules records for one file.
+    private readonly record struct ImportedModules(
+        List<Node> Imports,
+        Dictionary<(string Name, ModuleKind? Mode), ResolvedModuleFull?>? Resolutions,
+        (string Text, ModuleKind? Mode)? SyntheticJsxImport);
+
+    /// <summary>program.ts processImportedModules for one file: its imports and their resolutions (no resolved file is added).</summary>
+    private ImportedModules CollectImportedModules(SourceFile file)
     {
         var (imports, moduleAugmentations) = CollectExternalModuleReferences(file);
-        if (imports.Count > 0)
-        {
-            fileImports[file] = imports;
-        }
         var syntheticJsxImport = GetSyntheticJsxImportText(file, options);
         if (imports.Count == 0 && moduleAugmentations.Count == 0 && syntheticJsxImport is null)
         {
-            return;
+            return new ImportedModules(imports, null, null);
         }
         // Because global augmentation doesn't have string literal name, we can check for global augmentation as such.
         var moduleNames = GetModuleNames(file.Store, imports, moduleAugmentations);
@@ -53,13 +115,13 @@ internal sealed partial class Program
         // resolveModuleNamesWorker: the containing file's name made absolute
         var containingFileName = TsPath.GetNormalizedAbsolutePath(store.FileName(file.Root), currentDirectory);
         var resolutionsInFile = new Dictionary<(string Name, ModuleKind? Mode), ResolvedModuleFull?>();
-        resolvedModules[file] = resolutionsInFile;
+        (string Text, ModuleKind? Mode)? synthetic = null;
         if (syntheticJsxImport is not null)
         {
             // the synthesized `import "<base>/jsx-runtime"` (createSyntheticImport, the first import): its specifier's mode
             // is getModeForUsageLocation of a string literal whose parent is an import declaration of the file
             var mode = ImportSyntaxAffectsModuleResolution(options) ? GetEmitSyntaxOfFile(file, options) : null;
-            syntheticJsxImports[file] = (syntheticJsxImport, mode);
+            synthetic = (syntheticJsxImport, mode);
             resolutionsInFile[(syntheticJsxImport, mode)] = ModuleNameResolver.ResolveModuleName(syntheticJsxImport, containingFileName, options, host, moduleResolutionCache, mode);
         }
         foreach (var moduleNameNode in moduleNames)
@@ -73,6 +135,7 @@ internal sealed partial class Program
             // (addResolutionDiagnosticsFromResolutionOrCache: the ported resolution produces no resolution diagnostics.)
             // (noResolve: no resolved file is added to the program.)
         }
+        return new ImportedModules(imports, resolutionsInFile, synthetic);
     }
 
     // sourceFile.imports without the synthesized JSX runtime import (kept by the program; the file stores are not written)

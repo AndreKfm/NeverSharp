@@ -551,8 +551,8 @@ internal sealed partial class Program
         {
             ProcessLibReferenceDirectives(file);
         }
-        // always process imported modules to record module name resolutions
-        ProcessImportedModules(file);
+        // always process imported modules to record module name resolutions (module CO4: after the walk, ResolveImportedModules)
+        importedModuleFiles.Add(file);
         if (isDefaultLib)
         {
             processingDefaultLibFiles!.Add(file);

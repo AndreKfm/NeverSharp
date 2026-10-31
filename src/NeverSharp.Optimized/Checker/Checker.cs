@@ -55,6 +55,9 @@ internal sealed partial class Checker
         {
             fileIndex[files[i]] = i + 1;
         }
+        // The program's module resolutions, if no checker pool has resolved them yet (module CO4: the program resolves
+        // its files' imports after its walk, before they are bound)
+        program.ResolveImportedModules(singleThreaded: true);
         // (initializeTypeChecker binds the files; done first here, as the per-symbol tables are laid out by the files'
         // symbol counts)
         foreach (var file in files)
