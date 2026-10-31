@@ -898,12 +898,12 @@ internal sealed partial class Checker
             data.DeclaredMembersResolved = true;
             data.DeclaredProperties = GetNamedMembers(members);
             // Start with signatures at empty array in case of recursive types
-            data.DeclaredCallSignatures = [];
-            data.DeclaredConstructSignatures = [];
-            data.DeclaredIndexInfos = [];
-            data.DeclaredCallSignatures = GetSignaturesOfSymbol(members.Get(InternalSymbolName.Call));
-            data.DeclaredConstructSignatures = GetSignaturesOfSymbol(members.Get(InternalSymbolName.New));
-            data.DeclaredIndexInfos = GetIndexInfosOfSymbol(symbol);
+            data.DeclaredCallSignatures = default;
+            data.DeclaredConstructSignatures = default;
+            data.DeclaredIndexInfos = default;
+            data.DeclaredCallSignatures = Types.Store(GetSignaturesOfSymbol(members.Get(InternalSymbolName.Call)));
+            data.DeclaredConstructSignatures = Types.Store(GetSignaturesOfSymbol(members.Get(InternalSymbolName.New)));
+            data.DeclaredIndexInfos = Types.Store(GetIndexInfosOfSymbol(symbol));
         }
         return data;
     }
@@ -938,14 +938,14 @@ internal sealed partial class Checker
             }
             else
             {
-                SetStructuredTypeMembers(type, emptySymbols, null, null, null);
+                SetStructuredTypeMembers(type, emptySymbols, default, default, default);
             }
         }
         return data;
     }
 
     // checker.ts addInheritedMembers
-    private void AddInheritedMembers(SymTable symbols, List<SymbolRef> baseSymbols)
+    private void AddInheritedMembers(SymTable symbols, Items<SymbolRef> baseSymbols)
     {
         symbols.EnsureCapacity(symbols.Count + baseSymbols.Count);
         foreach (var b in baseSymbols)
@@ -1002,7 +1002,7 @@ internal sealed partial class Checker
         var typeData = Types.Object(type);
         if (!typeData.Target.IsNone)
         {
-            SetStructuredTypeMembers(type, emptySymbols, null, null, null);
+            SetStructuredTypeMembers(type, emptySymbols, default, default, default);
             var mapper = typeData.Mapper!;
             var instantiatedMembers = CreateInstantiatedSymbolTable(GetPropertiesOfObjectType(typeData.Target), mapper, mappingThisOnly: false);
             var instantiatedCallSignatures = InstantiateSignatures(GetSignaturesOfType(typeData.Target, SignatureKind.Call), mapper);
@@ -1014,13 +1014,13 @@ internal sealed partial class Checker
         var symbol = GetMergedSymbol(Types.Symbol(type));
         if (symbol.IsNone)
         {
-            SetStructuredTypeMembers(type, emptySymbols, null, null, null);
+            SetStructuredTypeMembers(type, emptySymbols, default, default, default);
             return;
         }
         var flags = SymbolFlagsOf(symbol);
         if ((flags & SymbolFlags.TypeLiteral) != 0)
         {
-            SetStructuredTypeMembers(type, emptySymbols, null, null, null);
+            SetStructuredTypeMembers(type, emptySymbols, default, default, default);
             var members = GetMembersOfSymbol(symbol);
             var callSignatures = GetSignaturesOfSymbol(members.Get(InternalSymbolName.Call));
             var constructSignatures = GetSignaturesOfSymbol(members.Get(InternalSymbolName.New));
@@ -1046,7 +1046,7 @@ internal sealed partial class Checker
             }
             exports = varsOnly;
         }
-        SetStructuredTypeMembers(type, exports, null, null, null);
+        SetStructuredTypeMembers(type, exports, default, default, default);
         IndexInfo? baseConstructorIndexInfo = null;
         if ((flags & SymbolFlags.Class) != 0)
         {
@@ -1085,20 +1085,20 @@ internal sealed partial class Checker
         }
         else if (baseConstructorIndexInfo is not null)
         {
-            anonymousIndexInfos = [baseConstructorIndexInfo];
+            anonymousIndexInfos = [baseConstructorIndexInfo.Value];
         }
         if (!hasIndexSymbol && (flags & SymbolFlags.Enum) != 0 && ((Types.Flags(GetDeclaredTypeOfSymbol(symbol)) & TypeFlags.Enum) != 0 || HasNumberLikeProperty(exports)))
         {
             (anonymousIndexInfos ??= []).Add(enumNumberIndexInfo ??= new IndexInfo { KeyType = numberType, Type = stringType, IsReadonly = true });
         }
-        SetStructuredTypeMembers(type, exports, null, null, anonymousIndexInfos);
+        SetStructuredTypeMembers(type, exports, default, default, anonymousIndexInfos is null ? default : Types.Keep(anonymousIndexInfos));
         var data = Types.Object(type);
         // We resolve the members before computing the signatures because a signature may use
         // typeof with a qualified name expression that circularly references the type we are
         // in the process of resolving (see issue #6072).
         if ((flags & (SymbolFlags.Function | SymbolFlags.Method)) != 0)
         {
-            data.CallSignatures = GetSignaturesOfSymbol(symbol);
+            data.CallSignatures = Types.Store(GetSignaturesOfSymbol(symbol));
         }
         // And likewise for construct signatures for classes
         if ((flags & SymbolFlags.Class) != 0)
@@ -1109,7 +1109,7 @@ internal sealed partial class Checker
             if ((flags & SymbolFlags.Function) != 0)
             {
                 constructSignatures = [.. constructSignatures];
-                foreach (var sig in data.CallSignatures!)
+                foreach (var sig in Types.View(data.CallSignatures))
                 {
                     var declaration = Signatures.Record(sig).Declaration;
                     if (!IsJSConstructor(declaration))
@@ -1128,7 +1128,7 @@ internal sealed partial class Checker
             {
                 constructSignatures = GetDefaultConstructSignatures(classType);
             }
-            data.ConstructSignatures = constructSignatures;
+            data.ConstructSignatures = Types.Store(constructSignatures);
         }
     }
 
@@ -1313,8 +1313,8 @@ internal sealed partial class Checker
     }
 
     /// <summary>checker.ts getPropertiesOfObjectType.</summary>
-    internal List<SymbolRef> GetPropertiesOfObjectType(Type type) =>
-        (Types.Flags(type) & TypeFlags.Object) != 0 ? ResolveStructuredTypeMembers(type).Properties! : [];
+    internal Items<SymbolRef> GetPropertiesOfObjectType(Type type) =>
+        (Types.Flags(type) & TypeFlags.Object) != 0 ? Types.View(ResolveStructuredTypeMembers(type).Properties) : default;
 
     /// <summary>checker.ts getPropertyOfObjectType.</summary>
     internal SymbolRef GetPropertyOfObjectType(Type type, string name)
@@ -1339,7 +1339,7 @@ internal sealed partial class Checker
     }
 
     /// <summary>checker.ts getPropertiesOfType (unions and intersections: the members common to the constituents).</summary>
-    internal List<SymbolRef> GetPropertiesOfType(Type type)
+    internal Items<SymbolRef> GetPropertiesOfType(Type type)
     {
         type = GetReducedApparentType(type);
         return (Types.Flags(type) & TypeFlags.UnionOrIntersection) != 0 ? GetPropertiesOfUnionOrIntersectionType(type) : GetPropertiesOfObjectType(type);
@@ -1398,8 +1398,8 @@ internal sealed partial class Checker
                 return SymbolRef.None;
             }
             var functionType = type == anyFunctionType ? globalFunctionType
-                : resolved.CallSignatures!.Count > 0 ? globalCallableFunctionType
-                : resolved.ConstructSignatures!.Count > 0 ? globalNewableFunctionType
+                : resolved.CallSignatures.Count > 0 ? globalCallableFunctionType
+                : resolved.ConstructSignatures.Count > 0 ? globalNewableFunctionType
                 : Type.None;
             if (!functionType.IsNone)
             {
@@ -1434,14 +1434,14 @@ internal sealed partial class Checker
     // (getPropertyOfUnionOrIntersectionType / createUnionOrIntersectionProperty: Checker.UnionProperties.cs, module C4)
 
     /// <summary>checker.ts getSignaturesOfType.</summary>
-    internal List<Signature> GetSignaturesOfType(Type type, SignatureKind kind)
+    internal Items<Signature> GetSignaturesOfType(Type type, SignatureKind kind)
     {
         var result = GetSignaturesOfStructuredType(GetReducedApparentType(type), kind);
         if (kind == SignatureKind.Call && result.Count == 0 && (Types.Flags(type) & TypeFlags.Union) != 0)
         {
             if (arrayFallbackSignatures.TryGetValue(type, out var fallback))
             {
-                return fallback;
+                return Types.View(fallback);
             }
             // If the union is all different instantiations of a member of the global array type...
             string? memberName = null;
@@ -1466,32 +1466,33 @@ internal sealed partial class Checker
                     Types.Object(t).Mapper ?? throw new InvalidOperationException("array member type without a mapper")));
                 var arrayType = CreateArrayType(arrayArg, SomeType(type, t => IsReadonlyArraySymbol(ParentOf(Types.Symbol(t)))));
                 var signatures = GetSignaturesOfType(GetTypeOfPropertyOfType(arrayType, memberName!), kind);
-                arrayFallbackSignatures[type] = signatures;
-                return signatures;
+                var stored = Types.Store(signatures);
+                arrayFallbackSignatures[type] = stored;
+                return Types.View(stored);
             }
-            arrayFallbackSignatures[type] = result;
+            arrayFallbackSignatures[type] = Types.Store(result);
         }
         return result;
     }
 
     // checker.ts UnionType.arrayFallbackSignatures
-    private readonly Dictionary<Type, List<Signature>> arrayFallbackSignatures = [];
+    private readonly Dictionary<Type, ItemRange<Signature>> arrayFallbackSignatures = [];
 
     // checker.ts getSignaturesOfStructuredType
-    internal List<Signature> GetSignaturesOfStructuredType(Type type, SignatureKind kind)
+    internal Items<Signature> GetSignaturesOfStructuredType(Type type, SignatureKind kind)
     {
         if ((Types.Flags(type) & TypeFlags.Object) != 0)
         {
             var resolved = ResolveStructuredTypeMembers(type);
-            return kind == SignatureKind.Call ? resolved.CallSignatures! : resolved.ConstructSignatures!;
+            return Types.View(kind == SignatureKind.Call ? resolved.CallSignatures : resolved.ConstructSignatures);
         }
         if ((Types.Flags(type) & TypeFlags.UnionOrIntersection) != 0)
         {
             // resolveUnionTypeMembers / resolveIntersectionTypeMembers (module C5)
             var resolved = ResolveUnionOrIntersectionTypeMembers(type);
-            return kind == SignatureKind.Call ? resolved.CallSignatures! : resolved.ConstructSignatures!;
+            return Types.View(kind == SignatureKind.Call ? resolved.CallSignatures : resolved.ConstructSignatures);
         }
-        return [];
+        return default;
     }
 
     // checker.ts isArrayOrTupleSymbol
@@ -1515,13 +1516,13 @@ internal sealed partial class Checker
     }
 
     /// <summary>checker.ts getIndexInfosOfType.</summary>
-    internal List<IndexInfo> GetIndexInfosOfType(Type type)
+    internal Items<IndexInfo> GetIndexInfosOfType(Type type)
     {
         // getIndexInfosOfStructuredType(getReducedApparentType(type)): an intersection reduced to never has none
         type = GetReducedApparentType(type);
-        return (Types.Flags(type) & TypeFlags.Object) != 0 ? ResolveStructuredTypeMembers(type).IndexInfos!
-            : (Types.Flags(type) & TypeFlags.UnionOrIntersection) != 0 ? ResolveUnionOrIntersectionTypeMembers(type).IndexInfos!
-            : [];
+        return (Types.Flags(type) & TypeFlags.Object) != 0 ? Types.View(ResolveStructuredTypeMembers(type).IndexInfos)
+            : (Types.Flags(type) & TypeFlags.UnionOrIntersection) != 0 ? Types.View(ResolveUnionOrIntersectionTypeMembers(type).IndexInfos)
+            : default;
     }
 
     /// <summary>checker.ts getIndexInfosOfSymbol.</summary>
@@ -2797,7 +2798,7 @@ internal sealed partial class Checker
                 }
             }
             var result = CreateAnonymousType(initialSize != members.Count ? SymbolRef.None : Types.Symbol(type), // Only set the type's symbol if it looks to be the same as the original type
-                members, exportedType.CallSignatures, exportedType.ConstructSignatures, exportedType.IndexInfos);
+                members, Types.View(exportedType.CallSignatures), Types.View(exportedType.ConstructSignatures), Types.View(exportedType.IndexInfos));
             if (initialSize == members.Count)
             {
                 if (!Types.Record(type).AliasSymbol.IsNone)

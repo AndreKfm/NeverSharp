@@ -432,15 +432,15 @@ internal sealed partial class Checker
         if ((Types.Flags(type) & TypeFlags.Object) != 0)
         {
             var resolved = ResolveStructuredTypeMembers(type);
-            if (allowMembers || (resolved.Properties!.Count == 0 && resolved.IndexInfos!.Count == 0))
+            if (allowMembers || (resolved.Properties.Count == 0 && resolved.IndexInfos.Count == 0))
             {
-                if (kind == SignatureKind.Call && resolved.CallSignatures!.Count == 1 && resolved.ConstructSignatures!.Count == 0)
+                if (kind == SignatureKind.Call && resolved.CallSignatures.Count == 1 && resolved.ConstructSignatures.Count == 0)
                 {
-                    return resolved.CallSignatures[0];
+                    return Types.View(resolved.CallSignatures)[0];
                 }
-                if (kind == SignatureKind.Construct && resolved.ConstructSignatures!.Count == 1 && resolved.CallSignatures!.Count == 0)
+                if (kind == SignatureKind.Construct && resolved.ConstructSignatures.Count == 1 && resolved.CallSignatures.Count == 0)
                 {
-                    return resolved.ConstructSignatures[0];
+                    return Types.View(resolved.ConstructSignatures)[0];
                 }
             }
         }

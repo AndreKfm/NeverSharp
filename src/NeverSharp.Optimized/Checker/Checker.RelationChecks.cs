@@ -93,7 +93,7 @@ internal sealed partial class Checker
             return true;
         }
         var seen = new Dictionary<string, (SymbolRef Prop, Type ContainingType)>(StringComparer.Ordinal);
-        foreach (var p in ResolveDeclaredMembers(type).DeclaredProperties ?? [])
+        foreach (var p in Types.View(ResolveDeclaredMembers(type).DeclaredProperties))
         {
             seen[NameOf(p)] = (p, type);
         }

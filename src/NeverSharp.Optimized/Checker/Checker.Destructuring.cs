@@ -684,7 +684,7 @@ internal sealed partial class Checker
             ValueSymbolLinks.Get(symbol).ResolvedType = elementType;
             members.Set(text, symbol);
         }
-        var result = CreateAnonymousType(SymbolRef.None, members, [], [], stringIndexInfo is not null ? [stringIndexInfo] : []);
+        var result = CreateAnonymousType(SymbolRef.None, members, [], [], stringIndexInfo is { } info ? [info] : []);
         Types.Record(result).ObjectFlags |= objectFlags;
         if (includePatternInType)
         {

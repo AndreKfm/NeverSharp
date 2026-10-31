@@ -524,8 +524,8 @@ internal sealed partial class Checker
                     {
                         var indexed = GetTypeFromTypeNode(At(node, store.Element(typeArgs, 0)));
                         var target = GetTypeFromTypeNode(At(node, store.Element(typeArgs, 1)));
-                        var indexInfo = indexed == stringType || indexed == numberType ? new List<IndexInfo> { new IndexInfo { KeyType = indexed, Type = target, IsReadonly = false } } : null;
-                        return CreateAnonymousType(SymbolRef.None, emptySymbols, null, null, indexInfo);
+                        Items<IndexInfo> indexInfo = indexed == stringType || indexed == numberType ? [new IndexInfo { KeyType = indexed, Type = target, IsReadonly = false }] : default;
+                        return CreateAnonymousType(SymbolRef.None, emptySymbols, default, default, indexInfo);
                     }
                     return anyType;
                 }

@@ -1063,8 +1063,8 @@ internal sealed partial class Checker
         if ((flags & TypeFlags.Object) != 0)
         {
             var resolved = ResolveStructuredTypeMembers(type);
-            return resolved.CallSignatures!.Count == 0 && resolved.ConstructSignatures!.Count == 0 && resolved.IndexInfos!.Count == 0 &&
-                resolved.Properties!.Count > 0 && resolved.Properties.TrueForAll(p => (SymbolFlagsOf(p) & SymbolFlags.Optional) != 0);
+            return resolved.CallSignatures.Count == 0 && resolved.ConstructSignatures.Count == 0 && resolved.IndexInfos.Count == 0 &&
+                resolved.Properties.Count > 0 && Types.View(resolved.Properties).TrueForAll(p => (SymbolFlagsOf(p) & SymbolFlags.Optional) != 0);
         }
         if ((flags & TypeFlags.Substitution) != 0)
         {

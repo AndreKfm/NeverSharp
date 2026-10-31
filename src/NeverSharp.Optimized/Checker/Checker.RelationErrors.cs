@@ -87,7 +87,7 @@ internal sealed partial class Checker
                 CheckTypeAssignableTo(source, target, node, headMessage, containingMessageChain, resultObj);
                 var diagnostic = resultObj.Errors![^1];
                 AddRelatedInfo(diagnostic, CreateRelatedForNode(node,
-                    signatures == constructSignatures ? Diagnostics.Did_you_mean_to_use_new_with_this_expression : Diagnostics.Did_you_mean_to_call_this_expression));
+                    signatures.SameAs(constructSignatures) ? Diagnostics.Did_you_mean_to_use_new_with_this_expression : Diagnostics.Did_you_mean_to_call_this_expression));
                 return true;
             }
         }

@@ -432,35 +432,35 @@ internal sealed partial class Checker
     }
 
     /// <summary>checker.ts instantiateSignatures.</summary>
-    internal List<Signature> InstantiateSignatures(List<Signature> signatures, TypeMapper mapper)
+    internal Items<Signature> InstantiateSignatures(Items<Signature> signatures, TypeMapper mapper)
     {
-        List<Signature>? result = null;
+        Signature[]? result = null;
         for (var i = 0; i < signatures.Count; i++)
         {
             var mapped = InstantiateSignature(signatures[i], mapper);
             if (mapped != signatures[i])
             {
-                result ??= [.. signatures];
+                result ??= signatures.ToArray();
                 result[i] = mapped;
             }
         }
-        return result ?? signatures;
+        return result is null ? signatures : new Items<Signature>(result);
     }
 
     /// <summary>checker.ts instantiateIndexInfos.</summary>
-    internal List<IndexInfo> InstantiateIndexInfos(List<IndexInfo> infos, TypeMapper mapper)
+    internal Items<IndexInfo> InstantiateIndexInfos(Items<IndexInfo> infos, TypeMapper mapper)
     {
-        List<IndexInfo>? result = null;
+        IndexInfo[]? result = null;
         for (var i = 0; i < infos.Count; i++)
         {
             var mapped = InstantiateIndexInfo(infos[i], mapper);
-            if (!ReferenceEquals(mapped, infos[i]))
+            if (mapped != infos[i])
             {
-                result ??= [.. infos];
+                result ??= infos.ToArray();
                 result[i] = mapped;
             }
         }
-        return result ?? infos;
+        return result is null ? infos : new Items<IndexInfo>(result);
     }
 
     /// <summary>checker.ts instantiateIndexInfo.</summary>
@@ -1084,31 +1084,31 @@ internal sealed partial class Checker
     {
         TypeMapper? mapper = null;
         SymTable members;
-        List<Signature> callSignatures;
-        List<Signature> constructSignatures;
-        List<IndexInfo> indexInfos;
+        Items<Signature> callSignatures;
+        Items<Signature> constructSignatures;
+        Items<IndexInfo> indexInfos;
         var sourceSymbol = Types.Symbol(sourceType);
         if (RangeEquals(typeParameters, typeArguments, typeParameters.Length))
         {
-            members = !sourceSymbol.IsNone ? GetMembersOfSymbol(sourceSymbol) : CreateSymbolTable(source.DeclaredProperties!);
-            callSignatures = source.DeclaredCallSignatures!;
-            constructSignatures = source.DeclaredConstructSignatures!;
-            indexInfos = source.DeclaredIndexInfos!;
+            members = !sourceSymbol.IsNone ? GetMembersOfSymbol(sourceSymbol) : CreateSymbolTable(Types.View(source.DeclaredProperties));
+            callSignatures = Types.View(source.DeclaredCallSignatures);
+            constructSignatures = Types.View(source.DeclaredConstructSignatures);
+            indexInfos = Types.View(source.DeclaredIndexInfos);
         }
         else
         {
             mapper = CreateTypeMapper(typeParameters, typeArguments);
-            members = CreateInstantiatedSymbolTable(source.DeclaredProperties!, mapper, mappingThisOnly: typeParameters.Length == 1);
-            callSignatures = InstantiateSignatures(source.DeclaredCallSignatures!, mapper);
-            constructSignatures = InstantiateSignatures(source.DeclaredConstructSignatures!, mapper);
-            indexInfos = InstantiateIndexInfos(source.DeclaredIndexInfos!, mapper);
+            members = CreateInstantiatedSymbolTable(Types.View(source.DeclaredProperties), mapper, mappingThisOnly: typeParameters.Length == 1);
+            callSignatures = InstantiateSignatures(Types.View(source.DeclaredCallSignatures), mapper);
+            constructSignatures = InstantiateSignatures(Types.View(source.DeclaredConstructSignatures), mapper);
+            indexInfos = InstantiateIndexInfos(Types.View(source.DeclaredIndexInfos), mapper);
         }
         var baseTypes = GetBaseTypes(sourceType);
         if (baseTypes.Count > 0)
         {
             if (!sourceSymbol.IsNone && members == GetMembersOfSymbol(sourceSymbol))
             {
-                var symbolTable = CreateSymbolTable(source.DeclaredProperties!);
+                var symbolTable = CreateSymbolTable(Types.View(source.DeclaredProperties));
                 // copy index signature symbol as well (for quickinfo)
                 var sourceIndex = GetMembersOfSymbol(sourceSymbol).Get(InternalSymbolName.Index);
                 if (!sourceIndex.IsNone)
@@ -1123,18 +1123,21 @@ internal sealed partial class Checker
             {
                 var instantiatedBaseType = !thisArgument.IsNone ? GetTypeWithThisArgument(InstantiateType(baseType, mapper), thisArgument) : baseType;
                 AddInheritedMembers(members, GetPropertiesOfType(instantiatedBaseType));
-                callSignatures = [.. callSignatures, .. GetSignaturesOfType(instantiatedBaseType, SignatureKind.Call)];
-                constructSignatures = [.. constructSignatures, .. GetSignaturesOfType(instantiatedBaseType, SignatureKind.Construct)];
+                callSignatures = ItemsBuilder.Concatenate(callSignatures, GetSignaturesOfType(instantiatedBaseType, SignatureKind.Call));
+                constructSignatures = ItemsBuilder.Concatenate(constructSignatures, GetSignaturesOfType(instantiatedBaseType, SignatureKind.Construct));
                 var inheritedIndexInfos = instantiatedBaseType != anyType ? GetIndexInfosOfType(instantiatedBaseType) : [new IndexInfo { KeyType = stringType, Type = anyType }];
-                var combined = new List<IndexInfo>(indexInfos);
+                List<IndexInfo>? added = null;
                 foreach (var info in inheritedIndexInfos)
                 {
                     if (!indexInfos.Exists(i => i.KeyType == info.KeyType))
                     {
-                        combined.Add(info);
+                        (added ??= []).Add(info);
                     }
                 }
-                indexInfos = combined;
+                if (added is not null)
+                {
+                    indexInfos = ItemsBuilder.Concatenate(indexInfos, added);
+                }
             }
         }
         SetStructuredTypeMembers(type, members, callSignatures, constructSignatures, indexInfos);
@@ -1153,7 +1156,7 @@ internal sealed partial class Checker
     }
 
     // checker.ts createSymbolTable(symbols)
-    private SymTable CreateSymbolTable(List<SymbolRef> symbols)
+    private SymTable CreateSymbolTable(Items<SymbolRef> symbols)
     {
         var result = new SymTable(Names, symbols.Count);
         foreach (var s in symbols)
@@ -1166,7 +1169,7 @@ internal sealed partial class Checker
     // checker.ts createInstantiatedSymbolTable. The mappingThisOnly flag indicates that the only type parameter being
     // mapped is "this". When the flag is true, we check symbols to see if we can quickly conclude they are free of
     // "this" references, thus needing no instantiation.
-    private SymTable CreateInstantiatedSymbolTable(List<SymbolRef> symbols, TypeMapper mapper, bool mappingThisOnly)
+    private SymTable CreateInstantiatedSymbolTable(Items<SymbolRef> symbols, TypeMapper mapper, bool mappingThisOnly)
     {
         var result = new SymTable(Names, symbols.Count);
         foreach (var symbol in symbols)
@@ -1779,13 +1782,15 @@ internal sealed partial class Checker
                 if ((flags & TypeFlags.Object) != 0)
                 {
                     var resolved = ResolveStructuredTypeMembers(t);
-                    var callSignatures = GetInstantiatedSignatures(resolved.CallSignatures!);
-                    var constructSignatures = GetInstantiatedSignatures(resolved.ConstructSignatures!);
-                    hasSignatures |= resolved.CallSignatures!.Count != 0 || resolved.ConstructSignatures!.Count != 0;
+                    var resolvedCallSignatures = Types.View(resolved.CallSignatures);
+                    var resolvedConstructSignatures = Types.View(resolved.ConstructSignatures);
+                    var callSignatures = GetInstantiatedSignatures(resolvedCallSignatures);
+                    var constructSignatures = GetInstantiatedSignatures(resolvedConstructSignatures);
+                    hasSignatures |= resolvedCallSignatures.Count != 0 || resolvedConstructSignatures.Count != 0;
                     hasApplicableSignature |= callSignatures.Count != 0 || constructSignatures.Count != 0;
-                    if (!ReferenceEquals(callSignatures, resolved.CallSignatures) || !ReferenceEquals(constructSignatures, resolved.ConstructSignatures))
+                    if (!callSignatures.SameAs(resolvedCallSignatures) || !constructSignatures.SameAs(resolvedConstructSignatures))
                     {
-                        var instantiated = CreateAnonymousType(CreateSymbol(SymbolFlags.None, InternalSymbolName.InstantiationExpression), resolved.Members!, callSignatures, constructSignatures, resolved.IndexInfos);
+                        var instantiated = CreateAnonymousType(CreateSymbol(SymbolFlags.None, InternalSymbolName.InstantiationExpression), resolved.Members!, callSignatures, constructSignatures, Types.View(resolved.IndexInfos));
                         Types.Record(instantiated).ObjectFlags |= ObjectFlags.InstantiationExpressionType;
                         Types.Object(instantiated).Node = node;
                         return instantiated;
@@ -1817,7 +1822,7 @@ internal sealed partial class Checker
             }
         }
 
-        List<Signature> GetInstantiatedSignatures(List<Signature> signatures)
+        Items<Signature> GetInstantiatedSignatures(Items<Signature> signatures)
         {
             var applicable = signatures.FindAll(sig =>
             {

@@ -1460,10 +1460,10 @@ internal sealed partial class Checker
             return CreateMappedTypeNodeFromType(type, context);
         }
         var resolved = ResolveStructuredTypeMembers(type);
-        var callSignatures = resolved.CallSignatures ?? [];
-        var constructSignatures = resolved.ConstructSignatures ?? [];
-        var properties = resolved.Properties ?? [];
-        var indexInfos = resolved.IndexInfos ?? [];
+        var callSignatures = Types.View(resolved.CallSignatures);
+        var constructSignatures = Types.View(resolved.ConstructSignatures);
+        var properties = Types.View(resolved.Properties);
+        var indexInfos = Types.View(resolved.IndexInfos);
         if (properties.Count == 0 && indexInfos.Count == 0)
         {
             if (callSignatures.Count == 0 && constructSignatures.Count == 0)
@@ -1856,11 +1856,11 @@ internal sealed partial class Checker
         }
         context.TypeStack.Add(-1);
         var typeElements = new List<Node>();
-        foreach (var signature in resolvedType.CallSignatures ?? [])
+        foreach (var signature in Types.View(resolvedType.CallSignatures))
         {
             typeElements.Add(SignatureToSignatureDeclarationHelper(signature, SyntaxKind.CallSignature, context));
         }
-        foreach (var signature in resolvedType.ConstructSignatures ?? [])
+        foreach (var signature in Types.View(resolvedType.ConstructSignatures))
         {
             if ((Signatures.Record(signature).Flags & SignatureFlags.Abstract) != 0)
             {
@@ -1868,18 +1868,13 @@ internal sealed partial class Checker
             }
             typeElements.Add(SignatureToSignatureDeclarationHelper(signature, SyntaxKind.ConstructSignature, context));
         }
-        foreach (var info in resolvedType.IndexInfos ?? [])
+        foreach (var info in Types.View(resolvedType.IndexInfos))
         {
             typeElements.AddRange(IndexInfoToObjectComputedNamesOrSignatureDeclaration(info, context, (Types.ObjectFlagsOf(type) & ObjectFlags.ReverseMapped) != 0 ? CreateElidedInformationPlaceholder(context) : Node.None));
         }
 
-        var properties = resolvedType.Properties;
-        if (properties is null)
-        {
-            context.TypeStack.RemoveAt(context.TypeStack.Count - 1);
-            return typeElements;
-        }
-
+        // (resolved properties are never undefined)
+        var properties = Types.View(resolvedType.Properties);
         var i = 0;
         foreach (var propertySymbol in properties)
         {

@@ -1499,7 +1499,7 @@ internal sealed partial class Checker
     internal Type CreateObjectType(ObjectFlags objectFlags, SymbolRef symbol) => Types.CreateObject(objectFlags, symbol);
 
     /// <summary>checker.ts createAnonymousType (setStructuredTypeMembers).</summary>
-    internal Type CreateAnonymousType(SymbolRef symbol, SymTable members, List<Signature>? callSignatures = null, List<Signature>? constructSignatures = null, List<IndexInfo>? indexInfos = null)
+    internal Type CreateAnonymousType(SymbolRef symbol, SymTable members, Items<Signature> callSignatures = default, Items<Signature> constructSignatures = default, Items<IndexInfo> indexInfos = default)
     {
         var type = CreateObjectType(ObjectFlags.Anonymous, symbol);
         SetStructuredTypeMembers(type, members, callSignatures, constructSignatures, indexInfos);
@@ -1507,14 +1507,14 @@ internal sealed partial class Checker
     }
 
     /// <summary>checker.ts setStructuredTypeMembers.</summary>
-    private void SetStructuredTypeMembers(Type type, SymTable members, List<Signature>? callSignatures, List<Signature>? constructSignatures, List<IndexInfo>? indexInfos)
+    private void SetStructuredTypeMembers(Type type, SymTable members, Items<Signature> callSignatures, Items<Signature> constructSignatures, Items<IndexInfo> indexInfos)
     {
         var data = Types.Object(type);
         data.Members = members;
-        data.Properties = [];
-        data.CallSignatures = callSignatures ?? [];
-        data.ConstructSignatures = constructSignatures ?? [];
-        data.IndexInfos = indexInfos ?? [];
+        data.Properties = default;
+        data.CallSignatures = Types.Store(callSignatures);
+        data.ConstructSignatures = Types.Store(constructSignatures);
+        data.IndexInfos = Types.Store(indexInfos);
         data.MembersResolved = true;
         // This can loop back to getPropertyOfType() which would crash if `callSignatures` & `constructSignatures` are not initialized.
         if (members != emptySymbols)
@@ -1523,10 +1523,11 @@ internal sealed partial class Checker
         }
     }
 
-    /// <summary>checker.ts getNamedMembers: the members that are not internal names (`__call`, ...).</summary>
-    private List<SymbolRef> GetNamedMembers(SymTable members)
+    /// <summary>checker.ts getNamedMembers: the members that are not internal names (`__call`, ...), as a stored list.</summary>
+    private ItemRange<SymbolRef> GetNamedMembers(SymTable members)
     {
-        var result = new List<SymbolRef>(members.Count);
+        var result = namedMembersScratch;
+        var mark = result.Count;
         for (var i = 0; i < members.Count; i++)
         {
             var id = members.NameAt(i);
@@ -1536,8 +1537,13 @@ internal sealed partial class Checker
                 result.Add(symbol);
             }
         }
-        return result;
+        var stored = Types.Store(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(result)[mark..]);
+        result.RemoveRange(mark, result.Count - mark);
+        return stored;
     }
+
+    // (a stack: IsNamedMember may resolve an alias, which may resolve members again above the outer call's elements)
+    private readonly List<SymbolRef> namedMembersScratch = [];
 
     private bool IsNamedMember(SymbolRef member, string escapedName) =>
         !IsReservedMemberName(escapedName) && SymbolIsValue(member);

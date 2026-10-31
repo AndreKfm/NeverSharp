@@ -1114,7 +1114,7 @@ internal sealed partial class Checker
     }
 
     // checker.ts getUninstantiatedJsxSignaturesOfType
-    private List<Signature> GetUninstantiatedJsxSignaturesOfType(Type elementType, NodeRef caller)
+    private Items<Signature> GetUninstantiatedJsxSignaturesOfType(Type elementType, NodeRef caller)
     {
         if ((Types.Flags(elementType) & TypeFlags.String) != 0)
         {

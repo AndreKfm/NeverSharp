@@ -56,26 +56,79 @@ internal sealed class TypeStore
         public Type Origin;
         public SymTable? PropertyCache;                                     // types.ts propertyCache
         public SymTable? PropertyCacheWithoutObjectFunctionPropertyAugment; // types.ts propertyCacheWithoutObjectFunctionPropertyAugment
-        public List<SymbolRef>? ResolvedProperties;                         // types.ts resolvedProperties
+        public ItemRange<SymbolRef> ResolvedProperties;                     // types.ts resolvedProperties (module CO3: a stored list)
+        public bool HasResolvedProperties;                                  // resolvedProperties !== undefined
+        public int ResolvedMembers;                                         // the object data record of the resolved members (module CO3; 0: not resolved)
     }
 
     private TypeRecord[] types = new TypeRecord[256];
     private int typeCount; // types[0] is the undefined handle
-    private readonly List<ObjectTypeData> objects = [null!];
+    private readonly Chunks<ObjectTypeRecord> objects = new(); // [0] unused (module CO3: records, not objects)
+    private int objectCount;
     private readonly Chunks<UnionData> unions = new();
     private int unionCount;
     private readonly Chunks<TypeParameterData> typeParameters = new(); // [0] unused (module CO2: records, not objects)
     private int typeParameterCount;
 
     /// <summary>A new object type (createObjectType) with its data record.</summary>
-    internal Type CreateObject(ObjectFlags objectFlags, SymbolRef symbol)
-    {
-        objects.Add(new ObjectTypeData());
-        return Create(TypeFlags.Object, objectFlags, symbol, objects.Count - 1);
-    }
+    internal Type CreateObject(ObjectFlags objectFlags, SymbolRef symbol) =>
+        Create(TypeFlags.Object, objectFlags, symbol, NewObjectRecord());
 
     /// <summary>The data of an object type.</summary>
-    internal ObjectTypeData Object(Type type) => objects[types[type.Id].Data];
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal ObjectTypeData Object(Type type) => new(objects, types[type.Id].Data);
+
+    /// <summary>The object data record <paramref name="index"/> (<see cref="NewObjectData"/>).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal ObjectTypeData ObjectData(int index) => new(objects, index);
+
+    /// <summary>
+    /// An object data record of no type (the resolved members of a union or intersection type, which TypeScript keeps
+    /// on the type object): its index.
+    /// </summary>
+    internal int NewObjectData() => NewObjectRecord();
+
+    private int NewObjectRecord()
+    {
+        objectCount++;
+        objects.EnsureIndex(objectCount);
+        return objectCount;
+    }
+
+    // The stored member lists (module CO3): properties, signatures, index infos as ranges of per-kind arenas.
+    private readonly ItemArena<SymbolRef> symbolLists = new();
+    private readonly ItemArena<Signature> signatureLists = new();
+    private readonly ItemArena<IndexInfo> indexInfoLists = new();
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal Items<SymbolRef> View(ItemRange<SymbolRef> list) => symbolLists.View(list);
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal Items<Signature> View(ItemRange<Signature> list) => signatureLists.View(list);
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal Items<IndexInfo> View(ItemRange<IndexInfo> list) => indexInfoLists.View(list);
+
+    internal ItemRange<SymbolRef> Store(Items<SymbolRef> list) => symbolLists.Store(list);
+
+    internal ItemRange<SymbolRef> Store(List<SymbolRef> list) => symbolLists.Store(list);
+
+    internal ItemRange<SymbolRef> Store(ReadOnlySpan<SymbolRef> list) => symbolLists.Store(list);
+
+    internal ItemRange<Signature> Store(Items<Signature> list) => signatureLists.Store(list);
+
+    internal ItemRange<Signature> Store(List<Signature> list) => signatureLists.Store(list);
+
+    internal ItemRange<IndexInfo> Store(Items<IndexInfo> list) => indexInfoLists.Store(list);
+
+    internal ItemRange<IndexInfo> Store(List<IndexInfo> list) => indexInfoLists.Store(list);
+
+    /// <summary>A stored copy of a list the checker built (the view of <see cref="Store(List{SymbolRef})"/>).</summary>
+    internal Items<SymbolRef> Keep(List<SymbolRef> list) => symbolLists.Copy(list);
+
+    internal Items<Signature> Keep(List<Signature> list) => signatureLists.Copy(list);
+
+    internal Items<IndexInfo> Keep(List<IndexInfo> list) => indexInfoLists.Copy(list);
 
     /// <summary>A new union or intersection type (or an origin type) with its member list.</summary>
     internal Type CreateUnionOrIntersection(TypeFlags flags, ObjectFlags objectFlags, TypeList members, Type origin)
@@ -213,19 +266,85 @@ internal sealed class TypeStore
 }
 
 /// <summary>
-/// types.ts ObjectType and its kinds (InterfaceType, TypeReference, ResolvedType members), typescript-go's
-/// ObjectType/InterfaceType/TypeReference data. Module C1 keeps one record class for all object kinds (the resolved
-/// members are lists the member resolution builds once); later optimization may split it into per-kind arrays.
+/// The data of an object type (module CO3): a reference to its <see cref="ObjectTypeRecord"/> in the store's chunks,
+/// read and written through the members below like the class it replaces (copying it does not copy the record). Lives
+/// on the stack; the type record keeps the record's index.
 /// </summary>
-internal sealed class ObjectTypeData
+internal readonly struct ObjectTypeData
+{
+    private readonly Chunks<ObjectTypeRecord> records;
+    private readonly int index;
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal ObjectTypeData(Chunks<ObjectTypeRecord> records, int index)
+    {
+        this.records = records;
+        this.index = index;
+    }
+
+    /// <summary>The record (valid while the store grows: chunks never move).</summary>
+    internal ref ObjectTypeRecord Record
+    {
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+        get => ref records[index];
+    }
+
+    public ref bool MembersResolved => ref Record.MembersResolved;
+    public ref SymTable? Members => ref Record.Members;
+    public ref ItemRange<SymbolRef> Properties => ref Record.Properties;
+    public ref ItemRange<Signature> CallSignatures => ref Record.CallSignatures;
+    public ref ItemRange<Signature> ConstructSignatures => ref Record.ConstructSignatures;
+    public ref ItemRange<IndexInfo> IndexInfos => ref Record.IndexInfos;
+    public ref TypeList TypeParameters => ref Record.TypeParameters;
+    public ref TypeList OuterTypeParameters => ref Record.OuterTypeParameters;
+    public ref TypeList LocalTypeParameters => ref Record.LocalTypeParameters;
+    public ref bool HasTypeParameters => ref Record.HasTypeParameters;
+    public ref Type ThisType => ref Record.ThisType;
+    public ref bool DeclaredMembersResolved => ref Record.DeclaredMembersResolved;
+    public ref ItemRange<SymbolRef> DeclaredProperties => ref Record.DeclaredProperties;
+    public ref ItemRange<Signature> DeclaredCallSignatures => ref Record.DeclaredCallSignatures;
+    public ref ItemRange<Signature> DeclaredConstructSignatures => ref Record.DeclaredConstructSignatures;
+    public ref ItemRange<IndexInfo> DeclaredIndexInfos => ref Record.DeclaredIndexInfos;
+    public ref List<Type>? ResolvedBaseTypes => ref Record.ResolvedBaseTypes;
+    public ref bool BaseTypesResolved => ref Record.BaseTypesResolved;
+    public ref Type ResolvedBaseConstructorType => ref Record.ResolvedBaseConstructorType;
+    public ref Type Target => ref Record.Target;
+    public ref TypeList ResolvedTypeArguments => ref Record.ResolvedTypeArguments;
+    public ref bool HasResolvedTypeArguments => ref Record.HasResolvedTypeArguments;
+    public ref bool HasInstantiations => ref Record.HasInstantiations;
+    public ref NodeRef Node => ref Record.Node;
+    public ref TypeMapper? Mapper => ref Record.Mapper;
+    public ref ElementFlags[]? ElementFlags => ref Record.ElementFlags;
+    public ref int MinLength => ref Record.MinLength;
+    public ref int FixedLength => ref Record.FixedLength;
+    public ref ElementFlags CombinedFlags => ref Record.CombinedFlags;
+    public ref bool Readonly => ref Record.Readonly;
+    public ref NodeRef[]? LabeledElementDeclarations => ref Record.LabeledElementDeclarations;
+    public ref NodeRef Declaration => ref Record.Declaration;
+    public ref Type MappedTypeParameter => ref Record.MappedTypeParameter;
+    public ref Type ConstraintType => ref Record.ConstraintType;
+    public ref Type NameType => ref Record.NameType;
+    public ref Type TemplateType => ref Record.TemplateType;
+    public ref Type ModifiersType => ref Record.ModifiersType;
+    public ref Type ResolvedApparentType => ref Record.ResolvedApparentType;
+    public ref bool ContainsError => ref Record.ContainsError;
+}
+
+/// <summary>
+/// types.ts ObjectType and its kinds (InterfaceType, TypeReference, ResolvedType members), typescript-go's
+/// ObjectType/InterfaceType/TypeReference data. Module C1 kept one record class for all object kinds; module CO3: a
+/// struct record in the store's chunks (<see cref="ObjectTypeData"/> refers to it), the member lists as ranges of the
+/// store's arenas (read through <see cref="TypeStore.View(ItemRange{Signature})"/>).
+/// </summary>
+internal struct ObjectTypeRecord
 {
     // ResolvedType (resolveStructuredTypeMembers)
     public bool MembersResolved;
     public SymTable? Members;
-    public List<SymbolRef>? Properties;
-    public List<Signature>? CallSignatures;
-    public List<Signature>? ConstructSignatures;
-    public List<IndexInfo>? IndexInfos;
+    public ItemRange<SymbolRef> Properties;
+    public ItemRange<Signature> CallSignatures;
+    public ItemRange<Signature> ConstructSignatures;
+    public ItemRange<IndexInfo> IndexInfos;
 
     // InterfaceType
     public TypeList TypeParameters;
@@ -234,10 +353,10 @@ internal sealed class ObjectTypeData
     public bool HasTypeParameters; // typeParameters !== undefined
     public Type ThisType;
     public bool DeclaredMembersResolved;
-    public List<SymbolRef>? DeclaredProperties;
-    public List<Signature>? DeclaredCallSignatures;
-    public List<Signature>? DeclaredConstructSignatures;
-    public List<IndexInfo>? DeclaredIndexInfos;
+    public ItemRange<SymbolRef> DeclaredProperties;
+    public ItemRange<Signature> DeclaredCallSignatures;
+    public ItemRange<Signature> DeclaredConstructSignatures;
+    public ItemRange<IndexInfo> DeclaredIndexInfos;
     public List<Type>? ResolvedBaseTypes;
     public bool BaseTypesResolved; // baseTypesResolved
     public Type ResolvedBaseConstructorType;
@@ -345,14 +464,56 @@ internal sealed class ConditionalData
     public Type ResolvedConstraintOfDistributive; // None: not computed; noConstraintType: false
 }
 
-/// <summary>types.ts IndexInfo.</summary>
-internal sealed class IndexInfo
+/// <summary>
+/// types.ts IndexInfo (module CO3: a value, stored in the index info lists of the store's arena, not an object). Every
+/// <c>new IndexInfo { ... }</c> gets a new <see cref="Id"/> and copies keep it, so <c>==</c> is TypeScript's identity
+/// of index info objects (the ids are only compared, never ordered).
+/// </summary>
+internal struct IndexInfo : IEquatable<IndexInfo>
 {
+    private static int lastId;
+
+    public readonly int Id;
     public Type KeyType;
     public Type Type;
     public bool IsReadonly;
     public NodeRef Declaration;
     public List<NodeRef>? Components; // the declarations with computed property names the index info is derived from
+
+    public IndexInfo()
+    {
+        Id = Interlocked.Increment(ref lastId);
+    }
+
+    public static bool operator ==(IndexInfo left, IndexInfo right) => left.Id == right.Id;
+
+    public static bool operator !=(IndexInfo left, IndexInfo right) => left.Id != right.Id;
+
+    public readonly bool Equals(IndexInfo other) => Id == other.Id;
+
+    public override readonly bool Equals(object? obj) => obj is IndexInfo other && Id == other.Id;
+
+    public override readonly int GetHashCode() => Id;
+}
+
+/// <summary>
+/// The IndexInfo members the checker reads on an index info it has checked for undefined (module CO3: the info is a
+/// nullable struct, which flow analysis does not unwrap; on undefined they throw, as the class members did).
+/// </summary>
+internal static class IndexInfoExtensions
+{
+    extension(IndexInfo? info)
+    {
+        internal Type KeyType => info!.Value.KeyType;
+
+        internal Type Type => info!.Value.Type;
+
+        internal bool IsReadonly => info!.Value.IsReadonly;
+
+        internal NodeRef Declaration => info!.Value.Declaration;
+
+        internal List<NodeRef>? Components => info!.Value.Components;
+    }
 }
 
 /// <summary>
@@ -489,6 +650,7 @@ internal sealed class Chunks<T>
         chunks[chunk] ??= new T[Size];
     }
 }
+
 
 /// <summary>
 /// A symbol table the checker owns (types.ts SymbolTable: a Map from escaped name to symbol, iterated in insertion

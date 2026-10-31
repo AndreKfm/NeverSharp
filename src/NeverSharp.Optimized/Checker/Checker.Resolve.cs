@@ -1743,7 +1743,7 @@ internal sealed partial class Checker
     }
 
     /// <summary>checker.ts getSpellingSuggestionForName (core.ts getSpellingSuggestion).</summary>
-    internal SymbolRef GetSpellingSuggestionForName(string name, List<SymbolRef> symbols, SymbolFlags meaning)
+    internal SymbolRef GetSpellingSuggestionForName(string name, Items<SymbolRef> symbols, SymbolFlags meaning)
     {
         var maximumLengthDifference = Math.Max(2, (int)Math.Floor(name.Length * 0.34));
         var bestDistance = Math.Floor(name.Length * 0.4) + 1; // If the best result is worse than this, don't bother.
@@ -2940,7 +2940,7 @@ internal sealed partial class Checker
             TransientSymbols.Record(result).Exports = new SymTable(exports);
         }
         var resolvedModuleType = ResolveStructuredTypeMembers(moduleType); // Should already be resolved from the signature checks above
-        ValueSymbolLinks.Get(result).ResolvedType = CreateAnonymousType(result, resolvedModuleType.Members!, [], [], resolvedModuleType.IndexInfos);
+        ValueSymbolLinks.Get(result).ResolvedType = CreateAnonymousType(result, resolvedModuleType.Members!, [], [], Types.View(resolvedModuleType.IndexInfos));
         return result;
     }
 

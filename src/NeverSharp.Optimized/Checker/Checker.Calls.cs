@@ -675,7 +675,7 @@ internal sealed partial class Checker
     }
 
     // checker.ts isPotentiallyUncalledDecorator
-    private bool IsPotentiallyUncalledDecorator(NodeRef decorator, List<Signature> signatures) =>
+    private bool IsPotentiallyUncalledDecorator(NodeRef decorator, Items<Signature> signatures) =>
         signatures.Count > 0 && signatures.TrueForAll(signature =>
             Signatures.Record(signature).MinArgumentCount == 0 &&
             !SignatureHasRestParameter(signature) &&
@@ -974,7 +974,7 @@ internal sealed partial class Checker
     }
 
     // checker.ts someSignature
-    private bool SomeSignature(List<Signature> signatures, Func<Signature, bool> f)
+    private bool SomeSignature(Items<Signature> signatures, Func<Signature, bool> f)
     {
         foreach (var signature in signatures)
         {
@@ -1349,7 +1349,7 @@ internal sealed partial class Checker
     // ---- arity ----
 
     // checker.ts reorderCandidates
-    private void ReorderCandidates(List<Signature> signatures, List<Signature> result, SignatureFlags callChainFlags)
+    private void ReorderCandidates(Items<Signature> signatures, List<Signature> result, SignatureFlags callChainFlags)
     {
         NodeRef lastParent = NodeRef.None;
         var lastSymbol = SymbolRef.None;
@@ -1925,7 +1925,7 @@ internal sealed partial class Checker
     // ---- resolveCall ----
 
     // checker.ts resolveCall
-    private Signature ResolveCall(NodeRef node, List<Signature> signatures, List<Signature>? candidatesOutArray, CheckMode checkMode, SignatureFlags callChainFlags, DiagnosticMessage? headMessage = null)
+    private Signature ResolveCall(NodeRef node, Items<Signature> signatures, List<Signature>? candidatesOutArray, CheckMode checkMode, SignatureFlags callChainFlags, DiagnosticMessage? headMessage = null)
     {
         var store = StoreOf(node);
         var n = node.Node;
@@ -2433,7 +2433,7 @@ internal sealed partial class Checker
     }
 
     // checker.ts getTypeArgumentArityError
-    private ProgramDiagnostic GetTypeArgumentArityError(NodeRef node, List<Signature> signatures, NodeList typeArguments, DiagnosticMessage? headMessage)
+    private ProgramDiagnostic GetTypeArgumentArityError(NodeRef node, Items<Signature> signatures, NodeList typeArguments, DiagnosticMessage? headMessage)
     {
         var argCount = StoreOf(node).Length(typeArguments);
         // No overloads exist

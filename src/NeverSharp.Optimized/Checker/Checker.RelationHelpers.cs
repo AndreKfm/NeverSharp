@@ -381,7 +381,7 @@ internal sealed partial class Checker
             var updated = GetRegularTypeOfObjectLiteral(original);
             members.Set(NameOf(property), updated == original ? property : CreateSymbolWithType(property, updated));
         }
-        var regularNew = CreateAnonymousType(Types.Symbol(type), members, resolved.CallSignatures, resolved.ConstructSignatures, resolved.IndexInfos);
+        var regularNew = CreateAnonymousType(Types.Symbol(type), members, Types.View(resolved.CallSignatures), Types.View(resolved.ConstructSignatures), Types.View(resolved.IndexInfos));
         ref var record = ref Types.Record(regularNew);
         record.Flags = Types.Flags(type);
         record.ObjectFlags |= Types.ObjectFlagsOf(type) & ~ObjectFlags.FreshLiteral;
@@ -392,7 +392,7 @@ internal sealed partial class Checker
     // ---- discriminants and best matches ----
 
     /// <summary>checker.ts findDiscriminantProperties.</summary>
-    internal List<SymbolRef>? FindDiscriminantProperties(List<SymbolRef> sourceProperties, Type target)
+    internal List<SymbolRef>? FindDiscriminantProperties(Items<SymbolRef> sourceProperties, Type target)
     {
         List<SymbolRef>? result = null;
         foreach (var sourceProperty in sourceProperties)

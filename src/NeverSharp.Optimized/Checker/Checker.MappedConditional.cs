@@ -241,7 +241,7 @@ internal sealed partial class Checker
         var members = new SymTable(Names);
         List<IndexInfo>? indexInfos = null;
         // Resolve upfront such that recursive references see an empty object type.
-        SetStructuredTypeMembers(type, emptySymbols, null, null, null);
+        SetStructuredTypeMembers(type, emptySymbols, default, default, default);
         // In { [P in K]: T }, we refer to P as the type parameter type, K as the constraint type,
         // and T as the template type.
         var typeParameter = GetTypeParameterFromMappedType(type);
@@ -263,7 +263,7 @@ internal sealed partial class Checker
         {
             ForEachType(GetLowerBoundOfKeyType(constraintType), AddMemberForKeyType);
         }
-        SetStructuredTypeMembers(type, members, null, null, indexInfos);
+        SetStructuredTypeMembers(type, members, default, default, indexInfos is null ? default : Types.Keep(indexInfos));
 
         void AddMemberForKeyType(Type keyType)
         {

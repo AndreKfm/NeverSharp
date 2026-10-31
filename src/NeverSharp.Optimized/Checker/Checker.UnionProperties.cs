@@ -416,18 +416,20 @@ internal sealed partial class Checker
     }
 
     /// <summary>checker.ts getPropertiesOfUnionOrIntersectionType.</summary>
-    internal List<SymbolRef> GetPropertiesOfUnionOrIntersectionType(Type type)
+    internal Items<SymbolRef> GetPropertiesOfUnionOrIntersectionType(Type type)
     {
-        if (Types.Union(type).ResolvedProperties is { } resolved)
+        if (Types.Union(type).HasResolvedProperties)
         {
-            return resolved;
+            return Types.View(Types.Union(type).ResolvedProperties);
         }
-        resolved = ComputePropertiesOfUnionOrIntersectionType(type);
-        Types.Union(type).ResolvedProperties = resolved;
-        return resolved;
+        var resolved = ComputePropertiesOfUnionOrIntersectionType(type);
+        ref var data = ref Types.Union(type);
+        data.ResolvedProperties = resolved;
+        data.HasResolvedProperties = true;
+        return Types.View(resolved);
     }
 
-    private List<SymbolRef> ComputePropertiesOfUnionOrIntersectionType(Type type)
+    private ItemRange<SymbolRef> ComputePropertiesOfUnionOrIntersectionType(Type type)
     {
         // (createSymbolTable(): a reused table, cleared when the result is taken)
         if (scratchTablesInUse == scratchTables.Count)

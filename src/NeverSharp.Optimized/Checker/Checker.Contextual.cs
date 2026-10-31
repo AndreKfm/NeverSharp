@@ -1019,17 +1019,17 @@ internal sealed partial class Checker
     }
 
     // checker.ts getIndexInfosOfStructuredType
-    private List<IndexInfo> GetIndexInfosOfStructuredType(Type type)
+    private Items<IndexInfo> GetIndexInfosOfStructuredType(Type type)
     {
         if ((Types.Flags(type) & TypeFlags.Object) != 0)
         {
-            return ResolveStructuredTypeMembers(type).IndexInfos!;
+            return Types.View(ResolveStructuredTypeMembers(type).IndexInfos);
         }
         if ((Types.Flags(type) & TypeFlags.UnionOrIntersection) != 0)
         {
-            return ResolveUnionOrIntersectionTypeMembers(type).IndexInfos!;
+            return Types.View(ResolveUnionOrIntersectionTypeMembers(type).IndexInfos);
         }
-        return [];
+        return default;
     }
 
     /// <summary>checker.ts getContextualTypeForElementExpression.</summary>

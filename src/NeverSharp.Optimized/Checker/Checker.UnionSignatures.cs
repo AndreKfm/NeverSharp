@@ -29,7 +29,6 @@ internal sealed partial class Checker
     private Signature unknownSignatureValue;
     private Signature resolvingSignatureValue;
     private Signature silentNeverSignatureValue;
-    private readonly Dictionary<Type, ObjectTypeData> unionOrIntersectionMembers = [];
     private readonly Dictionary<Signature, Type> isolatedSignatureTypes = [];
     private readonly Dictionary<(Signature, SignatureFlags), Signature> optionalCallSignatures = [];
     private readonly Dictionary<Type, Type> typesWithoutAbstractConstructSignatures = [];
@@ -126,7 +125,7 @@ internal sealed partial class Checker
     /// <summary>checker.ts getResolvedTypeWithoutAbstractConstructSignatures.</summary>
     internal Type GetResolvedTypeWithoutAbstractConstructSignatures(Type type, ObjectTypeData resolved)
     {
-        if (resolved.ConstructSignatures is null || resolved.ConstructSignatures.Count == 0)
+        if (resolved.ConstructSignatures.Count == 0)
         {
             return type;
         }
@@ -134,12 +133,12 @@ internal sealed partial class Checker
         {
             return cached;
         }
-        var constructSignatures = resolved.ConstructSignatures.FindAll(signature => (Signatures.Record(signature).Flags & SignatureFlags.Abstract) == 0);
+        var constructSignatures = Types.View(resolved.ConstructSignatures).FindAll(signature => (Signatures.Record(signature).Flags & SignatureFlags.Abstract) == 0);
         if (constructSignatures.Count == resolved.ConstructSignatures.Count)
         {
             return type;
         }
-        var typeCopy = CreateAnonymousType(Types.Symbol(type), resolved.Members!, resolved.CallSignatures, constructSignatures, resolved.IndexInfos);
+        var typeCopy = CreateAnonymousType(Types.Symbol(type), resolved.Members!, Types.View(resolved.CallSignatures), Types.Keep(constructSignatures), Types.View(resolved.IndexInfos));
         typesWithoutAbstractConstructSignatures[type] = typeCopy;
         typesWithoutAbstractConstructSignatures[typeCopy] = typeCopy;
         return typeCopy;
@@ -186,13 +185,16 @@ internal sealed partial class Checker
     // checker.ts resolveStructuredTypeMembers for union and intersection types
     private ObjectTypeData ResolveUnionOrIntersectionTypeMembers(Type type)
     {
-        if (unionOrIntersectionMembers.TryGetValue(type, out var data))
+        if (Types.Union(type).ResolvedMembers != 0)
         {
-            return data;
+            return Types.ObjectData(Types.Union(type).ResolvedMembers);
         }
         // (members resolving: the empty lists are in place while the signatures are computed)
-        data = new ObjectTypeData { Members = emptySymbols, Properties = [], CallSignatures = [], ConstructSignatures = [], IndexInfos = [], MembersResolved = true };
-        unionOrIntersectionMembers[type] = data;
+        var record = Types.NewObjectData();
+        Types.Union(type).ResolvedMembers = record;
+        var data = Types.ObjectData(record);
+        data.Members = emptySymbols;
+        data.MembersResolved = true;
         var types = Types.Elements(Types.Union(type).Types).ToArray();
         if ((Types.Flags(type) & TypeFlags.Union) != 0)
         {
@@ -200,9 +202,9 @@ internal sealed partial class Checker
             var callSignatures = GetUnionSignatures(Array.ConvertAll(types, t => t == globalFunctionType ? [unknownSignature] : GetSignaturesOfType(t, SignatureKind.Call)));
             var constructSignatures = GetUnionSignatures(Array.ConvertAll(types, t => GetSignaturesOfType(t, SignatureKind.Construct)));
             var indexInfos = GetUnionIndexInfos(types);
-            data.CallSignatures = callSignatures;
-            data.ConstructSignatures = constructSignatures;
-            data.IndexInfos = indexInfos;
+            data.CallSignatures = Types.Store(callSignatures);
+            data.ConstructSignatures = Types.Store(constructSignatures);
+            data.IndexInfos = Types.Store(indexInfos);
         }
         else
         {
@@ -226,7 +228,7 @@ internal sealed partial class Checker
                     if (signatures.Count > 0 && mixinCount > 0)
                     {
                         var index = i;
-                        signatures = signatures.ConvertAll(s =>
+                        signatures = signatures.ConvertAll<Signature>(s =>
                         {
                             var clone = CloneSignature(s);
                             var mixinReturnType = IncludeMixinType(GetReturnTypeOfSignature(s), types, mixinFlags, index); // (before the record is written)
@@ -242,15 +244,23 @@ internal sealed partial class Checker
                     indexInfos = AppendIndexInfo(indexInfos, newInfo, union: false);
                 }
             }
-            data.CallSignatures = callSignatures ?? [];
-            data.ConstructSignatures = constructSignatures ?? [];
-            data.IndexInfos = indexInfos ?? [];
+            data.CallSignatures = callSignatures is null ? default : Types.Store(callSignatures);
+            data.ConstructSignatures = constructSignatures is null ? default : Types.Store(constructSignatures);
+            data.IndexInfos = indexInfos is null ? default : Types.Store(indexInfos);
         }
         return data;
     }
 
     // checker.ts findMatchingSignature
-    private Signature FindMatchingSignature(List<Signature> signatureList, Signature signature, bool partialMatch, bool ignoreThisTypes, bool ignoreReturnTypes)
+    private Signature FindMatchingSignature(List<Signature> signatureList, Signature signature, bool partialMatch, bool ignoreThisTypes, bool ignoreReturnTypes) =>
+        FindMatchingSignature(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(signatureList), signature, partialMatch, ignoreThisTypes, ignoreReturnTypes);
+
+    // checker.ts findMatchingSignature
+    private Signature FindMatchingSignature(Items<Signature> signatureList, Signature signature, bool partialMatch, bool ignoreThisTypes, bool ignoreReturnTypes) =>
+        FindMatchingSignature(signatureList.AsSpan(), signature, partialMatch, ignoreThisTypes, ignoreReturnTypes);
+
+    // checker.ts findMatchingSignature
+    private Signature FindMatchingSignature(ReadOnlySpan<Signature> signatureList, Signature signature, bool partialMatch, bool ignoreThisTypes, bool ignoreReturnTypes)
     {
         foreach (var s in signatureList)
         {
@@ -263,7 +273,7 @@ internal sealed partial class Checker
     }
 
     // checker.ts findMatchingSignatures
-    private List<Signature>? FindMatchingSignatures(List<Signature>[] signatureLists, Signature signature, int listIndex)
+    private List<Signature>? FindMatchingSignatures(Items<Signature>[] signatureLists, Signature signature, int listIndex)
     {
         if (Signatures.Record(signature).TypeParameters.Count > 0)
         {
@@ -306,7 +316,7 @@ internal sealed partial class Checker
     }
 
     // checker.ts getUnionSignatures
-    private List<Signature> GetUnionSignatures(List<Signature>[] signatureLists)
+    private List<Signature> GetUnionSignatures(Items<Signature>[] signatureLists)
     {
         List<Signature>? result = null;
         int? indexWithLengthOverOne = null;
@@ -373,7 +383,7 @@ internal sealed partial class Checker
             List<Signature>? results = [.. masterList];
             foreach (var signatures in signatureLists)
             {
-                if (signatures != masterList)
+                if (!signatures.SameAs(masterList))
                 {
                     var signature = signatures[0];
                     var typeParameters = Signatures.Record(signature).TypeParameters;
@@ -584,7 +594,7 @@ internal sealed partial class Checker
     }
 
     // checker.ts appendSignatures
-    private List<Signature>? AppendSignatures(List<Signature>? signatures, List<Signature> newSignatures)
+    private List<Signature>? AppendSignatures(List<Signature>? signatures, Items<Signature> newSignatures)
     {
         foreach (var sig in newSignatures)
         {

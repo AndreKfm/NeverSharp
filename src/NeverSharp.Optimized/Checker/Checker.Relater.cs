@@ -2330,7 +2330,7 @@ internal sealed partial class Checker
             }
         }
 
-        private List<SymbolRef> ExcludeProperties(List<SymbolRef> properties, HashSet<string>? excludedProperties)
+        private Items<SymbolRef> ExcludeProperties(Items<SymbolRef> properties, HashSet<string>? excludedProperties)
         {
             if (excludedProperties is null || properties.Count == 0)
             {
@@ -2345,10 +2345,10 @@ internal sealed partial class Checker
                 }
                 else
                 {
-                    result ??= properties.GetRange(0, i);
+                    result ??= [.. properties.AsSpan()[..i]];
                 }
             }
-            return result ?? properties;
+            return result is null ? properties : result;
         }
 
         private int IsPropertySymbolTypeRelated(SymbolRef sourceProp, SymbolRef targetProp, Func<SymbolRef, Type> getTypeOfSourceProperty, bool reportErrors, IntersectionState intersectionState)
@@ -3015,9 +3015,9 @@ internal sealed partial class Checker
         private int TypeRelatedToIndexInfo(Type source, IndexInfo targetInfo, bool reportErrors, IntersectionState intersectionState)
         {
             var sourceInfo = c.GetApplicableIndexInfo(source, targetInfo.KeyType);
-            if (sourceInfo is not null)
+            if (sourceInfo is { } info)
             {
-                return IndexInfoRelatedTo(sourceInfo, targetInfo, reportErrors, intersectionState);
+                return IndexInfoRelatedTo(info, targetInfo, reportErrors, intersectionState);
             }
             // Intersection constituents are never considered to have an inferred index signature. Also, in the strict subtype relation,
             // only fresh object literals are considered to have inferred index signatures. This ensures { [x: string]: xxx } <: {} but

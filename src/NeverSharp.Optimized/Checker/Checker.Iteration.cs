@@ -712,8 +712,8 @@ internal sealed partial class Checker
         {
             return noCache ? AnyIterationTypes : SetCachedIterationTypes(type, resolver.IterableCacheKey, AnyIterationTypes);
         }
-        var allSignatures = !methodType.IsNone ? GetSignaturesOfType(methodType, SignatureKind.Call) : null;
-        var validSignatures = allSignatures?.FindAll(sig => GetMinArgumentCount(sig) == 0);
+        var allSignatures = !methodType.IsNone ? GetSignaturesOfType(methodType, SignatureKind.Call) : default;
+        var validSignatures = allSignatures.FindAll(sig => GetMinArgumentCount(sig) == 0);
         if (validSignatures is not { Count: > 0 })
         {
             if (!errorNode.IsNone && allSignatures is { Count: > 0 })

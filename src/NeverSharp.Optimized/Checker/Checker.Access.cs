@@ -1342,7 +1342,7 @@ internal sealed partial class Checker
             }
             if ((Types.Flags(indexType) & (TypeFlags.Number | TypeFlags.String)) != 0)
             {
-                var types = ResolveStructuredTypeMembers(objectType).Properties!.ConvertAll(GetTypeOfSymbol);
+                var types = Types.View(ResolveStructuredTypeMembers(objectType).Properties).ConvertAll(GetTypeOfSymbol);
                 types.Add(undefinedType);
                 resultType = GetUnionType(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(types));
                 return;

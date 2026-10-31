@@ -304,10 +304,10 @@ internal sealed partial class Checker
         Types.TypeParameter(thisType).Constraint = type;
         data.ThisType = thisType;
         data.DeclaredMembersResolved = true;
-        data.DeclaredProperties = properties;
-        data.DeclaredCallSignatures = [];
-        data.DeclaredConstructSignatures = [];
-        data.DeclaredIndexInfos = [];
+        data.DeclaredProperties = Types.Store(properties);
+        data.DeclaredCallSignatures = default;
+        data.DeclaredConstructSignatures = default;
+        data.DeclaredIndexInfos = default;
         data.ElementFlags = elementFlags;
         data.MinLength = minLength;
         data.FixedLength = fixedLength;
@@ -1709,8 +1709,8 @@ internal sealed partial class Checker
         if ((flags & TypeFlags.Object) != 0 && !IsGenericMappedType(type))
         {
             var resolved = ResolveStructuredTypeMembers(type);
-            return resolved.Properties!.Count == 0 && resolved.CallSignatures!.Count == 0 && resolved.ConstructSignatures!.Count == 0 &&
-                resolved.IndexInfos!.Count == 1 && resolved.IndexInfos[0].KeyType == stringType;
+            return resolved.Properties.Count == 0 && resolved.CallSignatures.Count == 0 && resolved.ConstructSignatures.Count == 0 &&
+                resolved.IndexInfos.Count == 1 && Types.View(resolved.IndexInfos)[0].KeyType == stringType;
         }
         if ((flags & TypeFlags.UnionOrIntersection) != 0)
         {
@@ -1727,7 +1727,17 @@ internal sealed partial class Checker
     }
 
     /// <summary>checker.ts getIndexInfoOfType.</summary>
-    internal IndexInfo? GetIndexInfoOfType(Type type, Type keyType) => GetIndexInfosOfType(type).Find(info => info.KeyType == keyType);
+    internal IndexInfo? GetIndexInfoOfType(Type type, Type keyType)
+    {
+        foreach (var info in GetIndexInfosOfType(type))
+        {
+            if (info.KeyType == keyType)
+            {
+                return info;
+            }
+        }
+        return null;
+    }
 
     /// <summary>checker.ts getIndexTypeOfType (None when there is none).</summary>
     internal Type GetIndexTypeOfType(Type type, Type keyType) => GetIndexInfoOfType(type, keyType)?.Type ?? Type.None;
@@ -1736,7 +1746,7 @@ internal sealed partial class Checker
     internal IndexInfo? GetApplicableIndexInfo(Type type, Type keyType) => GetApplicableIndexInfoOf(GetIndexInfosOfType(type), keyType);
 
     // checker.ts getApplicableIndexInfo(infos, keyType)
-    private IndexInfo? GetApplicableIndexInfoOf(List<IndexInfo> indexInfos, Type keyType)
+    private IndexInfo? GetApplicableIndexInfoOf(Items<IndexInfo> indexInfos, Type keyType)
     {
         // (the union of several applicable infos is created by C5's element access)
         IndexInfo? stringIndexInfo = null;
@@ -1756,7 +1766,7 @@ internal sealed partial class Checker
                 }
                 else
                 {
-                    (applicableInfos ??= [applicableInfo]).Add(info);
+                    (applicableInfos ??= [applicableInfo.Value]).Add(info);
                 }
             }
         }

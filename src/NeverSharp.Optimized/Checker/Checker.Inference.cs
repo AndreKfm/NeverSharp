@@ -1390,16 +1390,16 @@ internal sealed partial class Checker
                 }
                 return;
             }
-            var sourceTarget = sourceIsTuple ? c.TupleTarget(source) : null;
-            var startLength = sourceIsTuple ? Math.Min(sourceTarget!.FixedLength, targetTarget.FixedLength) : 0;
-            var endLength = Math.Min(sourceIsTuple ? GetEndElementCount(sourceTarget!, ElementFlags.Fixed) : 0,
+            var sourceTarget = sourceIsTuple ? c.TupleTarget(source) : default;
+            var startLength = sourceIsTuple ? Math.Min(sourceTarget.FixedLength, targetTarget.FixedLength) : 0;
+            var endLength = Math.Min(sourceIsTuple ? GetEndElementCount(sourceTarget, ElementFlags.Fixed) : 0,
                 (targetTarget.CombinedFlags & ElementFlags.Variable) != 0 ? GetEndElementCount(targetTarget, ElementFlags.Fixed) : 0);
             // Infer between starting fixed elements.
             for (var i = 0; i < startLength; i++)
             {
                 InferFromTypes(sourceArguments[i], elementTypes[i]);
             }
-            if (!sourceIsTuple || (sourceArity - startLength - endLength == 1 && (sourceTarget!.ElementFlags![startLength] & ElementFlags.Rest) != 0))
+            if (!sourceIsTuple || (sourceArity - startLength - endLength == 1 && (sourceTarget.ElementFlags![startLength] & ElementFlags.Rest) != 0))
             {
                 // Single rest element remains in source, infer from that to every element in target
                 var restType = sourceArguments[startLength];
