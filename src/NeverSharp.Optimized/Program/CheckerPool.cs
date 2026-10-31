@@ -8,6 +8,7 @@
 // Modified: translated from Go to C#; module C10 (the check driver). No tracing, no project-system pools, no locks
 // (each checker is used by one work item at a time by construction). Ported: newCheckerPoolWithTracing, createCheckers,
 // forEachCheckerGroupDo, GetGlobalDiagnostics; program.go GetSemanticDiagnostics with no file, GetGlobalDiagnostics.
+// Module CO4: each work item creates its own checker (no wait for the other checkers' construction).
 
 namespace NeverSharp.Optimized;
 
@@ -20,7 +21,7 @@ internal sealed class CheckerPool
 {
     private readonly Program program;
     private readonly bool singleThreaded;
-    private readonly Checker[] checkers;
+    private readonly Checker?[] checkers;
     private readonly Dictionary<SourceFile, int> fileAssociations;
 
     /// <summary>checkerpool.go newCheckerPoolWithTracing + createCheckers (program.Options().Checkers is not in Track O's options).</summary>
@@ -30,11 +31,10 @@ internal sealed class CheckerPool
         this.singleThreaded = singleThreaded;
         var checkerCount = singleThreaded ? 1 : 4;
         checkerCount = Math.Max(Math.Min(Math.Min(checkerCount, program.SourceFiles.Count), 256), 1);
-        checkers = new Checker[checkerCount];
+        checkers = new Checker?[checkerCount];
 
         // checker.NewChecker calls program.BindSourceFiles (parallel unless single-threaded) before anything else.
         program.BindSourceFiles(singleThreaded);
-        RunAll(checkerCount, i => checkers[i] = new Checker(program));
 
         fileAssociations = new Dictionary<SourceFile, int>(program.SourceFiles.Count, ReferenceEqualityComparer.Instance);
         var files = program.SourceFiles;
@@ -47,6 +47,14 @@ internal sealed class CheckerPool
     internal int Count => checkers.Length;
 
     /// <summary>
+    /// The checker of work item <paramref name="index"/>, created on that work item's thread when first needed
+    /// (module CO4). typescript-go's createCheckers creates every checker in a work group and waits for the slowest
+    /// before any file is checked; here each work item creates its own checker and goes on with its files at once (a
+    /// checker's construction reads only the bound program, so it does not depend on the other checkers).
+    /// </summary>
+    private Checker CheckerAt(int index) => checkers[index] ??= new Checker(program);
+
+    /// <summary>
     /// program.go GetSemanticDiagnostics(ctx, nil): collectCheckerDiagnosticsFromFiles over program.files with
     /// forEachCheckerGroupDo (one work item per checker, each visiting its files in order); the result per file index.
     /// </summary>
@@ -56,7 +64,7 @@ internal sealed class CheckerPool
         var diagnostics = new List<ProgramDiagnostic>[files.Count];
         RunAll(checkers.Length, checkerIndex =>
         {
-            var checker = checkers[checkerIndex];
+            var checker = CheckerAt(checkerIndex);
             checker.EnterThread();
             for (var i = 0; i < files.Count; i++)
             {
@@ -98,8 +106,9 @@ internal sealed class CheckerPool
         var perChecker = new List<ProgramDiagnostic>[checkers.Length];
         RunAll(checkers.Length, i =>
         {
-            checkers[i].EnterThread();
-            perChecker[i] = checkers[i].GetGlobalDiagnostics();
+            var checker = CheckerAt(i);
+            checker.EnterThread();
+            perChecker[i] = checker.GetGlobalDiagnostics();
         });
         var all = new List<ProgramDiagnostic>();
         foreach (var list in perChecker)
