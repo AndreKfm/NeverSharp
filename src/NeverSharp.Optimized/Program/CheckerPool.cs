@@ -9,7 +9,8 @@
 // (each checker is used by one work item at a time by construction). Ported: newCheckerPoolWithTracing, createCheckers,
 // forEachCheckerGroupDo, GetGlobalDiagnostics; program.go GetSemanticDiagnostics with no file, GetGlobalDiagnostics.
 // Module CO4: each work item creates its own checker (no wait for the other checkers' construction), and the program's
-// imports are resolved before binding (in parallel unless single-threaded).
+// imports are resolved before binding (in parallel unless single-threaded), and a checker keeps only its own files'
+// diagnostics.
 
 namespace NeverSharp.Optimized;
 
@@ -56,7 +57,7 @@ internal sealed class CheckerPool
     /// before any file is checked; here each work item creates its own checker and goes on with its files at once (a
     /// checker's construction reads only the bound program, so it does not depend on the other checkers).
     /// </summary>
-    private Checker CheckerAt(int index) => checkers[index] ??= new Checker(program);
+    private Checker CheckerAt(int index) => checkers[index] ??= new Checker(program, index, checkers.Length);
 
     /// <summary>
     /// program.go GetSemanticDiagnostics(ctx, nil): collectCheckerDiagnosticsFromFiles over program.files with

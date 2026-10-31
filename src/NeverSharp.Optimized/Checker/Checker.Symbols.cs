@@ -487,6 +487,11 @@ internal sealed partial class Checker
         {
             errorNode = node;
         }
+        if (!KeepsDiagnosticsOf(errorNode.File))
+        {
+            // (module CO4: the error and its related information would not be kept; nothing else depends on them)
+            return;
+        }
         var err = LookupOrIssueError(errorNode, message, symbolName);
         foreach (var relatedNode in relatedNodes ?? [])
         {

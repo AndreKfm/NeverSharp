@@ -45,6 +45,16 @@ internal sealed partial class Checker
     internal void EnterThread() => UtilitiesPublic.CheckerEmptyJsDocLists = emptyJsDocLists;
 
     internal Checker(Program program)
+        : this(program, 0, 1)
+    {
+    }
+
+    /// <summary>
+    /// A checker of a checker pool of <paramref name="poolCount"/> checkers that checks the files i with
+    /// i % <paramref name="poolCount"/> == <paramref name="poolIndex"/> (module CO4: only their diagnostics are kept,
+    /// <see cref="DiagnosticCollection.KeptFiles"/>).
+    /// </summary>
+    internal Checker(Program program, int poolIndex, int poolCount)
     {
         ArgumentNullException.ThrowIfNull(program);
         this.program = program;
@@ -54,6 +64,16 @@ internal sealed partial class Checker
         for (var i = 0; i < files.Count; i++)
         {
             fileIndex[files[i]] = i + 1;
+        }
+        if (poolCount > 1)
+        {
+            var kept = new HashSet<SourceFile>(ReferenceEqualityComparer.Instance);
+            for (var i = poolIndex; i < files.Count; i += poolCount)
+            {
+                kept.Add(files[i]);
+            }
+            diagnostics.KeptFiles = kept;
+            suggestionDiagnostics.KeptFiles = kept;
         }
         // The program's module resolutions, if no checker pool has resolved them yet (module CO4: the program resolves
         // its files' imports after its walk, before they are bound)
@@ -503,6 +523,9 @@ internal sealed partial class Checker
         }
     }
 
+    /// <summary>Whether the diagnostics this checker produces in program file <paramref name="file"/> are kept (<see cref="DiagnosticCollection.KeptFiles"/>).</summary>
+    private bool KeepsDiagnosticsOf(int file) => diagnostics.KeptFiles is not { } kept || kept.Contains(FileAt(file));
+
     /// <summary>checker.ts lookupOrIssueError.</summary>
     internal ProgramDiagnostic LookupOrIssueError(NodeRef location, DiagnosticMessage message, params object?[] args)
     {
@@ -660,6 +683,14 @@ internal sealed class DiagnosticCollection
     private readonly Dictionary<SourceFile, List<ProgramDiagnostic>> fileDiagnostics = new(ReferenceEqualityComparer.Instance);
     private readonly List<ProgramDiagnostic> nonFileDiagnostics = [];
 
+    /// <summary>
+    /// The files whose diagnostics are kept (null: all). Module CO4: a checker of a checker pool reports only the
+    /// diagnostics of its own files (the pool reads every other file's diagnostics from that file's checker), so the
+    /// diagnostics it produces in other files (e.g. the duplicate declarations of globals merged across files, which
+    /// tsc reports at every declaration) are not kept: nothing reads them, and kept they would live until the end.
+    /// </summary>
+    internal HashSet<SourceFile>? KeptFiles { get; set; }
+
     internal int GlobalCount => nonFileDiagnostics.Count;
 
     internal void Add(ProgramDiagnostic diagnostic)
@@ -667,6 +698,10 @@ internal sealed class DiagnosticCollection
         List<ProgramDiagnostic> list;
         if (diagnostic.SourceFile is { } file)
         {
+            if (KeptFiles is not null && !KeptFiles.Contains(file))
+            {
+                return;
+            }
             if (!fileDiagnostics.TryGetValue(file, out var existing))
             {
                 fileDiagnostics[file] = existing = [];
