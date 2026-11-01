@@ -408,7 +408,8 @@ internal sealed partial class Program
         var store = file.Store;
         var sourceFileLike = new SourceFileNodeLike(store, file.Root);
         var lineStarts = Scanner.GetLineStarts(sourceFileLike);
-        var text = store.SourceFileText(file.Root).Chars.ToString();
+        // (module CO5: the file's text read in place, not copied into a string per file)
+        var text = store.SourceFileText(file.Root).Chars;
         // createCommentDirectivesMap: keyed by the line of each directive's end (a later directive on a line replaces the
         // earlier one but keeps its position in the map's order)
         var lines = new List<int>();
@@ -452,7 +453,7 @@ internal sealed partial class Program
                     return true;
                 }
                 var lineEnd = line + 1 < lineStarts.Count ? lineStarts[line + 1] : text.Length;
-                var lineText = text[lineStarts[line]..lineEnd].Trim();
+                var lineText = text.AsSpan(lineStarts[line], lineEnd - lineStarts[line]).Trim();
                 if (lineText.Length != 0 && !IsLineComment(lineText))
                 {
                     return false;
@@ -462,7 +463,7 @@ internal sealed partial class Program
         }
 
         // /^\s*\/\/.*$/ on the trimmed line ('.' does not match line terminators)
-        static bool IsLineComment(string lineText)
+        static bool IsLineComment(ReadOnlySpan<char> lineText)
         {
             if (!lineText.StartsWith("//", StringComparison.Ordinal))
             {

@@ -67,14 +67,18 @@ internal sealed partial class Checker
     {
         var declarations = DeclarationsOf(symbol);
         var parentSymbol = GetParentOfSymbol(symbol);
+        // (module CO5: the predicate's delegate created once per checker)
+        var isDeprecated = isDeprecatedDeclarationFn ??= IsDeprecatedDeclaration;
         if (!parentSymbol.IsNone && declarations is { Count: > 1 })
         {
-            return (SymbolFlagsOf(parentSymbol) & SymbolFlags.Interface) != 0 ? declarations.Exists(IsDeprecatedDeclaration) : declarations.TrueForAll(IsDeprecatedDeclaration);
+            return (SymbolFlagsOf(parentSymbol) & SymbolFlags.Interface) != 0 ? declarations.Exists(isDeprecated) : declarations.TrueForAll(isDeprecated);
         }
         var valueDeclaration = ValueDeclarationOf(symbol);
         return (!valueDeclaration.IsNone && IsDeprecatedDeclaration(valueDeclaration)) ||
-            (declarations is { Count: > 0 } && declarations.TrueForAll(IsDeprecatedDeclaration));
+            (declarations is { Count: > 0 } && declarations.TrueForAll(isDeprecated));
     }
+
+    private Predicate<NodeRef>? isDeprecatedDeclarationFn;
 
     // checker.ts isDeprecatedDeclaration
     private bool IsDeprecatedDeclaration(NodeRef declaration) => (Utilities.GetCombinedNodeFlags(StoreOf(declaration), declaration.Node) & NodeFlags.Deprecated) != 0;

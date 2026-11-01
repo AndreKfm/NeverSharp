@@ -733,7 +733,26 @@ internal sealed partial class Checker
     private void OnSuccessfullyResolvedSymbol(NodeRef errorLocation, SymbolRef result, SymbolFlags meaning, NodeRef lastLocation,
         NodeRef associatedDeclarationForContainingInitializerOrBindingName, bool withinDeferredContext)
     {
-        AddLazyDiagnostic(() =>
+        // addLazyDiagnostic(() => ...) (module CO5: run at once without creating the callback when lazy diagnostics are
+        // eager, as AddLazyDiagnostic would)
+        if (eagerLazyDiagnostics)
+        {
+            CheckSuccessfullyResolvedSymbol(errorLocation, result, meaning, lastLocation, associatedDeclarationForContainingInitializerOrBindingName, withinDeferredContext);
+        }
+        else
+        {
+            DeferSuccessfullyResolvedSymbolCheck(errorLocation, result, meaning, lastLocation, associatedDeclarationForContainingInitializerOrBindingName, withinDeferredContext);
+        }
+    }
+
+    private void DeferSuccessfullyResolvedSymbolCheck(NodeRef errorLocation, SymbolRef result, SymbolFlags meaning, NodeRef lastLocation,
+        NodeRef associatedDeclarationForContainingInitializerOrBindingName, bool withinDeferredContext) =>
+        AddLazyDiagnostic(() => CheckSuccessfullyResolvedSymbol(errorLocation, result, meaning, lastLocation, associatedDeclarationForContainingInitializerOrBindingName, withinDeferredContext));
+
+    // (the callback of onSuccessfullyResolvedSymbol's addLazyDiagnostic)
+    private void CheckSuccessfullyResolvedSymbol(NodeRef errorLocation, SymbolRef result, SymbolFlags meaning, NodeRef lastLocation,
+        NodeRef associatedDeclarationForContainingInitializerOrBindingName, bool withinDeferredContext)
+    {
         {
             var name = NameOf(result);
             var isInExternalModule = !lastLocation.IsNone && Kind(lastLocation) == SyntaxKind.SourceFile &&
@@ -811,7 +830,7 @@ internal sealed partial class Checker
                 }
             }
             // (isolatedModules import conflicts: not set in Gate C)
-        });
+        }
     }
 
     /// <summary>utilities.ts isValidTypeOnlyAliasUseSite.</summary>

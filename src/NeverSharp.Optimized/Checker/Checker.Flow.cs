@@ -1648,6 +1648,12 @@ internal sealed partial class Checker
     {
         var store = StoreOf(root);
         var stack = new Stack<Node>();
+        var children = new List<Node>();
+        Func<Node, object?> collect = child =>
+        {
+            children.Add(child);
+            return null;
+        };
         stack.Push(root.Node);
         while (stack.Count > 0)
         {
@@ -1706,13 +1712,9 @@ internal sealed partial class Checker
             {
                 continue;
             }
-            // forEachChild in source order: pushed in reverse
-            var children = new List<Node>();
-            NodeVisitor.ForEachChild<object>(store, n, child =>
-            {
-                children.Add(child);
-                return null;
-            });
+            // forEachChild in source order: pushed in reverse (module CO5: one list and one callback per call)
+            children.Clear();
+            NodeVisitor.ForEachChild(store, n, collect);
             for (var i = children.Count - 1; i >= 0; i--)
             {
                 stack.Push(children[i]);
@@ -1798,15 +1800,19 @@ internal sealed partial class Checker
         return store.Kind(parent) is SyntaxKind.PropertyAccessExpression or SyntaxKind.QualifiedName ||
             (store.Kind(parent) is SyntaxKind.CallExpression or SyntaxKind.NewExpression && store.Expression(parent) == node.Node) ||
             (store.Kind(parent) == SyntaxKind.ElementAccessExpression && store.Expression(parent) == node.Node &&
-                !(SomeType(type, IsGenericTypeWithoutNullableConstraint) && IsGenericIndexType(GetTypeOfExpression(At(node, store.ArgumentExpression(parent))))));
+                !(SomeType(type, isGenericTypeWithoutNullableConstraintFn ??= IsGenericTypeWithoutNullableConstraint) && IsGenericIndexType(GetTypeOfExpression(At(node, store.ArgumentExpression(parent))))));
     }
+
+    // (module CO5: the two predicates' delegates created once per checker)
+    private Func<Type, bool>? isGenericTypeWithUnionConstraintFn;
+    private Func<Type, bool>? isGenericTypeWithoutNullableConstraintFn;
 
     // checker.ts isGenericTypeWithUnionConstraint
     private bool IsGenericTypeWithUnionConstraint(Type type)
     {
         if ((Types.Flags(type) & TypeFlags.Intersection) != 0)
         {
-            foreach (var t in Types.Elements(Types.Union(type).Types).ToArray())
+            foreach (var t in Types.Elements(Types.Union(type).Types))
             {
                 if (IsGenericTypeWithUnionConstraint(t))
                 {
@@ -1823,7 +1829,7 @@ internal sealed partial class Checker
     {
         if ((Types.Flags(type) & TypeFlags.Intersection) != 0)
         {
-            foreach (var t in Types.Elements(Types.Union(type).Types).ToArray())
+            foreach (var t in Types.Elements(Types.Union(type).Types))
             {
                 if (IsGenericTypeWithoutNullableConstraint(t))
                 {
@@ -1870,7 +1876,7 @@ internal sealed partial class Checker
         // (a synthetic access is in no constraint position and has no contextual type: its parent is a declaration it does
         // not initialize)
         var substituteConstraints = (checkMode & CheckMode.Inferential) == 0 && !IsSyntheticReference(reference) && !IsSyntheticElementAccess(reference) &&
-            SomeType(type, IsGenericTypeWithUnionConstraint) &&
+            SomeType(type, isGenericTypeWithUnionConstraintFn ??= IsGenericTypeWithUnionConstraint) &&
             (IsConstraintPosition(type, reference) || HasContextualTypeWithNoGenericTypes(reference, checkMode));
         return substituteConstraints ? MapType(type, GetBaseConstraintOrType) : type;
     }

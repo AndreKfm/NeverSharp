@@ -143,20 +143,18 @@ internal sealed partial class Checker
             {
                 Types.Record(type).ObjectFlags |= ObjectFlags.Reference;
                 var data = Types.Object(type);
-                var all = new List<Type>();
-                if (outerTypeParameters is not null)
-                {
-                    all.AddRange(outerTypeParameters);
-                }
-                if (localTypeParameters is not null)
-                {
-                    all.AddRange(localTypeParameters);
-                }
+                // concatenate(outerTypeParameters, localTypeParameters) (module CO5: no list growth; one of the two read
+                // in place when the other is undefined)
+                ReadOnlySpan<Type> all = outerTypeParameters is null
+                    ? System.Runtime.InteropServices.CollectionsMarshal.AsSpan(localTypeParameters)
+                    : localTypeParameters is null
+                        ? System.Runtime.InteropServices.CollectionsMarshal.AsSpan(outerTypeParameters)
+                        : [.. outerTypeParameters, .. localTypeParameters];
                 data.HasTypeParameters = outerTypeParameters is not null || localTypeParameters is not null;
-                data.TypeParameters = Types.CreateList(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(all));
+                data.TypeParameters = Types.CreateList(all);
                 data.OuterTypeParameters = outerTypeParameters is null ? TypeList.Empty : Types.CreateList(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(outerTypeParameters));
                 data.LocalTypeParameters = localTypeParameters is null ? TypeList.Empty : Types.CreateList(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(localTypeParameters));
-                InitializeInstantiations(type, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(all));
+                InitializeInstantiations(type, all);
                 data.Target = type;
                 data.ResolvedTypeArguments = data.TypeParameters;
                 data.HasResolvedTypeArguments = true;

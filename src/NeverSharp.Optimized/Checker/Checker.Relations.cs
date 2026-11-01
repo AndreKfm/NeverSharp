@@ -890,7 +890,7 @@ internal sealed partial class Checker
             // (T[K] | undefined) & {} | (T[K] | undefined) & null ==>
             // T[K] & {} | undefined & {} | T[K] & null | undefined & null ==>
             // T[K] & {} | T[K] & null
-            var types = Types.Elements(Types.Union(type).Types).ToArray();
+            var types = Types.Elements(Types.Union(type).Types);
             var normalizedTypes = new Type[types.Length];
             var changed = false;
             for (var i = 0; i < types.Length; i++)
@@ -911,7 +911,8 @@ internal sealed partial class Checker
     {
         var hasInstantiable = false;
         var hasNullableOrEmpty = false;
-        foreach (var t in Types.Elements(Types.Union(type).Types).ToArray())
+        // (module CO5: read in place; the type-list arena only appends, so the span stays a valid snapshot)
+        foreach (var t in Types.Elements(Types.Union(type).Types))
         {
             hasInstantiable |= (Types.Flags(t) & TypeFlags.Instantiable) != 0;
             hasNullableOrEmpty |= (Types.Flags(t) & TypeFlags.Nullable) != 0 || IsEmptyAnonymousObjectType(t);
@@ -1377,7 +1378,7 @@ internal sealed partial class Checker
             }
             if ((Types.Flags(type) & TypeFlags.Intersection) != 0)
             {
-                foreach (var t in Types.Elements(Types.Union(type).Types).ToArray())
+                foreach (var t in Types.Elements(Types.Union(type).Types))
                 {
                     if (IsDeeplyNestedType(t, stack, depth, maxDepth))
                     {

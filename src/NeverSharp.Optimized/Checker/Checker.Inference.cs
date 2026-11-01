@@ -595,6 +595,13 @@ internal sealed partial class Checker
         private InferencePriority priority = priority;
         private bool contravariant = contravariant;
 
+        // (module CO5: the callbacks passed down, created once per inference instead of once per use)
+        private Action<Type, Type>? inferFromTypesFn;
+        private Action<Type, Type>? inferFromContravariantTypesIfStrictFunctionTypesFn;
+        private Action<Type, Type>? inferFromGenericMappedTypesFn;
+        private Action<Type, Type>? inferFromObjectTypesFn;
+        private Action<Type, Type>? inferToConditionalTypeFn;
+
         private TypeStore Types => c.Types;
 
         private Type[] Members(Type type) => Types.Elements(Types.Union(type).Types).ToArray();
@@ -806,7 +813,7 @@ internal sealed partial class Checker
             }
             else if ((Types.Flags(target) & TypeFlags.Conditional) != 0)
             {
-                InvokeOnce(source, target, InferToConditionalType);
+                InvokeOnce(source, target, inferToConditionalTypeFn ??= InferToConditionalType);
             }
             else if ((Types.Flags(target) & TypeFlags.UnionOrIntersection) != 0)
             {
@@ -829,7 +836,7 @@ internal sealed partial class Checker
                 source = c.GetReducedType(source);
                 if (c.IsGenericMappedType(source) && c.IsGenericMappedType(target))
                 {
-                    InvokeOnce(source, target, InferFromGenericMappedTypes);
+                    InvokeOnce(source, target, inferFromGenericMappedTypesFn ??= InferFromGenericMappedTypes);
                 }
                 if (!((priority & InferencePriority.NoConstraints) != 0 && (Types.Flags(source) & (TypeFlags.Intersection | TypeFlags.Instantiable)) != 0))
                 {
@@ -846,7 +853,7 @@ internal sealed partial class Checker
                 }
                 if ((Types.Flags(source) & (TypeFlags.Object | TypeFlags.Intersection)) != 0)
                 {
-                    InvokeOnce(source, target, InferFromObjectTypes);
+                    InvokeOnce(source, target, inferFromObjectTypesFn ??= InferFromObjectTypes);
                 }
             }
         }
@@ -1520,10 +1527,10 @@ internal sealed partial class Checker
                 var kind = declaration.IsNone ? SyntaxKind.Unknown : c.Kind(declaration);
                 // Once we descend into a bivariant signature we remain bivariant for all nested inferences
                 bivariant = bivariant || kind is SyntaxKind.MethodDeclaration or SyntaxKind.MethodSignature or SyntaxKind.Constructor;
-                c.ApplyToParameterTypes(source, target, InferFromContravariantTypesIfStrictFunctionTypes);
+                c.ApplyToParameterTypes(source, target, inferFromContravariantTypesIfStrictFunctionTypesFn ??= InferFromContravariantTypesIfStrictFunctionTypes);
                 bivariant = saveBivariant;
             }
-            c.ApplyToReturnTypes(source, target, InferFromTypes);
+            c.ApplyToReturnTypes(source, target, inferFromTypesFn ??= InferFromTypes);
         }
 
         private void InferFromIndexTypes(Type source, Type target)

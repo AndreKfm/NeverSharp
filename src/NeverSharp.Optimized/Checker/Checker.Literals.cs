@@ -1346,7 +1346,24 @@ internal sealed partial class Checker
     /// <summary>checker.ts reportErrorsFromWidening.</summary>
     internal void ReportErrorsFromWidening(NodeRef declaration, Type type, WideningKind wideningKind = WideningKind.Normal)
     {
-        AddLazyDiagnostic(() =>
+        // addLazyDiagnostic(() => ...) (module CO5: run at once without creating the callback when lazy diagnostics are
+        // eager, as AddLazyDiagnostic would)
+        if (eagerLazyDiagnostics)
+        {
+            ReportErrorsFromWideningNow(declaration, type, wideningKind);
+        }
+        else
+        {
+            DeferReportErrorsFromWidening(declaration, type, wideningKind);
+        }
+    }
+
+    private void DeferReportErrorsFromWidening(NodeRef declaration, Type type, WideningKind wideningKind) =>
+        AddLazyDiagnostic(() => ReportErrorsFromWideningNow(declaration, type, wideningKind));
+
+    // (the callback of reportErrorsFromWidening's addLazyDiagnostic)
+    private void ReportErrorsFromWideningNow(NodeRef declaration, Type type, WideningKind wideningKind)
+    {
         {
             if (noImplicitAny && (Types.ObjectFlagsOf(type) & ObjectFlags.ContainsWideningType) != 0)
             {
@@ -1360,6 +1377,6 @@ internal sealed partial class Checker
                     }
                 }
             }
-        });
+        }
     }
 }

@@ -40,8 +40,11 @@ internal sealed partial class Checker
         private List<ProgramRelatedInformation>? relatedInfo;
         private List<RelationKey>? maybeKeys;
         private HashSet<RelationKey>? maybeKeysSet;
-        private List<Type> sourceStack = [];
-        private List<Type> targetStack = [];
+        // (module CO5: the stacks are created with maybeKeys, as before; until then both are a shared empty list that
+        // nothing writes to, read only up to the depths, which stay 0)
+        private List<Type> sourceStack = NoStack;
+        private List<Type> targetStack = NoStack;
+        private static readonly List<Type> NoStack = [];
         private int maybeCount;
         private int sourceDepth;
         private int targetDepth;
@@ -827,7 +830,7 @@ internal sealed partial class Checker
             // appear to be comparable to '2'.
             if (relation == c.comparableRelation && (targetFlags & TypeFlags.Primitive) != 0)
             {
-                var types = c.Types.Elements(c.Types.Union(source).Types).ToArray();
+                var types = c.Types.Elements(c.Types.Union(source).Types);
                 var constraints = new Type[types.Length];
                 var changed = false;
                 for (var i = 0; i < types.Length; i++)
@@ -868,7 +871,8 @@ internal sealed partial class Checker
         private int EachTypeRelatedToSomeType(Type source, Type target)
         {
             var result = Ternary.True;
-            foreach (var sourceType in c.Types.Elements(c.Types.Union(source).Types).ToArray())
+            // (module CO5: the list read in place; the type-list arena only appends, so the span stays a valid snapshot)
+            foreach (var sourceType in c.Types.Elements(c.Types.Union(source).Types))
             {
                 var related = TypeRelatedToSomeType(sourceType, target, false, IntersectionState.None);
                 if (related == Ternary.False)
@@ -882,7 +886,7 @@ internal sealed partial class Checker
 
         private int TypeRelatedToSomeType(Type source, Type target, bool reportErrors, IntersectionState intersectionState)
         {
-            var targetTypes = c.Types.Elements(c.Types.Union(target).Types).ToArray();
+            var targetTypes = c.Types.Elements(c.Types.Union(target).Types);
             if ((c.Types.Flags(target) & TypeFlags.Union) != 0)
             {
                 if (ContainsType(targetTypes, source))
@@ -940,7 +944,7 @@ internal sealed partial class Checker
         private int TypeRelatedToEachType(Type source, Type target, bool reportErrors, IntersectionState intersectionState)
         {
             var result = Ternary.True;
-            foreach (var targetType in c.Types.Elements(c.Types.Union(target).Types).ToArray())
+            foreach (var targetType in c.Types.Elements(c.Types.Union(target).Types))
             {
                 var related = IsRelatedTo(source, targetType, RecursionFlags.Target, reportErrors, null, intersectionState);
                 if (related == Ternary.False)
@@ -954,7 +958,7 @@ internal sealed partial class Checker
 
         private int SomeTypeRelatedToType(Type source, Type target, bool reportErrors, IntersectionState intersectionState)
         {
-            var sourceTypes = c.Types.Elements(c.Types.Union(source).Types).ToArray();
+            var sourceTypes = c.Types.Elements(c.Types.Union(source).Types);
             if ((c.Types.Flags(source) & TypeFlags.Union) != 0 && ContainsType(sourceTypes, target))
             {
                 return Ternary.True;
@@ -985,7 +989,7 @@ internal sealed partial class Checker
         private int EachTypeRelatedToType(Type source, Type target, bool reportErrors, IntersectionState intersectionState)
         {
             var result = Ternary.True;
-            var sourceTypes = c.Types.Elements(c.Types.Union(source).Types).ToArray();
+            var sourceTypes = c.Types.Elements(c.Types.Union(source).Types);
             // We strip `undefined` from the target if the `source` trivially doesn't contain it for our correspondence-checking fastpath
             // since `undefined` is frequently added by optionality and would otherwise spoil a potentially useful correspondence
             var undefinedStrippedTarget = GetUndefinedStrippedTargetIfNeeded(source, target);

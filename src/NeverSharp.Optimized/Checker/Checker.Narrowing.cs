@@ -34,6 +34,8 @@ internal sealed partial class Checker
         public int SharedFlowStart;
     }
 
+    private readonly Stack<FlowState> freeFlowStates = new();
+
     /// <summary>checker.ts getFlowTypeOfReference.</summary>
     internal Type GetFlowTypeOfReference(NodeRef reference, Type declaredType, Type initialType = default, NodeRef flowContainer = default, FlowRef flowNode = default)
     {
@@ -55,16 +57,21 @@ internal sealed partial class Checker
             return declaredType;
         }
         flowInvocationCount++;
-        var f = new FlowState
-        {
-            Reference = reference,
-            DeclaredType = declaredType,
-            InitialType = initialType,
-            FlowContainer = flowContainer,
-            SharedFlowStart = sharedFlowCount,
-        };
+        // (module CO5: the closure state reused from a per-checker stack; nothing keeps it after this call, and nested
+        // calls take another one)
+        var f = freeFlowStates.Count > 0 ? freeFlowStates.Pop() : new FlowState();
+        f.Reference = reference;
+        f.DeclaredType = declaredType;
+        f.InitialType = initialType;
+        f.FlowContainer = flowContainer;
+        f.Key = null;
+        f.IsKeySet = false;
+        f.FlowDepth = 0;
+        f.SharedFlowStart = sharedFlowCount;
         var evolvedType = GetTypeFromFlowType(GetTypeAtFlowNode(f, flowNode));
         sharedFlowCount = f.SharedFlowStart;
+        f.Reference = default;
+        freeFlowStates.Push(f);
         // When the reference is 'x' in an 'x.length', 'x.push(value)', 'x.unshift(value)' or x[n] = value' operation,
         // we give type 'any[]' to 'x' instead of using the type determined by control flow analysis such that operations
         // on empty arrays are possible without implicit any errors and new element types can be inferred without
@@ -255,8 +262,7 @@ internal sealed partial class Checker
             }
             else if ((flags & FlowFlags.ReduceLabel) != 0)
             {
-                var reduceLabel = flow;
-                type = WithReducedLabel(reduceLabel, () => GetTypeAtFlowNode(f, FlowAntecedent(reduceLabel)));
+                type = GetTypeAtFlowReduceLabel(f, flow);
             }
             else if ((flags & FlowFlags.Start) != 0)
             {
@@ -292,6 +298,11 @@ internal sealed partial class Checker
             return type;
         }
     }
+
+    // (module CO5: the reduce label's callback in a method of its own, so that GetTypeAtFlowNode creates no closure on
+    // its other paths)
+    private FlowType GetTypeAtFlowReduceLabel(FlowState f, FlowRef reduceLabel) =>
+        WithReducedLabel(reduceLabel, () => GetTypeAtFlowNode(f, FlowAntecedent(reduceLabel)));
 
     private static void SetAt<T>(List<T> list, int index, T value)
     {
