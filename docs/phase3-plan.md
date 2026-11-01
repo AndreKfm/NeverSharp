@@ -1,5 +1,7 @@
 # Phase 3: type checker (Track O only) — plan
 
+Phase 3 closed on 2026-11-01: summary in [phase3-summary.md](phase3-summary.md).
+
 Decided by the author on 2026-10-25: Phase 3 ports the type checker of TypeScript 6.0.3 (`src/compiler/checker.ts`, 54,434 lines; typescript-go 7.0.2's `internal/checker`, 26 files) in full, **for Track O only**; standing rules of Phases 1–2 apply (Track F not extended; run only the tests and gates a change affects). Draft pre-registration amendment: [preregistration.md](preregistration.md) §17 (`prereg/v9`, to be accepted and tagged before any checker measurement).
 
 ## Why this phase is different

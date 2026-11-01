@@ -657,3 +657,7 @@ The brief's target for tc1500/tc2500 (clearly faster, less pause) is not reached
 ## Checker additional run 2 (after CO4)
 
 2026-11-01, profile `check`, harness commit db97ac0, protocol-compliant (rig checks ok, variance gate PASS); `results/phase3/additional/2026-11-01T06-48-39-651Z/` (NOTE.md, report.md). **Additional run, not the endpoint** (endpoint stays G = 1.680, no parity). cs-o-aot-ws-check vs tsgo7-check **G = 1.025 [1.020, 1.030]** (run 1 1.068): upper bound <= 1.20, within 20 % of typescript-go (vscode 1.037, sentry 0.796, bluesky 1.217, playwright 1.238, tldraw 0.910); single-threaded 0.818 [0.814, 0.819]; Server GC 0.850 [0.844, 0.855] (98.75 %; bluesky 1.062, playwright 1.086), single 0.810; vs tsrs 5.185 [5.129, 5.218], single 1.705. Parallel medians run 1 -> run 2: bluesky 1.06 -> 0.993 s, playwright 1.85 -> 1.837 s, vscode 15.01 -> 15.01 s (typescript-go 14.48 s); 16.0 GB allocated on vscode, 3.9 s ws GC pause. Diagnostics as in run 1. The remaining parallel gap on bluesky and playwright is mostly the Workstation GC pause (Server GC within 9 % of typescript-go).
+
+### Phase 3 closed (2026-11-01)
+
+Closed by the author after CO5. Summary of Gate C, the checker endpoint (1.680, no parity), the two additional runs (down to 1.025 vs typescript-go, single-threaded 0.818, Server GC 0.850; vs tsrs 5.19), claims, disclosed differences, modules and steps, and what is left: [phase3-summary.md](phase3-summary.md).
