@@ -72,6 +72,10 @@ const configurations = [
         expectDriver: "tsgo-7.0.2-check-parallel", command: list => [parseGo, "--check", list] },
     { id: "tsgo7-check-single", label: "typescript-go 7.0.2, program parse+bind+check, single-threaded", threads: "single", check: true,
         expectDriver: "tsgo-7.0.2-check-single", command: list => [parseGo, "--check", "--single", list] },
+    // Pre-registration §18 (prereg/v10): the same program check with 12 checkers (CompilerOptions.Checkers, file i to
+    // checker i % 12), secondary configuration of profile check12.
+    { id: "tsgo7-check12", label: "typescript-go 7.0.2, program parse+bind+check, parallel (12 checkers)", threads: "parallel", check: true,
+        expectDriver: "tsgo-7.0.2-check-parallel-n12", command: list => [parseGo, "--check", "--checkers", "12", list] },
     // tsrs's program check (module C11, decided by the author on 2026-10-29): tsrs_compiler::new_program and its
     // built-in checker pool with tsrs's default parallelism (parse-rs --check; docs/benchmark-harness.md §4.1).
     { id: "tsrs-check", label: "tsrs 0.18.0 (Rust), program parse+bind+check, parallel (tsrs's default checker pool)", threads: "parallel", check: true,
@@ -112,7 +116,10 @@ for (const [track, prefix] of [["faithful", "cs"], ["optimized", "cs-o"]]) {
                 { id: `${prefix}-${runtime}-check`, label: `C# Track O, ${description}, program parse+bind+check, parallel (4 checkers)${endpoint}`, threads: "parallel", check: true,
                     expectDriver: `cs-${track}-${runtime}-check-parallel`, command: list => [driver, "--check", list] },
                 { id: `${prefix}-${runtime}-check-single`, label: `C# Track O, ${description}, program parse+bind+check, single-threaded`, threads: "single", check: true,
-                    expectDriver: `cs-${track}-${runtime}-check-single`, command: list => [driver, "--check", "--single", list] });
+                    expectDriver: `cs-${track}-${runtime}-check-single`, command: list => [driver, "--check", "--single", list] },
+                // pre-registration §18 (prereg/v10): 12 checkers, file i to checker i % 12, as tsgo7-check12
+                { id: `${prefix}-${runtime}-check12`, label: `C# Track O, ${description}, program parse+bind+check, parallel (12 checkers)`, threads: "parallel", check: true,
+                    expectDriver: `cs-${track}-${runtime}-check-parallel-n12`, command: list => [driver, "--check", "--checkers", "12", list] });
         }
     }
 }
@@ -142,6 +149,9 @@ const PROFILES = {
         "cs-o-aot-ws-bind", "cs-o-aot-ws-bind-single", "cs-o-aot-srv-bind", "cs-o-aot-srv-bind-single"],
     // Phase 3 checker endpoint (draft §17); tsrs's program check reported next to it (module C11)
     check: ["tsgo7-check", "tsgo7-check-single", "tsrs-check", "tsrs-check-single", "cs-o-aot-ws-check", "cs-o-aot-ws-check-single", "cs-o-aot-srv-check", "cs-o-aot-srv-check-single"],
+    // pre-registration §18 (prereg/v10): 12 checkers on both sides (secondary); the single-threaded rows of profile
+    // check bind the variance gate; tsrs's program check is reported next to it
+    check12: ["tsgo7-check12", "tsgo7-check-single", "tsrs-check", "cs-o-aot-ws-check12", "cs-o-aot-ws-check-single", "cs-o-aot-srv-check12"],
 };
 const profile = arg("--profile", configFilter ? undefined : "full");
 if (profile && configFilter) throw new Error("--profile and --configs exclude each other");

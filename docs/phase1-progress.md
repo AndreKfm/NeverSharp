@@ -661,3 +661,35 @@ The brief's target for tc1500/tc2500 (clearly faster, less pause) is not reached
 ### Phase 3 closed (2026-11-01)
 
 Closed by the author after CO5. Summary of Gate C, the checker endpoint (1.680, no parity), the two additional runs (down to 1.025 vs typescript-go, single-threaded 0.818, Server GC 0.850; vs tsrs 5.19), claims, disclosed differences, modules and steps, and what is left: [phase3-summary.md](phase3-summary.md).
+
+## Exploration CN1: more than 4 checkers (2026-11-01/02, not pre-registered)
+
+Asked by the author after Phase 3 closed, done by one subagent with nothing committed (raw data and patch in the session scratch, `CN1/`).
+- **Switch:** a measurement switch for the checker count N on both sides. typescript-go has its own: `CompilerOptions.Checkers`, with the same assignment, file *i* to checker *i* mod N.
+- **Lists:** tuning-check, tc1500/tc2500 and the five repository programs.
+- **Values:** N = 4, 8, 12, 16, on aot-ws, aot-srv and typescript-go.
+- **Method:** hyperfine, 10 runs per configuration in two rounds (N ascending, then descending).
+
+Geometric mean over the five repositories:
+
+| N | ws vs its N = 4 | srv vs its N = 4 | tsgo vs its N = 4 | ws vs tsgo same N | srv vs tsgo same N |
+|---|---:|---:|---:|---:|---:|
+| 4 | 1 | 1 | 1 | 0.997 | 0.836 |
+| 8 | 0.841 | 0.745 | 0.708 | 1.183 | 0.879 |
+| 12 | 0.825 | 0.669 | 0.628 | 1.310 | 0.890 |
+| 16 | 0.888 | 0.681 | 0.603 | 1.468 | 0.944 |
+
+**Workstation GC stops scaling.** Its pause grows with N (vscode 3.4 → 6.5 s from N = 4 to 16), and it never keeps more than about 6 cores busy. Server GC keeps 9–13 cores busy.
+
+**Diagnostic counts change with N on both sides** (as 4 checkers against one, C12) and are deterministic.
+
+**Fixed assignment can backfire.** With *i* mod N, tuning-check at N = 12 was slower than at N = 4: heavy units landed on one checker.
+
+**A crash with 8 or more checkers** was a port defect that 4 checkers can also reach. A spelling suggestion for a global type looked up without a location (`Disposable` from a `using` declaration) became a node diagnostic at no node instead of tsc's global `createError`. Fixed in 6bd5cd6; Gate C full: 50,177 of 50,177 identical.
+
+**Follow-up (author, 2026-11-02): draft amendment `prereg/v10`, §18.** A secondary comparison with 12 checkers on both sides:
+- configurations `tsgo7-check12`, `cs-o-aot-ws-check12`, `cs-o-aot-srv-check12`, in profile `check12` with `tsrs-check` and the single-threaded binding rows of profile `check`;
+- driver option `--checkers N` in both drivers;
+- Table 2f in report.mjs.
+
+The report of additional run 2 is byte-identical with the changed report.mjs. The functional check `bench.mjs --check --profile check12` passes, and the 4-checker configurations report unchanged driver names and counts.

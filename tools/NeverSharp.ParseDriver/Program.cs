@@ -26,8 +26,10 @@
 //   file i to checker i % 4, each checker on its own thread) computes the semantic diagnostics of every program file
 //   and the global diagnostics. --single: everything sequential, one checker. The driver name carries "-check" and the
 //   JSON line adds the diagnostic counts ("diagnostics" and per category). --dump-diagnostics <file> writes the
-//   canonical diagnostics for harness/bench/check-equivalence.mjs (never in timed runs).
-//   Usage: parse-cs-optimized-<runtime> [--bind | --check [--dump-diagnostics <file>]] [--single] <file list>
+//   canonical diagnostics for harness/bench/check-equivalence.mjs (never in timed runs). --checkers N (pre-registration
+//   §18): N checkers instead of 4, file i to checker i % N, as typescript-go's CompilerOptions.Checkers; the driver
+//   name ends in "-nN".
+//   Usage: parse-cs-optimized-<runtime> [--bind | --check [--checkers N] [--dump-diagnostics <file>]] [--single] <file list>
 
 using System.Diagnostics;
 using System.Globalization;
@@ -43,6 +45,7 @@ var single = false;
 var bind = false;
 var check = false;
 string? dumpDiagnostics = null;
+var checkerCount = 0;
 var argIndex = 0;
 for (; argIndex < args.Length && args[argIndex].StartsWith("--", StringComparison.Ordinal); argIndex++)
 {
@@ -60,6 +63,13 @@ for (; argIndex < args.Length && args[argIndex].StartsWith("--", StringCompariso
         case "--dump-diagnostics":
             dumpDiagnostics = args[++argIndex];
             break;
+        case "--checkers":
+            if (argIndex + 1 >= args.Length || !int.TryParse(args[++argIndex], NumberStyles.None, CultureInfo.InvariantCulture, out checkerCount) || checkerCount < 1)
+            {
+                Console.Error.WriteLine("--checkers needs a positive count");
+                return 2;
+            }
+            break;
         default:
             Console.Error.WriteLine($"unknown option {args[argIndex]}");
             return 2;
@@ -75,6 +85,11 @@ if (bind || check)
 if ((bind && check) || (dumpDiagnostics is not null && !check))
 {
     Console.Error.WriteLine("--bind and --check exclude each other; --dump-diagnostics needs --check");
+    return 2;
+}
+if (checkerCount > 0 && (!check || single))
+{
+    Console.Error.WriteLine("--checkers needs --check and excludes --single");
     return 2;
 }
 var listPath = args[argIndex];
@@ -106,7 +121,7 @@ var options = new CreateSourceFileOptions { LanguageVersion = ScriptTarget.Lates
 #if TRACK_OPTIMIZED
 if (check)
 {
-    return CheckMode.Run(files, single, priority, dumpDiagnostics);
+    return CheckMode.Run(files, single, checkerCount, priority, dumpDiagnostics);
 }
 #endif
 

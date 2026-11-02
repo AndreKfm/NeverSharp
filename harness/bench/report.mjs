@@ -53,7 +53,7 @@ push("", "Configurations:", "");
 for (const c of configs) push(`- \`${c.id}\`: ${c.label}`);
 push("");
 
-push(`## Table 1. Wall-clock, throughput, peak memory (parse-only${configs.some(c => /-bind(-single)?$/.test(c.id)) ? "; `*-bind` rows: parse+bind" : ""}${configs.some(c => /-check(-single)?$/.test(c.id)) ? "; `*-check` rows: the file list as one program, parse+bind+check" : ""})`, "",
+push(`## Table 1. Wall-clock, throughput, peak memory (parse-only${configs.some(c => /-bind(-single)?$/.test(c.id)) ? "; `*-bind` rows: parse+bind" : ""}${configs.some(c => /-check(-single|12)?$/.test(c.id)) ? "; `*-check` rows: the file list as one program, parse+bind+check" : ""})`, "",
     row(["Repository", "Configuration", "Median (s)", "MAD (s)", "MAD/median", "Files/s", "MB/s", "Peak working set (MiB)", "Peak commit (MiB)"]),
     row(["---", "---", "---:", "---:", "---:", "---:", "---:", "---:", "---:"]));
 for (const r of repos) for (const c of configs) {
@@ -69,7 +69,8 @@ const isBind = id => /-bind(-single)?$/.test(id);
 const bindConfigs = configs.filter(c => isBind(c.id));
 // Phase 3 (draft pre-registration §17): check configurations (`*-check`, `*-check-single`) report the diagnostics of
 // the checked program, and are compared with typescript-go's program check (Table 2e), never with parse-only or bind rows.
-const isCheck = id => /-check(-single)?$/.test(id);
+// (`*-check12`: 12 checkers, pre-registration §18)
+const isCheck = id => /-check(-single|12)?$/.test(id);
 const checkConfigs = configs.filter(c => isCheck(c.id));
 if (checkConfigs.length > 0) {
     push("## Table 1c. Program check: diagnostics reported (driver report of the validation run)", "",
@@ -121,10 +122,12 @@ for (const [table, reference, note] of [
     ["2c", "tsgo7-bind", "Endpoint of pre-registration §15: parse+bind per file, against typescript-go 7.0.2 (parser.ParseSourceFile and binder.BindSourceFile per file, parallel). Same method as Table 2. typescript-go's binder ports TypeScript 7 and differs from 6.0.3's in places."],
     ["2d", "tsrs-bind", "Secondary reference: parse+bind against tsrs 0.18.0 (tsrs_parser::parse_source_file_owned and tsrs_binder::bind_source_file per file, parallel). Same method as Table 2."],
     ["2e", "tsgo7-check", "Endpoint of draft pre-registration §17: each repository's file list as one program, parse+bind+check, against typescript-go 7.0.2 (compiler.NewProgram, GetSemanticDiagnostics and GetGlobalDiagnostics on its default checker pool of 4 checkers). Same method as Table 2. typescript-go's checker ports TypeScript 7 and differs from 6.0.3's in places."],
+    ["2f", "tsgo7-check12", "Pre-registration §18 (secondary): the same program check with 12 checkers on both sides (typescript-go 7.0.2 with CompilerOptions.Checkers = 12, Track O with 12 checkers; file i to checker i % 12 on both sides). Same method as Table 2."],
 ]) {
     if (!configs.some(c => c.id === reference)) continue;
-    const rows = reference === "tsgo7-check" ? checkConfigs : bindConfigs;
-    push(`## Table ${table}. ${reference === "tsgo7-check" ? "Program check" : "Parse+bind"}: median wall-clock relative to \`${reference}\`, with 95 % confidence interval`, "", note, "",
+    const isCheckTable = reference.startsWith("tsgo7-check");
+    const rows = isCheckTable ? checkConfigs : bindConfigs;
+    push(`## Table ${table}. ${isCheckTable ? "Program check" : "Parse+bind"}: median wall-clock relative to \`${reference}\`, with 95 % confidence interval`, "", note, "",
         row(["Configuration", ...repos, "Geometric mean"]), row(["---", ...repos.map(() => "---:"), "---:"]));
     for (const c of rows) {
         const pairs = repos.map(r => result(r, c.id) && result(r, reference) ? [result(r, c.id).timing.times, result(r, reference).timing.times] : undefined);
@@ -147,6 +150,7 @@ const PROFILE_RIG_CHECK = {
     quick: ["tsgo7-parse-single", "cs-o-aot-ws-single"],
     binder: ["tsgo7-bind-single", "cs-o-aot-ws-bind-single"],
     check: ["tsgo7-check-single", "cs-o-aot-ws-check-single"],
+    check12: ["tsgo7-check-single", "cs-o-aot-ws-check-single"],
 };
 const runProfile = run.profile ?? "full";
 const RIG_CHECK = new Set(PROFILE_RIG_CHECK[runProfile] ?? PROFILE_RIG_CHECK.full);

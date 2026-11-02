@@ -35,10 +35,12 @@
 // then program.GetSemanticDiagnostics(ctx, nil) (every file, on the program's
 // default checker pool: 4 checkers, file i to checker i % 4) and
 // program.GetGlobalDiagnostics(ctx). --single: ProgramOptions.SingleThreaded
-// (one checker, everything sequential). The driver name carries "-check" and
-// the JSON line adds the diagnostic counts.
+// (one checker, everything sequential). --checkers N (pre-registration §18):
+// CompilerOptions.Checkers = N, the pool's N checkers, file i to checker i % N;
+// the driver name ends in "-nN". The driver name carries "-check" and the JSON
+// line adds the diagnostic counts.
 //
-// Usage: parse-go [--bind | --check] [--single] <file list>
+// Usage: parse-go [--bind | --check [--checkers N]] [--single] <file list>
 
 package main
 
@@ -46,6 +48,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"sync/atomic"
 
@@ -83,7 +86,7 @@ func checkOptions() *core.CompilerOptions {
 	}
 }
 
-func runCheck(files []string, single bool, priority string) {
+func runCheck(files []string, single bool, checkers int, priority string) {
 	fs := osvfs.FS()
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -98,7 +101,11 @@ func runCheck(files []string, single bool, priority string) {
 	programFiles := 0
 	if len(files) > 0 {
 		host := compiler.NewCachedFSCompilerHost(cwd, fs, bundled.LibPath(), nil, nil)
-		config := tsoptions.NewParsedCommandLine(checkOptions(), files, tspath.ComparePathsOptions{UseCaseSensitiveFileNames: fs.UseCaseSensitiveFileNames(), CurrentDirectory: cwd})
+		options := checkOptions()
+		if checkers > 0 {
+			options.Checkers = &checkers
+		}
+		config := tsoptions.NewParsedCommandLine(options, files, tspath.ComparePathsOptions{UseCaseSensitiveFileNames: fs.UseCaseSensitiveFileNames(), CurrentDirectory: cwd})
 		program := compiler.NewProgram(compiler.ProgramOptions{Config: config, Host: host, SingleThreaded: singleThreaded})
 		ctx := context.Background()
 		semantic := program.GetSemanticDiagnostics(ctx, nil)
@@ -133,6 +140,8 @@ func runCheck(files []string, single bool, priority string) {
 	mode := "parallel"
 	if single {
 		mode = "single"
+	} else if checkers > 0 {
+		mode += "-n" + strconv.Itoa(checkers)
 	}
 	fmt.Printf("{\"driver\":\"tsgo-7.0.2-check-%s\",\"files\":%d,\"bytes\":%d,\"nodes\":%d,\"programFiles\":%d,\"diagnostics\":%d,\"errors\":%d,\"warnings\":%d,\"suggestions\":%d,\"messages\":%d,\"priority\":\"%s\"}\n",
 		mode, len(files), chars, nodes, programFiles, total, errors, warnings, suggestions, messages, priority)
@@ -140,6 +149,7 @@ func runCheck(files []string, single bool, priority string) {
 
 func main() {
 	single, bind, check := false, false, false
+	checkers := 0
 	args := os.Args[1:]
 	for len(args) > 0 && strings.HasPrefix(args[0], "--") {
 		switch args[0] {
@@ -149,6 +159,17 @@ func main() {
 			bind = true
 		case "--check":
 			check = true
+		case "--checkers":
+			n, err := 0, error(nil)
+			if len(args) > 1 {
+				n, err = strconv.Atoi(args[1])
+			}
+			if err != nil || n < 1 {
+				fmt.Fprintln(os.Stderr, "--checkers needs a positive count")
+				os.Exit(2)
+			}
+			checkers = n
+			args = args[1:]
 		default:
 			fmt.Fprintln(os.Stderr, "unknown option "+args[0])
 			os.Exit(2)
@@ -169,12 +190,20 @@ func main() {
 			files = append(files, tspath.NormalizeSlashes(line))
 		}
 	}
+	if checkers > 0 && !check {
+		fmt.Fprintln(os.Stderr, "--checkers needs --check")
+		os.Exit(2)
+	}
 	if check {
 		if bind {
 			fmt.Fprintln(os.Stderr, "--bind and --check exclude each other")
 			os.Exit(2)
 		}
-		runCheck(files, single, priority)
+		if checkers > 0 && single {
+			fmt.Fprintln(os.Stderr, "--checkers and --single exclude each other")
+			os.Exit(2)
+		}
+		runCheck(files, single, checkers, priority)
 		return
 	}
 

@@ -26,12 +26,16 @@ internal sealed class CheckerPool
     private readonly Checker?[] checkers;
     private readonly Dictionary<SourceFile, int> fileAssociations;
 
-    /// <summary>checkerpool.go newCheckerPoolWithTracing + createCheckers (program.Options().Checkers is not in Track O's options).</summary>
-    internal CheckerPool(Program program, bool singleThreaded)
+    /// <summary>
+    /// checkerpool.go newCheckerPoolWithTracing + createCheckers. program.Options().Checkers is not in Track O's
+    /// options; <paramref name="requestedCount"/> stands for it (4 by default; the driver's --checkers N,
+    /// pre-registration §18).
+    /// </summary>
+    internal CheckerPool(Program program, bool singleThreaded, int requestedCount = 4)
     {
         this.program = program;
         this.singleThreaded = singleThreaded;
-        var checkerCount = singleThreaded ? 1 : 4;
+        var checkerCount = singleThreaded ? 1 : requestedCount;
         checkerCount = Math.Max(Math.Min(Math.Min(checkerCount, program.SourceFiles.Count), 256), 1);
         checkers = new Checker?[checkerCount];
 

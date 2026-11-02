@@ -21,21 +21,22 @@ internal static class CheckMode
     /// </summary>
     private static CompilerOptions ProgramOptions() => new() { NoResolve = true };
 
-    internal static int Run(string[] files, bool single, string priority, string? dumpDiagnostics)
+    /// <param name="checkerCount">--checkers N (pre-registration §18), 0: the pool's default of 4.</param>
+    internal static int Run(string[] files, bool single, int checkerCount, string priority, string? dumpDiagnostics)
     {
         int exitCode = 0;
         if (single)
         {
             // Everything sequential on one thread whose stack is the checker threads' (Go stacks grow on demand).
-            var thread = new Thread(() => exitCode = RunCore(files, single, priority, dumpDiagnostics), CheckerPool.StackSize);
+            var thread = new Thread(() => exitCode = RunCore(files, single, checkerCount, priority, dumpDiagnostics), CheckerPool.StackSize);
             thread.Start();
             thread.Join();
             return exitCode;
         }
-        return RunCore(files, single, priority, dumpDiagnostics);
+        return RunCore(files, single, checkerCount, priority, dumpDiagnostics);
     }
 
-    private static int RunCore(string[] files, bool single, string priority, string? dumpDiagnostics)
+    private static int RunCore(string[] files, bool single, int checkerCount, string priority, string? dumpDiagnostics)
     {
         var programOptions = ProgramOptions();
         // tsc's host parses with the program's createSourceFile options: languageVersion = the emit target, jsDocParsingMode
@@ -101,7 +102,7 @@ internal static class CheckMode
         else
         {
             var program = TsProgram.Create(names, programOptions, host);
-            var pool = new CheckerPool(program, single);
+            var pool = checkerCount > 0 ? new CheckerPool(program, single, checkerCount) : new CheckerPool(program, single);
             semantic = pool.GetSemanticDiagnostics();
             global = pool.GetGlobalDiagnostics();
             programFiles = program.SourceFiles.Count;
@@ -138,7 +139,7 @@ internal static class CheckMode
         }
 
         var runtime = $"{(System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported ? "jit" : "aot")}-{(System.Runtime.GCSettings.IsServerGC ? "srv" : "ws")}";
-        var mode = single ? "single" : "parallel";
+        var mode = single ? "single" : checkerCount > 0 ? $"parallel-n{checkerCount.ToString(CultureInfo.InvariantCulture)}" : "parallel";
         var inv = CultureInfo.InvariantCulture;
         Console.WriteLine(string.Create(inv,
             $"{{\"driver\":\"cs-optimized-{runtime}-check-{mode}\",\"files\":{files.Length},\"chars\":{chars},\"nodes\":{nodes},\"programFiles\":{programFiles},\"checkers\":{checkers}," +

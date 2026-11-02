@@ -363,3 +363,31 @@ Every binding configuration of the run's profile must be present and below the l
 **Endpoint.** Each benchmark repository's file list as one program with the Gate C options, parse+bind+check: `cs-o-aot-ws-check` against `tsgo7-check` (typescript-go 7.0.2 checking the same program), with G, interval and decision rule as in §8, from the first protocol-compliant run after Gate C has passed; a measurement profile `check` (§16 style: `cs-o-aot-ws-check(-single)`, `cs-o-aot-srv-check(-single)`, `tsgo7-check(-single)`, `tsrs-check(-single)`) with the single-threaded variants of `cs-o-aot-ws-check` and `tsgo7-check` as the variance gate's binding rows. **Secondary reference (decided by the author, 2026-10-29):** tsrs 0.18.0 checking the same program (`tsrs_compiler::new_program`, semantic and global diagnostics, the same explicit options as typescript-go) is reported as for parsing (§8, prereg/v5), not binding; its default checker pool differs (checker count from the core count, 16 on the reference machine, files assigned by directory and stolen by idle checkers) and is disclosed with every comparison. Checked: the semantic diagnostics of every file and the global diagnostics (no suggestion diagnostics). Both sides resolve module names between the files of the program as tsc 6.0.3 does with `noResolve: true` (imports of files in the program resolve; files outside it are not added). Options: TypeScript 6.0.3's defaults, given to typescript-go explicitly where its TypeScript 7 defaults differ (table in docs/benchmark-harness.md). Parallel: typescript-go's default checker pool (4 checkers) and the same number of checkers with the same file assignment on the C# side; single-threaded: one checker. The diagnostic counts of both sides are reported with every comparison, and the C# diagnostics of each repository program are compared once with tsc 6.0.3's (counts, identical or not, differences by cause; `harness/bench/check-equivalence.mjs`). Before the tag all five repository programs were line-identical with tsc 6.0.3 (modules C10, C11). Disclosed: typescript-go's checker ports TypeScript 7 and differs from 6.0.3's in places; the repositories' dependencies are not installed and imports are not resolved, identically on both sides.
 
 **Status.** Accepted by the author on 2026-10-29 and tagged `prereg/v9` (OpenTimestamps) after Gate C passed and before any checker measurement.
+
+## 18. Program check with 12 checkers (draft amendment `prereg/v10`)
+
+**Purpose (decided by the author, 2026-11-02).** A secondary comparison of the program check of §17 with more checkers than typescript-go's default pool of 4, on both sides. It does not change the checker endpoint, Gate C, profile `check` or any result of §17; the endpoint stays G = 1.680.
+
+**Configurations** (profile `check12`):
+- `tsgo7-check12`: typescript-go 7.0.2 as `tsgo7-check`, with `CompilerOptions.Checkers = 12` (its own option; `checkerpool.go` assigns program file *i* to checker *i* mod 12).
+- `cs-o-aot-ws-check12` and `cs-o-aot-srv-check12`: Track O as `cs-o-aot-ws-check` / `cs-o-aot-srv-check`, with 12 checkers and the same assignment (driver option `--checkers 12`; the checker itself is unchanged).
+- `tsrs-check`: reported next to them, with its own pool (§17).
+- `tsgo7-check-single` and `cs-o-aot-ws-check-single`: the binding rows of the variance gate, as in profile `check`.
+
+**Comparisons.** Both are secondary and reported with G, interval and the wording of §8:
+- `cs-o-aot-ws-check12` vs `tsgo7-check12` at 95 %;
+- `cs-o-aot-srv-check12` vs `tsgo7-check12` at 98.75 % (Bonferroni, as the Server GC comparison of §17).
+
+Table 2f compares every check configuration of the run with `tsgo7-check12`; tsrs is reported as in §17. The comparison is taken from the first protocol-compliant run of profile `check12` after the tag. Later runs are additional runs.
+
+**Why 12.** 12 is the reference machine's physical core count. It was chosen after an exploratory measurement (CN1, 2026-11-01; not pre-registered, raw data in the session scratch, summarized in phase1-progress.md), which this amendment discloses:
+- N = 12 was Track O's best count on both runtimes;
+- for typescript-go, N = 12 came within 3 % of its best count (N = 16).
+
+In CN1, at equal N:
+- Track O under Workstation GC fell behind typescript-go (geometric mean 1.31 at N = 12), because the Workstation GC pause grows with the number of checkers;
+- under Server GC it stayed ahead (0.89).
+
+**Diagnostics.** With N checkers a file's diagnostics depend on which types its checker created before (C12), so the 12-checker counts differ from the 4-checker counts, on both sides. They are reported with every comparison, and CN1 found them deterministic from run to run. The fixed assignment *i* mod N can make a larger N slower for some programs (CN1: tuning-check at N = 12 against N = 4), which is disclosed.
+
+**Status.** Draft, awaiting the author's acceptance. The tag `prereg/v10` (OpenTimestamps) follows after the harness changes are committed and before any profile-`check12` measurement.
