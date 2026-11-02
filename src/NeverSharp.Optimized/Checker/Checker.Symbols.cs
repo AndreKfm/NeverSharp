@@ -418,26 +418,18 @@ internal sealed partial class Checker
             var targetPath = FileNameOf(targetSymbolFile);
             var firstFile = string.CompareOrdinal(sourcePath, targetPath) < 0 ? sourceSymbolFile : targetSymbolFile;
             var secondFile = firstFile == sourceSymbolFile ? targetSymbolFile : sourceSymbolFile;
-            amalgamatedDuplicatesByFiles ??= [];
-            if (!amalgamatedDuplicatesByFiles.TryGetValue((firstFile, secondFile), out var filesDuplicates))
-            {
-                filesDuplicates = new DuplicateInfoForFiles(firstFile, secondFile);
-                amalgamatedDuplicates.Add(filesDuplicates);
-                amalgamatedDuplicatesByFiles.Add((firstFile, secondFile), filesDuplicates);
-            }
-            if (!filesDuplicates.SymbolsByName.TryGetValue(symbolName, out var conflictingSymbolInfo))
-            {
-                conflictingSymbolInfo = new DuplicateInfoForSymbol(symbolName, isEitherBlockScoped);
-                filesDuplicates.ConflictingSymbols.Add(conflictingSymbolInfo);
-                filesDuplicates.SymbolsByName.Add(symbolName, conflictingSymbolInfo);
-            }
+            // getOrUpdate(amalgamatedDuplicates, `${firstFile.path}|${secondFile.path}`, ...) and
+            // getOrUpdate(filesDuplicates.conflictingSymbols, symbolName, ...)
+            var duplicates = amalgamatedDuplicates;
+            var pair = duplicates.PairOf(firstFile, secondFile);
+            var conflictingSymbolInfo = duplicates.SymbolOf(pair, symbolName, isEitherBlockScoped);
             if (!isSourcePlainJs)
             {
-                AddDuplicateLocations(conflictingSymbolInfo.FirstFileLocations, conflictingSymbolInfo.FirstFileSet, source);
+                AddDuplicateLocations(duplicates, conflictingSymbolInfo, secondList: false, source);
             }
             if (!isTargetPlainJs)
             {
-                AddDuplicateLocations(conflictingSymbolInfo.SecondFileLocations, conflictingSymbolInfo.SecondFileSet, target);
+                AddDuplicateLocations(duplicates, conflictingSymbolInfo, secondList: true, target);
             }
         }
         else
@@ -453,17 +445,14 @@ internal sealed partial class Checker
         }
     }
 
-    // checker.ts addDuplicateLocations (pushIfUnique; the set holds the list's elements)
-    private void AddDuplicateLocations(List<NodeRef> locations, HashSet<NodeRef> set, SymbolRef symbol)
+    // checker.ts addDuplicateLocations (pushIfUnique)
+    private void AddDuplicateLocations(AmalgamatedDuplicates duplicates, int symbolInfo, bool secondList, SymbolRef symbol)
     {
         if (DeclarationsOf(symbol) is { } declarations)
         {
             foreach (var declaration in declarations)
             {
-                if (set.Add(declaration))
-                {
-                    locations.Add(declaration);
-                }
+                duplicates.AddLocationIfUnique(symbolInfo, secondList, declaration);
             }
         }
     }
@@ -534,56 +523,180 @@ internal sealed partial class Checker
         return false;
     }
 
-    // checker.ts DuplicateInfoForFiles: the conflicting symbols in a Map keyed by name (insertion order in the list)
-    private sealed class DuplicateInfoForFiles(int firstFile, int secondFile)
+    /// <summary>
+    /// checker.ts amalgamatedDuplicates (module CO6: records without references instead of objects per file pair and per
+    /// symbol). The Map keyed by <c>`${firstFile.path}|${secondFile.path}`</c> (one program file per path, so the pair of
+    /// file numbers is the same key) is the pair records in insertion order with an index by the file numbers; a pair's
+    /// conflictingSymbols Map (DuplicateInfoForFiles) is a chain of symbol records (DuplicateInfoForSymbol) in insertion
+    /// order with an index by (pair, name); each of a symbol's location lists (pushIfUnique) is a chain of location
+    /// records, with one set of (list, location) for the uniqueness test. Lives only while the checker is constructed.
+    /// </summary>
+    private sealed class AmalgamatedDuplicates
     {
-        public int FirstFile { get; } = firstFile;
-        public int SecondFile { get; } = secondFile;
-        public List<DuplicateInfoForSymbol> ConflictingSymbols { get; } = [];
-        public Dictionary<string, DuplicateInfoForSymbol> SymbolsByName { get; } = new(StringComparer.Ordinal);
+        internal struct Pair
+        {
+            public int FirstFile;
+            public int SecondFile;
+            public int FirstSymbol; // the chain of the pair's symbols (0: none)
+            public int LastSymbol;
+            public int Count;
+        }
+
+        internal struct Symbol
+        {
+            public int Name;
+            public bool IsBlockScoped;
+            public int Next;
+            public int FirstHead; // firstFileLocations: the chain of locations (0: empty)
+            public int FirstTail;
+            public int SecondHead; // secondFileLocations
+            public int SecondTail;
+        }
+
+        internal struct Location
+        {
+            public NodeRef Node;
+            public int Next;
+        }
+
+        // (index 0 of each array: none)
+        internal Pair[] Pairs = new Pair[64];
+        internal int PairCount;
+        internal Symbol[] Symbols = new Symbol[64];
+        private int symbolCount;
+        private Location[] locations = new Location[256];
+        private int locationCount;
+        private readonly Dictionary<long, int> pairIndex = [];
+        private readonly Dictionary<long, int> symbolIndex = [];
+        private readonly Dictionary<string, int> nameIds = new(StringComparer.Ordinal);
+        internal readonly List<string> Names = [];
+        private readonly HashSet<(int List, NodeRef Node)> locationSet = [];
+
+        internal int PairOf(int firstFile, int secondFile)
+        {
+            var key = ((long)firstFile << 32) | (uint)secondFile;
+            if (!pairIndex.TryGetValue(key, out var pair))
+            {
+                pair = ++PairCount;
+                if (pair == Pairs.Length)
+                {
+                    Array.Resize(ref Pairs, Pairs.Length * 2);
+                }
+                Pairs[pair] = new Pair { FirstFile = firstFile, SecondFile = secondFile };
+                pairIndex.Add(key, pair);
+            }
+            return pair;
+        }
+
+        internal int SymbolOf(int pair, string name, bool isBlockScoped)
+        {
+            if (!nameIds.TryGetValue(name, out var nameId))
+            {
+                nameId = Names.Count;
+                Names.Add(name);
+                nameIds.Add(name, nameId);
+            }
+            var key = ((long)pair << 32) | (uint)nameId;
+            if (!symbolIndex.TryGetValue(key, out var symbol))
+            {
+                symbol = ++symbolCount;
+                if (symbol == Symbols.Length)
+                {
+                    Array.Resize(ref Symbols, Symbols.Length * 2);
+                }
+                Symbols[symbol] = new Symbol { Name = nameId, IsBlockScoped = isBlockScoped };
+                ref var p = ref Pairs[pair];
+                if (p.LastSymbol == 0)
+                {
+                    p.FirstSymbol = symbol;
+                }
+                else
+                {
+                    Symbols[p.LastSymbol].Next = symbol;
+                }
+                p.LastSymbol = symbol;
+                p.Count++;
+                symbolIndex.Add(key, symbol);
+            }
+            return symbol;
+        }
+
+        internal void AddLocationIfUnique(int symbol, bool secondList, NodeRef node)
+        {
+            if (!locationSet.Add((secondList ? -symbol : symbol, node)))
+            {
+                return;
+            }
+            var location = ++locationCount;
+            if (location == locations.Length)
+            {
+                Array.Resize(ref locations, locations.Length * 2);
+            }
+            locations[location] = new Location { Node = node };
+            ref var s = ref Symbols[symbol];
+            ref var tail = ref secondList ? ref s.SecondTail : ref s.FirstTail;
+            if (tail == 0)
+            {
+                (secondList ? ref s.SecondHead : ref s.FirstHead) = location;
+            }
+            else
+            {
+                locations[tail].Next = location;
+            }
+            tail = location;
+        }
+
+        /// <summary>The locations of a chain, in order, into <paramref name="list"/> (cleared first).</summary>
+        internal void CopyLocations(int head, List<NodeRef> list)
+        {
+            list.Clear();
+            for (var l = head; l != 0; l = locations[l].Next)
+            {
+                list.Add(locations[l].Node);
+            }
+        }
     }
 
-    // checker.ts DuplicateInfoForSymbol: the location lists are filled with pushIfUnique (the sets mirror the lists)
-    private sealed class DuplicateInfoForSymbol(string name, bool isBlockScoped)
-    {
-        public string Name { get; } = name;
-        public bool IsBlockScoped { get; } = isBlockScoped;
-        public List<NodeRef> FirstFileLocations { get; } = [];
-        public List<NodeRef> SecondFileLocations { get; } = [];
-        public HashSet<NodeRef> FirstFileSet { get; } = [];
-        public HashSet<NodeRef> SecondFileSet { get; } = [];
-    }
-
-    // checker.ts amalgamatedDuplicates: a Map keyed by `${firstFile.path}|${secondFile.path}` (one program file per
-    // path, so the pair of file numbers is the same key); the list keeps the Map's insertion order.
-    private List<DuplicateInfoForFiles>? amalgamatedDuplicates;
-    private Dictionary<(int, int), DuplicateInfoForFiles>? amalgamatedDuplicatesByFiles;
+    private AmalgamatedDuplicates? amalgamatedDuplicates;
 
     // initializeTypeChecker: amalgamatedDuplicates.forEach(...)
     private void ReportAmalgamatedDuplicates()
     {
-        foreach (var files in amalgamatedDuplicates!)
+        var duplicates = amalgamatedDuplicates!;
+        List<NodeRef>? firstFileLocations = null;
+        List<NodeRef>? secondFileLocations = null;
+        for (var p = 1; p <= duplicates.PairCount; p++)
         {
+            var files = duplicates.Pairs[p];
             // If not many things conflict, issue individual errors
-            if (files.ConflictingSymbols.Count < 8)
+            if (files.Count < 8)
             {
-                foreach (var info in files.ConflictingSymbols)
+                for (var s = files.FirstSymbol; s != 0; s = duplicates.Symbols[s].Next)
                 {
+                    var info = duplicates.Symbols[s];
+                    var name = duplicates.Names[info.Name];
                     var message = info.IsBlockScoped ? Diagnostics.Cannot_redeclare_block_scoped_variable_0 : Diagnostics.Duplicate_identifier_0;
-                    foreach (var node in info.FirstFileLocations)
+                    duplicates.CopyLocations(info.FirstHead, firstFileLocations ??= []);
+                    duplicates.CopyLocations(info.SecondHead, secondFileLocations ??= []);
+                    foreach (var node in firstFileLocations)
                     {
-                        AddDuplicateDeclarationError(node, message, info.Name, info.SecondFileLocations);
+                        AddDuplicateDeclarationError(node, message, name, secondFileLocations);
                     }
-                    foreach (var node in info.SecondFileLocations)
+                    foreach (var node in secondFileLocations)
                     {
-                        AddDuplicateDeclarationError(node, message, info.Name, info.FirstFileLocations);
+                        AddDuplicateDeclarationError(node, message, name, firstFileLocations);
                     }
                 }
             }
             else
             {
                 // Otherwise issue top-level error since the files appear very identical in terms of what they contain
-                var list = string.Join(", ", files.ConflictingSymbols.ConvertAll(c => c.Name));
+                var names = new List<string>(files.Count);
+                for (var s = files.FirstSymbol; s != 0; s = duplicates.Symbols[s].Next)
+                {
+                    names.Add(duplicates.Names[duplicates.Symbols[s].Name]);
+                }
+                var list = string.Join(", ", names);
                 var first = new NodeRef(files.FirstFile, FileAt(files.FirstFile).Root);
                 var second = new NodeRef(files.SecondFile, FileAt(files.SecondFile).Root);
                 var d1 = CreateDiagnosticForNode(first, Diagnostics.Definitions_of_the_following_identifiers_conflict_with_those_in_another_file_Colon_0, list);

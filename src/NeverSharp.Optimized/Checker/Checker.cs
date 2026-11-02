@@ -191,7 +191,7 @@ internal sealed partial class Checker
             Binder.BindSourceFile(file, compilerOptions);
         }
 
-        amalgamatedDuplicates = [];
+        amalgamatedDuplicates = new AmalgamatedDuplicates();
 
         // Initialize global symbol table
         List<(int File, List<Node> Names)>? augmentations = null;
@@ -327,7 +327,6 @@ internal sealed partial class Checker
 
         ReportAmalgamatedDuplicates();
         amalgamatedDuplicates = null;
-        amalgamatedDuplicatesByFiles = null;
     }
 
     /// <summary>
