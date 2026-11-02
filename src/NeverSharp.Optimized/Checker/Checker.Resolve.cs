@@ -707,7 +707,11 @@ internal sealed partial class Checker
                         var message = meaning == SymbolFlags.Namespace ? Diagnostics.Cannot_find_namespace_0_Did_you_mean_1
                             : isUncheckedJS ? Diagnostics.Could_not_find_name_0_Did_you_mean_1
                             : Diagnostics.Cannot_find_name_0_Did_you_mean_1;
-                        var diagnostic = CreateDiagnosticForNode(errorLocation, message, DiagnosticName(name, nameNode), suggestionName);
+                        // createError(errorLocation, ...): a global diagnostic without a location (a global type looked up
+                        // with no location, e.g. getGlobalType("Disposable", 0, true))
+                        var diagnostic = errorLocation.IsNone
+                            ? CreateCompilerDiagnostic(message, DiagnosticName(name, nameNode), suggestionName)
+                            : CreateDiagnosticForNode(errorLocation, message, DiagnosticName(name, nameNode), suggestionName);
                         // getCanonicalDiagnostic(nameNotFoundMessage, diagnosticName(nameArg)): a later plain "not found" of the
                         // same name and location is a duplicate of this diagnostic
                         diagnostic.CanonicalHead = (nameNotFoundMessage.Code,
