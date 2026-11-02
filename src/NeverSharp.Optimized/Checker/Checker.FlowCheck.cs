@@ -55,7 +55,7 @@ internal sealed partial class Checker
         {
             var targetTypePredicate = GetTypePredicateOfSignature(record.Target);
             var mapper = MapperAt(Signatures.Record(signature).Mapper);
-            predicate = targetTypePredicate is null ? null : mapper is null ? targetTypePredicate : InstantiateTypePredicate(targetTypePredicate, mapper);
+            predicate = targetTypePredicate is null ? null : mapper.IsNone ? targetTypePredicate : InstantiateTypePredicate(targetTypePredicate, mapper);
         }
         else if (Signatures.Record(signature).CompositeSignatures is { } compositeSignatures)
         {
@@ -306,13 +306,13 @@ internal sealed partial class Checker
     }
 
     // checker.ts instantiateTypePredicate
-    private TypePredicateInfo InstantiateTypePredicate(TypePredicateInfo predicate, object mapper) =>
+    private TypePredicateInfo InstantiateTypePredicate(TypePredicateInfo predicate, TypeMapper mapper) =>
         new()
         {
             Kind = predicate.Kind,
             ParameterName = predicate.ParameterName,
             ParameterIndex = predicate.ParameterIndex,
-            Type = predicate.Type.IsNone ? Type.None : InstantiateType(predicate.Type, (TypeMapper)mapper),
+            Type = predicate.Type.IsNone ? Type.None : InstantiateType(predicate.Type, mapper),
         };
 
     // getNodeLinks(parent).flags & NodeCheckFlags.InCheckIdentifier of binding patterns' parents
@@ -374,7 +374,7 @@ internal sealed partial class Checker
                 var contextualSignature = GetContextualSignature(func);
                 if (!contextualSignature.IsNone && Signatures.Record(contextualSignature).Parameters.Length == 1 && SignatureHasRestParameter(contextualSignature))
                 {
-                    var restType = GetReducedApparentType(InstantiateType(GetTypeOfSymbol(Signatures.Record(contextualSignature).Parameters[0]), GetInferenceContext(func)?.NonFixingMapper));
+                    var restType = GetReducedApparentType(InstantiateType(GetTypeOfSymbol(Signatures.Record(contextualSignature).Parameters[0]), GetInferenceContext(func) is { } inferenceContext ? inferenceContext.NonFixingMapper : TypeMapper.None));
                     var anyAssigned = false;
                     var position = 0;
                     var index = -1;

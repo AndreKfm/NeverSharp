@@ -51,7 +51,7 @@ internal sealed partial class Checker
         public HashSet<string>? TypeParameterNamesByText;
         public Dictionary<string, int>? TypeParameterNamesByTextNextNameCount;
         public readonly Dictionary<SymbolRef, Type> EnclosingSymbolTypes = [];
-        public object? Mapper; // TypeMapper (C3)
+        public TypeMapper Mapper; // (C3; none: undefined)
         public int Depth;
         public readonly List<int> TypeStack = [];
         public bool CanIncreaseExpansionDepth;

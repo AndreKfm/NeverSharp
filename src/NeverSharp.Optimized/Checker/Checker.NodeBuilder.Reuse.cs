@@ -1004,7 +1004,7 @@ internal sealed partial class Checker
     private Type GetTypeFromTypeNodeInContext(NodeBuilderContext context, NodeRef node, bool noMappedTypes = false)
     {
         var type = GetTypeFromTypeNode(node);
-        if (context.Mapper is null)
+        if (context.Mapper.IsNone)
         {
             return type;
         }
@@ -1053,7 +1053,7 @@ internal sealed partial class Checker
             if ((SymbolFlagsOf(symbol) & SymbolFlags.TypeParameter) != 0)
             {
                 var declaredType = GetDeclaredTypeOfSymbol(symbol);
-                return !(context.Mapper is not null && GetMappedType(declaredType, context.Mapper) != declaredType);
+                return !(!context.Mapper.IsNone && GetMappedType(declaredType, context.Mapper) != declaredType);
             }
             if ((store.Flags(n) & NodeFlags.JSDoc) != 0)
             {

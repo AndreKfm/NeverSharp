@@ -31,124 +31,257 @@ internal enum ElementFlags
     NonRest = Required | Optional | Variadic,
 }
 
-/// <summary>checker.ts TypeMapper (mapper.go TypeMapper): the kinds simple, array, deferred, function, composite, merged.</summary>
-internal abstract class TypeMapper
+/// <summary>
+/// checker.ts TypeMapper (mapper.go TypeMapper) as a handle (module CO6): the id of a record of the checker's
+/// <see cref="MapperStore"/>, 0 for none (undefined). Every make* call creates a new record, so <c>==</c> is
+/// TypeScript's identity of mapper objects (<c>mapper === other</c>, the active mappers' caches).
+/// </summary>
+internal readonly struct TypeMapper : IEquatable<TypeMapper>
 {
-    /// <summary>The handle of the mapper in the checker's table (0: not registered yet).</summary>
-    internal int Id;
+    internal readonly int Id;
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal TypeMapper(int id)
+    {
+        Id = id;
+    }
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    public static TypeMapper None => default;
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    public bool IsNone => Id == 0;
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    public static bool operator ==(TypeMapper left, TypeMapper right) => left.Id == right.Id;
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    public static bool operator !=(TypeMapper left, TypeMapper right) => left.Id != right.Id;
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    public bool Equals(TypeMapper other) => Id == other.Id;
+
+    public override bool Equals(object? obj) => obj is TypeMapper other && Id == other.Id;
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    public override int GetHashCode() => Id;
 }
 
-/// <summary>TypeMapKind.Simple.</summary>
-internal sealed class SimpleTypeMapper(Type source, Type target) : TypeMapper
+/// <summary>
+/// checker.ts TypeMapKind, with the deferred mappers of inference contexts (makeFixingMapperForContext,
+/// makeNonFixingMapperForContext) as kinds of their own: their targets are computed from the context, not from closures.
+/// </summary>
+internal enum TypeMapKind : byte
 {
-    internal readonly Type Source = source;
-    internal readonly Type Target = target;
+    None,
+    Simple,     // A: source, B: target (0: any)
+    Array,      // A: types chunk, B: offset of the sources (the targets follow them), C: count
+    ArrayToAny, // A: types chunk, B: offset of the sources, C: count; every source maps to any
+    Deferred,   // A: object index (DeferredTargets)
+    Fixing,     // A: object index (the InferenceContext)
+    NonFixing,  // A: object index (the InferenceContext)
+    Function,   // A: object index (Func<Type, Type>)
+    Composite,  // A: mapper1, B: mapper2
+    Merged,     // A: mapper1, B: mapper2
 }
 
-/// <summary>TypeMapKind.Array (targets null: every source maps to any).</summary>
-internal sealed class ArrayTypeMapper(Type[] sources, Type[]? targets) : TypeMapper
+/// <summary>A type mapper of a <see cref="MapperStore"/> (module CO6): no references.</summary>
+internal struct MapperRecord
 {
-    internal readonly Type[] Sources = sources;
-    internal readonly Type[]? Targets = targets;
+    public TypeMapKind Kind;
+    public int A;
+    public int B;
+    public int C;
 }
 
-/// <summary>TypeMapKind.Deferred.</summary>
-internal sealed class DeferredTypeMapper(Type[] sources, Func<Type>[] targets) : TypeMapper
+/// <summary>makeDeferredTypeMapper's sources and target functions (the deferred mappers that are not an inference context's).</summary>
+internal sealed class DeferredTargets(Type[] sources, Func<Type>[] targets)
 {
     internal readonly Type[] Sources = sources;
     internal readonly Func<Type>[] Targets = targets;
 }
 
-/// <summary>TypeMapKind.Function.</summary>
-internal sealed class FunctionTypeMapper(Func<Type, Type> func) : TypeMapper
+/// <summary>
+/// The type mappers of one checker (module CO6): records in creation order in chunks, the array kinds' sources and
+/// targets in chunks of types, and the objects of the function and deferred kinds (delegates, inference contexts) in a
+/// table. The collector traces only that table, not the records.
+/// </summary>
+internal sealed class MapperStore
 {
-    internal readonly Func<Type, Type> Func = func;
-}
+    private const int Shift = 12;
+    private const int Size = 1 << Shift;
+    private const int Mask = Size - 1;
+    private const int TypeChunkSize = 1 << 14;
 
-/// <summary>TypeMapKind.Composite (Merged false) and TypeMapKind.Merged (Merged true).</summary>
-internal sealed class CompositeTypeMapper(bool merged, TypeMapper mapper1, TypeMapper mapper2) : TypeMapper
-{
-    internal readonly bool Merged = merged;
-    internal readonly TypeMapper Mapper1 = mapper1;
-    internal readonly TypeMapper Mapper2 = mapper2;
+    private MapperRecord[][] records = [new MapperRecord[Size]];
+    private int count = 1; // 0: none
+    private Type[][] typeChunks = [new Type[TypeChunkSize]];
+    private int typeChunk;
+    private int typeUsed;
+    private readonly List<object> objects = [];
+
+    /// <summary>The record of a mapper (valid while the store grows: chunks never move).</summary>
+    internal ref MapperRecord this[TypeMapper mapper]
+    {
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+        get => ref records[mapper.Id >> Shift][mapper.Id & Mask];
+    }
+
+    /// <summary>A chunk of the array kinds' types.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal Type[] TypeChunk(int chunk) => typeChunks[chunk];
+
+    /// <summary>An object of the function and deferred kinds.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal object ObjectAt(int index) => objects[index];
+
+    internal TypeMapper Add(TypeMapKind kind, int a, int b, int c = 0)
+    {
+        var id = count;
+        if ((id & Mask) == 0)
+        {
+            AddChunk(id >> Shift);
+        }
+        ref var record = ref records[id >> Shift][id & Mask];
+        record.Kind = kind;
+        record.A = a;
+        record.B = b;
+        record.C = c;
+        count = id + 1;
+        return new TypeMapper(id);
+    }
+
+    private void AddChunk(int chunk)
+    {
+        if (chunk == records.Length)
+        {
+            Array.Resize(ref records, records.Length * 2);
+        }
+        records[chunk] = new MapperRecord[Size];
+    }
+
+    internal int AddObject(object value)
+    {
+        objects.Add(value);
+        return objects.Count - 1;
+    }
+
+    /// <summary>An array kind: the sources, then the targets (none: every source maps to any).</summary>
+    internal TypeMapper AddArray(ReadOnlySpan<Type> sources, ReadOnlySpan<Type> targets, bool toAny)
+    {
+        var length = toAny ? sources.Length : sources.Length * 2;
+        if (typeUsed + length > typeChunks[typeChunk].Length)
+        {
+            typeChunk++;
+            if (typeChunk == typeChunks.Length)
+            {
+                Array.Resize(ref typeChunks, typeChunks.Length * 2);
+            }
+            typeChunks[typeChunk] = new Type[Math.Max(TypeChunkSize, length)];
+            typeUsed = 0;
+        }
+        var offset = typeUsed;
+        var types = typeChunks[typeChunk];
+        sources.CopyTo(types.AsSpan(offset));
+        if (!toAny)
+        {
+            // createTypeMapper reads targets[i] for each source (undefined beyond the end of a shorter array: None)
+            var n = Math.Min(targets.Length, sources.Length);
+            targets[..n].CopyTo(types.AsSpan(offset + sources.Length));
+        }
+        typeUsed = offset + length;
+        return Add(toAny ? TypeMapKind.ArrayToAny : TypeMapKind.Array, typeChunk, offset, sources.Length);
+    }
 }
 
 internal sealed partial class Checker
 {
-    // ---- the mapper table (signature records and symbol links hold mappers by handle) ----
+    /// <summary>The checker's type mappers (module CO6).</summary>
+    internal readonly MapperStore Mappers = new();
 
-    private readonly List<TypeMapper?> mapperTable = [null];
+    // ---- mapper handles in records (signature records and symbol links hold the id) ----
 
-    /// <summary>The handle of a mapper (registered on first use; 0 for none).</summary>
-    internal int MapperHandle(TypeMapper? mapper)
-    {
-        if (mapper is null)
-        {
-            return 0;
-        }
-        if (mapper.Id == 0)
-        {
-            mapperTable.Add(mapper);
-            mapper.Id = mapperTable.Count - 1;
-        }
-        return mapper.Id;
-    }
+    /// <summary>The handle of a mapper as stored in a record (0 for none).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal static int MapperHandle(TypeMapper mapper) => mapper.Id;
 
-    /// <summary>The mapper of a handle (null for 0).</summary>
-    internal TypeMapper? MapperAt(int handle) => mapperTable[handle];
+    /// <summary>The mapper of a stored handle (none for 0).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal static TypeMapper MapperAt(int handle) => new(handle);
 
     // ---- mapper construction ----
 
-    internal static TypeMapper MakeUnaryTypeMapper(Type source, Type target) => new SimpleTypeMapper(source, target);
+    internal TypeMapper MakeUnaryTypeMapper(Type source, Type target) => Mappers.Add(TypeMapKind.Simple, source.Id, target.Id);
 
-    internal static TypeMapper MakeArrayTypeMapper(Type[] sources, Type[]? targets) => new ArrayTypeMapper(sources, targets);
+    internal TypeMapper MakeArrayTypeMapper(ReadOnlySpan<Type> sources, Type[]? targets) => Mappers.AddArray(sources, targets, targets is null);
 
-    internal static TypeMapper MakeFunctionTypeMapper(Func<Type, Type> func) => new FunctionTypeMapper(func);
+    internal TypeMapper MakeFunctionTypeMapper(Func<Type, Type> func) => Mappers.Add(TypeMapKind.Function, Mappers.AddObject(func), 0);
 
-    internal static TypeMapper MakeDeferredTypeMapper(Type[] sources, Func<Type>[] targets) => new DeferredTypeMapper(sources, targets);
+    internal TypeMapper MakeDeferredTypeMapper(Type[] sources, Func<Type>[] targets) =>
+        Mappers.Add(TypeMapKind.Deferred, Mappers.AddObject(new DeferredTargets(sources, targets)), 0);
 
     /// <summary>checker.ts createTypeMapper (targets null: map to any).</summary>
-    internal static TypeMapper CreateTypeMapper(Type[] sources, Type[]? targets) =>
+    internal TypeMapper CreateTypeMapper(ReadOnlySpan<Type> sources, Type[]? targets) =>
         sources.Length == 1 ? MakeUnaryTypeMapper(sources[0], targets is not null ? targets[0] : default) : MakeArrayTypeMapper(sources, targets);
 
     // (createTypeMapper's unary case maps to anyType when targets is undefined; the mapper is created with None and
     // getMappedType substitutes anyType, see GetMappedType)
 
-    internal static TypeMapper CombineTypeMappers(TypeMapper? mapper1, TypeMapper mapper2) =>
-        mapper1 is not null ? new CompositeTypeMapper(false, mapper1, mapper2) : mapper2;
+    internal TypeMapper CombineTypeMappers(TypeMapper mapper1, TypeMapper mapper2) =>
+        !mapper1.IsNone ? Mappers.Add(TypeMapKind.Composite, mapper1.Id, mapper2.Id) : mapper2;
 
-    internal static TypeMapper MergeTypeMappers(TypeMapper? mapper1, TypeMapper mapper2) =>
-        mapper1 is not null ? new CompositeTypeMapper(true, mapper1, mapper2) : mapper2;
+    internal TypeMapper MergeTypeMappers(TypeMapper mapper1, TypeMapper mapper2) =>
+        !mapper1.IsNone ? Mappers.Add(TypeMapKind.Merged, mapper1.Id, mapper2.Id) : mapper2;
 
-    internal static TypeMapper PrependTypeMapping(Type source, Type target, TypeMapper? mapper) =>
-        mapper is null ? MakeUnaryTypeMapper(source, target) : new CompositeTypeMapper(true, MakeUnaryTypeMapper(source, target), mapper);
+    internal TypeMapper PrependTypeMapping(Type source, Type target, TypeMapper mapper) =>
+        mapper.IsNone ? MakeUnaryTypeMapper(source, target) : Mappers.Add(TypeMapKind.Merged, MakeUnaryTypeMapper(source, target).Id, mapper.Id);
 
-    internal static TypeMapper AppendTypeMapping(TypeMapper? mapper, Type source, Type target) =>
-        mapper is null ? MakeUnaryTypeMapper(source, target) : new CompositeTypeMapper(true, mapper, MakeUnaryTypeMapper(source, target));
+    internal TypeMapper AppendTypeMapping(TypeMapper mapper, Type source, Type target) =>
+        mapper.IsNone ? MakeUnaryTypeMapper(source, target) : Mappers.Add(TypeMapKind.Merged, mapper.Id, MakeUnaryTypeMapper(source, target).Id);
 
-    internal static TypeMapper CreateTypeEraser(Type[] sources) => CreateTypeMapper(sources, null);
+    internal TypeMapper CreateTypeEraser(ReadOnlySpan<Type> sources) => CreateTypeMapper(sources, null);
 
     /// <summary>checker.ts getMappedType.</summary>
     internal Type GetMappedType(Type type, TypeMapper mapper)
     {
-        switch (mapper)
+        ref var record = ref Mappers[mapper];
+        switch (record.Kind)
         {
-            case SimpleTypeMapper simple:
-                return type == simple.Source ? (simple.Target.IsNone ? anyType : simple.Target) : type;
-            case ArrayTypeMapper array:
+            case TypeMapKind.Simple:
+                return type.Id == record.A ? (record.B == 0 ? anyType : new Type(record.B)) : type;
+            case TypeMapKind.Array:
+            case TypeMapKind.ArrayToAny:
             {
-                var sources = array.Sources;
-                for (var i = 0; i < sources.Length; i++)
+                var types = Mappers.TypeChunk(record.A);
+                var offset = record.B;
+                var count = record.C;
+                for (var i = 0; i < count; i++)
                 {
-                    if (type == sources[i])
+                    if (types[offset + i] == type)
                     {
-                        return array.Targets is not null ? array.Targets[i] : anyType;
+                        return record.Kind == TypeMapKind.Array ? types[offset + count + i] : anyType;
                     }
                 }
                 return type;
             }
-            case DeferredTypeMapper deferred:
+            case TypeMapKind.Fixing:
+            case TypeMapKind.NonFixing:
             {
+                var context = (InferenceContext)Mappers.ObjectAt(record.A);
+                var fixing = record.Kind == TypeMapKind.Fixing;
+                var inferences = context.Inferences;
+                for (var i = 0; i < inferences.Count; i++)
+                {
+                    if (inferences[i].TypeParameter == type)
+                    {
+                        return fixing ? GetFixedInferredType(context, i) : GetInferredType(context, i);
+                    }
+                }
+                return type;
+            }
+            case TypeMapKind.Deferred:
+            {
+                var deferred = (DeferredTargets)Mappers.ObjectAt(record.A);
                 var sources = deferred.Sources;
                 for (var i = 0; i < sources.Length; i++)
                 {
@@ -159,24 +292,29 @@ internal sealed partial class Checker
                 }
                 return type;
             }
-            case FunctionTypeMapper function:
-                return function.Func(type);
-            case CompositeTypeMapper composite:
+            case TypeMapKind.Function:
+                return ((Func<Type, Type>)Mappers.ObjectAt(record.A))(type);
+            case TypeMapKind.Composite:
+            case TypeMapKind.Merged:
             {
-                var t1 = GetMappedType(type, composite.Mapper1);
-                return t1 != type && !composite.Merged ? InstantiateType(t1, composite.Mapper2) : GetMappedType(t1, composite.Mapper2);
+                var merged = record.Kind == TypeMapKind.Merged;
+                var mapper2 = new TypeMapper(record.B);
+                var t1 = GetMappedType(type, new TypeMapper(record.A));
+                return t1 != type && !merged ? InstantiateType(t1, mapper2) : GetMappedType(t1, mapper2);
             }
         }
         return type;
     }
 
-    private TypeMapper? permissiveMapperCache;
-    private TypeMapper? restrictiveMapperCache;
+    private TypeMapper permissiveMapperCache;
+    private TypeMapper restrictiveMapperCache;
 
     // createTypeChecker: permissiveMapper, restrictiveMapper
-    private TypeMapper PermissiveMapper => permissiveMapperCache ??= MakeFunctionTypeMapper(t => (Types.Flags(t) & TypeFlags.TypeParameter) != 0 ? wildcardType : t);
+    private TypeMapper PermissiveMapper => !permissiveMapperCache.IsNone ? permissiveMapperCache
+        : permissiveMapperCache = MakeFunctionTypeMapper(t => (Types.Flags(t) & TypeFlags.TypeParameter) != 0 ? wildcardType : t);
 
-    private TypeMapper RestrictiveMapper => restrictiveMapperCache ??= MakeFunctionTypeMapper(t => (Types.Flags(t) & TypeFlags.TypeParameter) != 0 ? GetRestrictiveTypeParameter(t) : t);
+    private TypeMapper RestrictiveMapper => !restrictiveMapperCache.IsNone ? restrictiveMapperCache
+        : restrictiveMapperCache = MakeFunctionTypeMapper(t => (Types.Flags(t) & TypeFlags.TypeParameter) != 0 ? GetRestrictiveTypeParameter(t) : t);
 
     private readonly Dictionary<Type, Type> restrictiveTypeParameters = [];
 
@@ -231,7 +369,7 @@ internal sealed partial class Checker
     private void PopActiveMapper()
     {
         activeTypeMappersCount--;
-        activeTypeMappers[activeTypeMappersCount] = null!;
+        activeTypeMappers[activeTypeMappersCount] = default;
         activeTypeMappersCaches[activeTypeMappersCount].Clear();
     }
 
@@ -239,7 +377,7 @@ internal sealed partial class Checker
     {
         for (var i = activeTypeMappersCount - 1; i >= 0; i--)
         {
-            if (ReferenceEquals(mapper, activeTypeMappers[i]))
+            if (mapper == activeTypeMappers[i])
             {
                 return i;
             }
@@ -257,8 +395,8 @@ internal sealed partial class Checker
     }
 
     /// <summary>checker.ts instantiateType (None stays None; a null mapper returns the type).</summary>
-    internal Type InstantiateType(Type type, TypeMapper? mapper) =>
-        !type.IsNone && mapper is not null ? InstantiateTypeWithAlias(type, mapper, SymbolRef.None, default) : type;
+    internal Type InstantiateType(Type type, TypeMapper mapper) =>
+        !type.IsNone && !mapper.IsNone ? InstantiateTypeWithAlias(type, mapper, SymbolRef.None, default) : type;
 
     /// <summary>checker.ts instantiateTypeWithAlias.</summary>
     internal Type InstantiateTypeWithAlias(Type type, TypeMapper mapper, SymbolRef aliasSymbol, TypeList aliasTypeArguments)
@@ -421,9 +559,9 @@ internal sealed partial class Checker
     }
 
     /// <summary>instantiateTypes for a stored type list (the same list when nothing changed).</summary>
-    internal TypeList InstantiateTypeList(TypeList list, TypeMapper? mapper)
+    internal TypeList InstantiateTypeList(TypeList list, TypeMapper mapper)
     {
-        if (list.Count == 0 || mapper is null)
+        if (list.Count == 0 || mapper.IsNone)
         {
             return list;
         }
@@ -1082,7 +1220,7 @@ internal sealed partial class Checker
     // checker.ts resolveObjectTypeMembers
     private void ResolveObjectTypeMembers(Type type, Type sourceType, ObjectTypeData source, Type[] typeParameters, Type[] typeArguments)
     {
-        TypeMapper? mapper = null;
+        var mapper = TypeMapper.None;
         SymTable members;
         Items<Signature> callSignatures;
         Items<Signature> constructSignatures;

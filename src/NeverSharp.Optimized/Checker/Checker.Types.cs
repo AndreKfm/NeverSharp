@@ -1591,13 +1591,13 @@ internal sealed partial class Checker
     }
 
     /// <summary>checker.ts createDeferredTypeReference.</summary>
-    internal Type CreateDeferredTypeReference(Type target, NodeRef node, TypeMapper? mapper, SymbolRef aliasSymbol = default, TypeList aliasTypeArguments = default)
+    internal Type CreateDeferredTypeReference(Type target, NodeRef node, TypeMapper mapper, SymbolRef aliasSymbol = default, TypeList aliasTypeArguments = default)
     {
         if (aliasSymbol.IsNone)
         {
             aliasSymbol = GetAliasSymbolForTypeNode(node);
             var localAliasTypeArguments = GetTypeArgumentsForAliasSymbol(aliasSymbol);
-            aliasTypeArguments = mapper is not null ? InstantiateTypeList(localAliasTypeArguments, mapper) : localAliasTypeArguments;
+            aliasTypeArguments = !mapper.IsNone ? InstantiateTypeList(localAliasTypeArguments, mapper) : localAliasTypeArguments;
         }
         var type = CreateObjectType(ObjectFlags.Reference, Types.Symbol(target));
         var data = Types.Object(type);
@@ -1648,7 +1648,7 @@ internal sealed partial class Checker
                 if (!data.HasResolvedTypeArguments)
                 {
                     var resolved = typeArguments.ToArray();
-                    if (data.Mapper is not null)
+                    if (!data.Mapper.IsNone)
                     {
                         resolved = InstantiateTypes(resolved, data.Mapper, out _);
                     }

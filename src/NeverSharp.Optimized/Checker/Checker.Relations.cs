@@ -168,12 +168,12 @@ internal sealed partial class Checker
     private static readonly VarianceFlags[] EmptyVariances = [];
     private static readonly VarianceFlags[] ArrayVariances = [VarianceFlags.Covariant];
 
-    private TypeMapper? reportUnreliableMapperCache;
-    private TypeMapper? reportUnmeasurableMapperCache;
-    private TypeMapper? uniqueLiteralMapperCache;
+    private TypeMapper reportUnreliableMapperCache;
+    private TypeMapper reportUnmeasurableMapperCache;
+    private TypeMapper uniqueLiteralMapperCache;
 
     // createTypeChecker: reportUnreliableMapper
-    private TypeMapper ReportUnreliableMapper => reportUnreliableMapperCache ??= MakeFunctionTypeMapper(t =>
+    private TypeMapper ReportUnreliableMapper => !reportUnreliableMapperCache.IsNone ? reportUnreliableMapperCache : reportUnreliableMapperCache = MakeFunctionTypeMapper(t =>
     {
         if (outofbandVarianceMarkerHandler is not null && (t == markerSuperType || t == markerSubType || t == markerOtherType))
         {
@@ -183,7 +183,7 @@ internal sealed partial class Checker
     });
 
     // createTypeChecker: reportUnmeasurableMapper
-    private TypeMapper ReportUnmeasurableMapper => reportUnmeasurableMapperCache ??= MakeFunctionTypeMapper(t =>
+    private TypeMapper ReportUnmeasurableMapper => !reportUnmeasurableMapperCache.IsNone ? reportUnmeasurableMapperCache : reportUnmeasurableMapperCache = MakeFunctionTypeMapper(t =>
     {
         if (outofbandVarianceMarkerHandler is not null && (t == markerSuperType || t == markerSubType || t == markerOtherType))
         {
@@ -193,7 +193,7 @@ internal sealed partial class Checker
     });
 
     // createTypeChecker: uniqueLiteralMapper
-    private TypeMapper UniqueLiteralMapper => uniqueLiteralMapperCache ??= MakeFunctionTypeMapper(t => (Types.Flags(t) & TypeFlags.TypeParameter) != 0 ? uniqueLiteralType : t);
+    private TypeMapper UniqueLiteralMapper => !uniqueLiteralMapperCache.IsNone ? uniqueLiteralMapperCache : uniqueLiteralMapperCache = MakeFunctionTypeMapper(t => (Types.Flags(t) & TypeFlags.TypeParameter) != 0 ? uniqueLiteralType : t);
 
     // ---- entry points ----
 
@@ -297,7 +297,7 @@ internal sealed partial class Checker
     /// <summary>checker.ts isSignatureAssignableTo.</summary>
     internal bool IsSignatureAssignableTo(Signature source, Signature target, bool ignoreReturnTypes) =>
         CompareSignaturesRelated(source, target, ignoreReturnTypes ? SignatureCheckMode.IgnoreReturnTypes : SignatureCheckMode.None, false, null, null,
-            (s, t, _) => CompareTypesAssignable(s, t), null) != Ternary.False;
+            (s, t, _) => CompareTypesAssignable(s, t), TypeMapper.None) != Ternary.False;
 
     // checker.ts isTopSignature: `(...args: A) => R` where A is any, any[], never, or never[], and R is any or unknown.
     private bool IsTopSignature(Signature s)
@@ -316,7 +316,7 @@ internal sealed partial class Checker
 
     /// <summary>checker.ts compareSignaturesRelated (see signatureRelatedTo, compareSignaturesIdentical).</summary>
     internal int CompareSignaturesRelated(Signature source, Signature target, SignatureCheckMode checkMode, bool reportErrors, Action<DiagnosticMessage, object?[]>? errorReporter,
-        Action<Type, Type>? incompatibleErrorReporter, Func<Type, Type, bool, int> compareTypes, TypeMapper? reportUnreliableMarkers)
+        Action<Type, Type>? incompatibleErrorReporter, Func<Type, Type, bool, int> compareTypes, TypeMapper reportUnreliableMarkers)
     {
         if (source == target)
         {

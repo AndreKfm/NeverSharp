@@ -821,7 +821,7 @@ internal sealed partial class Checker
             AliasSymbol = aliasSymbol,
             AliasTypeArguments = aliasTypeArguments,
         };
-        var resolved = SetCachedNodeType(node, GetConditionalType(root, null, forConstraint: false));
+        var resolved = SetCachedNodeType(node, GetConditionalType(root, TypeMapper.None, forConstraint: false));
         if (outerTypeParameters is not null)
         {
             var mark = keyScratch.Mark();
@@ -898,7 +898,7 @@ internal sealed partial class Checker
         IsGenericType(type) || (checkTuples && IsTupleType(type) && Array.Exists(GetElementTypes(type), IsGenericType));
 
     /// <summary>checker.ts getConditionalType.</summary>
-    private Type GetConditionalType(ConditionalRoot root, TypeMapper? mapper, bool forConstraint, SymbolRef aliasSymbol = default, TypeList aliasTypeArguments = default)
+    private Type GetConditionalType(ConditionalRoot root, TypeMapper mapper, bool forConstraint, SymbolRef aliasSymbol = default, TypeList aliasTypeArguments = default)
     {
         var result = Type.None;
         List<Type>? extraTypes = null;
@@ -934,7 +934,7 @@ internal sealed partial class Checker
             var checkTuples = IsSimpleTupleType(checkTypeNode) && IsSimpleTupleType(extendsTypeNode) &&
                 StoreOf(checkTypeNode).Length(StoreOf(checkTypeNode).Elements(checkTypeNode.Node)) == StoreOf(extendsTypeNode).Length(StoreOf(extendsTypeNode).Elements(extendsTypeNode.Node));
             var checkTypeDeferred = IsDeferredType(checkType, checkTuples);
-            TypeMapper? combinedMapper = null;
+            var combinedMapper = TypeMapper.None;
             if (root.InferTypeParameters is not null)
             {
                 // When we're looking at making an inference for an infer type, when we get its constraint, it'll automagically be
@@ -943,7 +943,7 @@ internal sealed partial class Checker
                 // combine `context.nonFixingMapper` with `mapper` so their constraints can be instantiated in the context of
                 // `mapper`, and incorporate all of the component mappers into the combined mapper for the true and false members.
                 var context = CreateInferenceContext(root.InferTypeParameters, Signature.None, InferenceFlags.None);
-                if (mapper is not null)
+                if (!mapper.IsNone)
                 {
                     context.NonFixingMapper = CombineTypeMappers(context.NonFixingMapper, mapper);
                 }
@@ -956,10 +956,10 @@ internal sealed partial class Checker
                 // It's possible for 'infer T' type paramteters to be given uninstantiated constraints when the
                 // those type parameters are used in type references (see getInferredTypeParameterConstraint). For
                 // that reason we need context.mapper to be first in the combined mapper. See #42636 for examples.
-                combinedMapper = mapper is not null ? CombineTypeMappers(context.Mapper, mapper) : context.Mapper;
+                combinedMapper = !mapper.IsNone ? CombineTypeMappers(context.Mapper, mapper) : context.Mapper;
             }
             // Instantiate the extends type including inferences for 'infer T' type parameters
-            var inferredExtendsType = combinedMapper is not null ? InstantiateType(root.ExtendsType, combinedMapper) : extendsType;            // We attempt to resolve the conditional type only when the check and extends types are non-generic
+            var inferredExtendsType = !combinedMapper.IsNone ? InstantiateType(root.ExtendsType, combinedMapper) : extendsType;            // We attempt to resolve the conditional type only when the check and extends types are non-generic
             if (!checkTypeDeferred && !IsDeferredType(inferredExtendsType, checkTuples))
             {
                 // Return falseType for a definitely false extends check. We check an instantiations of the two
@@ -975,7 +975,7 @@ internal sealed partial class Checker
                     if ((Types.Flags(checkType) & TypeFlags.Any) != 0 || (forConstraint && (Types.Flags(inferredExtendsType) & TypeFlags.Never) == 0 &&
                         SomeType(GetPermissiveInstantiation(inferredExtendsType), t => IsTypeAssignableTo(t, GetPermissiveInstantiation(checkType)))))
                     {
-                        (extraTypes ??= []).Add(InstantiateType(GetTypeFromTypeNode(At(root.Node, store.TrueType(root.Node.Node))), combinedMapper ?? mapper));
+                        (extraTypes ??= []).Add(InstantiateType(GetTypeFromTypeNode(At(root.Node, store.TrueType(root.Node.Node))), !combinedMapper.IsNone ? combinedMapper : mapper));
                     }
                     // If falseType is an immediately nested conditional type that isn't distributive or has an
                     // identical checkType, switch to that type and loop.
@@ -1004,7 +1004,7 @@ internal sealed partial class Checker
                 if ((Types.Flags(inferredExtendsType) & TypeFlags.AnyOrUnknown) != 0 || IsTypeAssignableTo(GetRestrictiveInstantiation(checkType), GetRestrictiveInstantiation(inferredExtendsType)))
                 {
                     var trueType = GetTypeFromTypeNode(At(root.Node, store.TrueType(root.Node.Node)));
-                    var trueMapper = combinedMapper ?? mapper;
+                    var trueMapper = !combinedMapper.IsNone ? combinedMapper : mapper;
                     if (CanTailRecurse(trueType, trueMapper))
                     {
                         continue;
@@ -1034,9 +1034,9 @@ internal sealed partial class Checker
         // (b) are non distributive, have a check type that is unaffected by instantiation, or have a non-union check
         // type. Note that recursion is possible only through aliased conditional types, so we only increment the tail
         // recursion counter for those.
-        bool CanTailRecurse(Type newType, TypeMapper? newMapper)
+        bool CanTailRecurse(Type newType, TypeMapper newMapper)
         {
-            if ((Types.Flags(newType) & TypeFlags.Conditional) != 0 && newMapper is not null)
+            if ((Types.Flags(newType) & TypeFlags.Conditional) != 0 && !newMapper.IsNone)
             {
                 var newData = Types.Data<ConditionalData>(newType);
                 var newRoot = newData.Root;
@@ -1127,7 +1127,7 @@ internal sealed partial class Checker
         var data = Types.Data<ConditionalData>(type);
         if (data.ResolvedInferredTrueType.IsNone)
         {
-            data.ResolvedInferredTrueType = data.CombinedMapper is not null
+            data.ResolvedInferredTrueType = !data.CombinedMapper.IsNone
                 ? InstantiateType(GetTypeFromTypeNode(At(data.Root.Node, StoreOf(data.Root.Node).TrueType(data.Root.Node.Node))), data.CombinedMapper)
                 : GetTrueTypeFromConditionalType(type);
         }

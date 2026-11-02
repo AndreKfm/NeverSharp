@@ -435,7 +435,7 @@ internal sealed partial class Checker
     }
 
     // checker.ts combineUnionThisParam
-    private SymbolRef CombineUnionThisParam(SymbolRef left, SymbolRef right, TypeMapper? mapper)
+    private SymbolRef CombineUnionThisParam(SymbolRef left, SymbolRef right, TypeMapper mapper)
     {
         if (left.IsNone || right.IsNone)
         {
@@ -449,7 +449,7 @@ internal sealed partial class Checker
     }
 
     // checker.ts combineUnionParameters
-    private SymbolRef[] CombineUnionParameters(Signature left, Signature right, TypeMapper? mapper)
+    private SymbolRef[] CombineUnionParameters(Signature left, Signature right, TypeMapper mapper)
     {
         var leftCount = GetParameterCount(left);
         var rightCount = GetParameterCount(right);
@@ -508,10 +508,10 @@ internal sealed partial class Checker
         var leftRecord = Signatures.Record(left);
         var rightRecord = Signatures.Record(right);
         var typeParams = leftRecord.TypeParameters.Count > 0 ? leftRecord.TypeParameters : rightRecord.TypeParameters;
-        TypeMapper? paramMapper = null;
+        var paramMapper = TypeMapper.None;
         if (leftRecord.TypeParameters.Count > 0 && rightRecord.TypeParameters.Count > 0)
         {
-            paramMapper = CreateTypeMapper(Types.Elements(rightRecord.TypeParameters).ToArray(), Types.Elements(leftRecord.TypeParameters).ToArray());
+            paramMapper = CreateTypeMapper(Types.Elements(rightRecord.TypeParameters), Types.Elements(leftRecord.TypeParameters).ToArray());
             // We just use the type parameter defaults from the first signature
         }
         var flags = (leftRecord.Flags | rightRecord.Flags) & (SignatureFlags.PropagatingFlags & ~SignatureFlags.HasRestParameter);
@@ -528,7 +528,7 @@ internal sealed partial class Checker
         record.CompositeKind = TypeFlags.Union;
         var leftComposite = leftRecord.CompositeKind != TypeFlags.Intersection ? leftRecord.CompositeSignatures : null;
         record.CompositeSignatures = [.. leftComposite ?? [left], right];
-        if (paramMapper is not null)
+        if (!paramMapper.IsNone)
         {
             Signatures.Record(result).Mapper = MapperHandle(leftRecord.CompositeKind != TypeFlags.Intersection && leftRecord.Mapper != 0 && leftRecord.CompositeSignatures is not null
                 ? CombineTypeMappers(MapperAt(leftRecord.Mapper), paramMapper)

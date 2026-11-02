@@ -165,7 +165,7 @@ internal sealed partial class Checker
         }
         else if (!(isTuple && Array.Exists(store.Nodes(store.Elements(node.Node)).ToArray(), e => (GetTupleElementFlags(At(node, e)) & ElementFlags.Variadic) != 0)) && IsDeferredTypeReferenceNode(node, hasDefaultTypeArguments: false))
         {
-            result = isTuple && store.Length(store.Elements(node.Node)) == 0 ? target : CreateDeferredTypeReference(target, node, null);
+            result = isTuple && store.Length(store.Elements(node.Node)) == 0 ? target : CreateDeferredTypeReference(target, node, TypeMapper.None);
         }
         else
         {

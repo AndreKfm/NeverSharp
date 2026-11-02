@@ -203,7 +203,7 @@ internal sealed partial class Checker
                     return type;
                 }
             }
-            if (inferenceContext?.ReturnMapper is not null)
+            if (inferenceContext is not null && !inferenceContext.ReturnMapper.IsNone)
             {
                 // For other purposes (e.g. determining whether to produce literal types) we only
                 // incorporate inferences made from the return type in a function call. We remove
@@ -690,7 +690,7 @@ internal sealed partial class Checker
                     var overallAnnotation = GetEffectiveTypeAnnotationNode(decl);
                     if (!overallAnnotation.IsNone)
                     {
-                        var mapper = ValueSymbolLinks.Has(lhsSymbol) ? MapperAt(ValueSymbolLinks.Get(lhsSymbol).Mapper) : null;
+                        var mapper = ValueSymbolLinks.Has(lhsSymbol) ? MapperAt(ValueSymbolLinks.Get(lhsSymbol).Mapper) : TypeMapper.None;
                         return InstantiateType(GetTypeFromTypeNode(overallAnnotation), mapper);
                     }
                     return Kind(decl) == SyntaxKind.PropertyDeclaration && !StoreOf(decl).Initializer(decl.Node).IsNone ? GetTypeOfExpression(left) : Type.None;
@@ -1209,7 +1209,7 @@ internal sealed partial class Checker
     }
 
     // checker.ts combineIntersectionThisParam
-    private SymbolRef CombineIntersectionThisParam(SymbolRef left, SymbolRef right, TypeMapper? mapper)
+    private SymbolRef CombineIntersectionThisParam(SymbolRef left, SymbolRef right, TypeMapper mapper)
     {
         if (left.IsNone || right.IsNone)
         {
@@ -1223,7 +1223,7 @@ internal sealed partial class Checker
     }
 
     // checker.ts combineIntersectionParameters
-    private SymbolRef[] CombineIntersectionParameters(Signature left, Signature right, TypeMapper? mapper)
+    private SymbolRef[] CombineIntersectionParameters(Signature left, Signature right, TypeMapper mapper)
     {
         var leftCount = GetParameterCount(left);
         var rightCount = GetParameterCount(right);
@@ -1282,10 +1282,10 @@ internal sealed partial class Checker
         var leftRecord = Signatures.Record(left);
         var rightRecord = Signatures.Record(right);
         var typeParams = leftRecord.TypeParameters.Count > 0 ? leftRecord.TypeParameters : rightRecord.TypeParameters;
-        TypeMapper? paramMapper = null;
+        var paramMapper = TypeMapper.None;
         if (leftRecord.TypeParameters.Count > 0 && rightRecord.TypeParameters.Count > 0)
         {
-            paramMapper = CreateTypeMapper(Types.Elements(rightRecord.TypeParameters).ToArray(), Types.Elements(leftRecord.TypeParameters).ToArray());
+            paramMapper = CreateTypeMapper(Types.Elements(rightRecord.TypeParameters), Types.Elements(leftRecord.TypeParameters).ToArray());
             // We just use the type parameter defaults from the first signature
         }
         var flags = (leftRecord.Flags | rightRecord.Flags) & (SignatureFlags.PropagatingFlags & ~SignatureFlags.HasRestParameter);
@@ -1302,7 +1302,7 @@ internal sealed partial class Checker
         record.CompositeKind = TypeFlags.Intersection;
         var leftComposite = leftRecord.CompositeKind == TypeFlags.Intersection ? leftRecord.CompositeSignatures : null;
         record.CompositeSignatures = [.. leftComposite ?? [left], right];
-        if (paramMapper is not null)
+        if (!paramMapper.IsNone)
         {
             Signatures.Record(result).Mapper = MapperHandle(leftRecord.CompositeKind == TypeFlags.Intersection && leftRecord.Mapper != 0 && leftRecord.CompositeSignatures is not null
                 ? CombineTypeMappers(MapperAt(leftRecord.Mapper), paramMapper)

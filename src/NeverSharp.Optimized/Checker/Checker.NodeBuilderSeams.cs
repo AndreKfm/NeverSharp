@@ -15,13 +15,10 @@ namespace NeverSharp.Optimized;
 internal sealed partial class Checker
 {
     // signature.mapper
-    private TypeMapper? GetSignatureMapper(Signature signature) => MapperAt(Signatures.Record(signature).Mapper);
+    private TypeMapper GetSignatureMapper(Signature signature) => MapperAt(Signatures.Record(signature).Mapper);
 
     // instantiateType(type, signature.mapper)
-    private Type InstantiateTypeWithMapper(Type type, object? mapper) => mapper is null ? type : InstantiateType(type, (TypeMapper)mapper);
-
-    // getMappedType(type, mapper) for an untyped mapper
-    private Type GetMappedType(Type type, object mapper) => GetMappedType(type, (TypeMapper)mapper);
+    private Type InstantiateTypeWithMapper(Type type, TypeMapper mapper) => mapper.IsNone ? type : InstantiateType(type, mapper);
 
     // getMappedType(typeParameter, symbol.links.mapper) of an instantiated symbol
     private Type GetMappedTypeOfInstantiatedSymbol(Type typeParameter, SymbolRef instantiatedSymbol)
@@ -31,7 +28,7 @@ internal sealed partial class Checker
             return typeParameter;
         }
         var mapper = MapperAt(ValueSymbolLinks.Get(instantiatedSymbol).Mapper);
-        return mapper is null ? typeParameter : GetMappedType(typeParameter, mapper);
+        return mapper.IsNone ? typeParameter : GetMappedType(typeParameter, mapper);
     }
 
     // TupleType.elementFlags / readonly / labeledElementDeclarations

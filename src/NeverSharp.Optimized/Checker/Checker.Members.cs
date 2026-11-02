@@ -1001,7 +1001,7 @@ internal sealed partial class Checker
         if (!typeData.Target.IsNone)
         {
             SetStructuredTypeMembers(type, emptySymbols, default, default, default);
-            var mapper = typeData.Mapper!;
+            var mapper = typeData.Mapper;
             var instantiatedMembers = CreateInstantiatedSymbolTable(GetPropertiesOfObjectType(typeData.Target), mapper, mappingThisOnly: false);
             var instantiatedCallSignatures = InstantiateSignatures(GetSignaturesOfType(typeData.Target, SignatureKind.Call), mapper);
             var instantiatedConstructSignatures = InstantiateSignatures(GetSignaturesOfType(typeData.Target, SignatureKind.Construct), mapper);
@@ -1461,7 +1461,7 @@ internal sealed partial class Checker
                 // Transform the type from `(A[] | B[])["member"]` to `(A | B)[]["member"]` (since we pretend array is covariant anyway)
                 var arrayArg = MapType(type, t => GetMappedType(
                     Types.Elements(Types.Object(IsReadonlyArraySymbol(ParentOf(Types.Symbol(t))) ? globalReadonlyArrayType : globalArrayType).TypeParameters).ToArray()[0],
-                    Types.Object(t).Mapper ?? throw new InvalidOperationException("array member type without a mapper")));
+                    Types.Object(t).Mapper is var mapper && !mapper.IsNone ? mapper : throw new InvalidOperationException("array member type without a mapper")));
                 var arrayType = CreateArrayType(arrayArg, SomeType(type, t => IsReadonlyArraySymbol(ParentOf(Types.Symbol(t)))));
                 var signatures = GetSignaturesOfType(GetTypeOfPropertyOfType(arrayType, memberName!), kind);
                 var stored = Types.Store(signatures);

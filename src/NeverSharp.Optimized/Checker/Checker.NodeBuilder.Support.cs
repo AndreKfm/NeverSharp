@@ -414,8 +414,7 @@ internal sealed partial class Checker
     private Signature InstantiateSignatureForSymbol(Signature signature, SymbolRef symbol)
     {
         var handle = ValueSymbolLinks.Has(symbol) ? ValueSymbolLinks.Get(symbol).Mapper : 0;
-        var symbolMapper = handle == 0 ? null : MapperAt(handle);
-        return symbolMapper is null ? signature : InstantiateSignature(signature, symbolMapper);
+        return handle == 0 ? signature : InstantiateSignature(signature, MapperAt(handle));
     }
 
     private static NotSupportedException C3Seam() => new("TODO(C3): type kind or instantiation not ported yet.");

@@ -591,7 +591,7 @@ internal sealed partial class Checker
             }
             if (store.Kind(node.Node) == SyntaxKind.TypeReference && IsDeferredTypeReferenceNode(node, numTypeArguments != typeParameters.Count))
             {
-                return CreateDeferredTypeReference(type, node, null);
+                return CreateDeferredTypeReference(type, node, TypeMapper.None);
             }
             // In a type reference, the outer type parameters of the referenced class or interface are automatically
             // supplied as type arguments and the type reference only specifies arguments for the local type parameters

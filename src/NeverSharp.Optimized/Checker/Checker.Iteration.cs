@@ -891,7 +891,7 @@ internal sealed partial class Checker
             if (isGeneratorMethod || isIteratorMethod)
             {
                 var globalType = isGeneratorMethod ? globalGeneratorType : globalIteratorType;
-                var mapper = Types.Object(methodType).Mapper!;
+                var mapper = Types.Object(methodType).Mapper;
                 var typeParameters = Types.Elements(Types.Object(globalType).TypeParameters).ToArray();
                 return CreateIterationTypes(
                     GetMappedType(typeParameters[0], mapper),

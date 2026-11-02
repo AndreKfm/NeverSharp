@@ -313,7 +313,7 @@ internal readonly struct ObjectTypeData
     public ref bool HasResolvedTypeArguments => ref Record.HasResolvedTypeArguments;
     public ref bool HasInstantiations => ref Record.HasInstantiations;
     public ref NodeRef Node => ref Record.Node;
-    public ref TypeMapper? Mapper => ref Record.Mapper;
+    public ref TypeMapper Mapper => ref Record.Mapper;
     public ref ElementFlags[]? ElementFlags => ref Record.ElementFlags;
     public ref int MinLength => ref Record.MinLength;
     public ref int FixedLength => ref Record.FixedLength;
@@ -369,7 +369,7 @@ internal struct ObjectTypeRecord
     public NodeRef Node; // deferred type reference node (C3)
 
     // AnonymousType / DeferredTypeReference / MappedType (C3): the instantiation's mapper (Target: the instantiated type)
-    public TypeMapper? Mapper;
+    public TypeMapper Mapper;
 
     // TupleType (C3)
     public ElementFlags[]? ElementFlags;
@@ -397,7 +397,7 @@ internal struct TypeParameterData
     public Type Default;
     public bool IsThisType;
     public Type Target;          // the type parameter this one is an instantiation of (C3)
-    public TypeMapper? Mapper;   // the mapper of that instantiation (C3)
+    public TypeMapper Mapper;    // the mapper of that instantiation (C3)
 }
 
 /// <summary>types.ts IndexedAccessType (C3).</summary>
@@ -455,8 +455,8 @@ internal sealed class ConditionalData
     public ConditionalRoot Root = null!;
     public Type CheckType;
     public Type ExtendsType;
-    public TypeMapper? Mapper;
-    public TypeMapper? CombinedMapper;
+    public TypeMapper Mapper;
+    public TypeMapper CombinedMapper;
     public Type ResolvedTrueType;
     public Type ResolvedFalseType;
     public Type ResolvedInferredTrueType;

@@ -247,7 +247,7 @@ internal sealed partial class Checker
         var isJavascript = !declaration.IsNone && Utilities.IsInJSFile(StoreOf(declaration), declaration.Node);
         var typeParameters = Types.Elements(Signatures.Record(signature).TypeParameters).ToArray();
         var typeArgumentTypes = FillMissingTypeArguments(Array.ConvertAll(typeArgumentNodes, a => GetTypeFromTypeNode(At(node, a))), typeParameters, GetMinTypeArgumentCount(typeParameters), isJavascript);
-        TypeMapper? mapper = null;
+        var mapper = TypeMapper.None;
         for (var i = 0; i < typeArgumentNodes.Length; i++)
         {
             var constraint = GetConstraintOfTypeParameter(typeParameters[i]);
@@ -257,7 +257,10 @@ internal sealed partial class Checker
                     ? () => ChainDiagnosticMessages(null, Diagnostics.Type_0_does_not_satisfy_the_constraint_1)
                     : null;
                 var typeArgumentHeadMessage = headMessage ?? Diagnostics.Type_0_does_not_satisfy_the_constraint_1;
-                mapper ??= CreateTypeMapper(typeParameters, typeArgumentTypes);
+                if (mapper.IsNone)
+                {
+                    mapper = CreateTypeMapper(typeParameters, typeArgumentTypes);
+                }
                 var typeArgument = typeArgumentTypes[i];
                 if (!CheckTypeAssignableTo(typeArgument, GetTypeWithThisArgument(InstantiateType(constraint, mapper), typeArgument),
                     reportErrors ? At(node, typeArgumentNodes[i]) : NodeRef.None, typeArgumentHeadMessage, errorInfo))
@@ -275,7 +278,7 @@ internal sealed partial class Checker
         var store = StoreOf(node);
         var typeArgumentNodes = store.Nodes(store.TypeArguments(node.Node)).ToArray();
         Type[]? typeArguments = null;
-        TypeMapper? mapper = null;
+        var mapper = TypeMapper.None;
         var result = true;
         for (var i = 0; i < typeParameters.Length; i++)
         {

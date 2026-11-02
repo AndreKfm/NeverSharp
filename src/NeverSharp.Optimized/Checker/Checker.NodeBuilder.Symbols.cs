@@ -29,7 +29,7 @@ internal sealed partial class Checker
         context.ApproximateLength += 3; // Usually a signature contributes a few more characters than this, but 3 is the minimum
 
         var target = Signatures.Record(signature).Target;
-        if ((context.Flags & NodeBuilderFlags.WriteTypeArgumentsOfSignature) != 0 && !target.IsNone && GetSignatureMapper(signature) is not null && Signatures.Record(target).TypeParameters.Count > 0)
+        if ((context.Flags & NodeBuilderFlags.WriteTypeArgumentsOfSignature) != 0 && !target.IsNone && !GetSignatureMapper(signature).IsNone &&Signatures.Record(target).TypeParameters.Count > 0)
         {
             typeArguments = [];
             foreach (var parameter in Types.Elements(Signatures.Record(target).TypeParameters).ToArray())
@@ -151,7 +151,7 @@ internal sealed partial class Checker
     }
 
     // checker.ts enterNewScope
-    private Action EnterNewScope(NodeBuilderContext context, NodeRef declaration, SymbolRef[]? expandedParams, Type[]? typeParameters, SymbolRef[]? originalParameters = null, object? mapper = null)
+    private Action EnterNewScope(NodeBuilderContext context, NodeRef declaration, SymbolRef[]? expandedParams, Type[]? typeParameters, SymbolRef[]? originalParameters = null, TypeMapper mapper = default)
     {
         var cleanupContext = CloneNodeBuilderContext(context);
         // For regular function/method declarations, the enclosing declaration will already be signature.declaration,
@@ -171,7 +171,7 @@ internal sealed partial class Checker
         var oldEnclosingDecl = context.EnclosingDeclaration;
         var oldFakeScope = context.FakeScope;
         var oldMapper = context.Mapper;
-        if (mapper is not null)
+        if (!mapper.IsNone)
         {
             context.Mapper = mapper;
         }
@@ -1739,7 +1739,7 @@ internal sealed partial class Checker
         context.SuppressReportInferenceFallback = true;
         var typePredicate = GetTypePredicateOfSignature(signature);
         var returnTypeNode = typePredicate is not null
-            ? TypePredicateToTypePredicateNodeHelper(context.Mapper is not null ? InstantiateTypePredicate(typePredicate, context.Mapper) : typePredicate, context)
+            ? TypePredicateToTypePredicateNodeHelper(!context.Mapper.IsNone ? InstantiateTypePredicate(typePredicate, context.Mapper) : typePredicate, context)
             : TypeToTypeNodeHelper(returnType, context);
         context.SuppressReportInferenceFallback = oldSuppressReportInferenceFallback;
         return returnTypeNode;

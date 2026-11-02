@@ -78,10 +78,10 @@ internal sealed class InferenceContext
     public Signature Signature;          // None: undefined
     public InferenceFlags Flags;
     public Func<Type, Type, bool> CompareTypes = null!;
-    public TypeMapper Mapper = null!;
-    public TypeMapper NonFixingMapper = null!;
-    public TypeMapper? ReturnMapper;
-    public TypeMapper? OuterReturnMapper;
+    public TypeMapper Mapper;
+    public TypeMapper NonFixingMapper;
+    public TypeMapper ReturnMapper;
+    public TypeMapper OuterReturnMapper;
     public List<Type>? InferredTypeParameters;
     public List<(NodeRef Node, Type Type)>? IntraExpressionInferenceSites;
 }
@@ -112,52 +112,34 @@ internal sealed partial class Checker
     private InferenceContext CreateInferenceContextWorker(List<InferenceInfo> inferences, Signature signature, InferenceFlags flags, Func<Type, Type, bool> compareTypes)
     {
         var context = new InferenceContext { Inferences = inferences, Signature = signature, Flags = flags, CompareTypes = compareTypes };
-        context.Mapper = MakeFixingMapperForContext(context);
-        context.NonFixingMapper = MakeNonFixingMapperForContext(context);
+        // (module CO6: both mappers refer to the context by one slot of the mapper store's object table)
+        var slot = Mappers.AddObject(context);
+        context.Mapper = MakeFixingMapperForContext(slot);
+        context.NonFixingMapper = MakeNonFixingMapperForContext(slot);
         return context;
     }
 
-    // checker.ts makeFixingMapperForContext
-    private TypeMapper MakeFixingMapperForContext(InferenceContext context)
+    // checker.ts makeFixingMapperForContext (module CO6: a mapper kind of its own; the sources are the inferences' type
+    // parameters, which never change, and the target of source i is GetFixedInferredType(context, i))
+    private TypeMapper MakeFixingMapperForContext(int contextSlot) => Mappers.Add(TypeMapKind.Fixing, contextSlot, 0);
+
+    // makeFixingMapperForContext's target function of inference index
+    private Type GetFixedInferredType(InferenceContext context, int index)
     {
-        var count = context.Inferences.Count;
-        var sources = new Type[count];
-        var targets = new Func<Type>[count];
-        for (var i = 0; i < count; i++)
+        var inference = context.Inferences[index];
+        if (!inference.IsFixed)
         {
-            var inference = context.Inferences[i];
-            var index = i;
-            sources[i] = inference.TypeParameter;
-            targets[i] = () =>
-            {
-                if (!inference.IsFixed)
-                {
-                    // Before we commit to a particular inference (and thus lock out any further inferences),
-                    // we infer from any intra-expression inference sites we have collected.
-                    InferFromIntraExpressionSites(context);
-                    ClearCachedInferences(context.Inferences);
-                    inference.IsFixed = true;
-                }
-                return GetInferredType(context, index);
-            };
+            // Before we commit to a particular inference (and thus lock out any further inferences),
+            // we infer from any intra-expression inference sites we have collected.
+            InferFromIntraExpressionSites(context);
+            ClearCachedInferences(context.Inferences);
+            inference.IsFixed = true;
         }
-        return MakeDeferredTypeMapper(sources, targets);
+        return GetInferredType(context, index);
     }
 
-    // checker.ts makeNonFixingMapperForContext
-    private TypeMapper MakeNonFixingMapperForContext(InferenceContext context)
-    {
-        var count = context.Inferences.Count;
-        var sources = new Type[count];
-        var targets = new Func<Type>[count];
-        for (var i = 0; i < count; i++)
-        {
-            var index = i;
-            sources[i] = context.Inferences[i].TypeParameter;
-            targets[i] = () => GetInferredType(context, index);
-        }
-        return MakeDeferredTypeMapper(sources, targets);
-    }
+    // checker.ts makeNonFixingMapperForContext (module CO6: a mapper kind of its own, target GetInferredType(context, i))
+    private TypeMapper MakeNonFixingMapperForContext(int contextSlot) => Mappers.Add(TypeMapKind.NonFixing, contextSlot, 0);
 
     // checker.ts clearCachedInferences
     private static void ClearCachedInferences(List<InferenceInfo> inferences)
@@ -218,7 +200,7 @@ internal sealed partial class Checker
     }
 
     /// <summary>checker.ts getMapperFromContext.</summary>
-    internal static TypeMapper? GetMapperFromContext(InferenceContext? context) => context?.Mapper;
+    internal static TypeMapper GetMapperFromContext(InferenceContext? context) => context is null ? TypeMapper.None : context.Mapper;
 
     // checker.ts createBackreferenceMapper
     private TypeMapper CreateBackreferenceMapper(InferenceContext context, int index)
@@ -236,7 +218,8 @@ internal sealed partial class Checker
 
     /// <summary>checker.ts createOuterReturnMapper.</summary>
     internal TypeMapper CreateOuterReturnMapper(InferenceContext context) =>
-        context.OuterReturnMapper ??= MergeTypeMappers(context.ReturnMapper, CloneInferenceContext(context)!.Mapper);
+        !context.OuterReturnMapper.IsNone ? context.OuterReturnMapper
+            : context.OuterReturnMapper = MergeTypeMappers(context.ReturnMapper, CloneInferenceContext(context)!.Mapper);
 
     /// <summary>checker.ts isTypeParameterAtTopLevel.</summary>
     internal bool IsTypeParameterAtTopLevel(Type type, Type tp, int depth = 0)

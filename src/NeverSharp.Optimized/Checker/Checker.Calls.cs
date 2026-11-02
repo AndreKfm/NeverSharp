@@ -1775,9 +1775,9 @@ internal sealed partial class Checker
                     // the source type uses the outer context's return mapper (which excludes inferences made from
                     // outer arguments), and (b) we don't want any further inferences going into this context.
                     var returnContext = CreateInferenceContext(typeParameters, signature, context.Flags);
-                    var returnSourceType = InstantiateType(contextualType, outerContext is null ? null : CreateOuterReturnMapper(outerContext));
+                    var returnSourceType = InstantiateType(contextualType, outerContext is null ? TypeMapper.None : CreateOuterReturnMapper(outerContext));
                     InferTypes(returnContext.Inferences, returnSourceType, inferenceTargetType);
-                    context.ReturnMapper = returnContext.Inferences.Exists(HasInferenceCandidates) ? GetMapperFromContext(CloneInferredPartOfContext(returnContext)) : null;
+                    context.ReturnMapper = returnContext.Inferences.Exists(HasInferenceCandidates) ? GetMapperFromContext(CloneInferredPartOfContext(returnContext)) : TypeMapper.None;
                 }
             }
         }
@@ -1902,7 +1902,7 @@ internal sealed partial class Checker
         var store = StoreOf(node);
         var typeArgumentList = store.Nodes(typeArgumentNodes).ToArray();
         var typeArgumentTypes = FillMissingTypeArguments(Array.ConvertAll(typeArgumentList, t => GetTypeFromTypeNode(At(node, t))), typeParameters, GetMinTypeArgumentCount(typeParameters), isJavascript);
-        TypeMapper? mapper = null;
+        var mapper = TypeMapper.None;
         for (var i = 0; i < typeArgumentList.Length; i++)
         {
             var constraint = GetConstraintOfTypeParameter(typeParameters[i]);
@@ -1910,7 +1910,10 @@ internal sealed partial class Checker
             {
                 Func<DiagnosticMessageChain?>? errorInfo = reportErrors && headMessage is not null ? () => ChainDiagnosticMessages(null, Diagnostics.Type_0_does_not_satisfy_the_constraint_1) : null;
                 var typeArgumentHeadMessage = headMessage ?? Diagnostics.Type_0_does_not_satisfy_the_constraint_1;
-                mapper ??= CreateTypeMapper(typeParameters, typeArgumentTypes);
+                if (mapper.IsNone)
+                {
+                    mapper = CreateTypeMapper(typeParameters, typeArgumentTypes);
+                }
                 var typeArgument = typeArgumentTypes[i];
                 if (!CheckTypeAssignableTo(typeArgument, GetTypeWithThisArgument(InstantiateType(constraint, mapper), typeArgument),
                     reportErrors ? At(node, typeArgumentList[i]) : NodeRef.None, typeArgumentHeadMessage, errorInfo))
@@ -2698,8 +2701,8 @@ internal sealed partial class Checker
         // the contextual signature is (...args: A) => B, we want to infer the element type of A's constraint (say 'any')
         // for T but leave it possible to later infer '[any]' back to A.
         var restType = GetEffectiveRestType(contextualSignature);
-        var mapper = inferenceContext is null ? null : !restType.IsNone && (Types.Flags(restType) & TypeFlags.TypeParameter) != 0 ? inferenceContext.NonFixingMapper : inferenceContext.Mapper;
-        var sourceSignature = mapper is not null ? InstantiateSignature(contextualSignature, mapper) : contextualSignature;
+        var mapper = inferenceContext is null ? TypeMapper.None : !restType.IsNone && (Types.Flags(restType) & TypeFlags.TypeParameter) != 0 ? inferenceContext.NonFixingMapper : inferenceContext.Mapper;
+        var sourceSignature = !mapper.IsNone ? InstantiateSignature(contextualSignature, mapper) : contextualSignature;
         ApplyToParameterTypes(sourceSignature, signature, (source, target) =>
         {
             // Type parameters from outer context referenced by source type are fixed by instantiation of the source type
@@ -2716,7 +2719,7 @@ internal sealed partial class Checker
     // checker.ts getTypeParametersForMapper
     private Type[] GetTypeParametersForMapper(Signature signature) =>
         Array.ConvertAll(Types.Elements(Signatures.Record(signature).TypeParameters).ToArray(), tp =>
-            Types.TypeParameter(tp).Mapper is { } tpMapper ? InstantiateType(tp, tpMapper) : tp);
+            Types.TypeParameter(tp).Mapper is var tpMapper && !tpMapper.IsNone ? InstantiateType(tp, tpMapper) : tp);
 
     // checker.ts applyToParameterTypes
     private void ApplyToParameterTypes(Signature source, Signature target, Action<Type, Type> callback)

@@ -624,7 +624,7 @@ internal sealed partial class Checker
             if ((c.Types.Flags(source) & TypeFlags.TypeParameter) != 0 && c.DeclarationsOf(c.Types.Symbol(source)) is { Count: > 0 } sourceDeclarations && c.GetConstraintOfType(source).IsNone)
             {
                 var syntheticParam = c.CloneTypeParameter(source);
-                c.Types.TypeParameter(syntheticParam).Constraint = c.InstantiateType(target, MakeUnaryTypeMapper(source, syntheticParam));
+                c.Types.TypeParameter(syntheticParam).Constraint = c.InstantiateType(target, c.MakeUnaryTypeMapper(source, syntheticParam));
                 if (c.HasNonCircularBaseConstraint(syntheticParam))
                 {
                     var targetConstraintString = c.TypeToString(target, sourceDeclarations[0]);
@@ -1354,7 +1354,7 @@ internal sealed partial class Checker
             var modifiersType = c.GetApparentType(c.GetModifiersTypeFromMappedType(targetType));
             var mappedKeys = new List<Type>();
             c.ForEachMappedTypePropertyKeyTypeAndIndexSignatureKeyType(modifiersType, TypeFlags.StringOrNumberLiteralOrUnique, false,
-                t => mappedKeys.Add(c.InstantiateType(nameType, AppendTypeMapping(c.Types.Object(targetType).Mapper, c.GetTypeParameterFromMappedType(targetType), t))));
+                t => mappedKeys.Add(c.InstantiateType(nameType, c.AppendTypeMapping(c.Types.Object(targetType).Mapper, c.GetTypeParameterFromMappedType(targetType), t))));
             return c.GetUnionType(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(mappedKeys));
         }
 
@@ -1911,7 +1911,7 @@ internal sealed partial class Checker
                         var t = c.Types.Data<ConditionalData>(target);
                         var sourceParams = s.Root.InferTypeParameters;
                         var sourceExtends = s.ExtendsType;
-                        TypeMapper? mapper = null;
+                        var mapper = TypeMapper.None;
                         if (sourceParams is not null)
                         {
                             // If the source has infer type parameters, we instantiate them in the context of the target
@@ -2166,7 +2166,7 @@ internal sealed partial class Checker
                 int result;
                 if ((result = IsRelatedTo(targetConstraint, sourceConstraint, RecursionFlags.Both, reportErrors)) != Ternary.False)
                 {
-                    var mapper = CreateTypeMapper([c.GetTypeParameterFromMappedType(source)], [c.GetTypeParameterFromMappedType(target)]);
+                    var mapper = c.CreateTypeMapper([c.GetTypeParameterFromMappedType(source)], [c.GetTypeParameterFromMappedType(target)]);
                     if (c.InstantiateType(c.GetNameTypeFromMappedType(source), mapper) == c.InstantiateType(c.GetNameTypeFromMappedType(target), mapper))
                     {
                         return result & IsRelatedTo(c.InstantiateType(c.GetTemplateTypeFromMappedType(source), mapper), c.GetTemplateTypeFromMappedType(target), RecursionFlags.Both, reportErrors);
