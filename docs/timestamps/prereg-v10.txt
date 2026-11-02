@@ -1,0 +1,25 @@
+NeverSharp pre-registration timestamp
+
+tag:                 prereg/v10
+tag object:          73b5bccf8cbcea2bb61186a4be68891589f5f988
+tagged commit:       b2f775083cf7e1966ad0743c309bc63f33ec05a7
+commit tree:         dac346bca2e3ae2fbe1d7f22679ae08037bc2d32
+commit date:         2026-11-02T07:15:46+01:00
+
+SHA-256 of files at the tagged commit (content as stored in git, `git show <commit>:<path> | sha256sum`):
+docs/preregistration.md                         98100b43082ef60d4ba88adccb763bf7bd49488aedabe95c14e4f3cf3cac45a7
+docs/phase1-progress.md                         cff1e7c8051237506330f2ebeea428fa8b60a05a9f9a380b374de54a5c075bd6
+docs/benchmark-harness.md                       1d0e3fbc02a845a88f718954ba278bbb5b23dda892008ed74e98c5f2e7c24367
+docs/references.md                              dfe88a111f937c08d6f964ab6b9bf921c5af80a5ade87038a7b7ac05893abb28
+pins.json                                       d80f5bea7ff497eee20cdc801f4d968c4ea788c6d3c057effbad512ed814816d
+harness/bench/report.mjs                        9ff6ab98da060ebf5a3ae173ae356f8a5e859da3147741ab9d098d9cb01c2bc1
+harness/bench/bench.mjs                         19271d1d3212b28b848fbe23be00aeaad7a5cf4d7a07ada783ed6de0f04ec464
+harness/bench/result.schema.json                8b7d44668442d7e8a2dedb962118eda551919ffdfec0540fad47e3847e510d32
+harness/bench/check-equivalence.mjs             d4efbc107dc38e3c04166db31fc44b15e46404801cdd70ae41eb5da1010ec1ac
+harness/bench/go/parse.go                       664ba98ff2c2bbb01b69dffb878dcd342d597d0d2b2b0eaa5a5481a54c052fff
+harness/bench/rust/parse-rs/src/main.rs         df2f76d2188601cdb77dfa4214f467e8fbe4d3bb7e1568355d88803b99dd5ace
+tools/NeverSharp.ParseDriver/Program.cs         428a09b6b7f804ce7d71aa99b75bf405b92297b7c59f142f30cd94c13e98f301
+tools/NeverSharp.ParseDriver/CheckMode.cs       9f89b1dad836840158e43986cd820d0e294d5c1124281ca48fdb4f7160297fd0
+src/NeverSharp.Optimized/Program/CheckerPool.cs f13948088c5f880ebafdf7a7faf20d08ae932999b22ee4383038803e3534b77d
+
+Verify: ots verify docs/timestamps/prereg-v10.txt.ots  (after the proof has been upgraded with ots upgrade)
