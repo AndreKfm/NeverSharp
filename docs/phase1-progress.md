@@ -693,3 +693,19 @@ Geometric mean over the five repositories:
 - Table 2f in report.mjs.
 
 The report of additional run 2 is byte-identical with the changed report.mjs. The functional check `bench.mjs --check --profile check12` passes, and the 4-checker configurations report unchanged driver names and counts.
+
+## Program check with 12 checkers (§18, `prereg/v10`, 2026-11-02)
+
+The author accepted §18 on 2026-11-02. `prereg/v10` was tagged at b2f7750 and stamped with OpenTimestamps (61b36e9) before any profile-`check12` measurement.
+
+The protocol run passes the rig checks and the variance gate (binding rows ≤ 0.55 %). It is archived in `results/phase3/check12/2026-11-02T06-16-29-174Z/` with NOTE.md.
+
+| Comparison | Geometric mean [95 % CI] | Reading |
+|---|---|---|
+| cs-o-aot-ws-check12 vs tsgo7-check12 | 1.305 [1.292, 1.315] | no parity under Workstation GC |
+| cs-o-aot-srv-check12 vs tsgo7-check12 (98.75 %) | 0.890 [0.878, 0.900] | faster; bluesky 1.104 and playwright 1.064 still slower |
+| single-threaded binding rows | 0.807 | |
+
+Both CN1 predictions are reproduced. Secondary comparisons only; the checker endpoint stays 1.680.
+
+typescript-go gains 33–44 % from 4 to 12 checkers. Track O gains 25–43 % with Server GC but only 15–24 % with Workstation GC, whose blocking gen0/gen1 pause grows with the checker count (vscode 5.8 s of 11.45 s).
