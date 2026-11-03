@@ -6,8 +6,9 @@
 //   https://github.com/microsoft/TypeScript at commit 050880ce59e30b356b686bd3144efe24f875ebc8
 // Port structure follows internal/printer/printer.go
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
-// Modified: translated from TypeScript to C#; comment emission, source maps, name generation and the parenthesizer rule
-// arguments (applied only on substitution) are left out; emitTokenWithComment writes the token text only.
+// Modified: translated from TypeScript to C#; source maps, name generation and the parenthesizer rule arguments (applied
+// only on substitution) are left out. Module D0: the comment emission of the emit* functions (emitTokenWithComment is in
+// Printer.Comments.cs).
 
 using NeverSharp.Generated;
 
@@ -127,7 +128,14 @@ internal sealed partial class Printer
         {
             EmitTypeAnnotation(store.Type(node));
         }
-        EmitInitializer(store.Initializer(node), node);
+        // The comment position has to fallback to any present node within the parameterdeclaration because as it turns out, the parser can make parameter declarations with _just_ an initializer.
+        var type = store.Type(node);
+        var questionToken = store.QuestionToken(node);
+        var name = store.Name(node);
+        var modifiers = store.Modifiers(node);
+        EmitInitializer(store.Initializer(node),
+            !type.IsNone ? store.End(type) : !questionToken.IsNone ? store.End(questionToken) : !name.IsNone ? store.End(name) : !modifiers.IsNone ? store.End(modifiers) : store.Pos(node),
+            node);
     }
 
     private void EmitDecorator(Node decorator)
@@ -157,7 +165,9 @@ internal sealed partial class Printer
         Emit(store.QuestionToken(node));
         Emit(store.ExclamationToken(node));
         EmitTypeAnnotation(store.Type(node));
-        EmitInitializer(store.Initializer(node), node);
+        var type = store.Type(node);
+        var questionToken = store.QuestionToken(node);
+        EmitInitializer(store.Initializer(node), !type.IsNone ? store.End(type) : !questionToken.IsNone ? store.End(questionToken) : store.End(store.Name(node)), node);
         WriteTrailingSemicolon();
     }
 
@@ -560,7 +570,7 @@ internal sealed partial class Printer
             WriteSpace();
         }
         Emit(store.Name(node));
-        EmitInitializer(store.Initializer(node), node);
+        EmitInitializer(store.Initializer(node), store.End(store.Name(node)), node);
     }
 
     //
@@ -846,24 +856,40 @@ internal sealed partial class Printer
     }
 
     // createEmitBinaryExpression: createBinaryExpressionTrampoline(onEnter, onLeft, onOperator, onRight, onExit) with an
-    // explicit stack. Without comments, source maps and preserveSourceNewlines, onEnter and the bookkeeping of onExit do
-    // nothing; maybeEmitExpression descends into a binary operand and emits any other operand through the pipeline.
+    // explicit stack. Without source maps and preserveSourceNewlines, onEnter saves the comment container state and
+    // emits the comments before a nested binary expression, onExit the comments after it (the root's comments are emitted
+    // by the pipeline that called this); maybeEmitExpression descends into a binary operand and emits any other operand
+    // through the pipeline.
+    private readonly record struct BinaryFrame(Node Node, int State, int SavedContainerPos, int SavedContainerEnd, int SavedDeclarationListContainerEnd, bool ShouldEmitComments);
+
+    private void EnterBinaryExpression(List<BinaryFrame> stack, Node node)
+    {
+        // onEnter (a nested binary expression)
+        var frame = new BinaryFrame(node, 0, containerPos, containerEnd, declarationListContainerEnd, ShouldEmitComments(node));
+        stack.Add(frame);
+        if (frame.ShouldEmitComments)
+        {
+            EmitCommentsBeforeNode(node);
+        }
+    }
+
     private void EmitBinaryExpression(Node root)
     {
-        var stack = new List<(Node Node, int State)> { (root, 0) };
+        var stack = new List<BinaryFrame> { new(root, 0, -1, -1, -1, false) };
         while (stack.Count > 0)
         {
-            var (node, state) = stack[^1];
-            switch (state)
+            var frame = stack[^1];
+            var node = frame.Node;
+            switch (frame.State)
             {
                 case 0:
                 {
                     // onLeft
-                    stack[^1] = (node, 1);
+                    stack[^1] = frame with { State = 1 };
                     var left = store.Left(node);
                     if (store.Kind(left) == SyntaxKind.BinaryExpression)
                     {
-                        stack.Add((left, 0));
+                        EnterBinaryExpression(stack, left);
                     }
                     else
                     {
@@ -874,18 +900,20 @@ internal sealed partial class Printer
                 case 1:
                 {
                     // onOperator, onRight
-                    stack[^1] = (node, 2);
+                    stack[^1] = frame with { State = 2 };
                     var operatorToken = store.OperatorToken(node);
                     var isCommaOperator = store.Kind(operatorToken) != SyntaxKind.CommaToken;
                     var linesBeforeOperator = GetLinesBetweenNodes(node, store.Left(node), operatorToken);
                     var linesAfterOperator = GetLinesBetweenNodes(node, operatorToken, store.Right(node));
                     WriteLinesAndIndent(linesBeforeOperator, isCommaOperator);
+                    EmitLeadingCommentsOfPosition(store.Pos(operatorToken));
                     WriteTokenNode(operatorToken, store.Kind(operatorToken) == SyntaxKind.InKeyword ? WriteKind.Keyword : WriteKind.Operator);
+                    EmitTrailingCommentsOfPosition(store.End(operatorToken), prefixSpace: true); // Binary operators should have a space before the comment starts
                     WriteLinesAndIndent(linesAfterOperator, writeSpaceIfNotIndenting: true);
                     var right = store.Right(node);
                     if (store.Kind(right) == SyntaxKind.BinaryExpression)
                     {
-                        stack.Add((right, 0));
+                        EnterBinaryExpression(stack, right);
                     }
                     else
                     {
@@ -899,6 +927,10 @@ internal sealed partial class Printer
                     var linesBeforeOperator = GetLinesBetweenNodes(node, store.Left(node), store.OperatorToken(node));
                     var linesAfterOperator = GetLinesBetweenNodes(node, store.OperatorToken(node), store.Right(node));
                     DecreaseIndentIf(linesBeforeOperator, linesAfterOperator);
+                    if (stack.Count > 1 && frame.ShouldEmitComments)
+                    {
+                        EmitCommentsAfterNode(node, frame.SavedContainerPos, frame.SavedContainerEnd, frame.SavedDeclarationListContainerEnd);
+                    }
                     stack.RemoveAt(stack.Count - 1);
                     break;
                 }
@@ -942,8 +974,7 @@ internal sealed partial class Printer
     {
         EmitTokenWithComment(SyntaxKind.YieldKeyword, store.Pos(node), WriteKind.Keyword, node);
         Emit(store.AsteriskToken(node));
-        // (parenthesizeExpressionForNoAsi returns the node unchanged when comments are disabled)
-        EmitExpressionWithLeadingSpace(store.Expression(node));
+        EmitExpressionWithLeadingSpace(ParenthesizeExpressionForNoAsi(store.Expression(node)));
     }
 
     private void EmitSpreadElement(Node node)
@@ -1024,7 +1055,7 @@ internal sealed partial class Printer
         EmitTokenWithComment(SyntaxKind.OpenBraceToken, store.Pos(node), WriteKind.Punctuation, node);
         var format = forceSingleLine || (GetEmitFlags(node) & EmitFlags.SingleLine) != 0 ? ListFormat.SingleLineBlockStatements : ListFormat.MultiLineBlockStatements;
         EmitList(node, store.Statements(node), format);
-        EmitTokenWithComment(SyntaxKind.CloseBraceToken, store.End(store.Statements(node)), WriteKind.Punctuation, node);
+        EmitTokenWithComment(SyntaxKind.CloseBraceToken, store.End(store.Statements(node)), WriteKind.Punctuation, node, indentLeading: (format & ListFormat.MultiLine) != 0);
     }
 
     private void EmitVariableStatement(Node node)
@@ -1191,26 +1222,10 @@ internal sealed partial class Printer
         WriteTrailingSemicolon();
     }
 
-    /// <summary>
-    /// emitTokenWithComment with comments disabled and without source maps: the leading and trailing comments of the
-    /// position are not written, so only the token text is (writeToken and writeTokenText write the same then).
-    /// </summary>
-    private int EmitTokenWithComment(SyntaxKind token, int pos, WriteKind kind, Node contextNode)
-    {
-        var node = UtilitiesPublic.GetParseTreeNode(store, contextNode);
-        var isSimilarNode = !node.IsNone && store.Kind(node) == store.Kind(contextNode);
-        if (isSimilarNode && !currentSourceFile.IsNone)
-        {
-            pos = Scanner.SkipTrivia(CurrentText, pos);
-        }
-        return WriteTokenText(token, kind, pos);
-    }
-
     private void EmitReturnStatement(Node node)
     {
         EmitTokenWithComment(SyntaxKind.ReturnKeyword, store.Pos(node), WriteKind.Keyword, node);
-        // (parenthesizeExpressionForNoAsi returns the node unchanged when comments are disabled)
-        EmitExpressionWithLeadingSpace(store.Expression(node));
+        EmitExpressionWithLeadingSpace(ParenthesizeExpressionForNoAsi(store.Expression(node)));
         WriteTrailingSemicolon();
     }
 
@@ -1286,7 +1301,10 @@ internal sealed partial class Printer
         Emit(store.Name(node));
         Emit(store.ExclamationToken(node));
         EmitTypeAnnotation(store.Type(node));
-        EmitInitializer(store.Initializer(node), node);
+        var type = store.Type(node);
+        var name = store.Name(node);
+        var nameTypeNode = (store.EmitNode(name) as EmitNode)?.TypeNode ?? Node.None;
+        EmitInitializer(store.Initializer(node), !type.IsNone ? store.End(type) : !nameTypeNode.IsNone ? store.End(nameTypeNode) : store.End(name), node);
     }
 
     private void EmitVariableDeclarationList(Node node)
@@ -1464,7 +1482,7 @@ internal sealed partial class Printer
 
         var singleLine = ShouldEmitBlockFunctionBodyOnSingleLine(body);
 
-        EmitBodyWithDetachedComments(body, store.Pos(store.Statements(body)), () => EmitBlockFunctionBodyWorker(body, singleLine));
+        EmitBodyWithDetachedComments(body, store.Pos(store.Statements(body)), store.End(store.Statements(body)), () => EmitBlockFunctionBodyWorker(body, singleLine));
 
         DecreaseIndent();
         WriteToken(SyntaxKind.CloseBraceToken, store.End(store.Statements(body)), WriteKind.Punctuation);
@@ -1497,8 +1515,10 @@ internal sealed partial class Printer
     private void EmitClassDeclarationOrExpression(Node node)
     {
         EmitDecoratorsAndModifiers(node, store.Modifiers(node), allowDecorators: true);
-        // (emitTokenWithComment(SyntaxKind.ClassKeyword, moveRangePastModifiers(node).pos, ...): the position only places comments)
-        WriteTokenText(SyntaxKind.ClassKeyword, WriteKind.Keyword);
+        // moveRangePastModifiers(node).pos: past the last modifier or decorator, if any
+        var classModifiers = store.Nodes(store.Modifiers(node));
+        var classKeywordPos = classModifiers.Length > 0 && !PositionIsSynthesized(store.End(classModifiers[^1])) ? store.End(classModifiers[^1]) : store.Pos(node);
+        EmitTokenWithComment(SyntaxKind.ClassKeyword, classKeywordPos, WriteKind.Keyword, node);
         var name = store.Name(node);
         if (!name.IsNone)
         {
@@ -1606,7 +1626,7 @@ internal sealed partial class Printer
     {
         EmitTokenWithComment(SyntaxKind.OpenBraceToken, store.Pos(node), WriteKind.Punctuation, node);
         EmitList(node, store.Clauses(node), ListFormat.CaseBlockClauses);
-        EmitTokenWithComment(SyntaxKind.CloseBraceToken, store.End(store.Clauses(node)), WriteKind.Punctuation, node);
+        EmitTokenWithComment(SyntaxKind.CloseBraceToken, store.End(store.Clauses(node)), WriteKind.Punctuation, node, indentLeading: true);
     }
 
     private void EmitImportEqualsDeclaration(Node node)
@@ -1772,8 +1792,13 @@ internal sealed partial class Printer
         WritePunctuation(":");
         WriteSpace();
 
-        // (emitTrailingCommentsOfPosition of the value's comment range: comments are disabled)
-        Emit(store.Value(node));
+        var value = store.Value(node);
+        // @see emitPropertyAssignment
+        if ((GetEmitFlags(value) & EmitFlags.NoLeadingComments) == 0)
+        {
+            EmitTrailingCommentsOfPosition(CommentRangeOf(value).Pos);
+        }
+        Emit(value);
     }
 
     private void EmitNamespaceExportDeclaration(Node node)
@@ -1936,8 +1961,7 @@ internal sealed partial class Printer
     private void EmitJsxExpression(Node node)
     {
         var expression = store.Expression(node);
-        // (an empty expression is preserved only if it contains comments, which are disabled)
-        if (!expression.IsNone)
+        if (!expression.IsNone || (!commentsDisabled && !NodeIsSynthesized(node) && HasCommentsAtPosition(store.Pos(node)))) // preserve empty expressions if they contain comments!
         {
             var isMultiline = !currentSourceFile.IsNone && !NodeIsSynthesized(node) &&
                 Scanner.ComputeLineOfPosition(GetCurrentLineMap(), store.Pos(node)) != Scanner.ComputeLineOfPosition(GetCurrentLineMap(), store.End(node));
@@ -1948,12 +1972,31 @@ internal sealed partial class Printer
             var end = EmitTokenWithComment(SyntaxKind.OpenBraceToken, store.Pos(node), WriteKind.Punctuation, node);
             Emit(store.DotDotDotToken(node));
             EmitExpression(expression);
-            EmitTokenWithComment(SyntaxKind.CloseBraceToken, store.End(expression) != 0 ? store.End(expression) : end, WriteKind.Punctuation, node);
+            EmitTokenWithComment(SyntaxKind.CloseBraceToken, !expression.IsNone && store.End(expression) != 0 ? store.End(expression) : end, WriteKind.Punctuation, node);
             if (isMultiline)
             {
                 writer.DecreaseIndent();
             }
         }
+    }
+
+    private bool HasTrailingCommentsAtPosition(int pos)
+    {
+        var text = currentSourceFile.IsNone ? default : CurrentText;
+        var iterator = new Scanner.CommentRangeIterator(text, pos + 1, trailing: true);
+        return iterator.MoveNext(out _);
+    }
+
+    private bool HasLeadingCommentsAtPosition(int pos)
+    {
+        var text = currentSourceFile.IsNone ? default : CurrentText;
+        var iterator = new Scanner.CommentRangeIterator(text, pos + 1, trailing: false);
+        return iterator.MoveNext(out _);
+    }
+
+    private bool HasCommentsAtPosition(int pos)
+    {
+        return HasTrailingCommentsAtPosition(pos) || HasLeadingCommentsAtPosition(pos);
     }
 
     private void EmitJsxNamespacedName(Node node)
@@ -2052,8 +2095,19 @@ internal sealed partial class Printer
         Emit(store.Name(node));
         WritePunctuation(":");
         WriteSpace();
-        // (emitTrailingCommentsOfPosition of the initializer's comment range: comments are disabled)
-        EmitExpression(store.Initializer(node));
+        // This is to ensure that we emit comment in the following case:
+        //      For example:
+        //          obj = {
+        //              id: /*comment1*/ ()=>void
+        //          }
+        // "comment1" is not considered to be leading comment for node.initializer
+        // but rather a trailing comment on the previous node.
+        var initializer = store.Initializer(node);
+        if ((GetEmitFlags(initializer) & EmitFlags.NoLeadingComments) == 0)
+        {
+            EmitTrailingCommentsOfPosition(CommentRangeOf(initializer).Pos);
+        }
+        EmitExpression(initializer);
     }
 
     private void EmitShorthandPropertyAssignment(Node node)
@@ -2085,7 +2139,7 @@ internal sealed partial class Printer
     private void EmitEnumMember(Node node)
     {
         Emit(store.Name(node));
-        EmitInitializer(store.Initializer(node), node);
+        EmitInitializer(store.Initializer(node), store.End(store.Name(node)), node);
     }
 
     //
@@ -2366,7 +2420,7 @@ internal sealed partial class Printer
             NodeIsSynthesized(nodes[0]);
         if (shouldEmitDetachedComment)
         {
-            EmitBodyWithDetachedComments(node, store.Pos(statements), () => EmitSourceFileWorker(node));
+            EmitBodyWithDetachedComments(node, store.Pos(statements), store.End(statements), () => EmitSourceFileWorker(node));
             return;
         }
         EmitSourceFileWorker(node);
@@ -2443,8 +2497,17 @@ internal sealed partial class Printer
 
     private void EmitPartiallyEmittedExpression(Node node)
     {
-        // (the comments around the expression are not written: comments are disabled)
-        EmitExpression(store.Expression(node));
+        var emitFlags = GetEmitFlags(node);
+        var expression = store.Expression(node);
+        if ((emitFlags & EmitFlags.NoLeadingComments) == 0 && store.Pos(node) != store.Pos(expression))
+        {
+            EmitTrailingCommentsOfPosition(store.Pos(expression));
+        }
+        EmitExpression(expression);
+        if ((emitFlags & EmitFlags.NoTrailingComments) == 0 && store.End(node) != store.End(expression))
+        {
+            EmitLeadingCommentsOfPosition(store.End(expression));
+        }
     }
 
     private void EmitCommaList(Node node)
@@ -2506,20 +2569,6 @@ internal sealed partial class Printer
         {
             throw new NotSupportedException("Emit helpers are not supported by the Track O printer.");
         }
-    }
-
-    // emitBodyWithDetachedComments with comments disabled: only emitDetachedComments of the leading range, which writes
-    // the pinned comments at the top of the file (removeComments keeps them).
-    private void EmitBodyWithDetachedComments(Node node, int detachedRangePos, Action emitCallback)
-    {
-        var emitFlags = GetEmitFlags(node);
-        var skipLeadingComments = detachedRangePos < 0 || (emitFlags & EmitFlags.NoLeadingComments) != 0;
-        if (!skipLeadingComments && !currentSourceFile.IsNone)
-        {
-            PrinterUtilities.EmitDetachedPinnedComments(CurrentText, GetCurrentLineMap(), writer, detachedRangePos, newLine);
-        }
-
-        emitCallback();
     }
 
     //
@@ -2597,7 +2646,8 @@ internal sealed partial class Printer
                         lastMode == false ? ListFormat.Modifiers : ListFormat.Decorators,
                         start,
                         pos - start,
-                        hasTrailingComma: false);
+                        hasTrailingComma: false,
+                        childrenTextRangeEnd: pos == nodes.Length - 1 ? store.End(modifiers) : -1);
                 }
                 start = pos;
                 lastMode = mode;
@@ -2631,13 +2681,12 @@ internal sealed partial class Printer
         }
     }
 
-    // emitInitializer (the position of the `=` only places comments)
-    private void EmitInitializer(Node node, Node container)
+    private void EmitInitializer(Node node, int equalCommentStartPos, Node container)
     {
         if (!node.IsNone)
         {
             WriteSpace();
-            EmitTokenWithComment(SyntaxKind.EqualsToken, store.Pos(node), WriteKind.Operator, container);
+            EmitTokenWithComment(SyntaxKind.EqualsToken, equalCommentStartPos, WriteKind.Operator, container);
             WriteSpace();
             EmitExpression(node);
         }

@@ -26,13 +26,18 @@ internal enum EmitHint
 }
 
 /// <summary>
-/// types.ts: PrinterOptions, the members the Track O printer reads. The printer emits no comments (only what
-/// <c>removeComments: true</c> still writes: a shebang, pinned comments at the top of a file, triple-slash directives of
-/// declaration files) and no source maps, so <see cref="RemoveComments"/> must be true.
+/// types.ts: PrinterOptions, the members the Track O printer reads. No source maps. Track O's default for
+/// <see cref="RemoveComments"/> is true (the type printer's); the emitter passes false (module D0: comment emission).
 /// </summary>
 internal sealed class PrinterOptions
 {
     public bool RemoveComments { get; init; } = true;
+
+    /// <summary>Only JSDoc-style (/** */) and pinned (/*! */) comments are written (the declaration printer).</summary>
+    public bool OnlyPrintJsDocStyle { get; init; }
+
+    /// <summary>The declaration printer: emit helpers are never written (TypeScript's noEmitHelpers).</summary>
+    public bool NoEmitHelpers { get; init; }
 
     public NewLineKind? NewLine { get; init; }
 

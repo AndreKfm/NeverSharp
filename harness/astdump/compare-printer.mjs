@@ -8,7 +8,9 @@
 //   actual:   <corpus>/dumps/cs-optimized-printer-<mode> (or --actual <dir>)
 //   outcomes: <dir>.outcomes.json next to each
 //
-// Usage: node compare-printer.mjs [--corpus <dir>] [--jsdoc-mode all|none|types] [--expected <dir>] [--actual <dir>] [--show 10]
+// Usage: node compare-printer.mjs [--corpus <dir>] [--jsdoc-mode all|none|types] [--comments remove|keep] [--expected <dir>]
+//                                 [--actual <dir>] [--show 10]
+//   --comments keep (module D0): the comment mode (ts-printer-<mode>-comments, cs-optimized-printer-<mode>-comments)
 // Prints the first differing line of the first --show units, then a JSON summary (identical / differing units).
 // Exit code 0 only if every unit is identical.
 
@@ -20,8 +22,11 @@ const arg = (name, fallback) => process.argv.includes(name) ? process.argv[proce
 const corpus = arg("--corpus", join(artifactsDir, "equivalence"));
 const mode = arg("--jsdoc-mode", "types");
 if (!["all", "none", "types"].includes(mode)) throw new Error("--jsdoc-mode must be all, none or types");
-const expectedDir = arg("--expected", join(corpus, "dumps", `ts-printer-${mode}`));
-const actualDir = arg("--actual", join(corpus, "dumps", `cs-optimized-printer-${mode}`));
+const comments = arg("--comments", "remove");
+if (!["remove", "keep"].includes(comments)) throw new Error("--comments must be remove or keep");
+const suffix = comments === "keep" ? "-comments" : "";
+const expectedDir = arg("--expected", join(corpus, "dumps", `ts-printer-${mode}${suffix}`));
+const actualDir = arg("--actual", join(corpus, "dumps", `cs-optimized-printer-${mode}${suffix}`));
 const show = Number(arg("--show", "10"));
 
 const outcomesOf = file => {
@@ -61,7 +66,7 @@ for (const unit of units) {
         console.log(`  C#:       ${i < al.length ? JSON.stringify(al[i]) : "<end>"}`);
     }
 }
-const summary = { mode, units: units.length, identical, differing: differing.length, outcomeMismatch: outcomeMismatch.length,
+const summary = { mode, comments, units: units.length, identical, differing: differing.length, outcomeMismatch: outcomeMismatch.length,
     firstDiffering: differing.slice(0, 50), firstOutcomeMismatch: outcomeMismatch.slice(0, 20) };
 console.log(JSON.stringify(summary));
 process.exit(differing.length === 0 && outcomeMismatch.length === 0 ? 0 : 1);

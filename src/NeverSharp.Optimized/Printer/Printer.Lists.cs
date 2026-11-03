@@ -7,8 +7,8 @@
 //   https://github.com/microsoft/TypeScript at commit 050880ce59e30b356b686bd3144efe24f875ebc8
 // Port structure follows internal/printer/printer.go
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
-// Modified: translated from TypeScript to C#; without comments, source maps and preserveSourceNewlines (their branches
-// are left out); a writer callback is a WriteKind.
+// Modified: translated from TypeScript to C#; without source maps and preserveSourceNewlines (their branches are left
+// out); a writer callback is a WriteKind. Module D0: the comment branches of emitNodeList and emitNodeListItems.
 
 using NeverSharp.Generated;
 
@@ -108,6 +108,10 @@ internal sealed partial class Printer
         if ((format & ListFormat.BracketsMask) != 0)
         {
             WritePunctuation(GetOpeningBracket(format));
+            if (isEmpty && !children.IsUndefined)
+            {
+                EmitTrailingCommentsOfPosition(children.Pos, prefixSpace: true); // Emit comments within empty bracketed lists
+            }
         }
 
         if (isEmpty)
@@ -124,11 +128,15 @@ internal sealed partial class Printer
         }
         else
         {
-            EmitNodeListItems(expressionList, parentNode, children.Nodes, format, start, count, children.HasTrailingComma);
+            EmitNodeListItems(expressionList, parentNode, children.Nodes, format, start, count, children.HasTrailingComma, children.End);
         }
 
         if ((format & ListFormat.BracketsMask) != 0)
         {
+            if (isEmpty && !children.IsUndefined)
+            {
+                EmitLeadingCommentsOfPosition(children.End); // Emit leading comments within empty lists
+            }
             WritePunctuation(GetClosingBracket(format));
         }
     }
@@ -138,13 +146,17 @@ internal sealed partial class Printer
     ///
     /// NOTE: You probably don't want to call this directly and should be using `emitList` or `emitExpressionList` instead.
     /// </summary>
-    private void EmitNodeListItems(bool expressionList, Node parentNode, ReadOnlySpan<Node> children, ListFormat format, int start, int count, bool hasTrailingComma)
+    private void EmitNodeListItems(bool expressionList, Node parentNode, ReadOnlySpan<Node> children, ListFormat format, int start, int count, bool hasTrailingComma, int? childrenTextRangeEnd)
     {
         // Write the opening line terminator or leading whitespace.
+        var mayEmitInterveningComments = (format & ListFormat.NoInterveningComments) == 0;
+        var shouldEmitInterveningComments = mayEmitInterveningComments;
+
         var leadingLineTerminatorCount = GetLeadingLineTerminatorCount(parentNode, children[start], format);
         if (leadingLineTerminatorCount != 0)
         {
             WriteLine(leadingLineTerminatorCount);
+            shouldEmitInterveningComments = false;
         }
         else if ((format & ListFormat.SpaceBetweenBraces) != 0)
         {
@@ -173,6 +185,21 @@ internal sealed partial class Printer
             }
             else if (!previousSibling.IsNone)
             {
+                // i.e
+                //      function commentedParameters(
+                //          /* Parameter a */
+                //          a
+                //          /* End of parameter a */ -> this comment isn't considered to be trailing comment of parameter "a" due to newline
+                //          ,
+                if ((format & ListFormat.DelimitersMask) != 0 && store.End(previousSibling) != (!parentNode.IsNone ? store.End(parentNode) : -1))
+                {
+                    var previousSiblingEmitFlags = GetEmitFlags(previousSibling);
+                    if ((previousSiblingEmitFlags & EmitFlags.NoTrailingComments) == 0)
+                    {
+                        EmitLeadingCommentsOfPosition(store.End(previousSibling));
+                    }
+                }
+
                 WriteDelimiter(format);
 
                 // Write either a line terminator or whitespace to separate the elements.
@@ -187,7 +214,14 @@ internal sealed partial class Printer
                         shouldDecreaseIndentAfterEmit = true;
                     }
 
+                    if (shouldEmitInterveningComments && (format & ListFormat.DelimitersMask) != 0 && !PositionIsSynthesized(store.Pos(child)))
+                    {
+                        var commentRange = CommentRangeOf(child);
+                        EmitTrailingCommentsOfPosition(commentRange.Pos, prefixSpace: (format & ListFormat.SpaceBetweenSiblings) != 0, forceNoNewline: true);
+                    }
+
                     WriteLine(separatingLineTerminatorCount);
+                    shouldEmitInterveningComments = false;
                 }
                 else if ((format & ListFormat.SpaceBetweenSiblings) != 0)
                 {
@@ -196,6 +230,16 @@ internal sealed partial class Printer
             }
 
             // Emit this child.
+            if (shouldEmitInterveningComments)
+            {
+                var commentRange = CommentRangeOf(child);
+                EmitTrailingCommentsOfPosition(commentRange.Pos);
+            }
+            else
+            {
+                shouldEmitInterveningComments = mayEmitInterveningComments;
+            }
+
             nextListElementPos = store.Pos(child);
             if (expressionList)
             {
@@ -216,11 +260,30 @@ internal sealed partial class Printer
         }
 
         // Write a trailing comma, if requested.
+        var emitFlags = !previousSibling.IsNone ? GetEmitFlags(previousSibling) : 0;
+        var skipTrailingComments = commentsDisabled || (emitFlags & EmitFlags.NoTrailingComments) != 0;
         var emitTrailingComma = hasTrailingComma && (format & ListFormat.AllowTrailingComma) != 0 && (format & ListFormat.CommaDelimited) != 0;
         if (emitTrailingComma)
         {
-            // (comments are disabled: TypeScript writes the comma with writePunctuation)
-            WritePunctuation(",");
+            if (!previousSibling.IsNone && !skipTrailingComments)
+            {
+                EmitTokenWithComment(SyntaxKind.CommaToken, store.End(previousSibling), WriteKind.Punctuation, previousSibling);
+            }
+            else
+            {
+                WritePunctuation(",");
+            }
+        }
+
+        // Emit any trailing comment of the last element in the list
+        // i.e
+        //       var array = [...
+        //          2
+        //          /* end of element 2 */
+        //       ];
+        if (!previousSibling.IsNone && (!parentNode.IsNone ? store.End(parentNode) : -1) != store.End(previousSibling) && (format & ListFormat.DelimitersMask) != 0 && !skipTrailingComments)
+        {
+            EmitLeadingCommentsOfPosition(emitTrailingComma && childrenTextRangeEnd is { } end && end != 0 ? end : store.End(previousSibling));
         }
 
         // Decrease the indent, if requested.

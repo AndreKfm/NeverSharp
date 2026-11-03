@@ -7,8 +7,9 @@
 //   https://github.com/microsoft/TypeScript at commit 050880ce59e30b356b686bd3144efe24f875ebc8
 // Port structure follows internal/printer/printer.go
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
-// Modified: translated from TypeScript to C#; reduced to a printer without handlers, comments (removeComments: true),
-// source maps, preserveSourceNewlines, emit helpers, snippets and name generation (see the class comment).
+// Modified: translated from TypeScript to C#; reduced to a printer without handlers, source maps,
+// preserveSourceNewlines, emit helpers, snippets and name generation (see the class comment). Module D0 adds comment
+// emission (Printer.Comments.cs).
 
 using NeverSharp.Generated;
 
@@ -18,12 +19,12 @@ namespace NeverSharp.Optimized;
 /// emitter.ts: createPrinter. The variables of its closure are the fields of the instance, its inner functions the
 /// instance methods. Nodes are read through the node store they live in, which each print call passes in.
 /// <para>
-/// Supported: <c>createPrinter({ removeComments: true, ... }, {})</c> with printNode, printList and printFile (and the
-/// write* variants taking a writer). Left out, because a printer without handlers and with removeComments never reaches
-/// them for parsed trees, and the type printer (node builder output) does not need them: print handlers (so no
-/// substitution, and therefore the parenthesizer rules the printer passes along are never applied, as in TypeScript),
-/// comment emission other than what removeComments still writes, source maps, preserveSourceNewlines, omitTrailingSemicolon,
-/// bundles, emit helpers, snippet elements, and generated names (auto-generated identifiers fail with an exception).
+/// Supported: <c>createPrinter({ removeComments, onlyPrintJsDocStyle, ... }, {})</c> with printNode, printList and
+/// printFile (and the write* variants taking a writer), comments included (module D0). Left out, because a printer
+/// without handlers never reaches them for parsed trees, and the type printer (node builder output) does not need them:
+/// print handlers (so no substitution, and therefore the parenthesizer rules the printer passes along are never applied,
+/// as in TypeScript), source maps, preserveSourceNewlines, omitTrailingSemicolon, bundles, emit helpers, snippet
+/// elements, and generated names (auto-generated identifiers fail with an exception).
 /// </para>
 /// </summary>
 internal sealed partial class Printer
@@ -41,11 +42,8 @@ internal sealed partial class Printer
 
     private Printer(PrinterOptions printerOptions)
     {
-        if (!printerOptions.RemoveComments)
-        {
-            throw new NotSupportedException("The Track O printer supports removeComments: true only.");
-        }
         this.printerOptions = printerOptions;
+        commentsDisabled = printerOptions.RemoveComments;
         newLine = EmitTextWriter.GetNewLineCharacter(printerOptions);
     }
 
@@ -161,6 +159,7 @@ internal sealed partial class Printer
     {
         currentSourceFile = sourceFile;
         currentLineMap = null;
+        detachedCommentsInfo = null;
     }
 
     private void SetWriter(EmitTextWriter output)
@@ -172,6 +171,7 @@ internal sealed partial class Printer
     {
         currentSourceFile = Node.None;
         currentLineMap = null;
+        detachedCommentsInfo = null;
     }
 
     private ReadOnlySpan<char> CurrentText => store.SourceFileText(currentSourceFile).Chars;
@@ -214,8 +214,9 @@ internal sealed partial class Printer
         PipelineEmit(store.Kind(node) == SyntaxKind.StringLiteral ? EmitHint.JsxAttributeValue : EmitHint.Unspecified, node);
     }
 
-    // pipelineEmit: without handlers, comments and source maps, every pipeline phase falls through to
-    // pipelineEmitWithHint, which (without onBeforeEmitNode/onAfterEmitNode and preserveSourceNewlines) is the worker.
+    // pipelineEmit: without substitution and source maps, the phases are notification (the handler below), comments
+    // (pipelineEmitWithComments when shouldEmitComments) and pipelineEmitWithHint, which (without
+    // onBeforeEmitNode/onAfterEmitNode and preserveSourceNewlines) is the worker.
     private void PipelineEmit(EmitHint emitHint, Node node)
     {
         // Track O (module C2): the onEmitNode handler of typeWriter.ts' underlining printer, which toggles the writer's
@@ -223,8 +224,19 @@ internal sealed partial class Printer
         if (IsFullySynthetic is not null && IsFullySynthetic(node) != writer.Underlining)
         {
             writer.Underlining = !writer.Underlining;
-            PipelineEmitWithHintWorker(emitHint, node);
+            PipelineEmitAfterNotification(emitHint, node);
             writer.Underlining = !writer.Underlining;
+            return;
+        }
+        PipelineEmitAfterNotification(emitHint, node);
+    }
+
+    // getPipelinePhase from PipelinePhase.Substitution on (no substitution, no source maps).
+    private void PipelineEmitAfterNotification(EmitHint emitHint, Node node)
+    {
+        if (ShouldEmitComments(node))
+        {
+            PipelineEmitWithComments(emitHint, node);
             return;
         }
         PipelineEmitWithHintWorker(emitHint, node);

@@ -7,9 +7,14 @@
 // ts.createPrinter({ removeComments: true, newLine: LineFeed }).printFile(sourceFile). The dump of a unit is the
 // printed text itself, written as UTF-8 (tools/NeverSharp.Dump.Optimized/PrinterDump.cs writes the same).
 //
+// Comment mode (Phase 4, module D0): with --comments keep the printer is ts.createPrinter({ removeComments: false,
+// newLine: LineFeed }), so comment emission is compared too; the default (--comments remove) is the mode above, unchanged.
+//
 // Usage: node dump-ts-printer.mjs [--corpus <dir>] [--out <dir>] [--timeout-ms <n>] [--jsdoc-mode all|none|types]
+//                                 [--comments remove|keep]
 //   --jsdoc-mode: all = ParseAll, none = ParseNone, types = ParseForTypeErrors (default, the measured mode)
-//   --out: default <corpus>/dumps/ts-printer-<mode>; the outcomes go to <out>.outcomes.json
+//   --out: default <corpus>/dumps/ts-printer-<mode> (ts-printer-<mode>-comments with --comments keep); the outcomes go
+//          to <out>.outcomes.json
 
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -24,7 +29,7 @@ const jsDocModes = { all: ts.JSDocParsingMode.ParseAll, none: ts.JSDocParsingMod
 
 let printer;
 
-function dumpUnit(text, unit, jsDocParsingMode) {
+function dumpUnit(text, unit, jsDocParsingMode, removeComments) {
     const sourceFile = ts.createSourceFile(
         unit.fileName,
         text,
@@ -32,14 +37,14 @@ function dumpUnit(text, unit, jsDocParsingMode) {
         /*setParentNodes*/ false,
         scriptKinds[unit.kind],
     );
-    printer ??= ts.createPrinter({ removeComments: true, newLine: ts.NewLineKind.LineFeed });
+    printer ??= ts.createPrinter({ removeComments, newLine: ts.NewLineKind.LineFeed });
     return printer.printFile(sourceFile);
 }
 
 if (!isMainThread) {
-    parentPort.on("message", ({ unit, input, output, jsDocParsingMode }) => {
+    parentPort.on("message", ({ unit, input, output, jsDocParsingMode, removeComments }) => {
         const text = readFileSync(input, "utf8");
-        writeFileSync(output, dumpUnit(text, unit, jsDocParsingMode));
+        writeFileSync(output, dumpUnit(text, unit, jsDocParsingMode, removeComments));
         parentPort.postMessage(unit.id);
     });
 }
@@ -49,7 +54,10 @@ else {
     const jsdocMode = arg("--jsdoc-mode", "types");
     if (!(jsdocMode in jsDocModes)) throw new Error("--jsdoc-mode must be all, none or types");
     const jsDocParsingMode = jsDocModes[jsdocMode];
-    const dumpName = `ts-printer-${jsdocMode}`;
+    const comments = arg("--comments", "remove");
+    if (comments !== "remove" && comments !== "keep") throw new Error("--comments must be remove or keep");
+    const removeComments = comments === "remove";
+    const dumpName = `ts-printer-${jsdocMode}${removeComments ? "" : "-comments"}`;
     const outDir = arg("--out", join(corpus, "dumps", dumpName));
     rmSync(outDir, { recursive: true, force: true });
     mkdirSync(outDir, { recursive: true });
@@ -68,7 +76,7 @@ else {
         }, timeoutMs);
         worker.once("message", () => { clearTimeout(timer); worker.removeAllListeners("error"); resolve("ok"); });
         worker.once("error", err => { clearTimeout(timer); worker = undefined; resolve({ error: String(err?.stack ?? err) }); });
-        worker.postMessage({ unit, input: join(corpus, "units", `${unit.id}.txt`), output: join(outDir, `${unit.id}.txt`), jsDocParsingMode });
+        worker.postMessage({ unit, input: join(corpus, "units", `${unit.id}.txt`), output: join(outDir, `${unit.id}.txt`), jsDocParsingMode, removeComments });
     });
     for (const unit of units) {
         const result = await runOne(unit);

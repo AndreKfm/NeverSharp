@@ -6,6 +6,7 @@
 // { languageVersion: Latest, jsDocParsingMode }, setParentNodes: false, scriptKind) and printed with Track O's printer,
 // Printer.CreatePrinter({ removeComments: true, newLine: LineFeed }).PrintFile(...); the dump of a unit is the printed
 // text, written as UTF-8. Units that do not finish within the timeout are recorded as timeouts, as by the tsc dumper.
+// --comments keep (module D0): removeComments: false, output cs-optimized-printer-<mode>-comments.
 
 using System.Globalization;
 using System.Text.Json;
@@ -29,7 +30,13 @@ internal static class PrinterDump
             "types" => JSDocParsingMode.ParseForTypeErrors,
             _ => throw new InvalidOperationException("--jsdoc-mode must be all, none or types"),
         };
-        var dumpName = $"cs-{Track.Name}-printer-{jsdocMode}";
+        var comments = options.Get("--comments", "remove");
+        if (comments is not ("remove" or "keep"))
+        {
+            throw new InvalidOperationException("--comments must be remove or keep");
+        }
+        var removeComments = comments == "remove";
+        var dumpName = $"cs-{Track.Name}-printer-{jsdocMode}{(removeComments ? "" : "-comments")}";
         var outDir = Path.GetFullPath(options.Get("--out", Path.Combine(corpus, "dumps", dumpName)));
         var timeoutMs = int.Parse(options.Get("--timeout-ms", "10000"), CultureInfo.InvariantCulture);
         var only = options.Get("--units", "");
@@ -55,7 +62,7 @@ internal static class PrinterDump
             {
                 try
                 {
-                    result = DumpUnit(text, unit, mode);
+                    result = DumpUnit(text, unit, mode, removeComments);
                 }
                 catch (Exception e)
                 {
@@ -110,7 +117,7 @@ internal static class PrinterDump
         return 0;
     }
 
-    private static string DumpUnit(string text, Unit unit, JSDocParsingMode mode)
+    private static string DumpUnit(string text, Unit unit, JSDocParsingMode mode, bool removeComments)
     {
         var scriptKind = unit.Kind switch
         {
@@ -124,7 +131,7 @@ internal static class PrinterDump
         var file = Parser.CreateSourceFile(unit.FileName, text,
             new CreateSourceFileOptions { LanguageVersion = ScriptTarget.Latest, JsDocParsingMode = mode },
             setParentNodes: false, scriptKind);
-        var printer = Printer.CreatePrinter(new PrinterOptions { RemoveComments = true, NewLine = NewLineKind.LineFeed });
+        var printer = Printer.CreatePrinter(new PrinterOptions { RemoveComments = removeComments, NewLine = NewLineKind.LineFeed });
         return printer.PrintFile(file.Store, file.Root);
     }
 }
