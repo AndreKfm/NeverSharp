@@ -74,10 +74,10 @@ internal static class Transformers
 
         if (compilerOptions.ExperimentalDecorators != true && (languageVersion < ScriptTarget.ESNext || !useDefineForClassFields))
         {
-            transformers.Add(NotYetPorted); // transformESDecorators (module D4)
+            transformers.Add(ESDecoratorsTransformer.TransformESDecorators);
         }
 
-        transformers.Add(NotYetPorted); // transformClassFields (module D4)
+        transformers.Add(ClassFieldsTransformer.TransformClassFields);
 
         if (languageVersion < ScriptTarget.ES2021)
         {
