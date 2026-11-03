@@ -59,8 +59,83 @@ internal sealed partial class Printer
     private HashSet<string>? currentSourceFileIdentifiers;
     private Node currentSourceFileIdentifiersFile;
 
-    // pipelineEmit's substitution phase.
-    private Func<Node, Node>? currentParenthesizerRule;
+    // pipelineEmit's substitution phase: the rule to apply to a substitute (none when the caller passes none) and the
+    // substitute computed before a notification (lastSubstitution).
+    private ParenthesizerRule currentParenthesizerRule;
+    private Node lastSubstitution;
+    private Action<EmitHint, Node>? pipelineEmitWithSubstitutionCallback;
+    private Action<EmitHint, Node>? pipelineEmitAfterNotificationCallback;
+
+    /// <summary>
+    /// The parenthesizer rules emitter.ts passes to emit, emitExpression and emitList for expressions (module D2),
+    /// applied to substitutes only: TypeScript's `factory.parenthesizer` (the printer's factory for the printed store,
+    /// <see cref="PrinterFactory"/>) and the printer's own rules for return, throw and yield. (The rules for type nodes
+    /// are left out: the transformers substitute no type node.)
+    /// </summary>
+    private enum ParenthesizerRuleKind : byte
+    {
+        None,
+        ExpressionOfComputedPropertyName,
+        ExpressionForDisallowedComma,
+        LeftSideOfAccess,
+        ExpressionOfNew,
+        OperandOfPrefixUnary,
+        OperandOfPostfixUnary,
+        ConciseBodyOfArrowFunction,
+        ConditionOfConditionalExpression,
+        BranchOfConditionalExpression,
+        ExpressionOfExpressionStatement,
+        ExpressionOfExportDefault,
+        LeftSideOfBinary,
+        RightSideOfBinary,
+        // the printer's parenthesizeExpressionForNoAsi and parenthesizeExpressionForNoAsiAndDisallowedComma
+        ExpressionForNoAsi,
+        ExpressionForNoAsiAndDisallowedComma,
+    }
+
+    /// <summary>
+    /// A parenthesizer rule as a value (TypeScript passes the rule functions; Track O passes their kind, with the
+    /// operator of the binary rules, so that no delegate is created per call).
+    /// </summary>
+    private readonly struct ParenthesizerRule(ParenthesizerRuleKind kind, SyntaxKind @operator = SyntaxKind.Unknown)
+    {
+        public ParenthesizerRuleKind Kind { get; } = kind;
+
+        public SyntaxKind Operator { get; } = @operator;
+
+        public bool IsNone => Kind == ParenthesizerRuleKind.None;
+
+        public static implicit operator ParenthesizerRule(ParenthesizerRuleKind kind) => new(kind);
+    }
+
+    private Node ApplyParenthesizerRule(ParenthesizerRule rule, Node node)
+    {
+        if (rule.Kind == ParenthesizerRuleKind.ExpressionForNoAsi)
+        {
+            return ParenthesizeExpressionForNoAsi(node);
+        }
+        var rules = PrinterFactory.Parenthesizer;
+        return rule.Kind switch
+        {
+            ParenthesizerRuleKind.ExpressionOfComputedPropertyName => rules.ParenthesizeExpressionOfComputedPropertyName(node),
+            ParenthesizerRuleKind.ExpressionForDisallowedComma => rules.ParenthesizeExpressionForDisallowedComma(node),
+            ParenthesizerRuleKind.LeftSideOfAccess => rules.ParenthesizeLeftSideOfAccess(node),
+            ParenthesizerRuleKind.ExpressionOfNew => rules.ParenthesizeExpressionOfNew(node),
+            ParenthesizerRuleKind.OperandOfPrefixUnary => rules.ParenthesizeOperandOfPrefixUnary(node),
+            ParenthesizerRuleKind.OperandOfPostfixUnary => rules.ParenthesizeOperandOfPostfixUnary(node),
+            ParenthesizerRuleKind.ConciseBodyOfArrowFunction => rules.ParenthesizeConciseBodyOfArrowFunction(node),
+            ParenthesizerRuleKind.ConditionOfConditionalExpression => rules.ParenthesizeConditionOfConditionalExpression(node),
+            ParenthesizerRuleKind.BranchOfConditionalExpression => rules.ParenthesizeBranchOfConditionalExpression(node),
+            ParenthesizerRuleKind.ExpressionOfExpressionStatement => rules.ParenthesizeExpressionOfExpressionStatement(node),
+            ParenthesizerRuleKind.ExpressionOfExportDefault => rules.ParenthesizeExpressionOfExportDefault(node),
+            // getParenthesizeLeftSideOfBinaryForOperator(operator): node => parenthesizeLeftSideOfBinary(operator, node)
+            ParenthesizerRuleKind.LeftSideOfBinary => rules.ParenthesizeLeftSideOfBinary(rule.Operator, node),
+            // getParenthesizeRightSideOfBinaryForOperator(operator): node => parenthesizeRightSideOfBinary(operator, undefined, node)
+            ParenthesizerRuleKind.RightSideOfBinary => rules.ParenthesizeRightSideOfBinary(rule.Operator, Node.None, node),
+            ParenthesizerRuleKind.ExpressionForNoAsiAndDisallowedComma => ParenthesizeExpressionForNoAsi(rules.ParenthesizeExpressionForDisallowedComma(node)),
+            _ => node,
+        };
+    }
 
     /// <summary>createPrinter(printerOptions, handlers).</summary>
     internal static Printer CreatePrinter(PrinterOptions printerOptions, PrintHandlers? handlers)
@@ -107,17 +182,37 @@ internal sealed partial class Printer
         {
             return Node.None;
         }
-        if (currentParenthesizerRule is not null)
+        if (!currentParenthesizerRule.IsNone)
         {
-            substitute = currentParenthesizerRule(substitute);
+            substitute = ApplyParenthesizerRule(currentParenthesizerRule, substitute);
         }
         return substitute;
     }
 
-    // pipelineEmitWithNotification: onEmitNode(hint, node, the next phase).
+    // pipelineEmitWithNotification: onEmitNode(hint, node, the next phase), where the next phase
+    // (getNextPipelinePhase(PipelinePhase.Notification, ...)) is chosen, and so the node substituted, before the
+    // notification handler runs.
     private void PipelineEmitWithNotification(EmitHint hint, Node node)
     {
-        handlers!.OnEmitNode!(hint, node, PipelineEmitFromSubstitution);
+        var substitute = Substitute(hint, node);
+        if (!substitute.IsNone)
+        {
+            lastSubstitution = substitute;
+            handlers!.OnEmitNode!(hint, node, pipelineEmitWithSubstitutionCallback ??= PipelineEmitWithSubstitution);
+        }
+        else
+        {
+            handlers!.OnEmitNode!(hint, node, pipelineEmitAfterNotificationCallback ??= PipelineEmitAfterNotification);
+        }
+    }
+
+    // pipelineEmitWithSubstitution: the phases after substitution with the substitute.
+    private void PipelineEmitWithSubstitution(EmitHint hint, Node node)
+    {
+        Debug.Assert(!lastSubstitution.IsNone);
+        node = lastSubstitution;
+        lastSubstitution = Node.None;
+        PipelineEmitAfterNotification(hint, node);
     }
 
     // getPipelinePhase(PipelinePhase.Substitution, ...) and the phases after it.
@@ -133,12 +228,54 @@ internal sealed partial class Printer
     }
 
     /// <summary>
-    /// Whether a node the binary expression emitter would descend into must go through the pipeline first
-    /// (emitBinaryExpression's maybeEmitExpression: a notification or a substitution phase).
+    /// emitBinaryExpression's maybeEmitExpression: emits an operand of a binary expression through the pipeline with
+    /// the operand's parenthesizer rule, or returns the binary expression to descend into (the operand, or its
+    /// substitute, when no notification phase remains).
     /// </summary>
-    private bool NeedsPipelineBeforeDescend(Node node)
+    private Node MaybeEmitBinaryOperand(Node next, Node parent, bool isLeft)
     {
-        return WantsNotification(node) || (handlers?.SubstituteNode is not null && !Substitute(EmitHint.Expression, node).IsNone);
+        if (handlers is null)
+        {
+            // (A printer without print handlers: no notification or substitution phase; the type printer's
+            // underlining is PipelineEmit's.)
+            if (store.Kind(next) == SyntaxKind.BinaryExpression)
+            {
+                return next;
+            }
+            PipelineEmit(EmitHint.Expression, next);
+            return Node.None;
+        }
+
+        var operatorKind = store.Kind(store.OperatorToken(parent));
+        var parenthesizerRule = new ParenthesizerRule(isLeft ? ParenthesizerRuleKind.LeftSideOfBinary : ParenthesizerRuleKind.RightSideOfBinary, operatorKind);
+
+        // getPipelinePhase(PipelinePhase.Notification, EmitHint.Expression, next)
+        if (WantsNotification(next))
+        {
+            currentParenthesizerRule = parenthesizerRule;
+            PipelineEmitWithNotification(EmitHint.Expression, next);
+            currentParenthesizerRule = default;
+            return Node.None;
+        }
+        if (handlers.SubstituteNode is not null)
+        {
+            var substitute = handlers.SubstituteNode(EmitHint.Expression, next);
+            if (!substitute.IsNone && substitute != next)
+            {
+                next = ApplyParenthesizerRule(parenthesizerRule, substitute);
+            }
+        }
+
+        // (the next phase is the comments phase or the emit itself)
+        if (store.Kind(next) == SyntaxKind.BinaryExpression)
+        {
+            return next;
+        }
+
+        currentParenthesizerRule = parenthesizerRule;
+        PipelineEmitAfterNotification(EmitHint.Expression, next);
+        currentParenthesizerRule = default;
+        return Node.None;
     }
 
     //// Emit helpers
@@ -755,6 +892,66 @@ internal sealed partial class Printer
         return MakeUniqueName(name, IsFileLevelUniqueNameInCurrentFile, optimistic: true, scoped: false, privateName: false, prefix: "", suffix: "");
     }
 
+    /// <summary>
+    /// Track O (module D2): the binder output of the printed file, for isUniqueLocalName (TypeScript reads `node.locals`
+    /// and `node.nextContainer` from the nodes). The printed store is the file's emit copy, whose parse tree nodes have
+    /// the file's handles; synthesized nodes have none of the binder's fields. Null when the printer prints no file of
+    /// a program (the type printer).
+    /// </summary>
+    internal BinderStore? Binding { get; set; }
+
+    /// <summary>Whether no container from <paramref name="container"/> on declares a local value named <paramref name="nameText"/>.</summary>
+    private bool IsUniqueLocalName(TextRef name, Node container)
+    {
+        if (Binding is null)
+        {
+            throw new InvalidOperationException("isUniqueLocalName needs the binder output of the printed file.");
+        }
+        for (var node = container; !node.IsNone && IsNodeDescendantOf(node, container); node = Binding.NextContainerOf(node))
+        {
+            if (Utilities.CanHaveLocals(store, node))
+            {
+                var locals = Binding.LocalsOf(node);
+                if (!locals.IsNone)
+                {
+                    var local = Binding.Get(locals, name);
+                    // We conservatively include alias symbols to cover cases where they're emitted as locals
+                    if (!local.IsNone && (Binding.Flags(local) & (SymbolFlags.Value | SymbolFlags.ExportValue | SymbolFlags.Alias)) != 0)
+                    {
+                        return false;
+                    }
+                }
+            }
+        }
+        return true;
+    }
+
+    // utilities.ts isNodeDescendantOf
+    private bool IsNodeDescendantOf(Node node, Node ancestor)
+    {
+        while (!node.IsNone)
+        {
+            if (node == ancestor)
+            {
+                return true;
+            }
+            node = store.Parent(node);
+        }
+        return false;
+    }
+
+    private string GenerateNameForModuleOrEnum(Node node)
+    {
+        var nameNode = store.Name(node);
+        var name = GetTextOfNode(nameNode);
+        // Use module/enum name itself if it is unique, otherwise make a unique variation
+        // (tryCast(node, canHaveLocals): a module declaration; an enum declaration has no locals, so its name is unique.)
+        // escapeLeadingUnderscores(name): the name's escaped text (the identifier's own, TypeScript's getTextOfNode
+        // of an identifier being its text).
+        var isUnique = !Utilities.CanHaveLocals(store, node) || IsUniqueLocalName(store.EscapedText(nameNode), node);
+        return isUnique ? name : MakeUniqueName(name, IsUniqueName, optimistic: false, scoped: false, privateName: false, prefix: "", suffix: "");
+    }
+
     /// <summary>Generates a unique name for an ImportDeclaration or ExportDeclaration.</summary>
     private string GenerateNameForImportOrExportDeclaration(Node node)
     {
@@ -818,8 +1015,8 @@ internal sealed partial class Printer
                     suffix);
             case SyntaxKind.ModuleDeclaration:
             case SyntaxKind.EnumDeclaration:
-                // generateNameForModuleOrEnum needs isUniqueLocalName, the locals of the binder (module D2).
-                throw new NotSupportedException("generateNameForModuleOrEnum is not ported yet (module D2).");
+                Debug.Assert(prefix.Length == 0 && suffix.Length == 0 && !privateName);
+                return GenerateNameForModuleOrEnum(node);
             case SyntaxKind.ImportDeclaration:
             case SyntaxKind.ExportDeclaration:
                 Debug.Assert(prefix.Length == 0 && suffix.Length == 0 && !privateName);

@@ -210,6 +210,16 @@ internal sealed partial class Printer
         PipelineEmit(EmitHint.Expression, node);
     }
 
+    // emitExpression(node, parenthesizerRule)
+    private void EmitExpression(Node node, ParenthesizerRule parenthesizerRule)
+    {
+        if (node.IsNone)
+        {
+            return;
+        }
+        PipelineEmit(EmitHint.Expression, node, parenthesizerRule);
+    }
+
     private void EmitJsxAttributeValue(Node node)
     {
         PipelineEmit(store.Kind(node) == SyntaxKind.StringLiteral ? EmitHint.JsxAttributeValue : EmitHint.Unspecified, node);
@@ -218,7 +228,7 @@ internal sealed partial class Printer
     // pipelineEmit: without substitution and source maps, the phases are notification (the handler below), comments
     // (pipelineEmitWithComments when shouldEmitComments) and pipelineEmitWithHint, which (without
     // onBeforeEmitNode/onAfterEmitNode and preserveSourceNewlines) is the worker.
-    private void PipelineEmit(EmitHint emitHint, Node node, Func<Node, Node>? parenthesizerRule = null)
+    private void PipelineEmit(EmitHint emitHint, Node node, ParenthesizerRule parenthesizerRule = default)
     {
         // Track O (module C2): the onEmitNode handler of typeWriter.ts' underlining printer, which toggles the writer's
         // underlining around every node whose fully-synthetic state differs from the current one.
@@ -244,7 +254,7 @@ internal sealed partial class Printer
         {
             PipelineEmitFromSubstitution(emitHint, node);
         }
-        currentParenthesizerRule = null;
+        currentParenthesizerRule = default;
     }
 
     // getPipelinePhase from PipelinePhase.Substitution on (no substitution, no source maps).

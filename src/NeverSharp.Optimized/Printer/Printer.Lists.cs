@@ -80,14 +80,14 @@ internal sealed partial class Printer
             count);
     }
 
-    private void EmitExpressionList(Node parentNode, NodeList children, ListFormat format, int start = 0, int count = -1)
+    private void EmitExpressionList(Node parentNode, NodeList children, ListFormat format, ParenthesizerRuleKind parenthesizerRule = ParenthesizerRuleKind.None, int start = 0, int count = -1)
     {
-        EmitNodeList(expressionList: true, parentNode, Items(children), format, start, count);
+        EmitNodeList(expressionList: true, parentNode, Items(children), format, start, count, parenthesizerRule);
     }
 
     // emitNodeList; count -1 is TypeScript's default `children ? children.length - start : 0`. (The parenthesizer rule
-    // argument is left out: without substitution the printer never applies it.)
-    private void EmitNodeList(bool expressionList, Node parentNode, ListItems children, ListFormat format, int start, int count)
+    // argument: the expression rules only, module D2; the type rules are left out, no type node is substituted.)
+    private void EmitNodeList(bool expressionList, Node parentNode, ListItems children, ListFormat format, int start, int count, ParenthesizerRuleKind parenthesizerRule = ParenthesizerRuleKind.None)
     {
         if (count < 0)
         {
@@ -128,7 +128,7 @@ internal sealed partial class Printer
         }
         else
         {
-            EmitNodeListItems(expressionList, parentNode, children.Nodes, format, start, count, children.HasTrailingComma, children.End);
+            EmitNodeListItems(expressionList, parentNode, children.Nodes, format, start, count, children.HasTrailingComma, children.End, parenthesizerRule);
         }
 
         if ((format & ListFormat.BracketsMask) != 0)
@@ -146,7 +146,7 @@ internal sealed partial class Printer
     ///
     /// NOTE: You probably don't want to call this directly and should be using `emitList` or `emitExpressionList` instead.
     /// </summary>
-    private void EmitNodeListItems(bool expressionList, Node parentNode, ReadOnlySpan<Node> children, ListFormat format, int start, int count, bool hasTrailingComma, int? childrenTextRangeEnd)
+    private void EmitNodeListItems(bool expressionList, Node parentNode, ReadOnlySpan<Node> children, ListFormat format, int start, int count, bool hasTrailingComma, int? childrenTextRangeEnd, ParenthesizerRuleKind parenthesizerRule = ParenthesizerRuleKind.None)
     {
         // Write the opening line terminator or leading whitespace.
         var mayEmitInterveningComments = (format & ListFormat.NoInterveningComments) == 0;
@@ -243,7 +243,7 @@ internal sealed partial class Printer
             nextListElementPos = store.Pos(child);
             if (expressionList)
             {
-                EmitExpression(child);
+                EmitExpression(child, parenthesizerRule);
             }
             else
             {

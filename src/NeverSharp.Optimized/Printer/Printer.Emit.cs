@@ -84,7 +84,7 @@ internal sealed partial class Printer
     private void EmitComputedPropertyName(Node node)
     {
         WritePunctuation("[");
-        EmitExpression(store.Expression(node));
+        EmitExpression(store.Expression(node), ParenthesizerRuleKind.ExpressionOfComputedPropertyName);
         WritePunctuation("]");
     }
 
@@ -135,13 +135,14 @@ internal sealed partial class Printer
         var modifiers = store.Modifiers(node);
         EmitInitializer(store.Initializer(node),
             !type.IsNone ? store.End(type) : !questionToken.IsNone ? store.End(questionToken) : !name.IsNone ? store.End(name) : !modifiers.IsNone ? store.End(modifiers) : store.Pos(node),
-            node);
+            node,
+            ParenthesizerRuleKind.ExpressionForDisallowedComma);
     }
 
     private void EmitDecorator(Node decorator)
     {
         WritePunctuation("@");
-        EmitExpression(store.Expression(decorator));
+        EmitExpression(store.Expression(decorator), ParenthesizerRuleKind.LeftSideOfAccess);
     }
 
     //
@@ -577,7 +578,7 @@ internal sealed partial class Printer
             WriteSpace();
         }
         Emit(store.Name(node));
-        EmitInitializer(store.Initializer(node), store.End(store.Name(node)), node);
+        EmitInitializer(store.Initializer(node), store.End(store.Name(node)), node, ParenthesizerRuleKind.ExpressionForDisallowedComma);
     }
 
     //
@@ -587,7 +588,7 @@ internal sealed partial class Printer
     private void EmitArrayLiteralExpression(Node node)
     {
         var preferNewLine = store.MultiLine(node) ? ListFormat.PreferNewLine : ListFormat.None;
-        EmitExpressionList(node, store.Elements(node), ListFormat.ArrayLiteralExpressionElements | preferNewLine);
+        EmitExpressionList(node, store.Elements(node), ListFormat.ArrayLiteralExpressionElements | preferNewLine, ParenthesizerRuleKind.ExpressionForDisallowedComma);
     }
 
     private void EmitObjectLiteralExpression(Node node)
@@ -618,7 +619,7 @@ internal sealed partial class Printer
         var expression = store.Expression(node);
         var name = store.Name(node);
         var questionDotToken = store.QuestionDotToken(node);
-        EmitExpression(expression);
+        EmitExpression(expression, ParenthesizerRuleKind.LeftSideOfAccess);
         // const token = node.questionDotToken || setTextRangePosEnd(factory.createToken(SyntaxKind.DotToken), node.expression.end, node.name.pos);
         int linesBeforeDot;
         int linesAfterDot;
@@ -692,7 +693,7 @@ internal sealed partial class Printer
 
     private void EmitElementAccessExpression(Node node)
     {
-        EmitExpression(store.Expression(node));
+        EmitExpression(store.Expression(node), ParenthesizerRuleKind.LeftSideOfAccess);
         Emit(store.QuestionDotToken(node));
         EmitTokenWithComment(SyntaxKind.OpenBracketToken, store.End(store.Expression(node)), WriteKind.Punctuation, node);
         EmitExpression(store.ArgumentExpression(node));
@@ -709,23 +710,23 @@ internal sealed partial class Printer
             WritePunctuation(",");
             WriteSpace();
         }
-        EmitExpression(store.Expression(node));
+        EmitExpression(store.Expression(node), ParenthesizerRuleKind.LeftSideOfAccess);
         if (indirectCall)
         {
             WritePunctuation(")");
         }
         Emit(store.QuestionDotToken(node));
         EmitTypeArguments(node, store.TypeArguments(node));
-        EmitExpressionList(node, store.Arguments(node), ListFormat.CallExpressionArguments);
+        EmitExpressionList(node, store.Arguments(node), ListFormat.CallExpressionArguments, ParenthesizerRuleKind.ExpressionForDisallowedComma);
     }
 
     private void EmitNewExpression(Node node)
     {
         EmitTokenWithComment(SyntaxKind.NewKeyword, store.Pos(node), WriteKind.Keyword, node);
         WriteSpace();
-        EmitExpression(store.Expression(node));
+        EmitExpression(store.Expression(node), ParenthesizerRuleKind.ExpressionOfNew);
         EmitTypeArguments(node, store.TypeArguments(node));
-        EmitExpressionList(node, store.Arguments(node), ListFormat.NewExpressionArguments);
+        EmitExpressionList(node, store.Arguments(node), ListFormat.NewExpressionArguments, ParenthesizerRuleKind.ExpressionForDisallowedComma);
     }
 
     private void EmitTaggedTemplateExpression(Node node)
@@ -738,7 +739,7 @@ internal sealed partial class Printer
             WritePunctuation(",");
             WriteSpace();
         }
-        EmitExpression(store.Tag(node));
+        EmitExpression(store.Tag(node), ParenthesizerRuleKind.LeftSideOfAccess);
         if (indirectCall)
         {
             WritePunctuation(")");
@@ -753,7 +754,7 @@ internal sealed partial class Printer
         WritePunctuation("<");
         Emit(store.Type(node));
         WritePunctuation(">");
-        EmitExpression(store.Expression(node));
+        EmitExpression(store.Expression(node), ParenthesizerRuleKind.OperandOfPrefixUnary);
     }
 
     private void EmitParenthesizedExpression(Node node)
@@ -794,7 +795,7 @@ internal sealed partial class Printer
         else
         {
             WriteSpace();
-            EmitExpression(body);
+            EmitExpression(body, ParenthesizerRuleKind.ConciseBodyOfArrowFunction);
         }
     }
 
@@ -802,28 +803,28 @@ internal sealed partial class Printer
     {
         EmitTokenWithComment(SyntaxKind.DeleteKeyword, store.Pos(node), WriteKind.Keyword, node);
         WriteSpace();
-        EmitExpression(store.Expression(node));
+        EmitExpression(store.Expression(node), ParenthesizerRuleKind.OperandOfPrefixUnary);
     }
 
     private void EmitTypeOfExpression(Node node)
     {
         EmitTokenWithComment(SyntaxKind.TypeOfKeyword, store.Pos(node), WriteKind.Keyword, node);
         WriteSpace();
-        EmitExpression(store.Expression(node));
+        EmitExpression(store.Expression(node), ParenthesizerRuleKind.OperandOfPrefixUnary);
     }
 
     private void EmitVoidExpression(Node node)
     {
         EmitTokenWithComment(SyntaxKind.VoidKeyword, store.Pos(node), WriteKind.Keyword, node);
         WriteSpace();
-        EmitExpression(store.Expression(node));
+        EmitExpression(store.Expression(node), ParenthesizerRuleKind.OperandOfPrefixUnary);
     }
 
     private void EmitAwaitExpression(Node node)
     {
         EmitTokenWithComment(SyntaxKind.AwaitKeyword, store.Pos(node), WriteKind.Keyword, node);
         WriteSpace();
-        EmitExpression(store.Expression(node));
+        EmitExpression(store.Expression(node), ParenthesizerRuleKind.OperandOfPrefixUnary);
     }
 
     private void EmitPrefixUnaryExpression(Node node)
@@ -833,7 +834,7 @@ internal sealed partial class Printer
         {
             WriteSpace();
         }
-        EmitExpression(store.Operand(node));
+        EmitExpression(store.Operand(node), ParenthesizerRuleKind.OperandOfPrefixUnary);
     }
 
     private bool ShouldEmitWhitespaceBeforeOperand(Node node)
@@ -863,7 +864,7 @@ internal sealed partial class Printer
 
     private void EmitPostfixUnaryExpression(Node node)
     {
-        EmitExpression(store.Operand(node));
+        EmitExpression(store.Operand(node), ParenthesizerRuleKind.OperandOfPostfixUnary);
         WriteTokenText(store.Operator(node), WriteKind.Operator);
     }
 
@@ -898,14 +899,10 @@ internal sealed partial class Printer
                 {
                     // onLeft
                     stack[^1] = frame with { State = 1 };
-                    var left = store.Left(node);
-                    if (store.Kind(left) == SyntaxKind.BinaryExpression && !NeedsPipelineBeforeDescend(left))
+                    var left = MaybeEmitBinaryOperand(store.Left(node), node, isLeft: true);
+                    if (!left.IsNone)
                     {
                         EnterBinaryExpression(stack, left);
-                    }
-                    else
-                    {
-                        PipelineEmit(EmitHint.Expression, left);
                     }
                     break;
                 }
@@ -922,14 +919,10 @@ internal sealed partial class Printer
                     WriteTokenNode(operatorToken, store.Kind(operatorToken) == SyntaxKind.InKeyword ? WriteKind.Keyword : WriteKind.Operator);
                     EmitTrailingCommentsOfPosition(store.End(operatorToken), prefixSpace: true); // Binary operators should have a space before the comment starts
                     WriteLinesAndIndent(linesAfterOperator, writeSpaceIfNotIndenting: true);
-                    var right = store.Right(node);
-                    if (store.Kind(right) == SyntaxKind.BinaryExpression && !NeedsPipelineBeforeDescend(right))
+                    var right = MaybeEmitBinaryOperand(store.Right(node), node, isLeft: false);
+                    if (!right.IsNone)
                     {
                         EnterBinaryExpression(stack, right);
-                    }
-                    else
-                    {
-                        PipelineEmit(EmitHint.Expression, right);
                     }
                     break;
                 }
@@ -962,17 +955,17 @@ internal sealed partial class Printer
         var linesBeforeColon = GetLinesBetweenNodes(node, whenTrue, colonToken);
         var linesAfterColon = GetLinesBetweenNodes(node, colonToken, whenFalse);
 
-        EmitExpression(condition);
+        EmitExpression(condition, ParenthesizerRuleKind.ConditionOfConditionalExpression);
         WriteLinesAndIndent(linesBeforeQuestion, writeSpaceIfNotIndenting: true);
         Emit(questionToken);
         WriteLinesAndIndent(linesAfterQuestion, writeSpaceIfNotIndenting: true);
-        EmitExpression(whenTrue);
+        EmitExpression(whenTrue, ParenthesizerRuleKind.BranchOfConditionalExpression);
         DecreaseIndentIf(linesBeforeQuestion, linesAfterQuestion);
 
         WriteLinesAndIndent(linesBeforeColon, writeSpaceIfNotIndenting: true);
         Emit(colonToken);
         WriteLinesAndIndent(linesAfterColon, writeSpaceIfNotIndenting: true);
-        EmitExpression(whenFalse);
+        EmitExpression(whenFalse, ParenthesizerRuleKind.BranchOfConditionalExpression);
         DecreaseIndentIf(linesBeforeColon, linesAfterColon);
     }
 
@@ -986,13 +979,13 @@ internal sealed partial class Printer
     {
         EmitTokenWithComment(SyntaxKind.YieldKeyword, store.Pos(node), WriteKind.Keyword, node);
         Emit(store.AsteriskToken(node));
-        EmitExpressionWithLeadingSpace(ParenthesizeExpressionForNoAsi(store.Expression(node)));
+        EmitExpressionWithLeadingSpace(ParenthesizeExpressionForNoAsi(store.Expression(node)), ParenthesizerRuleKind.ExpressionForNoAsiAndDisallowedComma);
     }
 
     private void EmitSpreadElement(Node node)
     {
         EmitTokenWithComment(SyntaxKind.DotDotDotToken, store.Pos(node), WriteKind.Punctuation, node);
-        EmitExpression(store.Expression(node));
+        EmitExpression(store.Expression(node), ParenthesizerRuleKind.ExpressionForDisallowedComma);
     }
 
     private void EmitClassExpression(Node node)
@@ -1002,7 +995,7 @@ internal sealed partial class Printer
 
     private void EmitExpressionWithTypeArguments(Node node)
     {
-        EmitExpression(store.Expression(node));
+        EmitExpression(store.Expression(node), ParenthesizerRuleKind.LeftSideOfAccess);
         EmitTypeArguments(node, store.TypeArguments(node));
     }
 
@@ -1020,7 +1013,7 @@ internal sealed partial class Printer
 
     private void EmitNonNullExpression(Node node)
     {
-        EmitExpression(store.Expression(node));
+        EmitExpression(store.Expression(node), ParenthesizerRuleKind.LeftSideOfAccess);
         WriteOperator("!");
     }
 
@@ -1093,7 +1086,7 @@ internal sealed partial class Printer
 
     private void EmitExpressionStatement(Node node)
     {
-        EmitExpression(store.Expression(node));
+        EmitExpression(store.Expression(node), ParenthesizerRuleKind.ExpressionOfExpressionStatement);
         // Emit semicolon in non json files
         // or if json file that created synthesized expression(eg.define expression statement when --out and amd code generation)
         if (currentSourceFile.IsNone || !IsJsonSourceFile(currentSourceFile) || NodeIsSynthesized(store.Expression(node)))
@@ -1237,7 +1230,7 @@ internal sealed partial class Printer
     private void EmitReturnStatement(Node node)
     {
         EmitTokenWithComment(SyntaxKind.ReturnKeyword, store.Pos(node), WriteKind.Keyword, node);
-        EmitExpressionWithLeadingSpace(ParenthesizeExpressionForNoAsi(store.Expression(node)));
+        EmitExpressionWithLeadingSpace(ParenthesizeExpressionForNoAsi(store.Expression(node)), ParenthesizerRuleKind.ExpressionForNoAsi);
         WriteTrailingSemicolon();
     }
 
@@ -1273,7 +1266,7 @@ internal sealed partial class Printer
     private void EmitThrowStatement(Node node)
     {
         EmitTokenWithComment(SyntaxKind.ThrowKeyword, store.Pos(node), WriteKind.Keyword, node);
-        EmitExpressionWithLeadingSpace(store.Expression(node));
+        EmitExpressionWithLeadingSpace(ParenthesizeExpressionForNoAsi(store.Expression(node)), ParenthesizerRuleKind.ExpressionForNoAsi);
         WriteTrailingSemicolon();
     }
 
@@ -1316,7 +1309,7 @@ internal sealed partial class Printer
         var type = store.Type(node);
         var name = store.Name(node);
         var nameTypeNode = (store.EmitNode(name) as EmitNode)?.TypeNode ?? Node.None;
-        EmitInitializer(store.Initializer(node), !type.IsNone ? store.End(type) : !nameTypeNode.IsNone ? store.End(nameTypeNode) : store.End(name), node);
+        EmitInitializer(store.Initializer(node), !type.IsNone ? store.End(type) : !nameTypeNode.IsNone ? store.End(nameTypeNode) : store.End(name), node, ParenthesizerRuleKind.ExpressionForDisallowedComma);
     }
 
     private void EmitVariableDeclarationList(Node node)
@@ -1754,7 +1747,11 @@ internal sealed partial class Printer
             EmitTokenWithComment(SyntaxKind.DefaultKeyword, nextPos, WriteKind.Keyword, node);
         }
         WriteSpace();
-        EmitExpression(store.Expression(node));
+        EmitExpression(
+            store.Expression(node),
+            store.IsExportEquals(node)
+                ? new ParenthesizerRule(ParenthesizerRuleKind.RightSideOfBinary, SyntaxKind.EqualsToken)
+                : ParenthesizerRuleKind.ExpressionOfExportDefault);
         WriteTrailingSemicolon();
     }
 
@@ -2051,7 +2048,7 @@ internal sealed partial class Printer
     {
         EmitTokenWithComment(SyntaxKind.CaseKeyword, store.Pos(node), WriteKind.Keyword, node);
         WriteSpace();
-        EmitExpression(store.Expression(node));
+        EmitExpression(store.Expression(node), ParenthesizerRuleKind.ExpressionForDisallowedComma);
 
         EmitCaseOrDefaultClauseRest(node, store.Statements(node), store.End(store.Expression(node)));
     }
@@ -2132,7 +2129,7 @@ internal sealed partial class Printer
         {
             EmitTrailingCommentsOfPosition(CommentRangeOf(initializer).Pos);
         }
-        EmitExpression(initializer);
+        EmitExpression(initializer, ParenthesizerRuleKind.ExpressionForDisallowedComma);
     }
 
     private void EmitShorthandPropertyAssignment(Node node)
@@ -2144,7 +2141,7 @@ internal sealed partial class Printer
             WriteSpace();
             WritePunctuation("=");
             WriteSpace();
-            EmitExpression(objectAssignmentInitializer);
+            EmitExpression(objectAssignmentInitializer, ParenthesizerRuleKind.ExpressionForDisallowedComma);
         }
     }
 
@@ -2153,7 +2150,7 @@ internal sealed partial class Printer
         if (!store.Expression(node).IsNone)
         {
             EmitTokenWithComment(SyntaxKind.DotDotDotToken, store.Pos(node), WriteKind.Punctuation, node);
-            EmitExpression(store.Expression(node));
+            EmitExpression(store.Expression(node), ParenthesizerRuleKind.ExpressionForDisallowedComma);
         }
     }
 
@@ -2164,7 +2161,7 @@ internal sealed partial class Printer
     private void EmitEnumMember(Node node)
     {
         Emit(store.Name(node));
-        EmitInitializer(store.Initializer(node), store.End(store.Name(node)), node);
+        EmitInitializer(store.Initializer(node), store.End(store.Name(node)), node, ParenthesizerRuleKind.ExpressionForDisallowedComma);
     }
 
     //
@@ -2699,14 +2696,14 @@ internal sealed partial class Printer
         }
     }
 
-    private void EmitInitializer(Node node, int equalCommentStartPos, Node container)
+    private void EmitInitializer(Node node, int equalCommentStartPos, Node container, ParenthesizerRuleKind parenthesizerRule = ParenthesizerRuleKind.None)
     {
         if (!node.IsNone)
         {
             WriteSpace();
             EmitTokenWithComment(SyntaxKind.EqualsToken, equalCommentStartPos, WriteKind.Operator, container);
             WriteSpace();
-            EmitExpression(node);
+            EmitExpression(node, parenthesizerRule);
         }
     }
 
@@ -2719,12 +2716,12 @@ internal sealed partial class Printer
         }
     }
 
-    private void EmitExpressionWithLeadingSpace(Node node)
+    private void EmitExpressionWithLeadingSpace(Node node, ParenthesizerRuleKind parenthesizerRule = ParenthesizerRuleKind.None)
     {
         if (!node.IsNone)
         {
             WriteSpace();
-            EmitExpression(node);
+            EmitExpression(node, parenthesizerRule);
         }
     }
 
