@@ -507,6 +507,21 @@ internal sealed unsafe partial class NodeStore
         // (Open frames at the seal keep their scratch arrays.)
     }
 
+    /// <summary>Module D1: the lists of the emit copy (<see cref="CreateEmitCopy"/>): headers and elements copied into memory of the copy's own.</summary>
+    private void CopyListsFrom(NodeStore source)
+    {
+        var headers = source.listCount;
+        lists = (ListHeader*)listRange.Grow(0, ((long)headers + 64) * sizeof(ListHeader), null, SlabKind.ListHeaders);
+        Buffer.MemoryCopy(source.lists, lists, listRange.Capacity, (long)headers * sizeof(ListHeader));
+        listCapacity = (int)(listRange.Capacity / sizeof(ListHeader));
+        listCount = headers;
+        var elements = source.listElementCount;
+        listElements = (Node*)elementRange.Grow(0, ((long)elements + 256) * sizeof(Node), null, SlabKind.ListElements);
+        Buffer.MemoryCopy(source.listElements, listElements, elementRange.Capacity, (long)elements * sizeof(Node));
+        elementCapacity = (int)(elementRange.Capacity / sizeof(Node));
+        listElementCount = elements;
+    }
+
     /// <summary>Drops the holds on the list slabs (<see cref="Release"/>).</summary>
     private void ReleaseLists()
     {

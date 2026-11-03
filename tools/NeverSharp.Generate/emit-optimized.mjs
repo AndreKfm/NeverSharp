@@ -374,7 +374,7 @@ export function emitOptimized(schema) {
             const params = [...(multi ? ["SyntaxKind kind"] : []), "TransformFlags transformFlags", ...list.map(f => `${f.type} ${param(f)} = default`)];
             const kindWord = [multi ? "(int)kind" : `(int)SyntaxKind.${kinds[0]}`, ...list.filter(f => f.layout === "bit").map(f => `(${param(f)} ? ${1 << f.offset} : 0)`)];
             const body = [`        var handle = NewRecord(${info.words});`, "        var record = data + handle;",
-                `        record[0] = ${kindWord.join(" | ")};`, "        record[FlagsWord] = 0;", "        record[PosWord] = 0;", "        record[EndWord] = 0;",
+                `        record[0] = ${kindWord.join(" | ")};`, "        record[FlagsWord] = newNodeFlags;", "        record[PosWord] = newNodePos;", "        record[EndWord] = newNodePos;",
                 "        record[TransformFlagsWord] = (int)transformFlags;"];
             for (const f of list.filter(f => f.layout === "word")) {
                 const v = param(f);

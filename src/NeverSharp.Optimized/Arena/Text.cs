@@ -323,10 +323,50 @@ internal sealed unsafe class TextTable
         get => pooled && slabs is not null && ReferenceEquals(slabs.Active, slabsOwner) ? slabs : null;
     }
 
+    // Module D1: the table of an emit copy shares the source text of the table it copies (and does not free it).
+    private bool sharesSource;
+
+    /// <summary>
+    /// Module D1: the table of a store's emit copy (NodeStore.CreateEmitCopy): the same source text, a copy of the
+    /// arena's characters at the same offsets in memory of its own, and the interned texts in a hash table of its own.
+    /// </summary>
+    internal TextTable CreateEmitCopy()
+    {
+        Debug.Assert(!pooled, "The emit copy is taken of a sealed table.");
+        var copy = new TextTable(owner) { sharesSource = true };
+        if (charCount != 0)
+        {
+            var at = copy.Reserve(charCount);
+            new ReadOnlySpan<char>(chars, charCount).CopyTo(copy.ArenaSpan(at, charCount));
+            copy.charCount = charCount;
+        }
+        var interned = InternedTexts();
+        if (interned.Length != 0)
+        {
+            var size = 256;
+            while (interned.Length > size - (size >> 2))
+            {
+                size *= 2;
+            }
+            copy.buckets = new int[size];
+            copy.entries = new Entry[size];
+            copy.bucketBits = (byte)BitOperations.Log2((uint)size);
+            foreach (var text in interned)
+            {
+                var hash = copy.HashOf(text, out var low, out var high);
+                copy.AddEntry(hash, text, low, high);
+            }
+        }
+        return copy;
+    }
+
     /// <summary>Drops the hold on the character slab and frees the source text (the result is released).</summary>
     internal void Release()
     {
-        owner.Release();
+        if (!sharesSource)
+        {
+            owner.Release();
+        }
         chars = null;
         charCapacity = 0;
         charCount = 0;

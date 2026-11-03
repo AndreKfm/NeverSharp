@@ -127,6 +127,11 @@ internal sealed unsafe partial class NodeStore
 
     private int count;
 
+    // Module D1: the flags and the pos and end of a new node: 0 (the parser's base factory), or NodeFlags.Synthesized
+    // and -1 in an emit copy (TypeScript's synthetic factory, which the transformers' factory uses).
+    private int newNodeFlags;
+    private int newNodePos;
+
     // Nodes created (step O12), not reduced by truncation.
     private int created;
 
@@ -178,6 +183,128 @@ internal sealed unsafe partial class NodeStore
         used = HeaderWords;
         count = 1;
         InitLists(local, textLength);
+    }
+
+    /// <summary>
+    /// Module D1: the emit copy of a committed store (<see cref="CreateEmitCopy"/>): every record, object slot, side
+    /// table entry, parent, list and arena text of <paramref name="source"/> at the same handles, in memory of the copy's
+    /// own, sharing the source text. Nodes created afterwards are appended to the copy only.
+    /// </summary>
+    private NodeStore(NodeStore source)
+    {
+        Debug.Assert(!source.IsActive, "The emit copy is taken of a committed store.");
+        Texts = source.Texts.CreateEmitCopy();
+        var words = source.used;
+        data = (int*)dataRange.Grow(0, ((long)words * sizeof(int)) + (MaxRecordWords * 64 * sizeof(int)), null, SlabKind.Records);
+        Buffer.MemoryCopy(source.data, data, dataRange.Capacity, (long)words * sizeof(int));
+        dataCapacity = (int)(dataRange.Capacity / sizeof(int));
+        used = words;
+        count = source.count;
+        created = source.created;
+
+        refArray = new object?[Math.Max(source.refCount * 2, 16)];
+        source.refs.Slice(0, source.refCount).CopyTo(refArray);
+        refBase = 0;
+        refCapacity = refArray.Length;
+        refCount = source.refCount;
+
+        if (source.sideIndex is not null)
+        {
+            var capacity = source.sideCapacity;
+            var indexBytes = (long)capacity * 2 * sizeof(int);
+            var bytes = indexBytes + ((long)capacity * sizeof(SideEntry));
+            var region = sideRange.Grow(0, bytes, null, SlabKind.Side);
+            sideTop = SlabRange.Align(bytes);
+            sideIndex = (int*)region;
+            sideEntries = (SideEntry*)(region + indexBytes);
+            Buffer.MemoryCopy(source.sideIndex, sideIndex, indexBytes, indexBytes);
+            Buffer.MemoryCopy(source.sideEntries, sideEntries, (long)capacity * sizeof(SideEntry), (long)source.sideCount * sizeof(SideEntry));
+            sideCapacity = capacity;
+            sideCount = source.sideCount;
+            sideShift = source.sideShift;
+        }
+
+        if (source.parents != null)
+        {
+            var length = source.parentLength;
+            parents = (int*)parentRange.Grow(0, (long)length * sizeof(int), null, SlabKind.Parents);
+            Buffer.MemoryCopy(source.parents, parents, parentRange.Capacity, (long)length * sizeof(int));
+            parentLength = length;
+        }
+
+        CopyListsFrom(source);
+
+        // TypeScript's syntheticFactory: `node.flags |= NodeFlags.Synthesized` on a node created with pos and end -1.
+        newNodeFlags = (int)NodeFlags.Synthesized;
+        newNodePos = -1;
+    }
+
+    /// <summary>
+    /// Module D1: a copy of this committed store for the transformers of one emit (TypeScript's transformers create new
+    /// nodes and annotate parse tree nodes with emit nodes; Track O's nodes are handles of one store, so the transformed
+    /// tree is built in a copy, and nothing writes into the file's own store). A node of this store has the same handle
+    /// in the copy.
+    /// </summary>
+    internal NodeStore CreateEmitCopy() => new(this);
+
+    /// <summary>
+    /// Module D1: nodeFactory.ts cloneNode's copy of the fields: a new record of the node's kind with its words, object
+    /// slots and side table fields, except the fields TypeScript's node constructor sets (pos and end are the new
+    /// node's, the flags are the node's plus the new node's, and parent, original, the modifier flags cache and the
+    /// emit node are not copied).
+    /// </summary>
+    internal Node CloneRecord(Node node)
+    {
+        var h = node.Index;
+        var w = data[h];
+        var k = w & KindMask;
+        var clone = CreateNode((SyntaxKind)k);
+        var c = clone.Index;
+        int size = RecordSizes[k];
+        for (var i = HeaderWords; i < size; i++)
+        {
+            data[c + i] = data[h + i];
+        }
+        data[c] = (data[c] & SideBit) | (w & ~SideBit);
+        data[c + FlagsWord] = data[h + FlagsWord] | newNodeFlags;
+        data[c + TransformFlagsWord] = data[h + TransformFlagsWord];
+        int refSize = RefCounts[k];
+        if (refSize != 0)
+        {
+            var from = data[h + RefBaseWord];
+            var to = data[c + RefBaseWord];
+            var objects = refs;
+            for (var i = 0; i < refSize; i++)
+            {
+                objects[to + i] = objects[from + i];
+            }
+        }
+        if (w < 0)
+        {
+            // The node's side table fields (a scan: clones are rare).
+            for (var p = 0; p < sideCount; p++)
+            {
+                var entry = sideEntries[p];
+                if ((int)(entry.Key >> 8) != h)
+                {
+                    continue;
+                }
+                var field = (int)(entry.Key & 0xFF);
+                if (field is ParentSide or OriginalSide or ModifierFlagsCacheSide or EmitNodeSide)
+                {
+                    continue;
+                }
+                if (entry.IsRef != 0)
+                {
+                    SetSideRef(c, field, refs[entry.Value]);
+                }
+                else
+                {
+                    SetSideInt(c, field, entry.Value);
+                }
+            }
+        }
+        return clone;
     }
 
     /// <summary>Whether this store's parse still writes to the thread's slabs (it owns them and is not committed).</summary>
@@ -290,6 +417,9 @@ internal sealed unsafe partial class NodeStore
         var record = data + h;
         Unsafe.InitBlockUnaligned(record, 0, MaxRecordWords * sizeof(int));
         record[0] = k;
+        record[FlagsWord] = newNodeFlags;
+        record[PosWord] = newNodePos;
+        record[EndWord] = newNodePos;
         record[TransformFlagsWord] = (int)transformFlags;
         int refSize = RefCounts[k];
         if (refSize != 0)
