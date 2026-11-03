@@ -672,7 +672,7 @@ internal sealed partial class Checker
         }
         // Module D5: in declaration emit an existing node of the enclosing file (or a clone of a built node) keeps its
         // positions, as TypeScript's reused and updated nodes do, so that the printer emits their comments
-        if (emitBuilderActive && (ReferenceEquals(store, builderEnclosingStore) || ReferenceEquals(store, S)) && store.Pos(n) >= 0)
+        if (emitBuilderActive && !noCopyPositions && (ReferenceEquals(store, builderEnclosingStore) || ReferenceEquals(store, S)) && store.Pos(n) >= 0)
         {
             Utilities.SetTextRangePosEnd(S, copy, store.Pos(n), store.End(n));
         }
@@ -1003,12 +1003,16 @@ internal sealed partial class Checker
 
     // checker.ts parameterToParameterDeclarationName's cloneBindingName: the binding pattern without initializers,
     // every node SingleLine | NoAsciiEscaping
-    private Node CloneBindingName(NodeRef name)
+    private Node CloneBindingName(NodeRef name, NodeBuilderContext? context = null)
     {
         Node Visit(NodeRef node)
         {
             // elideInitializerAndSetEmitFlags: the initializer of a binding element is removed before its children are visited
             var store = StoreOf(node);
+            if (context is not null && context.Tracker.CanTrackSymbol && store.Kind(node.Node) == SyntaxKind.ComputedPropertyName && IsLateBindableName(node))
+            {
+                TrackComputedName(At(node, store.Expression(node.Node)), context.EnclosingDeclaration, context);
+            }
             var initializer = store.Kind(node.Node) == SyntaxKind.BindingElement ? store.Initializer(node.Node) : Node.None;
             Node VisitChild(NodeRef child) => !initializer.IsNone && child.Node == initializer ? Node.None : Visit(child);
             var copy = CopyWithChildren(node, VisitChild, list => CopyListWith(node, list, Visit), markReused: true);

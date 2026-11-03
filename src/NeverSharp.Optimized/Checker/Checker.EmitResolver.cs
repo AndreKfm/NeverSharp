@@ -827,6 +827,14 @@ internal sealed class EmitResolver
     internal List<Node>? CreateLateBoundIndexSignatures(Node cls, Node enclosing, NodeBuilderFlags flags, InternalNodeBuilderFlags internalFlags, ISymbolTracker tracker) =>
         checker.CreateLateBoundIndexSignatures(EmitStore, ParseTreeNode(cls), ParseTreeNode(enclosing), flags, internalFlags, tracker);
 
+    /// <summary>getDeclarationStatementsForSourceFile (a JavaScript file); null when the node builder encountered an error.</summary>
+    internal List<Node>? GetDeclarationStatementsForSourceFile(Node node, NodeFactory factory, NodeBuilderFlags flags, InternalNodeBuilderFlags internalFlags, ISymbolTracker tracker)
+    {
+        var n = ParseTreeNode(node);
+        Debug.Assert(!n.IsNone && checker.Kind(n) == SyntaxKind.SourceFile, "Non-sourcefile node passed into getDeclarationsForSourceFile");
+        return checker.GetDeclarationStatementsForSourceFile(EmitStore, factory, n, flags, internalFlags, tracker);
+    }
+
     // Symbols the declaration transformer reads (input.symbol, p.escapedName, p.valueDeclaration, p.parent)
 
     internal SymbolRef GetSymbolOfDeclaration(Node node)

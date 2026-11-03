@@ -65,6 +65,13 @@ internal sealed partial class Checker
         public SymbolTrackerImpl Tracker = null!;
         public bool ReportedDiagnostic;
         public List<TrackedSymbol>? TrackedSymbols;
+        // symbolTableToDeclarationStatements (module D5)
+        public HashSet<string>? UsedSymbolNames;
+        public Dictionary<SymbolRef, string>? RemappedSymbolNames;
+        public Dictionary<SymbolRef, SymbolRef>? RemappedSymbolReferences;
+
+        // `{ ...context }`: a shallow copy (the collections are shared, as in TypeScript)
+        public NodeBuilderContext Clone() => (NodeBuilderContext)MemberwiseClone();
     }
 
     // ---- the node store the builder writes into ----

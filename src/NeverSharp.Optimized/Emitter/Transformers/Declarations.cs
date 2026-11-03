@@ -294,6 +294,29 @@ internal sealed partial class DeclarationsTransformer : ISymbolTracker
 
     public void PopErrorFallbackNode() => restoreFallbackNode();
 
+    private List<Node> TransformDeclarationsForJS(Node sourceFile)
+    {
+        var oldDiag = getSymbolAccessibilityDiagnostic;
+        getSymbolAccessibilityDiagnostic = s =>
+        {
+            var errorNode = resolver.ToEmit(s.ErrorNode);
+            if (!errorNode.IsNone && CanProduceDiagnostics(errorNode))
+            {
+                return CreateGetSymbolAccessibilityDiagnosticForNode(errorNode)(s);
+            }
+            return new SymbolAccessibilityDiagnostic
+            {
+                DiagnosticMessage = s.ErrorModuleName is not null
+                    ? Diagnostics.Declaration_emit_for_this_file_requires_using_private_name_0_from_module_1_An_explicit_type_annotation_may_unblock_declaration_emit
+                    : Diagnostics.Declaration_emit_for_this_file_requires_using_private_name_0_An_explicit_type_annotation_may_unblock_declaration_emit,
+                ErrorNode = !errorNode.IsNone ? errorNode : sourceFile,
+            };
+        };
+        var result = resolver.GetDeclarationStatementsForSourceFile(sourceFile, factory, DeclarationEmitNodeBuilderFlags, DeclarationEmitInternalNodeBuilderFlags, this);
+        getSymbolAccessibilityDiagnostic = oldDiag;
+        return result ?? [];
+    }
+
     // ---- transformRoot ----
 
     private Node TransformRoot(Node node)
@@ -321,9 +344,7 @@ internal sealed partial class DeclarationsTransformer : ISymbolTracker
         NodeList combinedStatements;
         if (IsSourceFileJS(node))
         {
-            // JavaScript units: transformDeclarationsForJS (getDeclarationStatementsForSourceFile,
-            // symbolTableToDeclarationStatements) is not ported yet; the source is left as it is.
-            return node;
+            combinedStatements = factory.CreateNodeArray(TransformDeclarationsForJS(node));
         }
         else
         {

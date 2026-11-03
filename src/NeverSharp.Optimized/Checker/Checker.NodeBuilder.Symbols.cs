@@ -117,12 +117,31 @@ internal sealed partial class Checker
             case SyntaxKind.ConstructorType:
                 node = SSignature(kind, modifiers, Node.None, Node.None, SList(typeParameters), SList(parameters), !returnTypeNode.IsNone ? returnTypeNode : STypeReference(SIdentifier(""), NodeList.None));
                 break;
+            case SyntaxKind.FunctionDeclaration:
+                // (module D5: symbolTableToDeclarationStatements)
+                node = SSignature(kind, modifiers, !name.IsNone ? name : SIdentifier(""), Node.None, SList(typeParameters), SList(parameters), returnTypeNode);
+                break;
             default:
                 throw new NotSupportedException("signatureToSignatureDeclarationHelper: " + kind);
         }
         if (typeArguments is not null)
         {
             S.SetTypeArguments(node, SList(typeArguments));
+        }
+        var signatureDeclaration = Signatures.Record(signature).Declaration;
+        if (!signatureDeclaration.IsNone && Kind(signatureDeclaration) == SyntaxKind.JSDocSignature && Kind(Parent(signatureDeclaration)) == SyntaxKind.JSDocOverloadTag)
+        {
+            // the text of the JSDoc comment as a synthetic comment (printed by declaration emit)
+            var jsdoc = Parent(Parent(signatureDeclaration));
+            var jstore = StoreOf(jsdoc);
+            var text = Utilities.GetSourceTextOfNodeFromSourceFile(jstore, Utilities.RootOf(jstore, jsdoc.Node), jsdoc.Node, includeTrivia: true);
+            text = text.Length >= 4 ? text[2..^2] : "";
+            var lines = System.Text.RegularExpressions.Regex.Split(text, "\r\n|\n|\r");
+            for (var i = 0; i < lines.Length; i++)
+            {
+                lines[i] = System.Text.RegularExpressions.Regex.Replace(lines[i], "^\\s+", " ");
+            }
+            SAddSyntheticLeadingComment(node, string.Join("\n", lines), hasTrailingNewLine: true);
         }
         cleanup();
         return node;
@@ -469,17 +488,30 @@ internal sealed partial class Checker
         {
             return SIdentifier(SymbolName(parameterSymbol));
         }
-        switch (store.Kind(name))
+        // (factory.cloneNode: a clone has no positions, so declaration emit prints no comments of the name)
+        var oldNoCopyPositions = noCopyPositions;
+        noCopyPositions = true;
+        try
         {
-            case SyntaxKind.Identifier:
-                // factory.cloneNode of the existing name (its original is the name: reused)
-                return SetEmitFlags(CopyShell(At(parameterDeclaration, name)), EmitFlags.NoAsciiEscaping);
-            case SyntaxKind.QualifiedName:
-                return SetEmitFlags(CopyShell(At(parameterDeclaration, store.Right(name))), EmitFlags.NoAsciiEscaping);
-            default:
-                return CloneBindingName(At(parameterDeclaration, name));
+            switch (store.Kind(name))
+            {
+                case SyntaxKind.Identifier:
+                    // factory.cloneNode of the existing name (its original is the name: reused)
+                    return SetEmitFlags(CopyShell(At(parameterDeclaration, name)), EmitFlags.NoAsciiEscaping);
+                case SyntaxKind.QualifiedName:
+                    return SetEmitFlags(CopyShell(At(parameterDeclaration, store.Right(name))), EmitFlags.NoAsciiEscaping);
+                default:
+                    return CloneBindingName(At(parameterDeclaration, name), context);
+            }
+        }
+        finally
+        {
+            noCopyPositions = oldNoCopyPositions;
         }
     }
+
+    // Module D5: copies made for factory.cloneNode keep no positions in declaration emit (see CopyShellFrom)
+    private bool noCopyPositions;
 
     // checker.ts lookupSymbolChain (typeToString's tracker has no inner tracker: trackSymbol does nothing)
     private List<SymbolRef> LookupSymbolChain(SymbolRef symbol, NodeBuilderContext context, SymbolFlags meaning, bool yieldModuleSymbol = false)
@@ -1328,6 +1360,10 @@ internal sealed partial class Checker
     // checker.ts getNameOfSymbolAsWritten
     private string GetNameOfSymbolAsWritten(SymbolRef symbol, NodeBuilderContext? context = null)
     {
+        if (context?.RemappedSymbolReferences is { } remapped && remapped.TryGetValue(symbol, out var remappedSymbol))
+        {
+            symbol = remappedSymbol;
+        }
         var declarations = DeclarationsOf(symbol);
         if (context is not null && NameOf(symbol) == InternalSymbolName.Default && (context.Flags & NodeBuilderFlags.UseAliasDefinedOutsideCurrentScope) == 0 &&
             // If it's not the first part of an entity name, it must print as `default`
