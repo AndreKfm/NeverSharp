@@ -6,8 +6,17 @@
 //   js           the outputs with a JavaScript extension (.js, .jsx, .mjs, .cjs): names, order and texts
 //   dts          the outputs with a declaration extension (.d.ts, .d.mts, .d.cts)
 //   diagnostics  the emit diagnostics and emitSkipped
-// A unit is identical when its whole dump is byte-identical; crashed: the C# side has no dump (error or timeout) while
-// tsc has one. Outcomes (ok / timeout / error) must agree too.
+// A unit is identical when its whole dump is byte-identical after the symbol id normalization below; crashed: the C#
+// side has no dump (error or timeout) while tsc has one. Outcomes (ok / timeout / error) must agree too.
+//
+// Symbol id normalization (module D6, author's decision 2026-11-03; preregistration.md §19): tsc builds some names
+// from its process-wide symbol id (getSymbolId), which depends on how many symbols the oracle's worker numbered before
+// the unit, not on the unit. Before comparing, both sides replace that id with "<id>" in exactly these names:
+//   - the late-bound member name of a unique symbol, `__@<escapedName>@<id>` (createUniqueESSymbolType);
+//   - the local name serialization derives from it (getNameCandidateWorker: "_" + the name with every character
+//     other than [a-z0-9] (case-insensitive) replaced by "_", i.e. `____<name>_<id>`), with the optional `_<n>` suffix
+//     of getUnusedName.
+// The summary counts the units and lines this changes on the tsc side.
 //
 //   expected: <corpus>/dumps/ts-emit-types           (or --expected <dir>)
 //   actual:   <corpus>/dumps/cs-optimized-emit-types (or --actual <dir>)
@@ -44,6 +53,22 @@ const unitsFile = arg("--units", undefined);
 if (unitsFile) {
     const ids = new Set(readFileSync(unitsFile, "utf8").split(/\r?\n/).filter(Boolean));
     units = units.filter(u => ids.has(u.id));
+}
+
+// The symbol id normalization (see the header). The escaped name of a unique symbol's symbol is an identifier here
+// (`[\w$]*`); the derived local name has only [A-Za-z0-9_] by construction.
+const lateBoundName = /(?<![\w$])__@([\w$]*)@\d+(?![\w$])/g;
+const derivedLocalName = /(?<![\w$])____([A-Za-z0-9_]*?)_\d+((?:_\d+)?)(?![\w$])/g;
+const normalizeSymbolIds = text => text.replace(lateBoundName, "__@$1@<id>").replace(derivedLocalName, "____$1_<id>$2");
+let normalizedUnits = 0, normalizedLines = 0;
+function normalizeExpected(text) {
+    const result = normalizeSymbolIds(text);
+    if (result !== text) {
+        normalizedUnits++;
+        const before = text.split("\n"), after = result.split("\n");
+        for (let i = 0; i < before.length; i++) if (before[i] !== after[i]) normalizedLines++;
+    }
+    return result;
 }
 
 const isJs = name => /\.(js|jsx|mjs|cjs)$/.test(name) && !/\.d\.[cm]?ts$/.test(name);
@@ -88,8 +113,8 @@ for (const unit of units) {
         if (a !== e) outcomeMismatch.push({ id: unit.id, tsc: e, cs: a });
         continue;
     }
-    const expected = readFileSync(join(expectedDir, `${unit.id}.txt`), "utf8");
-    const actual = readFileSync(actualFile, "utf8");
+    const expected = normalizeExpected(readFileSync(join(expectedDir, `${unit.id}.txt`), "utf8"));
+    const actual = normalizeSymbolIds(readFileSync(actualFile, "utf8"));
     if (expected === actual) {
         identical++;
         identicalIds.add(unit.id);
@@ -116,7 +141,8 @@ for (const unit of units) {
 }
 
 const summary = { units: units.length, identical, differing: differingUnits, crashed: crashedUnits, outcomeMismatch: outcomeMismatch.length,
-    sections: counts, headerOrOtherOutputsDiffering: otherDiffering, firstDiffering, firstOutcomeMismatch: outcomeMismatch.slice(0, 20) };
+    sections: counts, headerOrOtherOutputsDiffering: otherDiffering, firstDiffering, firstOutcomeMismatch: outcomeMismatch.slice(0, 20),
+    symbolIdNormalized: { units: normalizedUnits, lines: normalizedLines } };
 if (coverageFile && existsSync(coverageFile)) {
     // The units that need no transformer (dump-ts-emit.mjs coverage report): how many of them are identical.
     const coverage = JSON.parse(readFileSync(coverageFile, "utf8"));
