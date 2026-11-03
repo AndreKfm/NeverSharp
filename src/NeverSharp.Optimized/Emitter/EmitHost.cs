@@ -10,6 +10,8 @@
 // Modified: translated from TypeScript to C#; the members emitFiles reads under Gate D's options (no outDir, outFile,
 // declarationDir, project references, build info or source maps).
 
+using NeverSharp.Generated;
+
 namespace NeverSharp.Optimized;
 
 /// <summary>types.ts WriteFileCallback (onError, sourceFiles and data are not passed: nothing in Track O reads them).</summary>
@@ -56,6 +58,9 @@ internal sealed class EmitHost
     internal IReadOnlyList<SourceFile> GetSourceFiles() => program.SourceFiles;
 
     internal bool IsEmitBlocked(string emitFileName) => program.IsEmitBlocked(emitFileName);
+
+    /// <summary>program.ts getEmitModuleFormatOfFile (module D3): for a source file node of the file's store or its emit copy.</summary>
+    internal ModuleKind GetEmitModuleFormatOfFile(NodeStore store, Node file) => Program.GetEmitModuleFormatOfFileWorker(store, file, program.Options);
 
     internal void WriteFile(string fileName, string text, bool writeByteOrderMark)
     {

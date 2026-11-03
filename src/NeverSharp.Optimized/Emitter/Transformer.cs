@@ -69,7 +69,7 @@ internal static class Transformers
 
         if (languageVersion < ScriptTarget.ESNext)
         {
-            transformers.Add(NotYetPorted); // transformESNext (module D3)
+            transformers.Add(ESNextTransformer.TransformESNext);
         }
 
         if (compilerOptions.ExperimentalDecorators != true && (languageVersion < ScriptTarget.ESNext || !useDefineForClassFields))
@@ -84,15 +84,16 @@ internal static class Transformers
             throw new NotSupportedException("Downlevel transformers below ES2021 are not Phase 4 options.");
         }
 
+        // getModuleTransformer(moduleKind): module kinds ES2015..ESNext select transformImpliedNodeFormatDependentModule
+        // (module D3). CommonJS, AMD, UMD, System, Node16+ and Preserve as the program's module kind are outside Phase 4's
+        // options; their slot returns its input.
         if (moduleKind is not (ModuleKind.ES2015 or ModuleKind.ES2020 or ModuleKind.ES2022 or ModuleKind.ESNext))
         {
-            // getModuleTransformer: CommonJS, AMD, UMD, System, Node16+ and Preserve are outside Phase 4's options.
-            // (Module kinds ES2015..ESNext select transformECMAScriptModule.)
             transformers.Add(NotYetPorted);
         }
         else
         {
-            transformers.Add(NotYetPorted); // transformECMAScriptModule (module D3)
+            transformers.Add(ImpliedNodeFormatDependentModuleTransformer.TransformImpliedNodeFormatDependentModule);
         }
 
         return transformers;

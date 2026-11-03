@@ -610,7 +610,18 @@ internal sealed partial class Program
 
     // program.ts getEmitModuleFormatOfFileWorker
     private static ModuleKind GetEmitModuleFormatOfFileWorker(SourceFile file, CompilerOptions options) =>
-        GetImpliedNodeFormatForEmitWorker(file, options) ?? options.GetEmitModuleKind();
+        GetEmitModuleFormatOfFileWorker(file.Store, file.Root, options);
+
+    /// <summary>
+    /// program.ts getEmitModuleFormatOfFileWorker for a source file node of any store. Track O (module D3): the emit
+    /// host's getEmitModuleFormatOfFile, which the module transformers call with the transformed file (a node of the
+    /// emit copy, with the file's name).
+    /// </summary>
+    internal static ModuleKind GetEmitModuleFormatOfFileWorker(NodeStore store, Node file, CompilerOptions options) =>
+        GetImpliedNodeFormatForEmitWorker(store, file, options) ?? options.GetEmitModuleKind();
+
+    private static ModuleKind? GetImpliedNodeFormatForEmitWorker(SourceFile file, CompilerOptions options) =>
+        GetImpliedNodeFormatForEmitWorker(file.Store, file.Root, options);
 
     /// <summary>
     /// program.ts getImpliedNodeFormatForEmitWorker. The program's files carry the implied node format of
@@ -618,14 +629,14 @@ internal sealed partial class Program
     /// node_modules) depends on the extension only: ESNext for .mts/.mjs (and .d.mts), CommonJS for .cts/.cjs (and .d.cts),
     /// otherwise none; there is no package.json scope.
     /// </summary>
-    private static ModuleKind? GetImpliedNodeFormatForEmitWorker(SourceFile file, CompilerOptions options)
+    private static ModuleKind? GetImpliedNodeFormatForEmitWorker(NodeStore store, Node file, CompilerOptions options)
     {
         var moduleKind = options.GetEmitModuleKind();
         if (ModuleKind.Node16 <= moduleKind && moduleKind <= ModuleKind.NodeNext)
         {
             throw new NotSupportedException("Program (module C10): node16/nodenext module formats are not ported");
         }
-        var fileName = file.Store.FileName(file.Root);
+        var fileName = store.FileName(file);
         if (FileExtensionIsOneOf(fileName, ".cjs", ".cts"))
         {
             return ModuleKind.CommonJS;

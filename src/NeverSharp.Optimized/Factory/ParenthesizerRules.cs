@@ -912,8 +912,23 @@ internal static class FactoryNodeConverters
 
         public Node ConvertToClassExpression(Node node)
         {
+            // node.modifiers?.filter(modifier => !isExportModifier(modifier) && !isDefaultModifier(modifier)): a new array
+            var modifiers = store.Modifiers(node);
+            var filtered = NodeList.None;
+            if (!modifiers.IsNone)
+            {
+                var kept = new List<Node>();
+                foreach (var modifier in store.Nodes(modifiers))
+                {
+                    if (store.Kind(modifier) is not (SyntaxKind.ExportKeyword or SyntaxKind.DefaultKeyword))
+                    {
+                        kept.Add(modifier);
+                    }
+                }
+                filtered = factory.CreateNodeArray(kept);
+            }
             var updated = factory.CreateClassExpression(
-                store.Modifiers(node),
+                filtered,
                 store.Name(node),
                 store.TypeParameters(node),
                 store.HeritageClauses(node),
