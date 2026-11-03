@@ -398,7 +398,8 @@ In CN1, at equal N:
 **Scope (decided by the author, 2026-11-03).**
 - The emitter of TypeScript 6.0.3 for Track O only: `.js` and `.d.ts` output under TypeScript 6.0.3's default options (target ES2025, module kind ES2022, no source maps, comments kept), plus `declaration: true`.
 - This covers the transformers those options run (`getScriptTransformers` and `getDeclarationTransformers` of `transformer.ts`): TypeScript, ESNext, ES decorators, class fields, the ES module transformer, and declarations, with the emit resolver, emit helpers and comment emission.
-- Transformers only other options need are out of scope: JSX, legacy decorators, downlevel targets, generators, the CommonJS, AMD, UMD and System modules, and source maps.
+- The CommonJS module transformer is in scope for files whose implied module format is CommonJS (`.cts`, `.cjs`). The default options run it for those files too (`transformImpliedNodeFormatDependentModule`); decided by the author on 2026-11-03.
+- Transformers only other options need are out of scope: JSX, legacy decorators, downlevel targets, generators, the AMD, UMD and System modules, and source maps.
 - Port rules of §5.4 apply. Plan: [phase4-plan.md](phase4-plan.md).
 
 **Gate D.**

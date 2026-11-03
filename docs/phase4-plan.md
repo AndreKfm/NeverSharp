@@ -21,6 +21,7 @@ With the default options, tsc 6.0.3's `getScriptTransformers` (`transformer.ts`:
 | ES decorators | `transformers/esDecorators.ts` | 2,533 | standard decorators (ES2025 < ESNext, no `experimentalDecorators`) |
 | class fields | `transformers/classFields.ts` | 3,360 | with `useDefineForClassFields` true, mostly auto-accessors, private names in decorators, `static` blocks with decorators |
 | ES module | `transformers/module/esnextAnd2015.ts` | 439 | module kind ES2022 |
+| CommonJS module | `transformers/module/module.ts` | 2,504 | only for files whose implied format is CommonJS (`.cts`, `.cjs`, 84 units). Added by the author on 2026-11-03, ported in D3. |
 | declarations | `transformers/declarations.ts`, `declarations/diagnostics.ts` | 2,789 | `.d.ts` output and declaration emit diagnostics |
 
 Shared parts:
@@ -34,7 +35,7 @@ Shared parts:
 - legacy decorators and decorator metadata;
 - every downlevel transformer below ES2021;
 - generators;
-- CommonJS, AMD, UMD and System;
+- AMD, UMD and System;
 - source maps.
 
 **Already in Track O since Phase 3:**
