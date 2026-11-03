@@ -481,9 +481,12 @@ internal sealed partial class Checker
         }
     }
 
-    // checker.ts lookupSymbolChain (the trackers are not used by typeToString)
-    private List<SymbolRef> LookupSymbolChain(SymbolRef symbol, NodeBuilderContext context, SymbolFlags meaning, bool yieldModuleSymbol = false) =>
-        LookupSymbolChainWorker(symbol, context, meaning, yieldModuleSymbol);
+    // checker.ts lookupSymbolChain (typeToString's tracker has no inner tracker: trackSymbol does nothing)
+    private List<SymbolRef> LookupSymbolChain(SymbolRef symbol, NodeBuilderContext context, SymbolFlags meaning, bool yieldModuleSymbol = false)
+    {
+        context.Tracker.TrackSymbol(symbol, context.EnclosingDeclaration, context.FakeScope, meaning);
+        return LookupSymbolChainWorker(symbol, context, meaning, yieldModuleSymbol);
+    }
 
     // checker.ts lookupSymbolChainWorker
     private List<SymbolRef> LookupSymbolChainWorker(SymbolRef symbol, NodeBuilderContext context, SymbolFlags meaning, bool yieldModuleSymbol)

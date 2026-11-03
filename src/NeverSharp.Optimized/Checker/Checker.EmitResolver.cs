@@ -713,7 +713,146 @@ internal sealed class EmitResolver
         return !node.IsNone && checker.IsArgumentsLocalBindingOf(node);
     }
 
-    // Declaration emit (module D5): createTypeOfDeclaration, createReturnTypeOfSignatureDeclaration,
-    // createTypeOfExpression, createLiteralConstValue, collectLinkedAliases, isEntityNameVisible,
-    // requiresAddingImplicitUndefined, getJsxFactoryEntity are added with the declaration transformer.
+    // ---- declaration emit (module D5) ----
+
+    /// <summary>The file's index in the checker (the declarations of other files are not nodes of the emit copy).</summary>
+    internal int File => file;
+
+    /// <summary>A node of the emit copy as a node of the file (none for a synthesized node without a parse tree node).</summary>
+    internal NodeRef ToParseTree(Node nodeIn) => ParseTreeNode(nodeIn);
+
+    /// <summary>A node of the file as a node of the emit copy (the same handle); none for a node of another file.</summary>
+    internal Node ToEmit(NodeRef node) => InThisFile(node);
+
+    /// <summary>
+    /// createTypeOfDeclaration(declaration, enclosingDeclaration, flags, internalFlags, tracker): the type node in the
+    /// emit copy, or none for an `any` the caller creates (no parse tree node, or the builder encountered an error).
+    /// </summary>
+    internal Node CreateTypeOfDeclaration(Node declarationIn, Node enclosingDeclaration, NodeBuilderFlags flags, InternalNodeBuilderFlags internalFlags, ISymbolTracker tracker)
+    {
+        var declaration = ParseTreeNode(declarationIn);
+        if (declaration.IsNone || !HasInferredType(checker.Kind(declaration)))
+        {
+            return Node.None;
+        }
+        return checker.CreateTypeOfDeclaration(EmitStore, declaration, ParseTreeNode(enclosingDeclaration), null, flags, internalFlags, tracker);
+    }
+
+    /// <summary>createTypeOfDeclaration of a declaration of the checker (an expando property) in a fake namespace scope.</summary>
+    internal Node CreateTypeOfDeclaration(NodeRef declaration, Node enclosingDeclaration, Checker.FakeScope? fakeScope, NodeBuilderFlags flags, InternalNodeBuilderFlags internalFlags, ISymbolTracker tracker)
+    {
+        if (declaration.IsNone || !HasInferredType(checker.Kind(declaration)))
+        {
+            return Node.None;
+        }
+        return checker.CreateTypeOfDeclaration(EmitStore, declaration, ParseTreeNode(enclosingDeclaration), fakeScope, flags, internalFlags, tracker);
+    }
+
+    // utilities.ts hasInferredType
+    private static bool HasInferredType(SyntaxKind kind) => kind is
+        SyntaxKind.Parameter or SyntaxKind.PropertySignature or SyntaxKind.PropertyDeclaration or SyntaxKind.BindingElement or
+        SyntaxKind.PropertyAccessExpression or SyntaxKind.ElementAccessExpression or SyntaxKind.BinaryExpression or
+        SyntaxKind.VariableDeclaration or SyntaxKind.ExportAssignment or SyntaxKind.PropertyAssignment or
+        SyntaxKind.ShorthandPropertyAssignment or SyntaxKind.JSDocParameterTag or SyntaxKind.JSDocPropertyTag;
+
+    /// <summary>createReturnTypeOfSignatureDeclaration; none for `any`.</summary>
+    internal Node CreateReturnTypeOfSignatureDeclaration(Node signatureDeclarationIn, Node enclosingDeclaration, NodeBuilderFlags flags, InternalNodeBuilderFlags internalFlags, ISymbolTracker tracker)
+    {
+        var signatureDeclaration = ParseTreeNode(signatureDeclarationIn);
+        if (signatureDeclaration.IsNone || !Utilities.IsFunctionLike(checker.StoreOf(signatureDeclaration), signatureDeclaration.Node))
+        {
+            return Node.None;
+        }
+        return checker.CreateReturnTypeOfSignatureDeclaration(EmitStore, signatureDeclaration, ParseTreeNode(enclosingDeclaration), flags, internalFlags, tracker);
+    }
+
+    /// <summary>createTypeOfExpression; none for `any`.</summary>
+    internal Node CreateTypeOfExpression(Node exprIn, Node enclosingDeclaration, NodeBuilderFlags flags, InternalNodeBuilderFlags internalFlags, ISymbolTracker tracker)
+    {
+        var expr = ParseTreeNode(exprIn);
+        if (expr.IsNone)
+        {
+            return Node.None;
+        }
+        return checker.CreateTypeOfExpression(EmitStore, expr, ParseTreeNode(enclosingDeclaration), flags, internalFlags, tracker);
+    }
+
+    /// <summary>createLiteralConstValue(getParseTreeNode(node), tracker).</summary>
+    internal Node CreateLiteralConstValue(Node nodeIn, ISymbolTracker tracker) => checker.CreateLiteralConstValue(EmitStore, ParseTreeNode(nodeIn), tracker);
+
+    /// <summary>isSymbolAccessible(symbol, enclosingDeclaration, meaning, shouldComputeAliasesToMakeVisible).</summary>
+    internal SymbolAccessibilityResult IsSymbolAccessible(SymbolRef symbol, NodeRef enclosingDeclaration, Checker.FakeScope? fakeScope, SymbolFlags meaning, bool shouldComputeAliasToMarkVisible) =>
+        checker.IsSymbolAccessibleFull(symbol, enclosingDeclaration, fakeScope, meaning, shouldComputeAliasToMarkVisible);
+
+    /// <summary>isEntityNameVisible(entityName, enclosingDeclaration) (both parse tree nodes of the file).</summary>
+    internal SymbolAccessibilityResult IsEntityNameVisible(Node entityName, Node enclosingDeclaration)
+    {
+        // (The declaration transformer passes parse tree nodes; TypeScript takes them as they are.)
+        return checker.IsEntityNameVisibleFull(ParseTreeNode(entityName), ParseTreeNode(enclosingDeclaration));
+    }
+
+    /// <summary>requiresAddingImplicitUndefined(parameter, enclosingDeclaration).</summary>
+    internal bool RequiresAddingImplicitUndefined(Node parameter, Node enclosingDeclaration) =>
+        checker.RequiresAddingImplicitUndefinedOf(ParseTreeNode(parameter), ParseTreeNode(enclosingDeclaration));
+
+    internal bool IsOptionalParameter(Node node)
+    {
+        var p = ParseTreeNode(node);
+        return !p.IsNone && checker.IsOptionalParameterOf(p);
+    }
+
+    internal bool IsExpandoFunctionDeclaration(Node node)
+    {
+        var declaration = ParseTreeNode(node);
+        return !declaration.IsNone && checker.IsExpandoFunctionDeclaration(declaration);
+    }
+
+    internal List<SymbolRef> GetPropertiesOfContainerFunction(Node node) => checker.GetPropertiesOfContainerFunction(ParseTreeNode(node));
+
+    internal bool IsLateBound(Node nodeIn)
+    {
+        var node = ParseTreeNode(nodeIn);
+        return !node.IsNone && Utilities.IsDeclaration(checker.StoreOf(node), node.Node) && checker.IsLateBoundDeclaration(node);
+    }
+
+    internal bool IsImportRequiredByAugmentation(Node node)
+    {
+        var declaration = ParseTreeNode(node);
+        return !declaration.IsNone && checker.IsImportRequiredByAugmentation(declaration);
+    }
+
+    /// <summary>collectLinkedAliases(node, setVisibility: false).</summary>
+    internal List<NodeRef>? CollectLinkedAliases(Node node) => checker.CollectLinkedAliases(ParseTreeNode(node), setVisibility: false);
+
+    internal List<Node>? CreateLateBoundIndexSignatures(Node cls, Node enclosing, NodeBuilderFlags flags, InternalNodeBuilderFlags internalFlags, ISymbolTracker tracker) =>
+        checker.CreateLateBoundIndexSignatures(EmitStore, ParseTreeNode(cls), ParseTreeNode(enclosing), flags, internalFlags, tracker);
+
+    // Symbols the declaration transformer reads (input.symbol, p.escapedName, p.valueDeclaration, p.parent)
+
+    internal SymbolRef GetSymbolOfDeclaration(Node node)
+    {
+        var declaration = ParseTreeNode(node);
+        return declaration.IsNone ? SymbolRef.None : checker.GetSymbolOfDeclaration(declaration);
+    }
+
+    internal Decls? DeclarationsOf(SymbolRef symbol) => checker.DeclarationsOf(symbol);
+
+    internal NodeRef ValueDeclarationOf(SymbolRef symbol) => checker.ValueDeclarationOf(symbol);
+
+    internal string NameOf(SymbolRef symbol) => checker.NameOf(symbol);
+
+    internal SymbolRef ParentOf(SymbolRef symbol) => checker.ParentOf(symbol);
+
+    internal SymbolFlags SymbolFlagsOf(SymbolRef symbol) => checker.SymbolFlagsOf(symbol);
+
+    internal NodeStore StoreOf(NodeRef node) => checker.StoreOf(node);
+
+    internal SourceFile FileAt(int fileIndex) => checker.FileAt(fileIndex);
+
+    /// <summary>A node builder fake scope for the expando namespace of a function (TypeScript's fakespace module declaration).</summary>
+    internal Checker.FakeScope CreateFakeNamespaceScope(List<SymbolRef> props) => checker.CreateFakeNamespaceScope(props);
+
+    internal ProgramDiagnostic CreateDiagnosticForNode(NodeRef node, DiagnosticMessage message, params object?[] args) => checker.CreateDiagnosticForNode(node, message, args);
+
+    internal string GetTextOfNode(NodeRef node) => checker.GetTextOfNode(node);
 }

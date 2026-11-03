@@ -287,8 +287,10 @@ internal sealed partial class Checker
         return (first, second, get, set);
     }
 
-    // checker.ts isExpandoFunctionDeclaration (JavaScript-style expando assignments to functions: C9)
-    private bool IsExpandoFunctionDeclaration(NodeRef node) => false;
+    // checker.ts isExpandoFunctionDeclaration for the syntactic builder: ported in module D5 for declaration emit (a
+    // context with an inner tracker); typeToString's paths keep Phase 3's stand-in (false), so Gate C's printing is unchanged.
+    private bool IsExpandoFunctionDeclarationForBuilder(NodeBuilderContext context, NodeRef node) =>
+        context.Tracker.CanTrackSymbol && IsExpandoFunctionDeclaration(node);
 
     // utilities.ts getFunctionFlags
     private static FunctionFlags GetFunctionFlagsOf(NodeStore store, Node node)

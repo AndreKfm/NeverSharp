@@ -59,6 +59,12 @@ internal sealed partial class Checker
 
         // createRecoveryBoundary: whether an error was marked inside the current boundary (null outside of any)
         public bool? BoundaryHadError;
+
+        // Module D5 (declaration emit): the symbol tracker (SymbolTrackerImpl; its inner tracker is none for
+        // typeToString), reportedDiagnostic and trackedSymbols
+        public SymbolTrackerImpl Tracker = null!;
+        public bool ReportedDiagnostic;
+        public List<TrackedSymbol>? TrackedSymbols;
     }
 
     // ---- the node store the builder writes into ----
@@ -66,12 +72,12 @@ internal sealed partial class Checker
     private NodeStore? synthStore;
     private NodeStore.Mark synthMark;
     private int synthDepth;
-    private readonly HashSet<Node> reusedNodes = [];
+    private HashSet<Node> reusedNodes = [];
 
     // NodeLinks.serializedTypes (visitAndTransformType's cache) of every enclosing declaration
     // (the enclosing declaration is the fake scope when there is one: TypeScript's pushFakeScope makes a Block the
     // enclosing declaration, with NodeLinks of its own)
-    private readonly Dictionary<(NodeRef, FakeScope?, Type, NodeBuilderFlags, InternalNodeBuilderFlags), (Node Node, bool Truncating, int AddedLength)> serializedTypes = [];
+    private Dictionary<(NodeRef, FakeScope?, Type, NodeBuilderFlags, InternalNodeBuilderFlags), (Node Node, bool Truncating, int AddedLength, List<TrackedSymbol>? TrackedSymbols)> serializedTypes = [];
 
     private NodeStore S => synthStore!;
 
@@ -85,6 +91,10 @@ internal sealed partial class Checker
             var copy = SEmitNode(clone);
             copy.Flags = emitNode.Flags;
             copy.IdentifierTypeArguments = emitNode.IdentifierTypeArguments;
+            // (setOriginalNode's mergeEmitNode: the comments, for declaration emit)
+            copy.LeadingComments = emitNode.LeadingComments;
+            copy.TrailingComments = emitNode.TrailingComments;
+            copy.CommentRange = emitNode.CommentRange;
         }
         return clone;
     }
@@ -123,7 +133,7 @@ internal sealed partial class Checker
     private int synthCacheCount;
     private int synthReusedCount;
     // reusedNodes in the order they were marked (a truncated print unmarks its own)
-    private readonly List<Node> reusedNodesInOrder = [];
+    private List<Node> reusedNodesInOrder = [];
 
     private void MarkReused(Node node)
     {
@@ -211,13 +221,23 @@ internal sealed partial class Checker
     // that other references to it (cached type parameter names) stay fully synthetic.
     private Node SetTextRange(NodeBuilderContext context, Node range, NodeRef location)
     {
-        _ = context;
-        if (location.IsNone || range.IsNone || reusedNodes.Contains(range))
+        if (location.IsNone || range.IsNone)
         {
             return range;
         }
-        return CloneSynthForReuse(range);
+        var result = reusedNodes.Contains(range) ? range : CloneSynthForReuse(range);
+        // only set positions if range comes from the same file since copying text across files isn't supported by the emitter
+        // (module D5: in declaration emit, where the positions give the printer the comments to emit)
+        if (emitBuilderActive && context.EnclosingFile != 0 && location.File == context.EnclosingFile)
+        {
+            var lstore = StoreOf(location);
+            Utilities.SetTextRangePosEnd(S, result, lstore.Pos(location.Node), lstore.End(location.Node));
+        }
+        return result;
     }
+
+    // Whether the builder writes into an emit copy for the emit resolver (module D5)
+    private bool emitBuilderActive;
 
     private bool IsFullySynthetic(Node node) => !reusedNodes.Contains(node);
 
@@ -560,7 +580,7 @@ internal sealed partial class Checker
     private NodeBuilderContext CreateNodeBuilderContext(NodeRef enclosingDeclaration, NodeBuilderFlags flags, InternalNodeBuilderFlags internalFlags, int maximumLength = 0)
     {
         builderEnclosingStore = enclosingDeclaration.IsNone ? null : StoreOf(enclosingDeclaration);
-        return new NodeBuilderContext
+        var context = new NodeBuilderContext
         {
             EnclosingDeclaration = enclosingDeclaration,
             EnclosingFile = enclosingDeclaration.IsNone ? 0 : enclosingDeclaration.File,
@@ -568,6 +588,8 @@ internal sealed partial class Checker
             InternalFlags = internalFlags,
             MaxTruncationLength = maximumLength != 0 ? maximumLength : (flags & NodeBuilderFlags.NoTruncation) != 0 ? NoTruncationMaximumTruncationLength : DefaultMaximumTruncationLength,
         };
+        context.Tracker = new SymbolTrackerImpl(this, context, null);
+        return context;
     }
 
     // printer.writeNode(EmitHint.Unspecified, node, sourceFile, writer) with createTextWriter("") (single line)
@@ -857,8 +879,7 @@ internal sealed partial class Checker
             }
             if (type == unresolvedType)
             {
-                // (the synthetic /*unresolved*/ comment is not printed with removeComments)
-                return SKeyword(SyntaxKind.AnyKeyword);
+                return SAddSyntheticLeadingComment(SKeyword(SyntaxKind.AnyKeyword), "unresolved");
             }
             context.ApproximateLength += 3;
             return SKeyword(type == intrinsicMarkerType ? SyntaxKind.IntrinsicKeyword : SyntaxKind.AnyKeyword);
@@ -954,6 +975,7 @@ internal sealed partial class Checker
                     context.ApproximateLength += 6;
                     return SymbolToTypeNode(record.Symbol, context, SymbolFlags.Value);
                 }
+                context.Tracker.ReportInaccessibleUniqueSymbolError();
             }
             context.ApproximateLength += 13;
             return STypeOperator(SyntaxKind.UniqueKeyword, SKeyword(SyntaxKind.SymbolKeyword));
@@ -996,6 +1018,7 @@ internal sealed partial class Checker
                 {
                     context.EncounteredError = true;
                 }
+                context.Tracker.ReportInaccessibleThisError();
             }
             context.ApproximateLength += 4;
             return SToken(SyntaxKind.ThisType);
@@ -1207,6 +1230,7 @@ internal sealed partial class Checker
                 if ((context.Flags & NodeBuilderFlags.AllowAnonymousIdentifier) == 0)
                 {
                     context.EncounteredError = true;
+                    context.Tracker.ReportCyclicStructureError();
                 }
                 return CreateElidedInformationPlaceholder(context);
             }
@@ -1420,6 +1444,14 @@ internal sealed partial class Checker
         var cacheKey = useCache ? (context.FakeScope is null ? context.EnclosingDeclaration : NodeRef.None, context.FakeScope, type, context.Flags, context.InternalFlags) : default;
         if (useCache && serializedTypes.TryGetValue(cacheKey, out var cached))
         {
+            // TODO:: check if we instead store late painted statements associated with this?
+            if (cached.TrackedSymbols is not null)
+            {
+                foreach (var tracked in cached.TrackedSymbols)
+                {
+                    context.Tracker.TrackSymbol(tracked.Symbol, tracked.EnclosingDeclaration, tracked.FakeScope, tracked.Meaning);
+                }
+            }
             if (cached.Truncating)
             {
                 context.Truncating = true;
@@ -1438,17 +1470,20 @@ internal sealed partial class Checker
             context.SymbolDepth![id] = depth + 1;
         }
         context.VisitedTypes.Add(type);
+        var prevTrackedSymbols = context.TrackedSymbols;
+        context.TrackedSymbols = null;
         var startLength = context.ApproximateLength;
         var result = transform(type);
-        if (useCache && !context.EncounteredError)
+        if (useCache && !context.ReportedDiagnostic && !context.EncounteredError)
         {
-            serializedTypes[cacheKey] = (result, context.Truncating, context.ApproximateLength - startLength);
+            serializedTypes[cacheKey] = (result, context.Truncating, context.ApproximateLength - startLength, context.TrackedSymbols);
         }
         context.VisitedTypes.Remove(type);
         if (id is not null)
         {
             context.SymbolDepth![id] = depth;
         }
+        context.TrackedSymbols = prevTrackedSymbols;
         return result;
     }
 
@@ -1791,6 +1826,7 @@ internal sealed partial class Checker
                         continue;
                     }
                     var store = StoreOf(e);
+                    TrackComputedName(At(e, store.Expression(store.Name(e.Node))), context.EnclosingDeclaration, context);
                     var kind = store.Kind(e.Node);
                     var hasQuestion = kind is SyntaxKind.PropertySignature or SyntaxKind.PropertyDeclaration or SyntaxKind.MethodSignature or SyntaxKind.MethodDeclaration or SyntaxKind.GetAccessor or SyntaxKind.SetAccessor &&
                         !store.QuestionToken(e.Node).IsNone;
@@ -1849,8 +1885,7 @@ internal sealed partial class Checker
             context.Truncated = true;
             if ((context.Flags & NodeBuilderFlags.NoTruncation) != 0)
             {
-                // a NotEmittedTypeElement with the synthetic comment /*elided*/ (not printed with removeComments)
-                return [SNew(SyntaxKind.NotEmittedTypeElement)];
+                return [SAddSyntheticTrailingComment(SNew(SyntaxKind.NotEmittedTypeElement), "elided")];
             }
             return [SPropertySignature(NodeList.None, SIdentifier("..."), Node.None, Node.None)];
         }
@@ -1889,6 +1924,18 @@ internal sealed partial class Checker
                 {
                     continue;
                 }
+                if (context.Tracker.CanTrackSymbol)
+                {
+                    if ((GetDeclarationModifierFlagsFromSymbol(propertySymbol) & (ModifierFlags.Private | ModifierFlags.Protected)) != 0)
+                    {
+                        context.Tracker.ReportPrivateInBaseOfClassExpression(Utilities.UnescapeLeadingUnderscores(NameOf(propertySymbol)));
+                    }
+                    if (IsPrivateIdentifierSymbol(propertySymbol))
+                    {
+                        var vd = ValueDeclarationOf(propertySymbol);
+                        context.Tracker.ReportPrivateInBaseOfClassExpression(StoreOf(vd).Texts.GetString(Utilities.IdText(StoreOf(vd), StoreOf(vd).Name(vd.Node)))!);
+                    }
+                }
             }
             if (CheckTruncationLength(context) && (i + 2 < properties.Count - 1))
             {
@@ -1917,8 +1964,27 @@ internal sealed partial class Checker
         {
             return STypeReference(SIdentifier("..."), NodeList.None);
         }
-        // `any` with the synthetic comment /*elided*/ (not printed with removeComments)
-        return SKeyword(SyntaxKind.AnyKeyword);
+        return SAddSyntheticLeadingComment(SKeyword(SyntaxKind.AnyKeyword), "elided");
+    }
+
+    // addSyntheticLeadingComment(node, MultiLineCommentTrivia, text) (printed by declaration emit; typeToString prints
+    // without comments)
+    private Node SAddSyntheticLeadingComment(Node node, string text, bool? hasTrailingNewLine = null) =>
+        FactoryEmitNode.AddSyntheticLeadingComment(S, node, SyntaxKind.MultiLineCommentTrivia, text, hasTrailingNewLine);
+
+    private Node SAddSyntheticTrailingComment(Node node, string text) =>
+        FactoryEmitNode.AddSyntheticTrailingComment(S, node, SyntaxKind.MultiLineCommentTrivia, text);
+
+    // checker.ts setCommentRange(context, node, range): only within the enclosing file
+    private Node SetCommentRangeInFile(NodeBuilderContext context, Node node, NodeRef range)
+    {
+        if (context.EnclosingFile != 0 && !range.IsNone && context.EnclosingFile == range.File)
+        {
+            // Copy comments to node for declaration emit
+            var rstore = StoreOf(range);
+            FactoryEmitNode.SetCommentRange(S, node, new ObjectTextRange { Pos = rstore.Pos(range.Node), End = rstore.End(range.Node) });
+        }
+        return node;
     }
 
     // checker.ts shouldUsePlaceholderForProperty
@@ -1968,6 +2034,33 @@ internal sealed partial class Checker
         context.FakeScope = null;
         var valueDeclaration = ValueDeclarationOf(propertySymbol);
         var declarations = DeclarationsOf(propertySymbol);
+        if (context.Tracker.CanTrackSymbol && IsLateBoundName(NameOf(propertySymbol)))
+        {
+            if (declarations is { Count: > 0 } lateDeclarations)
+            {
+                var decl = lateDeclarations[0];
+                if (HasLateBindableName(decl))
+                {
+                    var dstore = StoreOf(decl);
+                    if (dstore.Kind(decl.Node) == SyntaxKind.BinaryExpression)
+                    {
+                        var name = Utilities.GetNameOfDeclaration(dstore, decl.Node);
+                        if (!name.IsNone && dstore.Kind(name) == SyntaxKind.ElementAccessExpression && Utilities.IsPropertyAccessEntityNameExpression(dstore, dstore.ArgumentExpression(name)))
+                        {
+                            TrackComputedName(At(decl, dstore.ArgumentExpression(name)), saveEnclosingDeclaration, context);
+                        }
+                    }
+                    else
+                    {
+                        TrackComputedName(At(decl, dstore.Expression(dstore.Name(decl.Node))), saveEnclosingDeclaration, context);
+                    }
+                }
+            }
+            else
+            {
+                context.Tracker.ReportNonSerializableProperty(SymbolToString(propertySymbol));
+            }
+        }
         if (!valueDeclaration.IsNone)
         {
             context.EnclosingDeclaration = valueDeclaration;
@@ -1998,20 +2091,20 @@ internal sealed partial class Checker
                     if (!getterDeclaration.IsNone)
                     {
                         var getterSignature = GetSignatureFromDeclaration(getterDeclaration);
-                        typeElements.Add(SignatureToSignatureDeclarationHelper(InstantiateSignatureForSymbol(getterSignature, propertySymbol), SyntaxKind.GetAccessor, context, name: propertyName));
+                        typeElements.Add(SetCommentRangeInFile(context, SignatureToSignatureDeclarationHelper(InstantiateSignatureForSymbol(getterSignature, propertySymbol), SyntaxKind.GetAccessor, context, name: propertyName), getterDeclaration));
                     }
                     var setterDeclaration = GetDeclarationOfKind(propertySymbol, SyntaxKind.SetAccessor);
                     if (!setterDeclaration.IsNone)
                     {
                         var setterSignature = GetSignatureFromDeclaration(setterDeclaration);
-                        typeElements.Add(SignatureToSignatureDeclarationHelper(InstantiateSignatureForSymbol(setterSignature, propertySymbol), SyntaxKind.SetAccessor, context, name: propertyName));
+                        typeElements.Add(SetCommentRangeInFile(context, SignatureToSignatureDeclarationHelper(InstantiateSignatureForSymbol(setterSignature, propertySymbol), SyntaxKind.SetAccessor, context, name: propertyName), setterDeclaration));
                     }
                     return;
                 }
                 if ((SymbolFlagsOf(ParentOf(propertySymbol)) & SymbolFlags.Class) != 0 && !propDeclaration.IsNone && HasAccessorModifier(propDeclaration))
                 {
                     var fakeGetterSignature = CreateSignatureForBuilder(NodeRef.None, [], propertyType);
-                    typeElements.Add(SignatureToSignatureDeclarationHelper(fakeGetterSignature, SyntaxKind.GetAccessor, context, name: propertyName));
+                    typeElements.Add(SetCommentRangeInFile(context, SignatureToSignatureDeclarationHelper(fakeGetterSignature, SyntaxKind.GetAccessor, context, name: propertyName), propDeclaration));
                     var setterParam = CreateSymbol(SymbolFlags.FunctionScopedVariable, "arg");
                     ValueSymbolLinks.Get(setterParam).ResolvedType = writeType;
                     var fakeSetterSignature = CreateSignatureForBuilder(NodeRef.None, [setterParam], voidType);
@@ -2027,7 +2120,9 @@ internal sealed partial class Checker
             var signatures = GetSignaturesOfType(FilterType(propertyType, t => (Types.Flags(t) & TypeFlags.Undefined) == 0), SignatureKind.Call);
             foreach (var signature in signatures)
             {
-                typeElements.Add(SignatureToSignatureDeclarationHelper(signature, SyntaxKind.MethodSignature, context, name: propertyName, questionToken: optionalToken));
+                var methodDeclaration = SignatureToSignatureDeclarationHelper(signature, SyntaxKind.MethodSignature, context, name: propertyName, questionToken: optionalToken);
+                var signatureDeclaration = Signatures.Record(signature).Declaration;
+                typeElements.Add(PreserveCommentsOn(methodDeclaration, !signatureDeclaration.IsNone ? signatureDeclaration : valueDeclaration));
             }
             if (signatures.Count > 0 || optionalToken.IsNone)
             {
@@ -2057,7 +2152,37 @@ internal sealed partial class Checker
         {
             context.ApproximateLength += 9;
         }
-        typeElements.Add(SPropertySignature(modifiers, propertyName, optionalToken, propertyTypeNode));
+        typeElements.Add(PreserveCommentsOn(SPropertySignature(modifiers, propertyName, optionalToken, propertyTypeNode), valueDeclaration));
+
+        Node PreserveCommentsOn(Node node, NodeRef range)
+        {
+            var jsdocPropertyTag = NodeRef.None;
+            if (declarations is not null)
+            {
+                foreach (var d in declarations)
+                {
+                    if (Kind(d) == SyntaxKind.JSDocPropertyTag)
+                    {
+                        jsdocPropertyTag = d;
+                        break;
+                    }
+                }
+            }
+            if (!jsdocPropertyTag.IsNone)
+            {
+                var commentText = PrinterUtilities.GetTextOfJSDocComment(StoreOf(jsdocPropertyTag), StoreOf(jsdocPropertyTag).Comment(jsdocPropertyTag.Node));
+                if (!string.IsNullOrEmpty(commentText))
+                {
+                    FactoryEmitNode.SetSyntheticLeadingComments(S, node, [new SynthesizedComment { Kind = SyntaxKind.MultiLineCommentTrivia, Text = "*\n * " + commentText.Replace("\n", "\n * ") + "\n ", HasTrailingNewLine = true }]);
+                }
+            }
+            else if (!range.IsNone)
+            {
+                // Copy comments to node for declaration emit
+                SetCommentRangeInFile(context, node, range);
+            }
+            return node;
+        }
     }
 
     private bool HasAccessorModifier(NodeRef declaration)

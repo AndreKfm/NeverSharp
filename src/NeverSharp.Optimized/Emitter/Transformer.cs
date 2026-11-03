@@ -98,13 +98,13 @@ internal static class Transformers
         return transformers;
     }
 
-    /// <summary>transformer.ts getDeclarationTransformers: transformDeclarations (module D5; it returns its input until then).</summary>
+    /// <summary>transformer.ts getDeclarationTransformers: transformDeclarations (module D5).</summary>
     internal static List<TransformerFactory> GetDeclarationTransformers()
     {
-        return [NotYetPorted];
+        return [DeclarationsTransformer.TransformDeclarations];
     }
 
-    // The slot of a transformer a later module of Phase 4 ports: the identity transformation.
+    // The slot of a transformer outside Phase 4's options: the identity transformation.
     private static Func<Node, Node> NotYetPorted(TransformationContext context) => static node => node;
 
     /// <summary>

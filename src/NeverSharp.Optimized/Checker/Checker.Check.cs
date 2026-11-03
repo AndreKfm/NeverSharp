@@ -461,6 +461,10 @@ internal sealed partial class Checker
         var hasModuleSpecifier = !store.ModuleSpecifier(store.Parent(store.Parent(n))).IsNone;
         CheckModuleExportName(At(node, store.PropertyName(n)), hasModuleSpecifier);
         CheckModuleExportName(At(node, store.Name(n)));
+        if (compilerOptions.GetEmitDeclarations())
+        {
+            CollectLinkedAliases(At(node, !store.PropertyName(n).IsNone ? store.PropertyName(n) : store.Name(n)), setVisibility: true);
+        }
         if (!hasModuleSpecifier)
         {
             var exportedName = !store.PropertyName(n).IsNone ? store.PropertyName(n) : store.Name(n);
@@ -543,6 +547,11 @@ internal sealed partial class Checker
             else
             {
                 CheckExpressionCached(expression); // doesn't resolve, check as expression to mark as error
+            }
+
+            if (compilerOptions.GetEmitDeclarations())
+            {
+                CollectLinkedAliases(expression, setVisibility: true);
             }
         }
         else

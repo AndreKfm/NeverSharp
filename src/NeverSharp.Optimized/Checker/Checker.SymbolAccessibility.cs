@@ -11,8 +11,8 @@
 // Modified: translated from TypeScript to C#; module C2. The node builder's fake scopes (a Block with locals whose
 // parent is the enclosing declaration, checker.ts enterNewScope) are a FakeScope chain on top of the enclosing
 // declaration (Track O nodes of a file cannot point at a synthesized parent). The accessibleChainCache is left out
-// (a cache of the pure result). The node links' isVisible cache is left out: isDeclarationVisible is computed each time
-// (the node builder never paints aliases visible: shouldComputeAliasesToMakeVisible is false on its paths).
+// (a cache of the pure result). Module D5: the node links' isVisible cache (isVisibleLinks), which declaration emit paints
+// (Checker.DeclarationEmit.cs); the versions with aliases to make visible are there.
 
 using NeverSharp.Generated;
 
@@ -33,7 +33,7 @@ internal sealed partial class Checker
     /// A fake scope of the node builder (checker.ts enterNewScope's pushFakeScope): a Block whose locals are
     /// <see cref="Locals"/>, whose parent is <see cref="Parent"/> or, at the bottom of the chain, the enclosing declaration.
     /// </summary>
-    private sealed class FakeScope
+    internal sealed class FakeScope
     {
         public required string Kind;
         public required SymTable Locals;
@@ -820,6 +820,23 @@ internal sealed partial class Checker
         {
             return false;
         }
+        // NodeLinks.isVisible (module D5): the computed result is kept, and declaration emit paints aliases visible
+        // (hasVisibleDeclarations, collectLinkedAliases); before D5 nothing painted and the result was recomputed.
+        if (isVisibleLinks.TryGetValue(node, out var isVisible))
+        {
+            return isVisible;
+        }
+        isVisible = DetermineIfDeclarationIsVisible(node);
+        isVisibleLinks[node] = isVisible;
+        return isVisible;
+    }
+
+    // NodeLinks.isVisible of every node whose visibility was computed or painted
+    private readonly Dictionary<NodeRef, bool> isVisibleLinks = [];
+
+    // checker.ts isDeclarationVisible's determineIfDeclarationIsVisible
+    private bool DetermineIfDeclarationIsVisible(NodeRef node)
+    {
         var store = StoreOf(node);
         var n = node.Node;
         switch (store.Kind(n))

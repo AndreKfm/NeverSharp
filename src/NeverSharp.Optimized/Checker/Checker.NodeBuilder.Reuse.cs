@@ -63,6 +63,17 @@ internal sealed partial class Checker
         var oldEncounteredError = context.EncounteredError;
         var oldLength = context.ApproximateLength;
         var oldUnsupported = reuseUnsupported;
+        // createRecoveryBoundary's tracker (module D5): only under a tracker with an inner tracker (declaration emit), so
+        // that typeToString's paths stay as Phase 3 ported them
+        var oldTracker = context.Tracker;
+        var oldTrackedSymbols = context.TrackedSymbols;
+        RecoveryBoundaryTracker? boundaryTracker = null;
+        if (oldTracker.CanTrackSymbol)
+        {
+            context.TrackedSymbols = null;
+            boundaryTracker = new RecoveryBoundaryTracker(context, oldTracker);
+            context.Tracker = new SymbolTrackerImpl(this, context, boundaryTracker);
+        }
         context.BoundaryHadError = false;
         reuseUnsupported = false;
         var transformed = VisitExistingNodeTreeSymbols(context, existing);
@@ -71,6 +82,22 @@ internal sealed partial class Checker
         context.BoundaryHadError = oldBoundary;
         context.EncounteredError = oldEncounteredError;
         reuseUnsupported = oldUnsupported;
+        if (boundaryTracker is not null)
+        {
+            context.Tracker = oldTracker;
+            context.TrackedSymbols = oldTrackedSymbols;
+            foreach (var unreportedError in boundaryTracker.UnreportedErrors)
+            {
+                unreportedError();
+            }
+            if (!hadError)
+            {
+                foreach (var tracked in boundaryTracker.TrackedSymbols)
+                {
+                    context.Tracker.TrackSymbol(tracked.Symbol, tracked.EnclosingDeclaration, tracked.FakeScope, tracked.Meaning);
+                }
+            }
+        }
         if (hadError)
         {
             context.ApproximateLength = oldLength;
@@ -98,6 +125,10 @@ internal sealed partial class Checker
             return Node.None;
         }
         var store = StoreOf(node);
+        // startRecoveryScope
+        var boundaryTracker = context.Tracker.Inner as RecoveryBoundaryTracker;
+        var trackedSymbolsTop = boundaryTracker?.TrackedSymbols.Count ?? 0;
+        var unreportedErrorsTop = boundaryTracker?.UnreportedErrors.Count ?? 0;
         Action? onExitNewScope = IsNewScopeNode(store, node.Node) ? EnterNewScopeForNode(context, node) : null;
         var result = VisitExistingNodeTreeSymbolsWorker(context, node);
         onExitNewScope?.Invoke();
@@ -108,6 +139,12 @@ internal sealed partial class Checker
             if (IsTypeNodeKind(store.Kind(node.Node)) && store.Kind(node.Node) != SyntaxKind.TypePredicate)
             {
                 // recover(): the error is reset and the actual type of the node is serialized
+                if (boundaryTracker is not null)
+                {
+                    // Reset the tracked symbols to before the error
+                    boundaryTracker.TrackedSymbols.RemoveRange(trackedSymbolsTop, boundaryTracker.TrackedSymbols.Count - trackedSymbolsTop);
+                    boundaryTracker.UnreportedErrors.RemoveRange(unreportedErrorsTop, boundaryTracker.UnreportedErrors.Count - unreportedErrorsTop);
+                }
                 context.BoundaryHadError = false;
                 return SerializeExistingTypeNode(context, node, addUndefined: false);
             }
@@ -633,6 +670,12 @@ internal sealed partial class Checker
         {
             MarkReused(copy);
         }
+        // Module D5: in declaration emit an existing node of the enclosing file (or a clone of a built node) keeps its
+        // positions, as TypeScript's reused and updated nodes do, so that the printer emits their comments
+        if (emitBuilderActive && (ReferenceEquals(store, builderEnclosingStore) || ReferenceEquals(store, S)) && store.Pos(n) >= 0)
+        {
+            Utilities.SetTextRangePosEnd(S, copy, store.Pos(n), store.End(n));
+        }
         return copy;
     }
 
@@ -683,6 +726,10 @@ internal sealed partial class Checker
             var copy = SEmitNode(clone);
             copy.Flags = emitNode.Flags;
             copy.IdentifierTypeArguments = emitNode.IdentifierTypeArguments;
+            // (setOriginalNode's mergeEmitNode: the comments, for declaration emit)
+            copy.LeadingComments = emitNode.LeadingComments;
+            copy.TrailingComments = emitNode.TrailingComments;
+            copy.CommentRange = emitNode.CommentRange;
         }
         return clone;
     }
@@ -1129,6 +1176,10 @@ internal sealed partial class Checker
             // `this` isn't a bindable identifier - skip resolution, find a relevant `this` symbol directly and avoid exhaustive scope traversal
             sym = GetSymbolOfDeclaration(At(node, Utilities.GetThisContainer(store, leftmost.Node, false, false)));
             var introduces = IsSymbolAccessible(sym, leftmost, null, meaning) != SymbolAccessibility.Accessible;
+            if (introduces)
+            {
+                context.Tracker.ReportInaccessibleThisError();
+            }
             return (introduces, AttachSymbolToLeftmostIdentifier(node));
         }
         sym = ResolveEntityName(leftmost, meaning, ignoreErrors: true, dontResolveAlias: true);
@@ -1149,6 +1200,11 @@ internal sealed partial class Checker
                 // If the symbol is found both in declaration scope and in current scope then it should point to the same reference
                 (!symAtLocation.IsNone && !sym.IsNone && GetSymbolIfSameReference(GetExportSymbolOfValueSymbolIfExported(symAtLocation), sym).IsNone))
             {
+                // In isolated declaration we will not do rest parameter expansion so there is no need to report on these.
+                if (symAtLocation != unknownSymbol)
+                {
+                    context.Tracker.ReportInferenceFallback(node);
+                }
                 return (true, CopyExistingNode(node));
             }
             sym = symAtLocation;
@@ -1169,7 +1225,12 @@ internal sealed partial class Checker
                 !Utilities.IsDeclarationName(store, node.Node) &&
                 IsSymbolAccessible(sym, context.EnclosingDeclaration, context.FakeScope, meaning) != SymbolAccessibility.Accessible)
             {
+                context.Tracker.ReportInferenceFallback(node);
                 introducesError = true;
+            }
+            else
+            {
+                context.Tracker.TrackSymbol(sym, context.EnclosingDeclaration, context.FakeScope, meaning);
             }
             return (introducesError, AttachSymbolToLeftmostIdentifier(node));
         }
@@ -1485,7 +1546,7 @@ internal sealed partial class Checker
         }
         else if (!store.Initializer(node.Node).IsNone && ((DeclarationsOf(symbol)?.Count ?? 0) == 1 || (DeclarationsOf(symbol) ?? []).FindAll(d => Kind(d) == SyntaxKind.VariableDeclaration).Count == 1))
         {
-            if (!IsExpandoFunctionDeclaration(node) && !IsContextuallyTyped(node))
+            if (!IsExpandoFunctionDeclarationForBuilder(context, node) && !IsContextuallyTyped(node))
             {
                 resultType = TypeFromExpression(At(node, store.Initializer(node.Node)), context, false, false, IsVarConstLike(node));
             }
