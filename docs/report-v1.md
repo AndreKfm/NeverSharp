@@ -1,6 +1,8 @@
-# NeverSharp: overall report v1 (2026-11-02) — Windows only
+# NeverSharp: overall report v1.1 (2026-11-03) — Windows only
 
 This report collects the results of the project, from the pre-registration (`prereg/v1`, 2026-10-21) to the last amendment (`prereg/v10`, 2026-11-02).
+
+**v1.1** (2026-11-03) adds the optimization step CO6 and the two additional runs after it (profile `check` and profile `check12`). No endpoint changes. v1 was f157691.
 
 NeverSharp is a C# port of the TypeScript 6.0.3 compiler front end: scanner, parser, binder and type checker. It is measured against typescript-go 7.0.2, Microsoft's Go port, under a pre-registered protocol ([preregistration.md](preregistration.md)). The detailed sources are:
 - the phase summaries: [track-o-summary.md](track-o-summary.md), [phase2-summary.md](phase2-summary.md) and [phase3-summary.md](phase3-summary.md);
@@ -23,7 +25,7 @@ The pre-registered question (§1) asks:
 - **Binder and checker:** Track O was extended to the binder (Phase 2) and the checker (Phase 3).
   - The binder endpoint is **inconclusive** (1.207).
   - The checker endpoint is **no parity** (1.680).
-  - Both endpoints measured the unoptimized ports. Later additional runs, labeled as such, put parse+bind at 0.425 and parse+bind+check at 1.025 of typescript-go's time.
+  - Both endpoints measured the unoptimized ports. Later additional runs, labeled as such, put parse+bind at 0.425 and parse+bind+check at 0.970 of typescript-go's time.
 
 All numbers below are from one machine: AMD Ryzen 9 3900X, 12 cores / 24 threads, fixed all-core clock ([hardware.md](hardware.md)). All are Windows only; the Linux replication (§8, A4) has not been run and was deferred by the author on 2026-11-01.
 
@@ -53,7 +55,7 @@ G is the geometric mean over the five repositories of median(C#) / median(refere
 |---|---|---|---|---|---:|---|
 | Parsing, optimized | vs `tsgo7-parse` | 0.40 [0.39, 0.40] | faster | none | 0.43 | `results/track-o/additional/2026-10-24T06-41-11-991Z/` |
 | Parse+bind, optimized | vs `tsgo7-bind` | 0.425 [0.419, 0.431] | faster | none | 0.53 | `results/phase2/additional/2026-10-25T05-13-51-186Z/` |
-| Parse+bind+check, optimized, 4 checkers | vs `tsgo7-check` | 1.025 [1.020, 1.030] | within 20 % | bluesky, playwright | 0.70 | `results/phase3/additional/2026-11-01T06-48-39-651Z/` |
+| Parse+bind+check, optimized, 4 checkers | vs `tsgo7-check` | 0.970 [0.965, 0.976] | faster | none | 0.69 | `results/phase3/additional/2026-11-02T22-22-25-874Z/` |
 
 **Pre-registered secondary comparison, §18 (`prereg/v10`), 12 checkers on both sides.**
 
@@ -61,6 +63,8 @@ G is the geometric mean over the five repositories of median(C#) / median(refere
 |---|---|---|---|---:|---|
 | Workstation GC, `cs-o-aot-ws-check12` vs `tsgo7-check12` | 1.305 [1.292, 1.315] | no parity | vscode, bluesky, playwright, tldraw | 0.77 | `results/phase3/check12/2026-11-02T06-16-29-174Z/` |
 | Server GC, `cs-o-aot-srv-check12` vs `tsgo7-check12`, 98.75 % | 0.890 [0.878, 0.900] | faster | none | 0.93 | same run |
+| Additional run after CO6, Workstation GC | 1.236 [1.226, 1.244] | no parity | vscode, bluesky, playwright, tldraw | 0.77 | `results/phase3/check12-additional/2026-11-02T20-56-02-668Z/` |
+| Additional run after CO6, Server GC, 98.75 % | 0.889 [0.878, 0.897] | faster | none | 0.94 | same run |
 
 Peak working set (G) is the geometric mean over the repositories of the C# median peak working set divided by the reference's. It was computed for this report from the archived run.json files.
 
@@ -153,12 +157,12 @@ Secondary results of the endpoint run:
 
 The parallel gap was again allocation: 20.2 GB on vscode, with 13.0 s of Workstation GC pause.
 
-**Additional runs.** The optimization steps CO1 to CO5 followed. The last additional run (after CO4) gave:
-- 4 checkers: **1.025 [1.020, 1.030]**, within 20 %;
-- single-threaded: **0.818**;
-- Server GC: **0.850**, faster.
+**Additional runs.** The optimization steps CO1 to CO6 followed. The last additional run (after CO6, 2026-11-03) gave:
+- 4 checkers: **0.970 [0.965, 0.976]**, faster (after CO4: 1.025);
+- single-threaded: **0.800**;
+- Server GC: **0.827**, faster.
 
-Under Workstation GC, the small programs bluesky (1.217) and playwright (1.238) stay above 1.20.
+No repository is above 1.20 any more; bluesky and playwright are at 1.168. CO6 stored the type mappers as records instead of objects and the duplicate-declaration data without objects. On vscode the Workstation GC pause at 4 checkers fell from 3.9 s to 3.3 s.
 
 **12 checkers (§18, `prereg/v10`).** The unregistered exploration CN1 tried 4, 8, 12 and 16 checkers. Its predictions were ws 1.310 and srv 0.890 at 12 checkers, and the protocol run reproduced both.
 - With **Workstation GC, no parity: 1.305** [1.292, 1.315].
@@ -170,6 +174,8 @@ From 4 to 12 checkers:
 - Track O gains only 15–24 % with Workstation GC.
 
 On vscode with 12 checkers and Server GC, Track O takes 6.76 s against typescript-go's 8.85 s.
+
+The additional run with 12 checkers after CO6 gave Workstation GC **1.236 [1.226, 1.244]**, still no parity, and Server GC 0.889, unchanged. On vscode the Workstation GC pause fell from 5.80 s to 5.05 s of 10.85 s.
 
 ## 7. What may be claimed
 
@@ -186,13 +192,13 @@ Every claim names the track and scope, and gives G with its interval.
 **Optimized track, labeled additional runs:**
 - Parsing is about 2.5 times as fast as typescript-go: 0.40.
 - Parse+bind is about 2.4 times as fast: 0.425.
-- Parse+bind+check with 4 checkers is within 20 % of typescript-go (1.025), with bluesky and playwright above 1.20.
-- Single-threaded, the check is about 18 % faster (0.818).
-- With Server GC, the check is faster (0.850).
+- Parse+bind+check with 4 checkers is faster than typescript-go: 0.970 [0.965, 0.976], no repository above 1.20, peak working set 0.69.
+- Single-threaded, the check is about 20 % faster (0.800).
+- With Server GC, the check is faster (0.827).
 
 **Optimized track, §18 secondary:**
 - With 12 checkers on both sides, Server GC is faster than typescript-go: 0.890.
-- With 12 checkers on both sides, Workstation GC is more than 20 % slower: 1.305.
+- With 12 checkers on both sides, Workstation GC is more than 20 % slower: 1.305 (additional run after CO6: 1.236).
 
 **Against tsrs, secondary:**
 - Parsing is within 20 % (1.04).
@@ -202,16 +208,16 @@ Every claim names the track and scope, and gives G with its interval.
 - that the faithful port is near typescript-go;
 - that the optimized checker matches typescript-go at its pre-registered endpoint;
 - that any Track O result is faster than tsrs in any phase;
-- that the checker is near tsrs. It is 4.1–5.2 times as slow with Workstation GC and 2.8 times with Server GC at 12 checkers;
+- that the checker is near tsrs. After CO6 it is 3.9–4.9 times as slow with Workstation GC and 2.8 times with Server GC at 12 checkers;
 - anything about Linux.
 
 ## 8. Why, in short (post hoc)
 
 - **Where the time went.** In every phase, the unoptimized C# port was about as fast as typescript-go single-threaded, or faster. The parallel gap was allocation: with Workstation GC, gen0 and gen1 collections stop all worker threads and are collected by one thread.
   - Parsing and binding became nearly allocation-free with arenas and records in per-thread memory. vscode parse+bind: 89 MB allocated, 50 ms of GC pause.
-  - The checker still allocates 16 GB on vscode. The type mappers are the largest group of objects with references that survive collection.
+  - The checker still allocates 13.4 GB on vscode at 4 checkers. CO5 and CO6 showed that the pause follows the surviving objects with references, not the allocated bytes. CO6 removed the largest group, the type mappers.
 - **Why Server GC differs.** Server GC collects in parallel, which explains its gap to Workstation GC.
-  - The gap grows with the checker count: 3.9 s of pause at 4 checkers, 5.8 s at 12, on vscode.
+  - The gap grows with the checker count: 3.3 s of pause at 4 checkers, 5.05 s at 12, on vscode after CO6.
   - Go's collector marks concurrently and does not move objects, so typescript-go keeps scaling.
 - **What C# gives an optimized port.** The C# advantages used were value types and spans, arenas in native or pinned memory, SIMD, NativeAOT and the NoAlloc analyzer. They make the optimized parser and binder faster than typescript-go. A faithful port, whose representation follows TypeScript's object graph, cannot use them.
 - **The tsrs gap in the checker** was not analyzed. tsrs reports almost the same diagnostic counts as typescript-go, so it does the same checking work. It runs 16 checkers with work stealing, compared with fixed assignment for typescript-go and Track O; typescript-go itself is 3.2 times as slow as tsrs with 12 checkers.
@@ -259,6 +265,7 @@ Every claim names the track and scope, and gives G with its interval.
 - O23 was decided on a repeat ranking because of a tie.
 - CO4 was kept although its single-threaded time was 1.1 % slower, attributed to the placement of AOT code.
 - A CO5 step was reverted.
+- CO6 was kept although Server GC on the tuning list was 0.4 % slower [0.2, 0.8 %]. Server GC is not in the keep rule, which binds the three Workstation GC configurations.
 - Gate C's first pass accepted one timeout under load.
 
 **Runs not used,** all archived:
@@ -281,9 +288,9 @@ All were fixed with a full Gate C.
 ## 11. Open
 
 - **Linux replication (A4, §8):** deferred by the author. Until it exists, every result is "Windows only".
-- **The Workstation GC pause in the checker:** the only remaining reason for the gap with 12 checkers. Candidates:
-  - type mappers as struct records;
-  - per-checker duplicate-declaration data;
+- **The Workstation GC pause in the checker:** still the main reason for the gap with 12 checkers (Server GC with the same code: 0.889). Not pursued after CO6, by the author's decision. Candidates:
+  - the globals merge, which every checker repeats; merged once before the checkers start, it would also let the checkers share the duplicate-declaration data;
+  - inference contexts kept alive by the mapper store;
   - module-resolution strings.
 - **The tsrs gap in the checker:** about 4–5 times, not analyzed.
 - **Track O steps not evaluated:**
@@ -302,7 +309,8 @@ All were fixed with a full Gate C.
 | 2026-10-25 | Phase 2 closed (last 0.425) |
 | 2026-10-29 | Gate C passes; `prereg/v9`; checker endpoint (1.680, no parity) |
 | 2026-11-01 | Phase 3 closed (last 1.025) |
-| 2026-11-02 | `prereg/v10`; 12-checker run (ws 1.305, srv 0.890) |
+| 2026-11-02 | `prereg/v10`; 12-checker run (ws 1.305, srv 0.890); CO6 |
+| 2026-11-03 | Additional runs after CO6: 4 checkers 0.970 (faster), 12 checkers 1.236 |
 
 The 18-week budget for Phase 1 (to 2027-02-24) was not needed. Every phase finished inside it.
 

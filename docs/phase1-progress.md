@@ -777,3 +777,7 @@ Both protocol-compliant (rig checks ok, variance gate PASS), commit 5d9e8a5. **A
 - **Profile `check12`, additional run 1** (`results/phase3/check12-additional/2026-11-02T20-56-02-668Z/`): cs-o-aot-ws-check12 vs tsgo7-check12 **G = 1.236 [1.226, 1.244]**, lower bound > 1.20, no parity (§18 run 1.305; vscode 1.239, sentry 1.034, bluesky 1.335, playwright 1.400, tldraw 1.206; peak working set G 0.77); Server GC 0.889 [0.878, 0.897] (98.75 %, unchanged); single-threaded 0.798; vs tsrs 3.935. Workstation GC pause vscode 5.80 → 5.05 s of 10.85 s (Server GC 0.78 s of 6.48 s).
 
 Diagnostics as in the runs before. At 12 checkers the Workstation GC pause is still the gap: Server GC with the same code is 0.889.
+
+### Checker optimization closed after CO6 (2026-11-03)
+
+Closed by the author after the additional runs above. CO7 (globals merge once before the checkers start, inference contexts retained by the mapper store) is not pursued; both stay listed as open in [report-v1.md](report-v1.md) §11. Overall report updated to v1.1 (CO6 and the two additional runs; no endpoint changes).
