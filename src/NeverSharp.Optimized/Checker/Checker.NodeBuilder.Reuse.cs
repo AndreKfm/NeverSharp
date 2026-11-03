@@ -1379,6 +1379,7 @@ internal sealed partial class Checker
         {
             return result;
         }
+        context.Tracker.ReportInferenceFallback(node);
         var fallback = SerializeExistingTypeNode(context, declaredType, addUndefined);
         return !fallback.IsNone ? fallback : SKeyword(SyntaxKind.AnyKeyword);
     }
@@ -1395,6 +1396,7 @@ internal sealed partial class Checker
         {
             return result;
         }
+        context.Tracker.ReportInferenceFallback(typeNode); // (targetNode ?? typeNode: no caller passes a target node)
         var fallback = SerializeExistingTypeNode(context, typeNode, addUndefined);
         return !fallback.IsNone ? fallback : SKeyword(SyntaxKind.AnyKeyword);
     }
@@ -1410,7 +1412,7 @@ internal sealed partial class Checker
     private Node SerializeTypeOfExpression(NodeRef expr, NodeBuilderContext context, bool addUndefined = false, bool preserveLiterals = false)
     {
         var result = TypeFromExpression(expr, context, false, addUndefined, preserveLiterals);
-        return !result.Type.IsNone ? result.Type : InferExpressionType(expr, context);
+        return !result.Type.IsNone ? result.Type : InferExpressionType(expr, context, result.ReportFallback);
     }
 
     // serializeTypeOfDeclaration (the syntactic builder's)
@@ -1470,7 +1472,7 @@ internal sealed partial class Checker
                 result = SerializeExistingTypeNodeSyntactic(assertionNode, context);
             }
         }
-        return !result.IsNone ? result : InferTypeOfDeclaration(node, symbol, context);
+        return !result.IsNone ? result : InferTypeOfDeclaration(node, symbol, context, reportFallback: false);
     }
 
     // serializeReturnTypeForSignature (the syntactic builder's)
@@ -1570,7 +1572,7 @@ internal sealed partial class Checker
                 resultType = TypeFromExpression(At(node, store.Initializer(node.Node)), context, false, false, IsVarConstLike(node));
             }
         }
-        return !resultType.Type.IsNone ? resultType.Type : InferTypeOfDeclaration(node, symbol, context);
+        return !resultType.Type.IsNone ? resultType.Type : InferTypeOfDeclaration(node, symbol, context, resultType.ReportFallback);
     }
 
     // typeFromParameter
@@ -1593,7 +1595,7 @@ internal sealed partial class Checker
         {
             resultType = TypeFromExpression(At(node, store.Initializer(node.Node)), context, false, addUndefined);
         }
-        return !resultType.Type.IsNone ? resultType.Type : InferTypeOfDeclaration(node, symbol, context);
+        return !resultType.Type.IsNone ? resultType.Type : InferTypeOfDeclaration(node, symbol, context, resultType.ReportFallback);
     }
 
     // typeFromExpandoProperty
@@ -1607,7 +1609,7 @@ internal sealed partial class Checker
         }
         var oldSuppressReportInferenceFallback = context.SuppressReportInferenceFallback;
         context.SuppressReportInferenceFallback = true;
-        var resultType = !result.IsNone ? result : InferTypeOfDeclaration(node, symbol, context);
+        var resultType = !result.IsNone ? result : InferTypeOfDeclaration(node, symbol, context, reportFallback: false);
         context.SuppressReportInferenceFallback = oldSuppressReportInferenceFallback;
         return resultType;
     }
@@ -1632,7 +1634,7 @@ internal sealed partial class Checker
                 resultType = TypeFromExpression(At(node, initializer), context, false, requiresAddingUndefined, isReadonly);
             }
         }
-        return !resultType.Type.IsNone ? resultType.Type : InferTypeOfDeclaration(node, symbol, context);
+        return !resultType.Type.IsNone ? resultType.Type : InferTypeOfDeclaration(node, symbol, context, resultType.ReportFallback);
     }
 
     // utilities.ts isDeclarationReadonly
@@ -1652,32 +1654,64 @@ internal sealed partial class Checker
         return blockScope is NodeFlags.Const or NodeFlags.Using or NodeFlags.AwaitUsing;
     }
 
-    // inferTypeOfDeclaration (context.noInferenceFallback is set only while the discarded literal nodes are built)
-    private Node InferTypeOfDeclaration(NodeRef node, SymbolRef symbol, NodeBuilderContext context) =>
-        ResolverSerializeTypeOfDeclaration(context, node, symbol);
+    // inferTypeOfDeclaration. The report marks the context's reportedDiagnostic (SymbolTrackerImpl.reportInferenceFallback,
+    // when there is an inner tracker), which keeps later results of that context out of visitAndTransformType's cache.
+    // context.noInferenceFallback is set while the discarded literal nodes are built.
+    private Node InferTypeOfDeclaration(NodeRef node, SymbolRef symbol, NodeBuilderContext context, bool reportFallback = true)
+    {
+        if (reportFallback)
+        {
+            context.Tracker.ReportInferenceFallback(node);
+        }
+        if (context.NoInferenceFallback)
+        {
+            return SKeyword(SyntaxKind.AnyKeyword);
+        }
+        return ResolverSerializeTypeOfDeclaration(context, node, symbol);
+    }
 
     // inferExpressionType
-    private Node InferExpressionType(NodeRef node, NodeBuilderContext context)
+    private Node InferExpressionType(NodeRef node, NodeBuilderContext context, bool reportFallback = true)
     {
+        if (reportFallback)
+        {
+            context.Tracker.ReportInferenceFallback(node);
+        }
+        if (context.NoInferenceFallback)
+        {
+            return SKeyword(SyntaxKind.AnyKeyword);
+        }
         var result = ResolverSerializeTypeOfExpression(context, node);
         return !result.IsNone ? result : SKeyword(SyntaxKind.AnyKeyword);
     }
 
     // inferReturnTypeOfSignatureSignature
-    private Node InferReturnTypeOfSignatureSignature(NodeRef node, NodeBuilderContext context, SymbolRef symbol)
+    private Node InferReturnTypeOfSignatureSignature(NodeRef node, NodeBuilderContext context, SymbolRef symbol, bool reportFallback)
     {
+        if (reportFallback)
+        {
+            context.Tracker.ReportInferenceFallback(node);
+        }
+        if (context.NoInferenceFallback)
+        {
+            return SKeyword(SyntaxKind.AnyKeyword);
+        }
         var result = ResolverSerializeReturnTypeForSignature(context, node, symbol);
         return !result.IsNone ? result : SKeyword(SyntaxKind.AnyKeyword);
     }
 
     // inferAccessorType
-    private Node InferAccessorType(NodeRef node, (NodeRef First, NodeRef Second, NodeRef Get, NodeRef Set) allAccessors, NodeBuilderContext context, SymbolRef symbol)
+    private Node InferAccessorType(NodeRef node, (NodeRef First, NodeRef Second, NodeRef Get, NodeRef Set) allAccessors, NodeBuilderContext context, SymbolRef symbol, bool reportFallback = true)
     {
         if (Kind(node) == SyntaxKind.GetAccessor)
         {
-            return CreateReturnFromSignature(node, symbol, context);
+            return CreateReturnFromSignature(node, symbol, context, reportFallback);
         }
-        var result = !allAccessors.Get.IsNone ? CreateReturnFromSignature(allAccessors.Get, symbol, context) : Node.None;
+        if (reportFallback)
+        {
+            context.Tracker.ReportInferenceFallback(node);
+        }
+        var result = !allAccessors.Get.IsNone ? CreateReturnFromSignature(allAccessors.Get, symbol, context, reportFallback) : Node.None;
         if (result.IsNone)
         {
             result = ResolverSerializeTypeOfDeclaration(context, node, symbol);
@@ -1749,7 +1783,7 @@ internal sealed partial class Checker
             case SyntaxKind.ArrayLiteralExpression:
                 return TypeFromArrayLiteral(node, context, isConstContext, requiresAddingUndefined);
             case SyntaxKind.ObjectLiteralExpression:
-                return TypeFromObjectLiteral(node, context, requiresAddingUndefined);
+                return TypeFromObjectLiteral(node, context, isConstContext, requiresAddingUndefined);
             case SyntaxKind.ClassExpression:
                 return Result(InferExpressionType(node, context));
             case SyntaxKind.TemplateExpression:
@@ -1833,80 +1867,203 @@ internal sealed partial class Checker
         return Result(SSignature(SyntaxKind.FunctionType, NodeList.None, Node.None, Node.None, typeParameters, SList(parameters), returnType));
     }
 
-    // typeFromArrayLiteral: TypeScript builds a tuple node and discards it (notImplemented)
+    // canGetTypeFromArrayLiteral
+    private bool CanGetTypeFromArrayLiteral(NodeRef arrayLiteral, NodeBuilderContext context, bool isConstContext)
+    {
+        if (!isConstContext)
+        {
+            context.Tracker.ReportInferenceFallback(arrayLiteral);
+            return false;
+        }
+        var store = StoreOf(arrayLiteral);
+        foreach (var element in store.Nodes(store.Elements(arrayLiteral.Node)))
+        {
+            if (store.Kind(element) == SyntaxKind.SpreadElement)
+            {
+                context.Tracker.ReportInferenceFallback(At(arrayLiteral, element));
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // typeFromArrayLiteral: TypeScript builds a tuple node and discards it (notImplemented). The element types are still
+    // built for their effects on the context (inference fallback reports, tracked symbols, approximate length); the
+    // tuple node itself is not made.
     private SyntacticResult TypeFromArrayLiteral(NodeRef arrayLiteral, NodeBuilderContext context, bool isConstContext, bool requiresAddingUndefined)
     {
         var store = StoreOf(arrayLiteral);
-        var canGet = isConstContext;
-        if (canGet)
-        {
-            foreach (var element in store.Nodes(store.Elements(arrayLiteral.Node)))
-            {
-                if (store.Kind(element) == SyntaxKind.SpreadElement)
-                {
-                    canGet = false;
-                    break;
-                }
-            }
-        }
-        if (!canGet)
+        if (!CanGetTypeFromArrayLiteral(arrayLiteral, context, isConstContext))
         {
             if (requiresAddingUndefined || Utilities.IsDeclaration(store, WalkUpParenthesizedExpressionsParent(store, arrayLiteral.Node)))
             {
                 return SyntacticResult.AlreadyReported;
             }
-            return Result(InferExpressionType(arrayLiteral, context));
+            return Result(InferExpressionType(arrayLiteral, context, reportFallback: false));
         }
+        // Disable any inference fallback since we won't actually use the resulting type and we don't want to generate errors
+        var oldNoInferenceFallback = context.NoInferenceFallback;
+        context.NoInferenceFallback = true;
+        foreach (var element in store.Nodes(store.Elements(arrayLiteral.Node)))
+        {
+            if (store.Kind(element) == SyntaxKind.OmittedExpression)
+            {
+                continue; // (createUndefinedTypeNode)
+            }
+            var elementRef = At(arrayLiteral, element);
+            var expressionType = TypeFromExpression(elementRef, context, isConstContext);
+            if (expressionType.Type.IsNone)
+            {
+                InferExpressionType(elementRef, context, expressionType.ReportFallback);
+            }
+        }
+        context.NoInferenceFallback = oldNoInferenceFallback;
         return SyntacticResult.NotImplemented;
     }
 
-    // typeFromObjectLiteral: TypeScript builds a type literal and discards it (notImplemented)
-    private SyntacticResult TypeFromObjectLiteral(NodeRef objectLiteral, NodeBuilderContext context, bool requiresAddingUndefined)
+    // canGetTypeFromObjectLiteral
+    private bool CanGetTypeFromObjectLiteral(NodeRef objectLiteral, NodeBuilderContext context)
     {
         var store = StoreOf(objectLiteral);
-        var canGet = true;
+        var result = true;
         foreach (var prop in store.Nodes(store.Properties(objectLiteral.Node)))
         {
             if ((store.Flags(prop) & NodeFlags.ThisNodeHasError) != 0)
             {
-                canGet = false;
+                result = false;
                 break; // Bail if parse errors
             }
             var kind = store.Kind(prop);
             if (kind is SyntaxKind.ShorthandPropertyAssignment or SyntaxKind.SpreadAssignment)
             {
-                canGet = false;
+                context.Tracker.ReportInferenceFallback(At(objectLiteral, prop));
+                result = false;
                 continue;
             }
             var name = store.Name(prop);
             if ((store.Flags(name) & NodeFlags.ThisNodeHasError) != 0)
             {
-                canGet = false;
+                result = false;
                 break; // Bail if parse errors
             }
             if (store.Kind(name) == SyntaxKind.PrivateIdentifier)
             {
                 // Not valid in object literals but the compiler will complain about this, we just ignore it here.
-                canGet = false;
+                result = false;
             }
             else if (store.Kind(name) == SyntaxKind.ComputedPropertyName)
             {
                 var expression = store.Expression(name);
                 if (!IsPrimitiveLiteralValue(store, expression, includeBigInt: false) && !IsDefinitelyReferenceToGlobalSymbolObject(At(objectLiteral, expression)))
                 {
-                    canGet = false;
+                    context.Tracker.ReportInferenceFallback(At(objectLiteral, name));
+                    result = false;
                 }
             }
         }
-        if (!canGet)
+        return result;
+    }
+
+    // typeFromObjectLiteral: TypeScript builds a type literal and discards it (notImplemented). The members are still
+    // built for their effects on the context (inference fallback reports, scopes, tracked symbols, approximate length);
+    // the type literal and its member nodes themselves are not made.
+    private SyntacticResult TypeFromObjectLiteral(NodeRef objectLiteral, NodeBuilderContext context, bool isConstContext, bool requiresAddingUndefined)
+    {
+        var store = StoreOf(objectLiteral);
+        if (!CanGetTypeFromObjectLiteral(objectLiteral, context))
         {
             if (requiresAddingUndefined || Utilities.IsDeclaration(store, WalkUpParenthesizedExpressionsParent(store, objectLiteral.Node)))
             {
                 return SyntacticResult.AlreadyReported;
             }
-            return Result(InferExpressionType(objectLiteral, context));
+            return Result(InferExpressionType(objectLiteral, context, reportFallback: false));
         }
+        // Disable any inference fallback since we won't actually use the resulting type and we don't want to generate errors
+        var oldNoInferenceFallback = context.NoInferenceFallback;
+        context.NoInferenceFallback = true;
+        var oldFlags = context.Flags;
+        context.Flags |= NodeBuilderFlags.InObjectTypeLiteral;
+        foreach (var prop in store.Nodes(store.Properties(objectLiteral.Node)))
+        {
+            var propRef = At(objectLiteral, prop);
+            switch (store.Kind(prop))
+            {
+                case SyntaxKind.MethodDeclaration:
+                    WithNewScope(context, propRef, () =>
+                    {
+                        TypeFromObjectLiteralMethod(propRef, context);
+                        return true;
+                    });
+                    break;
+                case SyntaxKind.PropertyAssignment:
+                    TypeFromObjectLiteralPropertyAssignment(propRef, context, isConstContext);
+                    break;
+                case SyntaxKind.SetAccessor:
+                case SyntaxKind.GetAccessor:
+                    TypeFromObjectLiteralAccessor(propRef, context);
+                    break;
+            }
+        }
+        context.Flags = oldFlags;
+        context.NoInferenceFallback = oldNoInferenceFallback;
         return SyntacticResult.NotImplemented;
+    }
+
+    // typeFromObjectLiteralPropertyAssignment (only the type; the property signature is discarded)
+    private void TypeFromObjectLiteralPropertyAssignment(NodeRef prop, NodeBuilderContext context, bool isConstContext)
+    {
+        var expressionResult = TypeFromExpression(At(prop, StoreOf(prop).Initializer(prop.Node)), context, isConstContext);
+        if (expressionResult.Type.IsNone)
+        {
+            InferTypeOfDeclaration(prop, SymbolRef.None, context, expressionResult.ReportFallback);
+        }
+    }
+
+    // typeFromObjectLiteralMethod (return type, type parameters and parameters; the signature is discarded)
+    private void TypeFromObjectLiteralMethod(NodeRef method, NodeBuilderContext context)
+    {
+        var store = StoreOf(method);
+        CreateReturnFromSignature(method, SymbolRef.None, context);
+        ReuseTypeParameters(method, store.TypeParameters(method.Node), context);
+        foreach (var p in store.Nodes(store.Parameters(method.Node)))
+        {
+            EnsureParameter(At(method, p), context);
+        }
+    }
+
+    // typeFromObjectLiteralAccessor (the types; the accessor or property signature is discarded)
+    private void TypeFromObjectLiteralAccessor(NodeRef accessor, NodeBuilderContext context)
+    {
+        var allAccessors = GetAllAccessorDeclarationsRef(accessor);
+        var getAccessorType = allAccessors.Get.IsNone ? NodeRef.None : GetTypeAnnotationFromAccessor(allAccessors.Get);
+        var setAccessorType = allAccessors.Set.IsNone ? NodeRef.None : GetTypeAnnotationFromAccessor(allAccessors.Set);
+        // We have types for both accessors, we can't know if they are the same type so we keep both accessors
+        if (!getAccessorType.IsNone && !setAccessorType.IsNone)
+        {
+            WithNewScope(context, accessor, () =>
+            {
+                var store = StoreOf(accessor);
+                foreach (var p in store.Nodes(store.Parameters(accessor.Node)))
+                {
+                    EnsureParameter(At(accessor, p), context);
+                }
+                if (store.Kind(accessor.Node) == SyntaxKind.GetAccessor)
+                {
+                    SerializeExistingTypeNodeWithFallback(getAccessorType, context);
+                }
+                return true;
+            });
+        }
+        else if (allAccessors.First == accessor)
+        {
+            var foundType = !getAccessorType.IsNone ? WithNewScope(context, allAccessors.Get, () => SerializeExistingTypeNodeWithFallback(getAccessorType, context)) :
+                !setAccessorType.IsNone ? WithNewScope(context, allAccessors.Set, () => SerializeExistingTypeNodeWithFallback(setAccessorType, context)) :
+                Node.None;
+            if (foundType.IsNone)
+            {
+                InferAccessorType(accessor, allAccessors, context, SymbolRef.None);
+            }
+        }
     }
 
     // walkUpParenthesizedExpressions(node).parent
@@ -2011,7 +2168,6 @@ internal sealed partial class Checker
     // addUndefinedIfNeeded
     private Node AddUndefinedIfNeeded(Node node, bool addUndefined, NodeRef owner, NodeBuilderContext context)
     {
-        _ = context;
         var optionalDeclaration = false;
         if (!owner.IsNone)
         {
@@ -2022,6 +2178,12 @@ internal sealed partial class Checker
         if (!strictNullChecks || !(addUndefined || optionalDeclaration))
         {
             return node;
+        }
+        if (!CanAddUndefinedBuilt(node))
+        {
+            // (the report's node is the built type node; the declaration transformer's reportInferenceFallback does not
+            // read it outside isolatedDeclarations)
+            context.Tracker.ReportInferenceFallback(NodeRef.None);
         }
         if (S.Kind(node) == SyntaxKind.UnionType)
         {
@@ -2046,6 +2208,36 @@ internal sealed partial class Checker
         }
         return store.Kind(declaration.Node) is SyntaxKind.Parameter or SyntaxKind.PropertySignature or SyntaxKind.PropertyDeclaration or SyntaxKind.MethodDeclaration or SyntaxKind.MethodSignature or SyntaxKind.PropertyAssignment or SyntaxKind.ShorthandPropertyAssignment
             && !store.QuestionToken(declaration.Node).IsNone;
+    }
+
+    // canAddUndefined for a type node the builder made (in its store)
+    private bool CanAddUndefinedBuilt(Node node)
+    {
+        if (!strictNullChecks)
+        {
+            return true;
+        }
+        var kind = S.Kind(node);
+        if (Utilities.IsKeyword(kind) || kind is SyntaxKind.LiteralType or SyntaxKind.FunctionType or SyntaxKind.ConstructorType or SyntaxKind.ArrayType or SyntaxKind.TupleType or SyntaxKind.TypeLiteral or SyntaxKind.TemplateLiteralType or SyntaxKind.ThisType)
+        {
+            return true;
+        }
+        if (kind == SyntaxKind.ParenthesizedType)
+        {
+            return CanAddUndefinedBuilt(S.Type(node));
+        }
+        if (kind is SyntaxKind.UnionType or SyntaxKind.IntersectionType)
+        {
+            foreach (var t in S.Nodes(S.Types(node)))
+            {
+                if (!CanAddUndefinedBuilt(t))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+        return false;
     }
 
     // canAddUndefined for an existing type node
@@ -2080,7 +2272,7 @@ internal sealed partial class Checker
     }
 
     // createReturnFromSignature
-    private Node CreateReturnFromSignature(NodeRef fn, SymbolRef symbol, NodeBuilderContext context)
+    private Node CreateReturnFromSignature(NodeRef fn, SymbolRef symbol, NodeBuilderContext context, bool reportFallback = true)
     {
         var returnType = SyntacticResult.Failed;
         var store = StoreOf(fn);
@@ -2088,12 +2280,13 @@ internal sealed partial class Checker
             : At(fn, GetEffectiveReturnTypeNode(store, fn.Node));
         if (!returnTypeNode.IsNone)
         {
-            returnType = Result(SerializeTypeAnnotationOfDeclaration(returnTypeNode, context, fn, symbol));        }
+            returnType = Result(SerializeTypeAnnotationOfDeclaration(returnTypeNode, context, fn, symbol));
+        }
         else if (IsValueSignatureDeclaration(store, fn.Node))
         {
             returnType = TypeFromSingleReturnExpression(fn, context);
         }
-        return !returnType.Type.IsNone ? returnType.Type : InferReturnTypeOfSignatureSignature(fn, context, symbol);
+        return !returnType.Type.IsNone ? returnType.Type : InferReturnTypeOfSignatureSignature(fn, context, symbol, reportFallback && returnType.ReportFallback && returnTypeNode.IsNone);
     }
 
     // utilities.ts isValueSignatureDeclaration

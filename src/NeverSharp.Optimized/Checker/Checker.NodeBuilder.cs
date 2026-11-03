@@ -38,6 +38,7 @@ internal sealed partial class Checker
         public int MaxExpansionDepth = -1;
         public bool EncounteredError;
         public bool SuppressReportInferenceFallback;
+        public bool NoInferenceFallback;
         public HashSet<Type>? VisitedTypes;
         public Dictionary<string, int>? SymbolDepth;
         public List<Type>? InferTypeParameters;
