@@ -1,0 +1,31 @@
+NeverSharp pre-registration timestamp
+
+tag:                 prereg/v11
+tag object:          91219f73a7e3b925de7ffc5383d9c7d55eacab2e
+tagged commit:       bfc2a3ff32177a68da677ec7e3b6a4da9a51f4ef
+commit tree:         afa708240ed879ab97a98830841056f411477223
+commit date:         2026-11-03T20:37:17+01:00
+
+SHA-256 of files at the tagged commit (content as stored in git, `git show <commit>:<path> | sha256sum`):
+docs/preregistration.md                         042b9791f4d23d933291f75bc320a9b2359d9242d2a38df1866a140713070595
+docs/phase4-plan.md                             12d269de69a332195287083eb4125d757397cea2eeec92a934cc4dc0fd94bf23
+docs/phase1-progress.md                         888db4d36782597a201225be26db8f3c72b1139b182a8b38255d561694556004
+docs/benchmark-harness.md                       a6e82733b113e1bfed3c814d09390b60479b59b50a0cd0307b4eb94a1d52b388
+docs/references.md                              dfe88a111f937c08d6f964ab6b9bf921c5af80a5ade87038a7b7ac05893abb28
+pins.json                                       d80f5bea7ff497eee20cdc801f4d968c4ea788c6d3c057effbad512ed814816d
+harness/bench/report.mjs                        2ca70d876d6f550dafed30bf673664b4485f0c8f762bb63671abc3c4bff5d25c
+harness/bench/bench.mjs                         e0a943e686a0b4163f534bd41abf031565249fc5c237a054d962c5286eb2e55d
+harness/bench/result.schema.json                8b7d44668442d7e8a2dedb962118eda551919ffdfec0540fad47e3847e510d32
+harness/bench/check-equivalence.mjs             d4efbc107dc38e3c04166db31fc44b15e46404801cdd70ae41eb5da1010ec1ac
+harness/bench/emit-equivalence.mjs              8c8018363927c4150ebb84ec0d7fce77182d96a58c6695d41811d2790fb481e5
+harness/bench/tuning-emit-exclude.txt           b62bcff1c86ae6955a66821808d71182681bbdddcca1906d5d7f625acdb8993f
+harness/bench/go/parse.go                       65c6a55daf861076f57dade3f862f78c07002f5b8db2aa0a950367bca6b2cfd9
+harness/bench/rust/parse-rs/src/main.rs         7f0e13220a72a3aede301bb86581d5698992c438c40ac18c363b1c42b9e05595
+harness/astdump/dump-ts-emit.mjs                f553428c15eaea6e5b4124951616d568bcff74e2f0f0fdc2179dc9bbbdb2d4a4
+harness/astdump/compare-emit.mjs                68af74fe771a6e50aed6eef83823115840fcacf2e799fb6ee4b56f9096bb4da6
+tools/NeverSharp.ParseDriver/Program.cs         3996ade6919b4b53a247119086879ac104f15094fd5a9a17250f806105638cd1
+tools/NeverSharp.ParseDriver/CheckMode.cs       317212adaa1199c8ac10944414f6f5d362cf69093a54215fa850f95cd5c73c5b
+src/NeverSharp.Optimized/Program/CheckerPool.cs 636629ef9e99ad191177cd6ac2765859b69537d100488ecb32107fe74b38cea6
+src/NeverSharp.Optimized/Program/Program.Emit.cs 8ea66507025222a2a57293a6088d8077b7e3eec3f873ebbe1c39abddbc013604
+
+Verify: ots verify docs/timestamps/prereg-v11.txt.ots  (after the proof has been upgraded with ots upgrade)
