@@ -393,7 +393,7 @@ In CN1, at equal N:
 
 **Status.** Accepted by the author on 2026-11-02 and tagged `prereg/v10` (OpenTimestamps) after the harness changes were committed and before any profile-`check12` measurement.
 
-## 19. Phase 4: emitter (draft amendment `prereg/v11`)
+## 19. Phase 4: emitter (amendment `prereg/v11`)
 
 **Scope (decided by the author, 2026-11-03).**
 - The emitter of TypeScript 6.0.3 for Track O only: `.js` and `.d.ts` output under TypeScript 6.0.3's default options (target ES2025, module kind ES2022, no source maps, comments kept), plus `declaration: true`.
@@ -441,4 +441,4 @@ In CN1, at equal N:
 - **Profile `full`** keeps its earlier set. The emit configurations run only in profile `emit` or with `--configs`.
 - Windows only.
 
-**Status.** Draft, 2026-11-03. To be accepted by the author and tagged `prereg/v11` (OpenTimestamps) after Gate D passes and before any emit measurement.
+**Status.** Accepted by the author on 2026-11-03 and tagged `prereg/v11` (OpenTimestamps) after Gate D passed (50,177 of 50,177 units) and the emit equivalence of the five repository programs with tsc 6.0.3 was identical (modules D0–D8), before any emit measurement.
