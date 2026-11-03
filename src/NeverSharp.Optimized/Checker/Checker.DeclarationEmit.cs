@@ -486,7 +486,9 @@ internal sealed partial class Checker
     /// </summary>
     internal List<Node>? CreateLateBoundIndexSignatures(NodeStore emitStore, NodeRef cls, NodeRef enclosing, NodeBuilderFlags flags, InternalNodeBuilderFlags internalFlags, ISymbolTracker tracker)
     {
-        var sym = GetSymbolOfDeclaration(cls);
+        // cls.symbol: the class declaration's own symbol, not the merged one (a global class merged with an interface of
+        // another file does not get that interface's late-bound index signatures)
+        var sym = NodeSymbol(cls);
         var staticInfos = new List<IndexInfo>();
         foreach (var info in GetIndexInfosOfType(GetTypeOfSymbol(sym)))
         {
