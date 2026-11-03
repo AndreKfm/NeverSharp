@@ -113,7 +113,7 @@ internal static class Emitter
             // the file's own store); the file's resolver comes from the checker that checked it.
             var emitStore = sourceFile.Store.CreateEmitCopy();
             var factory = NodeFactory.CreateTransformFactory(emitStore);
-            var resolver = host.Program.GetTypeChecker().GetEmitResolver(sourceFile);
+            var resolver = host.GetEmitResolver(sourceFile);
             resolver.EmitStore = emitStore;
 
             EmitJsFile(sourceFile, names.JsFilePath, emitStore, factory, resolver);

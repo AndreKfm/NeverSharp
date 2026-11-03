@@ -7,7 +7,7 @@
 // Port structure follows internal/compiler/program.go (Emit)
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
 // Modified: translated from TypeScript to C#; no cancellation, emitOnly, custom transformers, forceDtsEmit or build info
-// (module D0).
+// (module D0). Module D7: the emit of one file with a checker of the checker pool (program.go Emit, newEmitHost).
 
 namespace NeverSharp.Optimized;
 
@@ -36,5 +36,18 @@ internal sealed partial class Program
             }
         }
         return Emitter.EmitFiles(new EmitHost(this, writeFileCallback), sourceFile);
+    }
+
+    /// <summary>
+    /// The emit of one file with a checker of the program's checker pool (module D7, the emit driver;
+    /// <see cref="CheckerPool.Emit"/>): as <see cref="Emit(SourceFile?, WriteFileCallback?)"/>, with the emit resolver of
+    /// <paramref name="checker"/>, the checker the file is assigned to (program.go Emit: newEmitHost takes the file's
+    /// checker). getEmitResolver(sourceFile) checks the file first; the pool's checker has checked it already, so this
+    /// finds it checked.
+    /// </summary>
+    internal EmitResult Emit(SourceFile sourceFile, Checker checker, WriteFileCallback? writeFileCallback)
+    {
+        checker.GetDiagnostics(sourceFile);
+        return Emitter.EmitFiles(new EmitHost(this, writeFileCallback, checker), sourceFile);
     }
 }

@@ -40,7 +40,16 @@
 // the driver name ends in "-nN". The driver name carries "-check" and the JSON
 // line adds the diagnostic counts.
 //
-// Usage: parse-go [--bind | --check [--checkers N]] [--single] <file list>
+// --check --emit (Phase 4, draft pre-registration §19, module D7): the check
+// above with Gate D's options (emitOptions: checkOptions plus declaration: true
+// and newLine: lf), then program.Emit(ctx, EmitOptions{WriteFile}) with an
+// in-memory WriteFile (every output kept in memory, nothing written to disk):
+// one work item per emitted file on the program's work group, each with the
+// emit resolver of its file's checker (newEmitHost). The driver name carries
+// "-emit" instead of "-check" and the JSON line adds "outputFiles",
+// "outputBytes", "emitDiagnostics" and "emitSkipped".
+//
+// Usage: parse-go [--bind | --check [--emit] [--checkers N]] [--single] <file list>
 
 package main
 
@@ -48,8 +57,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/microsoft/typescript-go/internal/ast"
@@ -86,7 +97,16 @@ func checkOptions() *core.CompilerOptions {
 	}
 }
 
-func runCheck(files []string, single bool, checkers int, priority string) {
+// emitOptions (--emit, draft pre-registration §19): Gate D's options, checkOptions
+// plus declaration: true and newLine: lf (the C# side's emit program options).
+func emitOptions() *core.CompilerOptions {
+	options := checkOptions()
+	options.Declaration = core.TSTrue
+	options.NewLine = core.NewLineKindLF
+	return options
+}
+
+func runCheck(files []string, single bool, checkers int, emit bool, priority string) {
 	fs := osvfs.FS()
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -99,9 +119,16 @@ func runCheck(files []string, single bool, checkers int, priority string) {
 	}
 	var nodes, chars, total, errors, warnings, suggestions, messages int64
 	programFiles := 0
+	// --emit: the outputs (name, text) kept in memory, an in-memory WriteFile
+	var outputNames, outputTexts []string
+	var outputBytes int64
+	emitDiagnostics, emitSkipped := 0, false
 	if len(files) > 0 {
 		host := compiler.NewCachedFSCompilerHost(cwd, fs, bundled.LibPath(), nil, nil)
 		options := checkOptions()
+		if emit {
+			options = emitOptions()
+		}
 		if checkers > 0 {
 			options.Checkers = &checkers
 		}
@@ -136,6 +163,21 @@ func runCheck(files []string, single bool, checkers int, priority string) {
 			}
 		}
 		programFiles = len(program.GetSourceFiles())
+		if emit {
+			// Program.Emit on the program's checker pool (one work item per file,
+			// each with its file's checker); WriteFile is called from those work items.
+			var mu sync.Mutex
+			result := program.Emit(ctx, compiler.EmitOptions{WriteFile: func(fileName string, text string, data *compiler.WriteFileData) error {
+				mu.Lock()
+				outputNames = append(outputNames, fileName)
+				outputTexts = append(outputTexts, text)
+				outputBytes += int64(len(text))
+				mu.Unlock()
+				return nil
+			}})
+			emitDiagnostics = len(result.Diagnostics)
+			emitSkipped = result.EmitSkipped
+		}
 	}
 	mode := "parallel"
 	if single {
@@ -143,12 +185,18 @@ func runCheck(files []string, single bool, checkers int, priority string) {
 	} else if checkers > 0 {
 		mode += "-n" + strconv.Itoa(checkers)
 	}
-	fmt.Printf("{\"driver\":\"tsgo-7.0.2-check-%s\",\"files\":%d,\"bytes\":%d,\"nodes\":%d,\"programFiles\":%d,\"diagnostics\":%d,\"errors\":%d,\"warnings\":%d,\"suggestions\":%d,\"messages\":%d,\"priority\":\"%s\"}\n",
-		mode, len(files), chars, nodes, programFiles, total, errors, warnings, suggestions, messages, priority)
+	kind, emitFields := "check", ""
+	if emit {
+		kind = "emit"
+		emitFields = fmt.Sprintf("\"outputFiles\":%d,\"outputBytes\":%d,\"emitDiagnostics\":%d,\"emitSkipped\":%t,", len(outputNames), outputBytes, emitDiagnostics, emitSkipped)
+	}
+	fmt.Printf("{\"driver\":\"tsgo-7.0.2-%s-%s\",\"files\":%d,\"bytes\":%d,\"nodes\":%d,\"programFiles\":%d,\"diagnostics\":%d,\"errors\":%d,\"warnings\":%d,\"suggestions\":%d,\"messages\":%d,%s\"priority\":\"%s\"}\n",
+		kind, mode, len(files), chars, nodes, programFiles, total, errors, warnings, suggestions, messages, emitFields, priority)
+	runtime.KeepAlive(outputTexts)
 }
 
 func main() {
-	single, bind, check := false, false, false
+	single, bind, check, emit := false, false, false, false
 	checkers := 0
 	args := os.Args[1:]
 	for len(args) > 0 && strings.HasPrefix(args[0], "--") {
@@ -159,6 +207,8 @@ func main() {
 			bind = true
 		case "--check":
 			check = true
+		case "--emit":
+			emit = true
 		case "--checkers":
 			n, err := 0, error(nil)
 			if len(args) > 1 {
@@ -194,6 +244,10 @@ func main() {
 		fmt.Fprintln(os.Stderr, "--checkers needs --check")
 		os.Exit(2)
 	}
+	if emit && !check {
+		fmt.Fprintln(os.Stderr, "--emit needs --check")
+		os.Exit(2)
+	}
 	if check {
 		if bind {
 			fmt.Fprintln(os.Stderr, "--bind and --check exclude each other")
@@ -203,7 +257,7 @@ func main() {
 			fmt.Fprintln(os.Stderr, "--checkers and --single exclude each other")
 			os.Exit(2)
 		}
-		runCheck(files, single, checkers, priority)
+		runCheck(files, single, checkers, emit, priority)
 		return
 	}
 

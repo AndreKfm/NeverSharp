@@ -35,14 +35,22 @@
 // stealing, stealing_enabled); parsing runs on rayon. --single: ProgramOptions.single_threaded (one checker,
 // everything sequential). The driver name carries "-check" and the JSON line adds the diagnostic counts.
 //
-// Usage: parse-rs [--bind | --check] [--single] <file list>
+// --check --emit (Phase 4, draft pre-registration §19, module D7): the check above with Gate D's options (emit_options:
+// check_options plus declaration: true and newLine: lf), then tsrs's Program::emit(ctx, EmitOptions { write_file, .. })
+// (tsrs_compiler/src/program_emit.rs, the port of typescript-go's Program.Emit) with an in-memory write_file (every output
+// kept in memory, nothing written to disk). tsrs's emit runs on its compiler checker pool: each file is transformed on its
+// checker's thread (files in program order within a checker's group), then printed and written on the worker pool. The
+// driver name carries "-emit" instead of "-check" and the JSON line adds "outputFiles", "outputBytes", "emitDiagnostics"
+// and "emitSkipped".
+//
+// Usage: parse-rs [--bind | --check [--emit]] [--single] <file list>
 
 use rayon::prelude::*;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::{Arc, Mutex};
 use tsrs_ast::SourceFileParseOptions;
 use tsrs_core::tspath::{normalize_path, normalize_slashes, to_path};
-use tsrs_core::{CompilerOptions, ModuleDetectionKind, ModuleKind, ModuleResolutionKind, P, ScriptTarget, Tristate};
+use tsrs_core::{CompilerOptions, ModuleDetectionKind, ModuleKind, ModuleResolutionKind, NewLineKind, P, ScriptTarget, Tristate};
 use tsrs_vfs::{bundled, osvfs};
 
 #[global_allocator]
@@ -108,10 +116,19 @@ fn check_options() -> CompilerOptions {
     }
 }
 
-fn run_check(files: Vec<String>, single: bool, priority: &str) {
+// emit_options (--emit, draft pre-registration §19): Gate D's options, check_options plus declaration: true and
+// newLine: lf, as the Go driver's emitOptions.
+fn emit_options() -> CompilerOptions {
+    CompilerOptions { declaration: Tristate::True, new_line: NewLineKind::LF, ..check_options() }
+}
+
+fn run_check(files: Vec<String>, single: bool, emit: bool, priority: &str) {
     let (mut nodes, mut chars, mut total, mut errors, mut warnings, mut suggestions, mut messages) = (0i64, 0i64, 0i64, 0i64, 0i64, 0i64, 0i64);
     let mut program_files = 0;
     let file_count = files.len();
+    // --emit: the outputs (name, text) kept in memory, an in-memory write_file (called from the checker and worker threads)
+    let outputs: Mutex<Vec<(String, String)>> = Mutex::new(Vec::new());
+    let (mut emit_diagnostics, mut emit_skipped) = (0usize, false);
     if !files.is_empty() {
         let os = osvfs::fs();
         let use_case_sensitive = os.use_case_sensitive_file_names();
@@ -120,7 +137,7 @@ fn run_check(files: Vec<String>, single: bool, priority: &str) {
         let root_paths: std::collections::HashSet<_> = files.iter().map(|f| to_path(f, &cwd, use_case_sensitive)).collect();
         let host = tsrs_compiler::new_cached_fs_compiler_host(&cwd, fs, &bundled::default_lib_path(), None, None, None);
         let config = tsrs_tsoptions::new_parsed_command_line(
-            P::new(check_options()),
+            P::new(if emit { emit_options() } else { check_options() }),
             files,
             Vec::new(),
             tsrs_core::tspath::ComparePathsOptions { use_case_sensitive_file_names: use_case_sensitive, current_directory: cwd.clone() },
@@ -149,21 +166,41 @@ fn run_check(files: Vec<String>, single: bool, priority: &str) {
             }
         }
         program_files = program.get_source_files().len();
+        if emit {
+            // Program::emit on the program's checker pool: each file transformed on its checker's thread (files in
+            // program order within a checker's group), printed and written on the worker pool.
+            let write_file = |file_name: &str, text: &str, _data: &mut tsrs_compiler::WriteFileData| -> Result<(), String> {
+                outputs.lock().unwrap().push((file_name.to_owned(), text.to_owned()));
+                Ok(())
+            };
+            let result = program.emit(&ctx, &tsrs_compiler::EmitOptions { write_file: Some(&write_file), ..Default::default() });
+            emit_diagnostics = result.diagnostics.len();
+            emit_skipped = result.emit_skipped;
+        }
     }
     let mode = if single { "single" } else { "parallel" };
+    let outputs = outputs.into_inner().unwrap();
+    let (kind, emit_fields) = if emit {
+        let output_bytes: usize = outputs.iter().map(|(_, text)| text.len()).sum();
+        ("emit", format!("\"outputFiles\":{},\"outputBytes\":{output_bytes},\"emitDiagnostics\":{emit_diagnostics},\"emitSkipped\":{emit_skipped},", outputs.len()))
+    } else {
+        ("check", String::new())
+    };
     println!(
-        "{{\"driver\":\"tsrs-0.18.0-check-{mode}\",\"files\":{file_count},\"bytes\":{chars},\"nodes\":{nodes},\"programFiles\":{program_files},\"diagnostics\":{total},\"errors\":{errors},\"warnings\":{warnings},\"suggestions\":{suggestions},\"messages\":{messages},\"priority\":\"{priority}\"}}"
+        "{{\"driver\":\"tsrs-0.18.0-{kind}-{mode}\",\"files\":{file_count},\"bytes\":{chars},\"nodes\":{nodes},\"programFiles\":{program_files},\"diagnostics\":{total},\"errors\":{errors},\"warnings\":{warnings},\"suggestions\":{suggestions},\"messages\":{messages},{emit_fields}\"priority\":\"{priority}\"}}"
     );
+    std::mem::forget(outputs);
 }
 
 fn run() {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
-    let (mut single, mut bind, mut check) = (false, false, false);
+    let (mut single, mut bind, mut check, mut emit) = (false, false, false, false);
     while args.first().is_some_and(|a| a.starts_with("--")) {
         match args.remove(0).as_str() {
             "--single" => single = true,
             "--bind" => bind = true,
             "--check" => check = true,
+            "--emit" => emit = true,
             other => {
                 eprintln!("unknown option {other}");
                 std::process::exit(2);
@@ -177,12 +214,16 @@ fn run() {
 
     let list = std::fs::read_to_string(&args[0]).expect("cannot read the file list");
     let files: Vec<String> = list.lines().map(str::trim).filter(|l| !l.is_empty()).map(normalize_slashes).collect();
+    if emit && !check {
+        eprintln!("--emit needs --check");
+        std::process::exit(2);
+    }
     if check {
         if bind {
             eprintln!("--bind and --check exclude each other");
             std::process::exit(2);
         }
-        run_check(files, single, priority);
+        run_check(files, single, emit, priority);
         return;
     }
     let fs = osvfs::fs();

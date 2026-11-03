@@ -42,6 +42,7 @@ internal sealed class EmitHost
 {
     private readonly Program program;
     private readonly WriteFileCallback? writeFileCallback;
+    private readonly Checker? checker;
 
     internal EmitHost(Program program, WriteFileCallback? writeFileCallback)
     {
@@ -49,7 +50,23 @@ internal sealed class EmitHost
         this.writeFileCallback = writeFileCallback;
     }
 
+    /// <summary>
+    /// The emit host of a file emitted with a checker of the program's checker pool (module D7; emitHost.go newEmitHost:
+    /// the host carries the emit resolver of the file's checker).
+    /// </summary>
+    internal EmitHost(Program program, WriteFileCallback? writeFileCallback, Checker checker)
+        : this(program, writeFileCallback)
+    {
+        this.checker = checker;
+    }
+
     internal Program Program => program;
+
+    /// <summary>
+    /// checker.ts getEmitResolver(sourceFile): from the program's type checker, or (module D7) from the pool checker the
+    /// host was created with.
+    /// </summary>
+    internal EmitResolver GetEmitResolver(SourceFile sourceFile) => (checker ?? program.GetTypeChecker()).GetEmitResolver(sourceFile);
 
     internal CompilerOptions GetCompilerOptions() => program.Options;
 

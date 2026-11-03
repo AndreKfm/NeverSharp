@@ -3,8 +3,9 @@
 //
 // --check mode of the parse driver (Track O; Phase 3, pre-registration §17, module C10): parse+bind+check of the file
 // list as one program, the counterpart of harness/bench/go/parse.go --check (typescript-go's NewProgram,
-// GetSemanticDiagnostics(ctx, nil) and GetGlobalDiagnostics on its compiler checker pool). See Program.cs for the
-// contract.
+// GetSemanticDiagnostics(ctx, nil) and GetGlobalDiagnostics on its compiler checker pool). With --emit (Phase 4, draft
+// pre-registration §19, module D7) the program is then emitted to memory, as parse.go --check --emit runs
+// typescript-go's Program.Emit. See Program.cs for the contract.
 
 #if TRACK_OPTIMIZED
 using System.Globalization;
@@ -21,24 +22,30 @@ internal static class CheckMode
     /// </summary>
     private static CompilerOptions ProgramOptions() => new() { NoResolve = true };
 
+    /// <summary>
+    /// The options of the emitted program (--emit, draft pre-registration §19): Gate D's options, Gate C's plus
+    /// declaration: true and newLine: lf (the Go and tsrs drivers pass the same values explicitly).
+    /// </summary>
+    private static CompilerOptions EmitProgramOptions() => new() { NoResolve = true, Declaration = true, NewLine = NewLineKind.LineFeed };
+
     /// <param name="checkerCount">--checkers N (pre-registration §18), 0: the pool's default of 4.</param>
-    internal static int Run(string[] files, bool single, int checkerCount, string priority, string? dumpDiagnostics)
+    internal static int Run(string[] files, bool single, int checkerCount, string priority, string? dumpDiagnostics, bool emit, string? dumpEmit)
     {
         int exitCode = 0;
         if (single)
         {
             // Everything sequential on one thread whose stack is the checker threads' (Go stacks grow on demand).
-            var thread = new Thread(() => exitCode = RunCore(files, single, checkerCount, priority, dumpDiagnostics), CheckerPool.StackSize);
+            var thread = new Thread(() => exitCode = RunCore(files, single, checkerCount, priority, dumpDiagnostics, emit, dumpEmit), CheckerPool.StackSize);
             thread.Start();
             thread.Join();
             return exitCode;
         }
-        return RunCore(files, single, checkerCount, priority, dumpDiagnostics);
+        return RunCore(files, single, checkerCount, priority, dumpDiagnostics, emit, dumpEmit);
     }
 
-    private static int RunCore(string[] files, bool single, int checkerCount, string priority, string? dumpDiagnostics)
+    private static int RunCore(string[] files, bool single, int checkerCount, string priority, string? dumpDiagnostics, bool emit, string? dumpEmit)
     {
-        var programOptions = ProgramOptions();
+        var programOptions = emit ? EmitProgramOptions() : ProgramOptions();
         // tsc's host parses with the program's createSourceFile options: languageVersion = the emit target, jsDocParsingMode
         // = the host's (executeCommandLine.ts: ParseForTypeErrors).
         var parseOptions = new CreateSourceFileOptions { LanguageVersion = programOptions.GetEmitScriptTarget(), JsDocParsingMode = JSDocParsingMode.ParseForTypeErrors };
@@ -91,9 +98,12 @@ internal static class CheckMode
         List<ProgramDiagnostic>[] semantic;
         List<ProgramDiagnostic> global;
         int programFiles, checkers;
+        // --emit: the outputs of each program file (name, text), in write order, kept in memory (an in-memory WriteFile)
+        List<(string FileName, string Text)>?[] outputs = [];
+        EmitResult? emitResult = null;
         if (files.Length == 0)
         {
-            // createProgram with no root files: no default library, no checker work.
+            // createProgram with no root files: no default library, no checker work, nothing to emit.
             semantic = [];
             global = [];
             programFiles = 0;
@@ -107,11 +117,32 @@ internal static class CheckMode
             global = pool.GetGlobalDiagnostics();
             programFiles = program.SourceFiles.Count;
             checkers = pool.Count;
+            if (emit)
+            {
+                var perFile = new List<(string FileName, string Text)>?[programFiles];
+                // Each slot is written only by the thread of its file's checker.
+                emitResult = pool.Emit((index, fileName, text) => (perFile[index] ??= []).Add((fileName, text)));
+                outputs = perFile;
+            }
             if (dumpDiagnostics is not null)
             {
                 WriteDiagnostics(dumpDiagnostics, program, semantic, global, libFolder);
             }
+            if (dumpEmit is not null)
+            {
+                WriteEmit(dumpEmit, outputs, emitResult!, libFolder);
+            }
             GC.KeepAlive(program);
+        }
+
+        long outputFiles = 0, outputBytes = 0;
+        foreach (var list in outputs)
+        {
+            foreach (var (_, text) in list ?? [])
+            {
+                outputFiles++;
+                outputBytes += Encoding.UTF8.GetByteCount(text);
+            }
         }
 
         long total = 0, errors = 0, warnings = 0, suggestions = 0, messages = 0;
@@ -141,13 +172,49 @@ internal static class CheckMode
         var runtime = $"{(System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported ? "jit" : "aot")}-{(System.Runtime.GCSettings.IsServerGC ? "srv" : "ws")}";
         var mode = single ? "single" : checkerCount > 0 ? $"parallel-n{checkerCount.ToString(CultureInfo.InvariantCulture)}" : "parallel";
         var inv = CultureInfo.InvariantCulture;
+        var emitFields = emit
+            ? string.Create(inv, $"\"outputFiles\":{outputFiles},\"outputBytes\":{outputBytes},\"emitDiagnostics\":{emitResult?.Diagnostics.Count ?? 0},\"emitSkipped\":{(emitResult?.EmitSkipped == true ? "true" : "false")},")
+            : "";
         Console.WriteLine(string.Create(inv,
-            $"{{\"driver\":\"cs-optimized-{runtime}-check-{mode}\",\"files\":{files.Length},\"chars\":{chars},\"nodes\":{nodes},\"programFiles\":{programFiles},\"checkers\":{checkers}," +
-            $"\"diagnostics\":{total},\"errors\":{errors},\"warnings\":{warnings},\"suggestions\":{suggestions},\"messages\":{messages},\"priority\":\"{priority}\"," +
+            $"{{\"driver\":\"cs-optimized-{runtime}-{(emit ? "emit" : "check")}-{mode}\",\"files\":{files.Length},\"chars\":{chars},\"nodes\":{nodes},\"programFiles\":{programFiles},\"checkers\":{checkers}," +
+            $"\"diagnostics\":{total},\"errors\":{errors},\"warnings\":{warnings},\"suggestions\":{suggestions},\"messages\":{messages},{emitFields}\"priority\":\"{priority}\"," +
             $"\"allocatedBytes\":{GC.GetTotalAllocatedBytes(true)},\"gen0\":{GC.CollectionCount(0)},\"gen1\":{GC.CollectionCount(1)},\"gen2\":{GC.CollectionCount(2)}," +
             $"\"gcPauseMs\":{GC.GetTotalPauseDuration().TotalMilliseconds.ToString("0.###", inv)}}}"));
         GC.KeepAlive(sourceFiles);
+        GC.KeepAlive(outputs);
         return 0;
+    }
+
+    /// <summary>
+    /// The canonical emit dump (emit-equivalence.mjs writes tsc's the same way), one JSON object per line: every output in
+    /// program file order and, per file, in write order, as <c>{"output":name,"text":text}</c>; then the emit diagnostics
+    /// as <c>{"diagnostic":line}</c> in the canonical form of <see cref="WriteDiagnostics"/> (tag "emit"); last
+    /// <c>{"emitSkipped":bool}</c>.
+    /// </summary>
+    private static void WriteEmit(string path, List<(string FileName, string Text)>?[] outputs, EmitResult result, string libFolder)
+    {
+        using var writer = new StreamWriter(path, false, new UTF8Encoding(false));
+        var sb = new StringBuilder();
+        foreach (var list in outputs)
+        {
+            foreach (var (fileName, text) in list ?? [])
+            {
+                writer.Write("{\"output\":");
+                writer.Write(Json(fileName));
+                writer.Write(",\"text\":");
+                writer.Write(Json(text));
+                writer.Write("}\n");
+            }
+        }
+        foreach (var d in result.Diagnostics)
+        {
+            sb.Clear();
+            Write(sb, "emit", d, libFolder);
+            writer.Write("{\"diagnostic\":");
+            writer.Write(Json(sb.ToString(0, sb.Length - 1)));
+            writer.Write("}\n");
+        }
+        writer.Write(result.EmitSkipped ? "{\"emitSkipped\":true}\n" : "{\"emitSkipped\":false}\n");
     }
 
     /// <summary>
@@ -162,33 +229,34 @@ internal static class CheckMode
         {
             foreach (var d in semantic[i] ?? [])
             {
-                Write(sb, "semantic", d);
+                Write(sb, "semantic", d, libFolder);
             }
         }
         foreach (var d in global)
         {
-            Write(sb, "global", d);
+            Write(sb, "global", d, libFolder);
         }
         File.WriteAllText(path, sb.ToString(), new UTF8Encoding(false));
         _ = program;
+    }
 
-        void Write(StringBuilder sb, string tag, ProgramDiagnostic d)
-        {
-            var fileName = d.SourceFile?.Store.FileName(d.SourceFile.Root);
-            var fileText = fileName is null ? "-" : fileName.StartsWith(libFolder + "/", StringComparison.Ordinal) ? fileName[(libFolder.Length + 1)..] : fileName;
-            sb.Append(tag).Append('\t').Append(fileText).Append('\t')
-                .Append(d.StartOrUndefined is { } start ? start.ToString(CultureInfo.InvariantCulture) : "-").Append('\t')
-                .Append(d.LengthOrUndefined is { } length ? length.ToString(CultureInfo.InvariantCulture) : "-").Append('\t')
-                .Append(d.Code.ToString(CultureInfo.InvariantCulture)).Append('\t')
-                .Append(d.Category switch
-                {
-                    DiagnosticCategory.Warning => "Warning",
-                    DiagnosticCategory.Error => "Error",
-                    DiagnosticCategory.Suggestion => "Suggestion",
-                    _ => "Message",
-                }).Append('\t')
-                .Append(Json(ProgramDiagnostics.FlattenDiagnosticMessageText(d, "\n"))).Append('\n');
-        }
+    // One canonical diagnostic line (with its "\n").
+    private static void Write(StringBuilder sb, string tag, ProgramDiagnostic d, string libFolder)
+    {
+        var fileName = d.SourceFile?.Store.FileName(d.SourceFile.Root);
+        var fileText = fileName is null ? "-" : fileName.StartsWith(libFolder + "/", StringComparison.Ordinal) ? fileName[(libFolder.Length + 1)..] : fileName;
+        sb.Append(tag).Append('\t').Append(fileText).Append('\t')
+            .Append(d.StartOrUndefined is { } start ? start.ToString(CultureInfo.InvariantCulture) : "-").Append('\t')
+            .Append(d.LengthOrUndefined is { } length ? length.ToString(CultureInfo.InvariantCulture) : "-").Append('\t')
+            .Append(d.Code.ToString(CultureInfo.InvariantCulture)).Append('\t')
+            .Append(d.Category switch
+            {
+                DiagnosticCategory.Warning => "Warning",
+                DiagnosticCategory.Error => "Error",
+                DiagnosticCategory.Suggestion => "Suggestion",
+                _ => "Message",
+            }).Append('\t')
+            .Append(Json(ProgramDiagnostics.FlattenDiagnosticMessageText(d, "\n"))).Append('\n');
     }
 
     // JSON.stringify of a string (the oracle's escaping).

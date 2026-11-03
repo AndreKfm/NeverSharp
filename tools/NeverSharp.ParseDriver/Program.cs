@@ -29,7 +29,14 @@
 //   canonical diagnostics for harness/bench/check-equivalence.mjs (never in timed runs). --checkers N (pre-registration
 //   §18): N checkers instead of 4, file i to checker i % N, as typescript-go's CompilerOptions.Checkers; the driver
 //   name ends in "-nN".
-//   Usage: parse-cs-optimized-<runtime> [--bind | --check [--checkers N] [--dump-diagnostics <file>]] [--single] <file list>
+// - --check --emit (Track O only; Phase 4, draft pre-registration §19, module D7): the check above with Gate D's options
+//   (TypeScript 6.0.3's defaults with noResolve, plus declaration: true and newLine: lf), then every program file emitted
+//   to memory (.js and .d.ts outputs kept in memory, never written to disk) through the same checkers (CheckerPool.Emit:
+//   each file with the emit resolver of its own checker, one work item per checker). The driver name carries "-emit"
+//   instead of "-check" and the JSON line adds "outputFiles", "outputBytes" (UTF-8), "emitDiagnostics" and
+//   "emitSkipped". --dump-emit <file> writes the outputs and emit diagnostics canonically (JSON lines) for
+//   harness/bench/emit-equivalence.mjs (never in timed runs).
+//   Usage: parse-cs-optimized-<runtime> [--bind | --check [--emit [--dump-emit <file>]] [--checkers N] [--dump-diagnostics <file>]] [--single] <file list>
 
 using System.Diagnostics;
 using System.Globalization;
@@ -44,7 +51,9 @@ using NeverSharp.Generated;
 var single = false;
 var bind = false;
 var check = false;
+var emit = false;
 string? dumpDiagnostics = null;
+string? dumpEmit = null;
 var checkerCount = 0;
 var argIndex = 0;
 for (; argIndex < args.Length && args[argIndex].StartsWith("--", StringComparison.Ordinal); argIndex++)
@@ -60,8 +69,14 @@ for (; argIndex < args.Length && args[argIndex].StartsWith("--", StringCompariso
         case "--check":
             check = true;
             break;
+        case "--emit":
+            emit = true;
+            break;
         case "--dump-diagnostics":
             dumpDiagnostics = args[++argIndex];
+            break;
+        case "--dump-emit":
+            dumpEmit = args[++argIndex];
             break;
         case "--checkers":
             if (argIndex + 1 >= args.Length || !int.TryParse(args[++argIndex], NumberStyles.None, CultureInfo.InvariantCulture, out checkerCount) || checkerCount < 1)
@@ -90,6 +105,11 @@ if ((bind && check) || (dumpDiagnostics is not null && !check))
 if (checkerCount > 0 && (!check || single))
 {
     Console.Error.WriteLine("--checkers needs --check and excludes --single");
+    return 2;
+}
+if ((emit && !check) || (dumpEmit is not null && !emit))
+{
+    Console.Error.WriteLine("--emit needs --check; --dump-emit needs --emit");
     return 2;
 }
 var listPath = args[argIndex];
@@ -121,7 +141,7 @@ var options = new CreateSourceFileOptions { LanguageVersion = ScriptTarget.Lates
 #if TRACK_OPTIMIZED
 if (check)
 {
-    return CheckMode.Run(files, single, checkerCount, priority, dumpDiagnostics);
+    return CheckMode.Run(files, single, checkerCount, priority, dumpDiagnostics, emit, dumpEmit);
 }
 #endif
 

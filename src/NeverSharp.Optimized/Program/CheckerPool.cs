@@ -10,7 +10,7 @@
 // forEachCheckerGroupDo, GetGlobalDiagnostics; program.go GetSemanticDiagnostics with no file, GetGlobalDiagnostics.
 // Module CO4: each work item creates its own checker (no wait for the other checkers' construction), and the program's
 // imports are resolved before binding (in parallel unless single-threaded), and a checker keeps only its own files'
-// diagnostics.
+// diagnostics. Module D7: program.go Emit on the pool (Emit), one work item per checker.
 
 namespace NeverSharp.Optimized;
 
@@ -125,6 +125,46 @@ internal sealed class CheckerPool
             all.AddRange(list);
         }
         return DiagnosticCollection.SortAndDeduplicate(all);
+    }
+
+    /// <summary>
+    /// program.go Emit(ctx, EmitOptions{WriteFile}) on this pool (module D7): every program file emitted with the emit
+    /// resolver of the checker it is assigned to. typescript-go queues one work item per file, each taking its file's
+    /// checker (newEmitHost) and locking it for every resolver call; here, as for the diagnostics, one work item per
+    /// checker emits that checker's files in program order (a checker is used by one thread at a time by construction).
+    /// <paramref name="writeFile"/> receives the program file index with every output, on the thread of the file's
+    /// checker. The result combines the files' results in program order (CombineEmitResults), with the emit diagnostics
+    /// sorted and deduplicated as emitter.ts emitFiles does for a whole program.
+    /// </summary>
+    internal EmitResult Emit(Action<int, string, string> writeFile)
+    {
+        var files = program.SourceFiles;
+        var results = new EmitResult?[files.Count];
+        RunAll(checkers.Length, checkerIndex =>
+        {
+            var checker = CheckerAt(checkerIndex);
+            checker.EnterThread();
+            for (var i = 0; i < files.Count; i++)
+            {
+                if (fileAssociations[files[i]] == checkerIndex)
+                {
+                    var index = i;
+                    results[i] = program.Emit(files[i], checker, (fileName, text, _) => writeFile(index, fileName, text));
+                }
+            }
+        });
+        var emitSkipped = false;
+        var diagnostics = new List<ProgramDiagnostic>();
+        foreach (var result in results)
+        {
+            if (result is null)
+            {
+                continue;
+            }
+            emitSkipped |= result.EmitSkipped;
+            diagnostics.AddRange(result.Diagnostics);
+        }
+        return new EmitResult(emitSkipped, DiagnosticCollection.SortAndDeduplicate(diagnostics));
     }
 
     /// <summary>
