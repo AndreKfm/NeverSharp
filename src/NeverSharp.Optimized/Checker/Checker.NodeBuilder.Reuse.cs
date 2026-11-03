@@ -680,7 +680,22 @@ internal sealed partial class Checker
     }
 
     // visitEachChild(node, visitor) for the node kinds of type annotations, into the builder's store
-    private Node VisitEachChildCopy(NodeBuilderContext context, NodeRef node) => CopyWithChildren(node, child => VisitExistingNodeTreeSymbols(context, child), list => VisitExistingNodes(context, node, list), markReused: true);
+    private Node VisitEachChildCopy(NodeBuilderContext context, NodeRef node)
+    {
+        var copy = CopyWithChildren(node, child => VisitExistingNodeTreeSymbols(context, child), list => VisitExistingNodes(context, node, list), markReused: true);
+        if (Kind(node) == SyntaxKind.IndexSignature)
+        {
+            // visitEachChildOfIndexSignatureDeclaration: Debug.checkDefined(nodeVisitor(node.type, visitor, isTypeNode)).
+            // An index signature without a type (`{ [key: foo] boolean }` in JSDoc) reaches it through the function-like
+            // branch of visitExistingNodeTreeSymbolsWorker, and tsc 6.0.3 fails there.
+            if (S.Type(copy).IsNone)
+            {
+                // (checkDefined → assertIsDefined: "Debug Failure." without a message)
+                Debug.Fail();
+            }
+        }
+        return copy;
+    }
 
     /// <summary>A deep copy of an existing node in the builder's store (factory.cloneNode of each node: reused).</summary>
     private Node CopyExistingNode(NodeRef node, bool markReused = true)
