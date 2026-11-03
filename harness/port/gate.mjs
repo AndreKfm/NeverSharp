@@ -42,6 +42,13 @@
 //        the default library read from the main checkout's pinned typescript package) and harness/astdump/compare-checker.mjs
 //        per JSDoc mode. --sample N: only a fixed sample of N units (seeded, the same for every run with the same N) is
 //        dumped by Track O and compared; the oracle dumps are the full corpus's. No parser or binder gates)
+//        Module D0: --phase printer runs both comment modes by default (--comments remove,keep; keep = removeComments:
+//        false, dumps ts-printer-<mode>-comments and cs-optimized-printer-<mode>-comments).
+//        node harness/port/gate.mjs --track optimized --phase emit [--sample N] [--main ...]   (Phase 4, Gate D: Track O
+//        Gate 2 build + headers, the tsc 6.0.3 emit dumps with the transformer coverage report
+//        (harness/astdump/dump-ts-emit.mjs; reused while the oracle script, typescript and the manifest are unchanged),
+//        the Track O emit dumps (NeverSharp.Dump.Optimized emit) and harness/astdump/compare-emit.mjs (sections js, dts,
+//        diagnostics); --sample N as for --phase checker)
 // Exit code 0 only if every gate passes; prints one line per gate and a JSON summary.
 
 import { spawnSync } from "node:child_process";
@@ -57,7 +64,8 @@ const main = arg("--main", root);
 const track = arg("--track", "faithful");
 if (track !== "faithful" && track !== "optimized") throw new Error("--track must be faithful or optimized");
 const phase = arg("--phase", "parser");
-if (!["parser", "binder", "printer", "checker"].includes(phase)) throw new Error("--phase must be parser, binder, printer or checker");
+if (!["parser", "binder", "printer", "checker", "emit"].includes(phase)) throw new Error("--phase must be parser, binder, printer, checker or emit");
+if (phase === "emit" && track !== "optimized") throw new Error("--phase emit is defined for --track optimized only (phase4-plan.md)");
 if (phase === "binder" && track !== "optimized") throw new Error("--phase binder is defined for --track optimized only (phase2-plan.md)");
 if (phase === "printer" && track !== "optimized") throw new Error("--phase printer is defined for --track optimized only (phase3-plan.md)");
 if (phase === "checker" && track !== "optimized") throw new Error("--phase checker is defined for --track optimized only (phase3-plan.md)");
@@ -137,24 +145,30 @@ if (phase === "printer") {
     const lf = file => readFileSync(file, "utf8").replaceAll("\r\n", "\n");
     const stamp = createHash("sha256").update(lf(oracle)).update(tsVersion).update(readFileSync(join(corpus, "manifest.json"))).digest("hex");
     const valid = dir => existsSync(`${dir}.stamp`) && existsSync(`${dir}.outcomes.json`) && readFileSync(`${dir}.stamp`, "utf8") === stamp;
+    // Comment modes (module D0): remove = removeComments: true (P1's gate), keep = removeComments: false.
+    const commentModes = arg("--comments", "remove,keep").split(",");
     let dumpBuilt = false;
     for (const mode of modes) {
-        let expected = join(corpus, "dumps", `ts-printer-${mode}`);
-        if (!valid(expected)) {
-            expected = join(root, "artifacts", "dumps", `ts-printer-${mode}`);
-            if (valid(expected)) console.log(`(oracle dumps of mode ${mode} reused: ${expected})`);
-            else if (gate(`oracle-${mode}`, node, [oracle, "--corpus", corpus, "--jsdoc-mode", mode, "--out", expected], { timeout: 60 * 60 * 1000, showOutput: true })) writeFileSync(`${expected}.stamp`, stamp);
-            else continue;
+        for (const comments of commentModes) {
+            if (comments !== "remove" && comments !== "keep") throw new Error("--comments must be remove and/or keep");
+            const name = `${mode}${comments === "keep" ? "-comments" : ""}`;
+            let expected = join(corpus, "dumps", `ts-printer-${name}`);
+            if (!valid(expected)) {
+                expected = join(root, "artifacts", "dumps", `ts-printer-${name}`);
+                if (valid(expected)) console.log(`(oracle dumps of mode ${name} reused: ${expected})`);
+                else if (gate(`oracle-${name}`, node, [oracle, "--corpus", corpus, "--jsdoc-mode", mode, "--comments", comments, "--out", expected], { timeout: 60 * 60 * 1000, showOutput: true })) writeFileSync(`${expected}.stamp`, stamp);
+                else continue;
+            }
+            else console.log(`(oracle dumps of mode ${name} reused: ${expected})`);
+            if (!dumpBuilt && !(dumpBuilt = gate("printer-dump-build", "dotnet", ["build", dumpProject, "-c", "Release", "-nologo", "-v", "q"], { showOutput: true }))) break;
+            const actual = join(root, "artifacts", "dumps", `cs-${track}-printer-${name}`);
+            const dumped = gate(`printer-dump-${name}`, "dotnet", ["run", "-c", "Release", "--no-build", "--project", dumpProject, "--", "printer", "--jsdoc-mode", mode, "--comments", comments, "--corpus", corpus, "--out", actual],
+                { timeout: 30 * 60 * 1000, showOutput: true });
+            if (dumped) gate(`printer-compare-${name}`, node, ["harness/astdump/compare-printer.mjs", "--corpus", corpus, "--jsdoc-mode", mode, "--comments", comments, "--expected", expected, "--actual", actual, "--show", "15"], { showOutput: true });
         }
-        else console.log(`(oracle dumps of mode ${mode} reused: ${expected})`);
-        if (!dumpBuilt && !(dumpBuilt = gate("printer-dump-build", "dotnet", ["build", dumpProject, "-c", "Release", "-nologo", "-v", "q"], { showOutput: true }))) break;
-        const actual = join(root, "artifacts", "dumps", `cs-${track}-printer-${mode}`);
-        const dumped = gate(`printer-dump-${mode}`, "dotnet", ["run", "-c", "Release", "--no-build", "--project", dumpProject, "--", "printer", "--jsdoc-mode", mode, "--corpus", corpus, "--out", actual],
-            { timeout: 30 * 60 * 1000, showOutput: true });
-        if (dumped) gate(`printer-compare-${mode}`, node, ["harness/astdump/compare-printer.mjs", "--corpus", corpus, "--jsdoc-mode", mode, "--expected", expected, "--actual", actual, "--show", "15"], { showOutput: true });
     }
     const pass = results.every(r => r.pass);
-    console.log(JSON.stringify({ track, phase, modes, pass, results }));
+    console.log(JSON.stringify({ track, phase, modes, comments: commentModes, pass, results }));
     process.exit(pass ? 0 : 1);
 }
 if (phase === "checker") {
@@ -204,6 +218,50 @@ if (phase === "checker") {
     }
     const pass = results.every(r => r.pass);
     console.log(JSON.stringify({ track, phase, modes, sections: sections.split(","), sample: sample === undefined ? null : Number(sample), pass, results }));
+    process.exit(pass ? 0 : 1);
+}
+if (phase === "emit") {
+    // Gate D (phase4-plan.md, module D0): the tsc 6.0.3 emit dump (the oracle, with its transformer coverage report),
+    // Track O's emit dump and the compare (sections js, dts, diagnostics), as --phase checker.
+    const corpus = join(main, "artifacts", "equivalence");
+    const sample = arg("--sample", undefined);
+    const oracle = join(root, "harness", "astdump", "dump-ts-emit.mjs");
+    const tsVersion = JSON.parse(readFileSync(createRequire(oracle).resolve("typescript/package.json"), "utf8")).version;
+    const lf = file => readFileSync(file, "utf8").replaceAll("\r\n", "\n");
+    const stamp = createHash("sha256").update(lf(oracle)).update(tsVersion).update(readFileSync(join(corpus, "manifest.json"))).digest("hex");
+    const valid = dir => existsSync(`${dir}.stamp`) && existsSync(`${dir}.outcomes.json`) && readFileSync(`${dir}.stamp`, "utf8") === stamp;
+    const dumpsDir = join(root, "artifacts", "dumps");
+    mkdirSync(dumpsDir, { recursive: true });
+    // The sample: as --phase checker's (the same seeded choice for a given N).
+    let unitsArgs = [];
+    if (sample !== undefined) {
+        const n = Number(sample);
+        if (!(n > 0)) throw new Error("--sample needs a positive number of units");
+        const { units } = JSON.parse(readFileSync(join(corpus, "manifest.json"), "utf8"));
+        const key = id => createHash("sha256").update(`20261025:${id}`).digest("hex");
+        const chosen = units.map(u => ({ id: u.id, key: key(u.id) })).sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0).slice(0, n).map(u => u.id).sort();
+        const unitsFile = join(dumpsDir, `emit-sample-${n}.txt`);
+        writeFileSync(unitsFile, chosen.join("\n") + "\n");
+        unitsArgs = ["--units", unitsFile];
+    }
+    const libDir = join(createRequire(join(main, "harness", "astdump", "dump-ts-checker.mjs")).resolve("typescript/lib/lib.d.ts"), "..");
+    let expected = join(corpus, "dumps", "ts-emit-types");
+    let haveOracle = true;
+    if (!valid(expected)) {
+        expected = join(dumpsDir, "ts-emit-types");
+        if (valid(expected)) console.log(`(oracle dumps reused: ${expected})`);
+        else if (gate("oracle-emit", node, [oracle, "--corpus", corpus, "--out", expected], { timeout: 3 * 60 * 60 * 1000, showOutput: true })) writeFileSync(`${expected}.stamp`, stamp);
+        else haveOracle = false;
+    }
+    else console.log(`(oracle dumps reused: ${expected})`);
+    if (haveOracle && gate("emit-dump-build", "dotnet", ["build", dumpProject, "-c", "Release", "-nologo", "-v", "q"], { showOutput: true })) {
+        const actual = join(dumpsDir, `cs-${track}-emit-types`);
+        const dumped = gate("emit-dump", "dotnet", ["run", "-c", "Release", "--no-build", "--project", dumpProject, "--", "emit", "--corpus", corpus, "--out", actual, "--lib-dir", libDir, ...unitsArgs],
+            { timeout: 60 * 60 * 1000, showOutput: true });
+        if (dumped) gate("emit-compare", node, ["harness/astdump/compare-emit.mjs", "--corpus", corpus, "--expected", expected, "--actual", actual, "--coverage", `${expected}.coverage.json`, "--show", "5", ...unitsArgs], { showOutput: true });
+    }
+    const pass = results.every(r => r.pass);
+    console.log(JSON.stringify({ track, phase, sample: sample === undefined ? null : Number(sample), pass, results }));
     process.exit(pass ? 0 : 1);
 }
 gate("unit-tests", "dotnet", ["test", "--project", testProject, "-c", "Release"]);
