@@ -62,4 +62,4 @@ Decided in module D0 ([modules/D0.md](modules/D0.md), [phase4-plan.md](phase4-pl
 ## Gate D harness
 
 - Oracle `harness/astdump/dump-ts-emit.mjs`: `program.emit(unitFile, writeFile)` per unit, dump format in its header; coverage report `<out>.coverage.json` / `.coverage.txt` from a second, wrapped run of the default transformers on the same program after the dump.
-- C# dump `tools/NeverSharp.Dump.Optimized emit` (`EmitDump.cs`), compare `harness/astdump/compare-emit.mjs` (sections js, dts, diagnostics incl. `emitSkipped`; with `--coverage` also the units that need no transformer), gate `harness/port/gate.mjs --track optimized --phase emit [--sample N]`.
+- C# dump `tools/NeverSharp.Dump.Optimized emit` (`EmitDump.cs`), compare `harness/astdump/compare-emit.mjs` (sections js, dts, diagnostics incl. `emitSkipped`; with `--coverage` also the units that need no transformer; since D6 both sides' symbol ids in tsc's generated names `__@<name>@<id>` and `____<name>_<id>` are replaced by `<id>` before comparing, counted in the summary as `symbolIdNormalized`), gate `harness/port/gate.mjs --track optimized --phase emit [--sample N]`.
