@@ -769,3 +769,11 @@ The brief's targets: tc1500/tc2500 `--checkers 12` clearly faster with less paus
 | tc2500 `--checkers 12` | 0.762 s | 0.664 s | 0.871 [0.854, 0.886] | |
 
 Diagnostics unchanged in every run (130,435 / 128,748 at 12 checkers / 135,770 single). Peak working set unchanged (ws 4.03 / 6.04 / 2.14 GB). Not slower by the interval in any of the three Workstation GC configurations: **CO6 kept.** Server GC on tuning-check is 0.4 % slower [0.2, 0.8 %] (disclosed; most likely the inference contexts retained by the mapper store, see "What is left").
+
+## Checker additional runs after CO6 (2026-11-02/03)
+
+Both protocol-compliant (rig checks ok, variance gate PASS), commit 5d9e8a5. **Additional runs, not endpoints** (checker endpoint stays G = 1.680, no parity; §18 protocol result stays 1.305, no parity).
+- **Profile `check`, additional run 3** (`results/phase3/additional/2026-11-02T22-22-25-874Z/`): cs-o-aot-ws-check vs tsgo7-check **G = 0.970 [0.965, 0.976]**, upper bound < 1.00, faster than typescript-go (run 2 1.025; vscode 0.983, sentry 0.745, bluesky 1.168, playwright 1.168, tldraw 0.860; none above 1.20; peak working set G 0.69); single-threaded 0.800 [0.799, 0.802]; Server GC 0.827 [0.821, 0.834] (98.75 %), single 0.794; vs tsrs 4.906, single 1.685. Workstation GC pause vscode 3.9 → 3.31 s.
+- **Profile `check12`, additional run 1** (`results/phase3/check12-additional/2026-11-02T20-56-02-668Z/`): cs-o-aot-ws-check12 vs tsgo7-check12 **G = 1.236 [1.226, 1.244]**, lower bound > 1.20, no parity (§18 run 1.305; vscode 1.239, sentry 1.034, bluesky 1.335, playwright 1.400, tldraw 1.206; peak working set G 0.77); Server GC 0.889 [0.878, 0.897] (98.75 %, unchanged); single-threaded 0.798; vs tsrs 3.935. Workstation GC pause vscode 5.80 → 5.05 s of 10.85 s (Server GC 0.78 s of 6.48 s).
+
+Diagnostics as in the runs before. At 12 checkers the Workstation GC pause is still the gap: Server GC with the same code is 0.889.
