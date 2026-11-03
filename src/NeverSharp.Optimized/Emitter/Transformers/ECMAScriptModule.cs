@@ -10,8 +10,7 @@
 // Modified: translated from TypeScript to C#; module D3. TypeScript 6.0.3's default options only (module kind ES2022,
 // no importHelpers, no rewriteRelativeImportExtensions): the paths of `--module preserve`, of node16 and later module
 // kinds (the createRequire shim of import-equals declarations) and of rewritten module specifiers are not reached and
-// throw. The CommonJS transformer (transformers/module/module.ts) is not ported: files whose emit module format is
-// CommonJS (.cts/.cjs) are routed as tsc routes them and returned untransformed.
+// throw. Files whose emit module format is CommonJS (.cts) go to the CommonJS transformer (CommonJSModule.cs).
 
 using NeverSharp.Generated;
 
@@ -229,8 +228,7 @@ internal sealed class ECMAScriptModuleTransformer
 
 /// <summary>
 /// impliedNodeFormatDependent.ts transformImpliedNodeFormatDependentModule: selects the ES module transformer or the
-/// CommonJS transformer by the emit module format of each file. Track O (module D3): the CommonJS transformer
-/// (module.ts) is not ported; a CommonJS file keeps the hooks of the transformers before it and is returned as it is.
+/// CommonJS transformer by the emit module format of each file.
 /// </summary>
 internal sealed class ImpliedNodeFormatDependentModuleTransformer
 {
@@ -238,6 +236,7 @@ internal sealed class ImpliedNodeFormatDependentModuleTransformer
     private readonly Func<EmitHint, Node, Node> previousOnSubstituteNode;
     private readonly Action<EmitHint, Node, Action<EmitHint, Node>> previousOnEmitNode;
     private readonly ECMAScriptModuleTransformer esmTransform;
+    private readonly CommonJSModuleTransformer cjsTransform;
     private readonly Func<EmitHint, Node, Node> esmOnSubstituteNode;
     private readonly Action<EmitHint, Node, Action<EmitHint, Node>> esmOnEmitNode;
     private readonly Func<EmitHint, Node, Node> cjsOnSubstituteNode;
@@ -258,7 +257,8 @@ internal sealed class ImpliedNodeFormatDependentModuleTransformer
         context.OnSubstituteNode = previousOnSubstituteNode;
         context.OnEmitNode = previousOnEmitNode;
 
-        // transformModule(context): not ported (module.ts is outside D3); its hooks are the previous ones.
+        cjsTransform = CommonJSModuleTransformer.Create(context);
+
         cjsOnSubstituteNode = context.OnSubstituteNode;
         cjsOnEmitNode = context.OnEmitNode;
 
@@ -327,9 +327,8 @@ internal sealed class ImpliedNodeFormatDependentModuleTransformer
         }
 
         currentSourceFile = node;
-        // getModuleTransformForFile(node)(node): the CommonJS transformer (module.ts) is not ported, so a CommonJS file
-        // is returned as it is (its .js output differs from tsc's until module.ts is ported).
-        var result = GetEmitModuleFormatOfFile(node) >= ModuleKind.ES2015 ? esmTransform.TransformSourceFile(node) : node;
+        // getModuleTransformForFile(node)(node)
+        var result = GetEmitModuleFormatOfFile(node) >= ModuleKind.ES2015 ? esmTransform.TransformSourceFile(node) : cjsTransform.TransformSourceFile(node);
         currentSourceFile = Node.None;
         Debug.Assert(store.Kind(result) == SyntaxKind.SourceFile);
         return result;

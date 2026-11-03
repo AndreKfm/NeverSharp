@@ -309,6 +309,31 @@ internal sealed class EmitHelperFactory
         return factory.CreateCallExpression(GetUnscopedHelperName("__disposeResources"), default, Args(envBinding));
     }
 
+    // ES Module Helpers (module D3: the CommonJS transformer)
+
+    internal Node CreateImportStarHelper(Node expression)
+    {
+        context.RequestEmitHelper(EmitHelpers.ImportStarHelper);
+        return factory.CreateCallExpression(GetUnscopedHelperName("__importStar"), default, Args(expression));
+    }
+
+    internal Node CreateImportDefaultHelper(Node expression)
+    {
+        context.RequestEmitHelper(EmitHelpers.ImportDefaultHelper);
+        return factory.CreateCallExpression(GetUnscopedHelperName("__importDefault"), default, Args(expression));
+    }
+
+    internal Node CreateExportStarHelper(Node moduleExpression, Node exportsExpression = default)
+    {
+        if (exportsExpression.IsNone)
+        {
+            exportsExpression = factory.CreateIdentifier("exports");
+        }
+        context.RequestEmitHelper(EmitHelpers.ExportStarHelper);
+        context.RequestEmitHelper(EmitHelpers.CreateBindingHelper);
+        return factory.CreateCallExpression(GetUnscopedHelperName("__exportStar"), default, Args(moduleExpression, exportsExpression));
+    }
+
     internal Node CreateRewriteRelativeImportExtensionsHelper(Node expression)
     {
         context.RequestEmitHelper(EmitHelpers.RewriteRelativeImportExtensionsHelper);
@@ -504,6 +529,95 @@ internal static class EmitHelpers
             var e = new Error(message);
             return e.name = "SuppressedError", e.error = error, e.suppressed = suppressed, e;
         });
+""");
+
+    // ES Module Helpers (module D3)
+
+    internal static readonly EmitHelper CreateBindingHelper = new(
+        "typescript:commonjscreatebinding",
+        scoped: false,
+        priority: 1,
+        importName: "__createBinding",
+        text: """
+
+        var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+            if (k2 === undefined) k2 = k;
+            var desc = Object.getOwnPropertyDescriptor(m, k);
+            if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+              desc = { enumerable: true, get: function() { return m[k]; } };
+            }
+            Object.defineProperty(o, k2, desc);
+        }) : (function(o, m, k, k2) {
+            if (k2 === undefined) k2 = k;
+            o[k2] = m[k];
+        }));
+""");
+
+    internal static readonly EmitHelper SetModuleDefaultHelper = new(
+        "typescript:commonjscreatevalue",
+        scoped: false,
+        priority: 1,
+        importName: "__setModuleDefault",
+        text: """
+
+        var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+            Object.defineProperty(o, "default", { enumerable: true, value: v });
+        }) : function(o, v) {
+            o["default"] = v;
+        });
+""");
+
+    // emit helper for `import * as Name from "foo"`
+    internal static readonly EmitHelper ImportStarHelper = new(
+        "typescript:commonjsimportstar",
+        scoped: false,
+        priority: 2,
+        importName: "__importStar",
+        dependencies: [CreateBindingHelper, SetModuleDefaultHelper],
+        text: """
+
+        var __importStar = (this && this.__importStar) || (function () {
+            var ownKeys = function(o) {
+                ownKeys = Object.getOwnPropertyNames || function (o) {
+                    var ar = [];
+                    for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+                    return ar;
+                };
+                return ownKeys(o);
+            };
+            return function (mod) {
+                if (mod && mod.__esModule) return mod;
+                var result = {};
+                if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+                __setModuleDefault(result, mod);
+                return result;
+            };
+        })();
+""");
+
+    // emit helper for `import Name from "foo"`
+    internal static readonly EmitHelper ImportDefaultHelper = new(
+        "typescript:commonjsimportdefault",
+        scoped: false,
+        importName: "__importDefault",
+        text: """
+
+        var __importDefault = (this && this.__importDefault) || function (mod) {
+            return (mod && mod.__esModule) ? mod : { "default": mod };
+        };
+""");
+
+    internal static readonly EmitHelper ExportStarHelper = new(
+        "typescript:export-star",
+        scoped: false,
+        priority: 2,
+        importName: "__exportStar",
+        dependencies: [CreateBindingHelper],
+        text: """
+
+        var __exportStar = (this && this.__exportStar) || function(m, exports) {
+            for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+        };
 """);
 
     internal static readonly EmitHelper RewriteRelativeImportExtensionsHelper = new(

@@ -354,6 +354,47 @@ internal sealed partial class Checker
         return symbol.IsNone ? NodeRef.None : ValueDeclarationOf(GetExportSymbolOfValueSymbolIfExported(symbol));
     }
 
+    /// <summary>checker.ts getReferencedValueDeclarations for a parse tree identifier (module D3: module.ts getExports).</summary>
+    internal List<NodeRef>? GetReferencedValueDeclarationsOf(NodeRef reference)
+    {
+        var symbol = GetReferencedValueSymbol(reference);
+        if (symbol.IsNone)
+        {
+            return null;
+        }
+        var result = new List<NodeRef>();
+        if (DeclarationsOf(GetExportSymbolOfValueSymbolIfExported(symbol)) is { } declarations)
+        {
+            foreach (var declaration in declarations)
+            {
+                switch (Kind(declaration))
+                {
+                    case SyntaxKind.VariableDeclaration:
+                    case SyntaxKind.Parameter:
+                    case SyntaxKind.BindingElement:
+                    case SyntaxKind.PropertyDeclaration:
+                    case SyntaxKind.PropertyAssignment:
+                    case SyntaxKind.ShorthandPropertyAssignment:
+                    case SyntaxKind.EnumMember:
+                    case SyntaxKind.ObjectLiteralExpression:
+                    case SyntaxKind.FunctionDeclaration:
+                    case SyntaxKind.FunctionExpression:
+                    case SyntaxKind.ArrowFunction:
+                    case SyntaxKind.ClassDeclaration:
+                    case SyntaxKind.ClassExpression:
+                    case SyntaxKind.EnumDeclaration:
+                    case SyntaxKind.MethodDeclaration:
+                    case SyntaxKind.GetAccessor:
+                    case SyntaxKind.SetAccessor:
+                    case SyntaxKind.ModuleDeclaration:
+                        result.Add(declaration);
+                        break;
+                }
+            }
+        }
+        return result;
+    }
+
     /// <summary>checker.ts isLiteralConstDeclaration.</summary>
     internal bool IsLiteralConstDeclarationOf(NodeRef node)
     {
@@ -540,6 +581,9 @@ internal sealed class EmitResolver
     // A declaration the checker returns, as a node of the transformers' store (none if it is in another file).
     private Node InThisFile(NodeRef node) => !node.IsNone && node.File == file ? node.Node : Node.None;
 
+    /// <summary>A declaration the resolver returned, as a node of the transformers' store (none if it is in another file).</summary>
+    internal Node NodeInThisFile(NodeRef node) => InThisFile(node);
+
     internal bool HasGlobalName(string name) => checker.HasGlobalName(name);
 
     internal Node GetReferencedExportContainer(Node nodeIn, bool prefixLocals = false)
@@ -646,6 +690,17 @@ internal sealed class EmitResolver
         }
         var reference = ParseTreeIdentifier(referenceIn);
         return reference.IsNone ? NodeRef.None : checker.GetReferencedValueDeclarationOf(reference);
+    }
+
+    /// <summary>getReferencedValueDeclarations (module D3); null when TypeScript returns undefined.</summary>
+    internal List<NodeRef>? GetReferencedValueDeclarations(Node referenceIn)
+    {
+        if (UtilitiesPublic.IsGeneratedIdentifier(EmitStore, referenceIn))
+        {
+            return null;
+        }
+        var reference = ParseTreeIdentifier(referenceIn);
+        return reference.IsNone ? null : checker.GetReferencedValueDeclarationsOf(reference);
     }
 
     internal bool IsArgumentsLocalBinding(Node nodeIn)

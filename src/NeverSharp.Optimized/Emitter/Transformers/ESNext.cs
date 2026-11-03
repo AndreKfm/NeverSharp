@@ -2,8 +2,7 @@
 // Portions Copyright (c) Microsoft Corporation.
 // SPDX-License-Identifier: Apache-2.0
 //
-// Ported from src/compiler/transformers/esnext.ts (transformESNext) and the IdentifierNameMap of
-// src/compiler/transformers/utilities.ts
+// Ported from src/compiler/transformers/esnext.ts (transformESNext)
 //   https://github.com/microsoft/TypeScript at commit 050880ce59e30b356b686bd3144efe24f875ebc8
 // Port structure follows internal/transformers/estransforms/using.go
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
@@ -31,7 +30,7 @@ internal sealed class ESNextTransformer
     private readonly NodeFactory factory;
     private readonly Func<Node, VisitResult> visitor;
 
-    private IdentifierNameMap? exportBindings;
+    private IdentifierNameMap<Node>? exportBindings;
     private List<Node>? exportVars;
     private Node defaultExportBinding;
     private Node exportEqualsBinding;
@@ -154,7 +153,7 @@ internal sealed class ESNextTransformer
             // `using` to isolate the complexity of the transformed output to only where it is necessary.
             context.StartLexicalEnvironment();
 
-            exportBindings = new IdentifierNameMap(store);
+            exportBindings = new IdentifierNameMap<Node>(store);
             exportVars = [];
 
             var prologueCount = CountPrologueStatements(statements);
@@ -868,66 +867,5 @@ internal sealed class ESNextTransformer
             }
         }
         return result;
-    }
-
-    /// <summary>
-    /// transformers/utilities.ts IdentifierNameMap: a map keyed by an identifier's name, or by the generated name's
-    /// identity for a generated identifier (`(auto@id)`, with its prefix and suffix), in insertion order.
-    /// </summary>
-    private sealed class IdentifierNameMap
-    {
-        private readonly NodeStore store;
-        private readonly Dictionary<string, int> indices = new(StringComparer.Ordinal);
-        private readonly List<Node> values = [];
-
-        internal IdentifierNameMap(NodeStore store)
-        {
-            this.store = store;
-        }
-
-        internal int Count => values.Count;
-
-        internal List<Node> Values => values;
-
-        internal void Set(Node key, Node value)
-        {
-            var k = ToKey(key);
-            if (indices.TryGetValue(k, out var index))
-            {
-                values[index] = value;
-            }
-            else
-            {
-                indices.Add(k, values.Count);
-                values.Add(value);
-            }
-        }
-
-        private string ToKey(Node name)
-        {
-            var autoGenerate = FactoryEmitNode.GetIdentifierAutoGenerate(store, name);
-            if (autoGenerate is not null && store.Kind(name) is SyntaxKind.Identifier or SyntaxKind.PrivateIdentifier)
-            {
-                string baseName;
-                if ((autoGenerate.Flags & GeneratedIdentifierFlags.KindMask) == GeneratedIdentifierFlags.Node)
-                {
-                    // getNodeForGeneratedName(name): the original node of a node-generated name
-                    var node = store.Original(name);
-                    baseName = !node.IsNone && node != name && store.Kind(node) is SyntaxKind.Identifier or SyntaxKind.PrivateIdentifier
-                        ? ToKey(node)
-                        : "(generated@" + node.Index.ToString(System.Globalization.CultureInfo.InvariantCulture) + ")";
-                }
-                else
-                {
-                    baseName = "(auto@" + autoGenerate.Id.ToString(System.Globalization.CultureInfo.InvariantCulture) + ")";
-                }
-                return NodeFactory.FormatGeneratedName(privateName: false, autoGenerate.Prefix, baseName, autoGenerate.Suffix);
-            }
-            if (store.Kind(name) == SyntaxKind.PrivateIdentifier)
-            {
-                return store.Texts.GetString(UtilitiesPublic.IdText(store, name))![1..];
-            }
-            return store.Texts.GetString(UtilitiesPublic.IdText(store, name))!;
-        }
     }
 }

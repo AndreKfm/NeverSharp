@@ -62,6 +62,9 @@ internal sealed class EmitHost
     /// <summary>program.ts getEmitModuleFormatOfFile (module D3): for a source file node of the file's store or its emit copy.</summary>
     internal ModuleKind GetEmitModuleFormatOfFile(NodeStore store, Node file) => Program.GetEmitModuleFormatOfFileWorker(store, file, program.Options);
 
+    /// <summary>program.ts shouldTransformImportCall (module D3).</summary>
+    internal bool ShouldTransformImportCall(NodeStore store, Node file) => Program.ShouldTransformImportCallWorker(store, file, program.Options);
+
     internal void WriteFile(string fileName, string text, bool writeByteOrderMark)
     {
         writeFileCallback?.Invoke(fileName, text, writeByteOrderMark);

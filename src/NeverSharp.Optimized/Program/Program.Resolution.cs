@@ -598,14 +598,21 @@ internal sealed partial class Program
     }
 
     // program.ts shouldTransformImportCallWorker
-    private static bool ShouldTransformImportCallWorker(SourceFile file, CompilerOptions options)
+    private static bool ShouldTransformImportCallWorker(SourceFile file, CompilerOptions options) =>
+        ShouldTransformImportCallWorker(file.Store, file.Root, options);
+
+    /// <summary>
+    /// program.ts shouldTransformImportCallWorker for a source file node of any store (module D3: the emit host's
+    /// shouldTransformImportCall, which the CommonJS transformer calls with the transformed file).
+    /// </summary>
+    internal static bool ShouldTransformImportCallWorker(NodeStore store, Node file, CompilerOptions options)
     {
         var moduleKind = options.GetEmitModuleKind();
         if ((ModuleKind.Node16 <= moduleKind && moduleKind <= ModuleKind.NodeNext) || moduleKind == ModuleKind.Preserve)
         {
             return false;
         }
-        return GetEmitModuleFormatOfFileWorker(file, options) < ModuleKind.ES2015;
+        return GetEmitModuleFormatOfFileWorker(store, file, options) < ModuleKind.ES2015;
     }
 
     // program.ts getEmitModuleFormatOfFileWorker
