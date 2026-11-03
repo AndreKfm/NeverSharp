@@ -238,4 +238,132 @@ internal sealed partial class Checker
     // checker.ts isConstEnumOrConstEnumOnlyModule
     private bool IsConstEnumOrConstEnumOnlyModule(SymbolRef s) =>
         (SymbolFlagsOf(s) & SymbolFlags.ConstEnum) != 0 || ConstEnumOnlyModuleOf(s);
+
+    /// <summary>
+    /// checker.ts markLinkedReferences(location, ReferenceHint.Unspecified), the resolver's markLinkedReferences (module
+    /// D2, emit only): the emitter calls it for every node of a file that is not checked (`// @ts-nocheck`), so that
+    /// import elision sees the aliases the file references. (The AsyncFunction hint does nothing at ES2015 and later, the
+    /// Decorator hint nothing without emitDecoratorMetadata.)
+    /// </summary>
+    internal void MarkLinkedReferencesUnspecified(NodeRef location)
+    {
+        if (!CanCollectAliasData)
+        {
+            return;
+        }
+        if (IsAmbientReferenceLocation(location))
+        {
+            // References within types and declaration files are never going to contribute to retaining a JS import,
+            // except for properties (which can be decorated).
+            return;
+        }
+        var store = StoreOf(location);
+        var n = location.Node;
+        var kind = store.Kind(n);
+        var parent = store.Parent(n);
+        // Identifiers in expression contexts are emitted, so we need to follow their referenced aliases and mark them as used
+        // Some non-expression identifiers are also treated as expression identifiers for this purpose, eg, `a` in `b = {a}` or `q` in `import r = q`
+        // This is the exception, rather than the rule - most non-expression identifiers are declaration names.
+        if (kind == SyntaxKind.Identifier &&
+            (Utilities.IsExpressionNode(store, n) ||
+                (!parent.IsNone && store.Kind(parent) == SyntaxKind.ShorthandPropertyAssignment) ||
+                (!parent.IsNone && store.Kind(parent) == SyntaxKind.ImportEqualsDeclaration && store.ModuleReference(parent) == n)) &&
+            ShouldMarkIdentifierAliasReferenced(store, n))
+        {
+            if (store.Kind(parent) is SyntaxKind.PropertyAccessExpression or SyntaxKind.QualifiedName)
+            {
+                var left = store.Kind(parent) == SyntaxKind.PropertyAccessExpression ? store.Expression(parent) : store.Left(parent);
+                if (left != n)
+                {
+                    return; // Only mark the LHS (the RHS is a property lookup)
+                }
+            }
+            MarkIdentifierAliasReferencedWorker(location);
+            return;
+        }
+        if (kind is SyntaxKind.PropertyAccessExpression or SyntaxKind.QualifiedName)
+        {
+            var topProp = n;
+            while (store.Kind(topProp) is SyntaxKind.PropertyAccessExpression or SyntaxKind.QualifiedName)
+            {
+                if (Utilities.IsPartOfTypeNode(store, topProp))
+                {
+                    return;
+                }
+                topProp = store.Parent(topProp);
+            }
+            MarkPropertyAliasReferencedWithoutType(location);
+            return;
+        }
+        switch (kind)
+        {
+            case SyntaxKind.ExportAssignment:
+                MarkExportAssignmentAliasReferenced(location);
+                return;
+            case SyntaxKind.JsxOpeningElement:
+            case SyntaxKind.JsxSelfClosingElement:
+            case SyntaxKind.JsxOpeningFragment:
+                MarkJsxAliasReferenced(location);
+                return;
+            case SyntaxKind.ImportEqualsDeclaration:
+                if (Utilities.IsInternalModuleImportEqualsDeclaration(store, n) || CheckExternalImportOrExportDeclaration(location))
+                {
+                    MarkImportEqualsAliasReferenced(location);
+                }
+                return;
+            case SyntaxKind.ExportSpecifier:
+                MarkExportSpecifierAliasReferenced(location);
+                return;
+        }
+        // (isFunctionLikeDeclaration or isMethodSignature: markAsyncFunctionAliasReferenced marks nothing at ES2015 and
+        // later; then `if (!compilerOptions.emitDecoratorMetadata) return;`.)
+        if (compilerOptions.EmitDecoratorMetadata == true)
+        {
+            throw new NotSupportedException("emitDecoratorMetadata is not a Phase 4 option.");
+        }
+    }
+
+    // checker.ts markPropertyAliasReferenced(location) without propSymbol and parentType
+    private void MarkPropertyAliasReferencedWithoutType(NodeRef location)
+    {
+        var store = StoreOf(location);
+        var isPropertyAccess = store.Kind(location.Node) == SyntaxKind.PropertyAccessExpression;
+        var left = isPropertyAccess ? store.Expression(location.Node) : store.Left(location.Node);
+        if (Utilities.IsThisIdentifier(store, left) || store.Kind(left) != SyntaxKind.Identifier)
+        {
+            return;
+        }
+        var parentSymbol = GetResolvedSymbol(At(location, left));
+        if (parentSymbol.IsNone || parentSymbol == unknownSymbol)
+        {
+            return;
+        }
+        // (getIsolatedModules, shouldPreserveConstEnums: false under the default options)
+        // Hereafter, this relies on type checking - but every check prior to this only used symbol information
+        var leftType = CheckExpressionCached(At(location, left));
+        if (IsTypeAny(leftType) || leftType == silentNeverType)
+        {
+            MarkAliasReferenced(parentSymbol, location);
+            return;
+        }
+        var right = isPropertyAccess ? store.Name(location.Node) : store.Right(location.Node);
+        var assignmentKind = GetAssignmentTargetKind(location);
+        var apparentType = GetApparentType(assignmentKind != AssignmentKind.None || IsMethodAccessForCall(store, location.Node) ? GetWidenedType(leftType) : leftType);
+        SymbolRef prop;
+        if (store.Kind(right) == SyntaxKind.PrivateIdentifier)
+        {
+            var lexicallyScopedSymbol = LookupSymbolForPrivateIdentifierDeclaration(At(location, right));
+            // getPrivateIdentifierPropertyOfType(apparentType, lexicallyScopedSymbol)
+            prop = lexicallyScopedSymbol.IsNone ? SymbolRef.None : GetPropertyOfType(apparentType, NameOf(lexicallyScopedSymbol));
+        }
+        else
+        {
+            prop = GetPropertyOfType(apparentType, store.Texts.GetString(store.EscapedText(right))!);
+        }
+        if (!(!prop.IsNone && (IsConstEnumOrConstEnumOnlyModule(prop) ||
+            (SymbolFlagsOf(prop) & SymbolFlags.EnumMember) != 0 && store.Kind(store.Parent(location.Node)) == SyntaxKind.EnumMember)))
+        {
+            MarkAliasReferenced(parentSymbol, location);
+        }
+    }
 }

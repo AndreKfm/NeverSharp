@@ -8,10 +8,10 @@
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
 // Modified: translated from TypeScript to C#; begun in module D1 to prove the transformation pipeline: type erasure
 // of declarations, annotations and assertions, `declare` statements, interface and type alias removal, import and
-// export elision through the emit resolver, classes without parameter properties, and const enum value substitution.
-// Module D2 continues with enums, namespaces, parameter properties and import-equals of entity names (these paths
-// throw NotSupportedException until then). TypeScript 6.0.3's default options only: no legacy decorators, no
-// decorator metadata, no JSX transform, target ES2025.
+// export elision through the emit resolver, classes with parameter properties, and const enum value substitution.
+// Module D2 adds enums, namespaces (with their exports and the substitution of exported names), import-equals of
+// entity names and namespace exports of classes, functions and variables. TypeScript 6.0.3's default options only:
+// no legacy decorators, no decorator metadata, no JSX transform, target ES2025 (so no class IIFEs), module ES2022.
 
 using NeverSharp.Generated;
 
@@ -64,11 +64,13 @@ internal sealed class TypeScriptTransformer
     // These variables contain state that changes as we descend into the tree.
     private Node currentSourceFile;
     private Node currentNamespace;
+    private Node currentNamespaceContainerName;
     private Node currentLexicalScope;
     private Dictionary<string, Node>? currentScopeFirstDeclarationsOfName;
 
-    // (enabledSubstitutions: whether expression substitution has been enabled for specific edge cases, which only
-    // visitModuleDeclaration and visitEnumDeclaration enable: module D2.)
+    // Keeps track of whether expression substitution has been enabled for specific edge cases.
+    // They are persisted between each SourceFile transformation and should not be reset.
+    private TypeScriptSubstitutionFlags enabledSubstitutions;
 
     // Keeps track of whether we are within any containing namespaces when performing
     // just-in-time substitution while printing an expression identifier.
@@ -76,6 +78,7 @@ internal sealed class TypeScriptTransformer
 
     private readonly Func<Node, VisitResult> visitor;
     private readonly Func<Node, VisitResult> sourceElementVisitor;
+    private readonly Func<Node, VisitResult> namespaceElementVisitor;
     private readonly Func<Node, VisitResult> modifierVisitor;
     private readonly Func<Node, VisitResult> modifierElidingVisitor;
     private readonly Func<Node, VisitResult> decoratorElidingVisitor;
@@ -94,11 +97,12 @@ internal sealed class TypeScriptTransformer
             throw new NotSupportedException("emitDecoratorMetadata (createRuntimeTypeSerializer) is not a Phase 4 option.");
         }
 
-        // (currentNamespace: set by visitModuleDeclaration, module D2.)
         currentNamespace = Node.None;
+        currentNamespaceContainerName = Node.None;
 
         visitor = Visitor;
         sourceElementVisitor = SourceElementVisitor;
+        namespaceElementVisitor = NamespaceElementVisitor;
         modifierVisitor = ModifierVisitor;
         modifierElidingVisitor = ModifierElidingVisitor;
         decoratorElidingVisitor = DecoratorElidingVisitor;
@@ -316,6 +320,30 @@ internal sealed class TypeScriptTransformer
                 Debug.Fail("Unhandled ellided statement");
                 return node;
         }
+    }
+
+    /// <summary>Specialized visitor that visits the immediate children of a namespace.</summary>
+    private VisitResult NamespaceElementVisitor(Node node) => SaveStateAndInvoke(node, NamespaceElementVisitorWorker);
+
+    /// <summary>Specialized visitor that visits the immediate children of a namespace.</summary>
+    private VisitResult NamespaceElementVisitorWorker(Node node)
+    {
+        if (
+            store.Kind(node) == SyntaxKind.ExportDeclaration ||
+            store.Kind(node) == SyntaxKind.ImportDeclaration ||
+            store.Kind(node) == SyntaxKind.ImportClause ||
+            (store.Kind(node) == SyntaxKind.ImportEqualsDeclaration &&
+                store.Kind(store.ModuleReference(node)) == SyntaxKind.ExternalModuleReference))
+        {
+            // do not emit ES6 imports and exports since they are illegal inside a namespace
+            return VisitResult.None;
+        }
+        else if ((store.TransformFlags(node) & TransformFlags.ContainsTypeScript) != 0 || Utilities.HasSyntacticModifier(store, node, ModifierFlags.Export))
+        {
+            return VisitTypeScript(node);
+        }
+
+        return node;
     }
 
     /// <summary>Gets a specialized visitor that visits the immediate children of a class with TypeScript syntax.</summary>
@@ -566,9 +594,7 @@ internal sealed class TypeScriptTransformer
 
             case SyntaxKind.EnumDeclaration:
                 // TypeScript enum declarations do not exist in ES6 and must be rewritten.
-                // (visitEnumDeclaration is module D2's; until then the declaration is left as it is, so the unit's
-                // .js output differs, while its other outputs stay comparable.)
-                return Visitors.VisitEachChild(node, visitor, context);
+                return VisitEnumDeclaration(node);
 
             case SyntaxKind.VariableStatement:
                 // TypeScript namespace exports for variable statements must be transformed.
@@ -579,8 +605,7 @@ internal sealed class TypeScriptTransformer
 
             case SyntaxKind.ModuleDeclaration:
                 // TypeScript namespace declarations must be transformed.
-                // (visitModuleDeclaration is module D2's; until then the declaration is left as it is, see above.)
-                return Visitors.VisitEachChild(node, visitor, context);
+                return VisitModuleDeclaration(node);
 
             case SyntaxKind.ImportEqualsDeclaration:
                 // TypeScript namespace or external module import.
@@ -743,7 +768,10 @@ internal sealed class TypeScriptTransformer
         {
             if ((facts & ClassFacts.IsExportOfNamespace) != 0)
             {
-                throw new NotSupportedException("createExportMemberAssignmentStatement is not ported yet (module D2).");
+                return VisitResult.Many([
+                    statement,
+                    CreateExportMemberAssignmentStatement(node),
+                ]);
             }
             if ((facts & ClassFacts.IsDefaultExternalExport) != 0)
             {
@@ -1129,7 +1157,9 @@ internal sealed class TypeScriptTransformer
             body.IsNone ? factory.CreateBlock(factory.CreateNodeArray(ReadOnlySpan<Node>.Empty)) : body);
         if (IsExportOfNamespace(node))
         {
-            throw new NotSupportedException("addExportMemberAssignment is not ported yet (module D2).");
+            var statements = new List<Node> { updated };
+            AddExportMemberAssignment(statements, node);
+            return VisitResult.Many(statements);
         }
         return updated;
     }
@@ -1229,9 +1259,59 @@ internal sealed class TypeScriptTransformer
     {
         if (IsExportOfNamespace(node))
         {
-            throw new NotSupportedException("Namespace exports of variables are not ported yet (module D2).");
+            // getInitializedVariables
+            var variables = new List<Node>();
+            foreach (var declaration in store.Nodes(store.Declarations(store.DeclarationList(node))))
+            {
+                if (!store.Initializer(declaration).IsNone)
+                {
+                    variables.Add(declaration);
+                }
+            }
+            if (variables.Count == 0)
+            {
+                // elide statement if there are no initialized variables.
+                return VisitResult.None;
+            }
+
+            var expressions = new List<Node>(variables.Count);
+            foreach (var variable in variables)
+            {
+                expressions.Add(TransformInitializedVariable(variable));
+            }
+            return FactoryUtilitiesPublic.SetTextRange(
+                store,
+                factory.CreateExpressionStatement(factory.InlineExpressions(expressions)),
+                node);
         }
-        return Visitors.VisitEachChild(node, visitor, context);
+        else
+        {
+            return Visitors.VisitEachChild(node, visitor, context);
+        }
+    }
+
+    private Node TransformInitializedVariable(Node node)
+    {
+        var name = store.Name(node);
+        if (UtilitiesPublic.IsBindingPattern(store, name))
+        {
+            return Destructuring.FlattenDestructuringAssignment(
+                node,
+                visitor,
+                context,
+                FlattenLevel.All,
+                needsValue: false,
+                CreateNamespaceExportExpression);
+        }
+        else
+        {
+            return FactoryUtilitiesPublic.SetTextRange(
+                store,
+                factory.CreateAssignment(
+                    GetNamespaceMemberNameWithSourceMapsAndWithoutComments(name),
+                    Visitors.VisitNode(factory, store.Initializer(node), visitor)),
+                /*location*/ node);
+        }
     }
 
     private Node VisitVariableDeclaration(Node node)
@@ -1348,12 +1428,511 @@ internal sealed class TypeScriptTransformer
             Visitors.VisitNode(factory, store.Attributes(node), visitor));
     }
 
+    /// <summary>Determines whether to emit an enum declaration.</summary>
+    private bool ShouldEmitEnumDeclaration(Node node)
+    {
+        return !Utilities.IsEnumConst(store, node)
+            || compilerOptions.ShouldPreserveConstEnums();
+    }
+
+    /// <summary>Visits an enum declaration.</summary>
+    private VisitResult VisitEnumDeclaration(Node node)
+    {
+        if (!ShouldEmitEnumDeclaration(node))
+        {
+            return factory.CreateNotEmittedStatement(node);
+        }
+
+        var statements = new List<Node>();
+
+        // We request to be advised when the printer is about to print this node. This allows
+        // us to set up the correct state for later substitutions.
+        var emitFlags = EmitFlags.AdviseOnEmitNode;
+
+        // If needed, we should emit a variable declaration for the enum. If we emit
+        // a leading variable declaration, we should not emit leading comments for the
+        // enum body.
+        var varAdded = AddVarForEnumOrModuleDeclaration(statements, node);
+        if (varAdded)
+        {
+            // We should still emit the comments if we are emitting a system module.
+            if (moduleKind != ModuleKind.System || currentLexicalScope != currentSourceFile)
+            {
+                emitFlags |= EmitFlags.NoLeadingComments;
+            }
+        }
+
+        // `parameterName` is the declaration name used inside of the enum.
+        var parameterName = GetNamespaceParameterName(node);
+
+        // `containerName` is the expression used inside of the enum for assignments.
+        var containerName = GetNamespaceContainerName(node);
+
+        // `exportName` is the expression used within this node's container for any exported references.
+        var exportName = IsExportOfNamespace(node)
+            ? factory.GetExternalModuleOrNamespaceExportName(currentNamespaceContainerName, node, allowComments: false, allowSourceMaps: true)
+            : factory.GetDeclarationName(node, allowComments: false, allowSourceMaps: true);
+
+        //  x || (x = {})
+        //  exports.x || (exports.x = {})
+        var moduleArg = factory.CreateLogicalOr(
+            exportName,
+            factory.CreateAssignment(
+                exportName,
+                factory.CreateObjectLiteralExpression()));
+
+        if (IsExportOfNamespace(node))
+        {
+            // `localName` is the expression used within this node's containing scope for any local references.
+            var localName = factory.GetLocalName(node, allowComments: false, allowSourceMaps: true);
+
+            //  x = (exports.x || (exports.x = {}))
+            moduleArg = factory.CreateAssignment(localName, moduleArg);
+        }
+
+        //  (function (x) {
+        //      x[x["y"] = 0] = "y";
+        //      ...
+        //  })(x || (x = {}));
+        var enumStatement = factory.CreateExpressionStatement(
+            factory.CreateCallExpression(
+                factory.CreateFunctionExpression(
+                    default,
+                    default,
+                    default,
+                    default,
+                    factory.CreateNodeArray(new[] { factory.CreateParameterDeclaration(default, default, parameterName) }),
+                    default,
+                    TransformEnumBody(node, containerName)),
+                default,
+                factory.CreateNodeArray(new[] { moduleArg })));
+
+        NodeFactory.SetOriginalNode(store, enumStatement, node);
+        if (varAdded)
+        {
+            // If a variable was added, synthetic comments are emitted on it, not on the moduleStatement.
+            FactoryEmitNode.SetSyntheticLeadingComments(store, enumStatement, null);
+            FactoryEmitNode.SetSyntheticTrailingComments(store, enumStatement, null);
+        }
+        FactoryUtilitiesPublic.SetTextRange(store, enumStatement, node);
+        FactoryEmitNode.AddEmitFlags(store, enumStatement, emitFlags);
+        statements.Add(enumStatement);
+
+        return VisitResult.Many(statements);
+    }
+
+    /// <summary>Transforms the body of an enum declaration.</summary>
+    private Node TransformEnumBody(Node node, Node localName)
+    {
+        var savedCurrentNamespaceLocalName = currentNamespaceContainerName;
+        currentNamespaceContainerName = localName;
+
+        var statements = new List<Node>();
+        context.StartLexicalEnvironment();
+        var members = new List<Node>();
+        foreach (var member in store.Nodes(store.Members(node)))
+        {
+            members.Add(TransformEnumMember(member));
+        }
+        InsertStatementsAfterStandardPrologue(statements, context.EndLexicalEnvironment());
+        statements.AddRange(members);
+
+        currentNamespaceContainerName = savedCurrentNamespaceLocalName;
+        return factory.CreateBlock(
+            FactoryUtilitiesPublic.SetTextRange(store, factory.CreateNodeArray(statements), /*location*/ store.Members(node)),
+            multiLine: true);
+    }
+
+    /// <summary>Transforms an enum member into a statement.</summary>
+    private Node TransformEnumMember(Node member)
+    {
+        // enums don't support computed properties
+        // we pass false as 'generateNameForComputedPropertyName' for a backward compatibility purposes
+        // old emitter always generate 'expression' part of the name as-is.
+        var name = GetExpressionForPropertyName(member, generateNameForComputedPropertyName: false);
+        var value = resolver.GetEnumMemberValue(member);
+        var valueExpression = TransformEnumMemberDeclarationValue(member, value);
+        var innerAssignment = factory.CreateAssignment(
+            factory.CreateElementAccessExpression(
+                currentNamespaceContainerName,
+                name),
+            valueExpression);
+        var outerAssignment = value is string || (value is null && resolver.IsEnumMemberValueSyntacticallyString(member)) ?
+            innerAssignment :
+            factory.CreateAssignment(
+                factory.CreateElementAccessExpression(
+                    currentNamespaceContainerName,
+                    innerAssignment),
+                name);
+        return FactoryUtilitiesPublic.SetTextRange(
+            store,
+            factory.CreateExpressionStatement(
+                FactoryUtilitiesPublic.SetTextRange(
+                    store,
+                    outerAssignment,
+                    member)),
+            member);
+    }
+
+    /// <summary>Transforms the value of an enum member.</summary>
+    private Node TransformEnumMemberDeclarationValue(Node member, object? constantValue)
+    {
+        if (constantValue is not null)
+        {
+            if (constantValue is string text)
+            {
+                return factory.CreateStringLiteral(store.Texts.Add(text));
+            }
+            var number = (double)constantValue;
+            return number < 0
+                ? factory.CreatePrefixUnaryExpression(SyntaxKind.MinusToken, factory.CreateNumericLiteral(-number))
+                : factory.CreateNumericLiteral(number);
+        }
+        else
+        {
+            EnableSubstitutionForNonQualifiedEnumMembers();
+            if (!store.Initializer(member).IsNone)
+            {
+                var initializer = Visitors.VisitNode(factory, store.Initializer(member), visitor);
+                Debug.Assert(!initializer.IsNone);
+                return initializer;
+            }
+            else
+            {
+                return factory.CreateVoidZero();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets an expression that represents a property name (for decorated properties or enums). For a computed
+    /// property, a name is generated for the node.
+    /// </summary>
+    private Node GetExpressionForPropertyName(Node member, bool generateNameForComputedPropertyName)
+    {
+        var name = store.Name(member);
+        switch (store.Kind(name))
+        {
+            case SyntaxKind.PrivateIdentifier:
+                return factory.CreateIdentifier("");
+            case SyntaxKind.ComputedPropertyName:
+                return generateNameForComputedPropertyName && !TransformerUtilities.IsSimpleInlineableExpression(store, store.Expression(name))
+                    ? factory.GetGeneratedNameForNode(name)
+                    : store.Expression(name);
+            case SyntaxKind.Identifier:
+                return factory.CreateStringLiteral(UtilitiesPublic.IdText(store, name));
+            default:
+                return factory.CloneNode(name);
+        }
+    }
+
+    // utilities.ts insertStatementsAfterStandardPrologue
+    private void InsertStatementsAfterStandardPrologue(List<Node> to, List<Node>? from)
+    {
+        if (from is null || from.Count == 0)
+        {
+            return;
+        }
+        var statementIndex = 0;
+        // skip all prologue directives to insert at the correct position
+        for (; statementIndex < to.Count; ++statementIndex)
+        {
+            if (!Utilities.IsPrologueDirective(store, to[statementIndex]))
+            {
+                break;
+            }
+        }
+        to.InsertRange(statementIndex, from);
+    }
+
+    /// <summary>Determines whether to elide a module declaration.</summary>
+    private bool ShouldEmitModuleDeclaration(Node nodeIn)
+    {
+        var node = UtilitiesPublic.GetParseTreeNode(store, nodeIn);
+        if (node.IsNone || store.Kind(node) != SyntaxKind.ModuleDeclaration)
+        {
+            // If we can't find a parse tree node, assume the node is instantiated.
+            return true;
+        }
+        // checker.ts isInstantiatedModule
+        var moduleState = Utilities.GetModuleInstanceState(store, node);
+        return moduleState == ModuleInstanceState.Instantiated ||
+            (compilerOptions.ShouldPreserveConstEnums() && moduleState == ModuleInstanceState.ConstEnumOnly);
+    }
+
+    /// <summary>
+    /// Records that a declaration was emitted in the current scope, if it was the first declaration for the provided
+    /// symbol.
+    /// </summary>
     private void RecordEmittedDeclarationInScope(Node node)
     {
         currentScopeFirstDeclarationsOfName ??= new Dictionary<string, Node>(StringComparer.Ordinal);
 
         var name = DeclaredNameInScope(node);
         currentScopeFirstDeclarationsOfName.TryAdd(name, node);
+    }
+
+    /// <summary>Determines whether a declaration is the first declaration with the same name emitted in the current scope.</summary>
+    private bool IsFirstEmittedDeclarationInScope(Node node)
+    {
+        if (currentScopeFirstDeclarationsOfName is not null)
+        {
+            var name = DeclaredNameInScope(node);
+            return currentScopeFirstDeclarationsOfName.TryGetValue(name, out var first) && first == node;
+        }
+        return true;
+    }
+
+    /// <summary>Adds a leading VariableStatement for a enum or module declaration.</summary>
+    private bool AddVarForEnumOrModuleDeclaration(List<Node> statements, Node node)
+    {
+        // Emit a variable statement for the module. We emit top-level enums as a `var`
+        // declaration to avoid static errors in global scripts scripts due to redeclaration.
+        // enums in any other scope are emitted as a `let` declaration.
+        var varDecl = factory.CreateVariableDeclaration(factory.GetLocalName(node, allowComments: false, allowSourceMaps: true), default, default, default);
+        var varFlags = store.Kind(currentLexicalScope) == SyntaxKind.SourceFile ? NodeFlags.None : NodeFlags.Let;
+        var statement = factory.CreateVariableStatement(
+            Visitors.VisitNodes(factory, store.Modifiers(node), modifierVisitor),
+            factory.CreateVariableDeclarationList(factory.CreateNodeArray(new[] { varDecl }), varFlags));
+
+        NodeFactory.SetOriginalNode(store, varDecl, node);
+        FactoryEmitNode.SetSyntheticLeadingComments(store, varDecl, null);
+        FactoryEmitNode.SetSyntheticTrailingComments(store, varDecl, null);
+
+        NodeFactory.SetOriginalNode(store, statement, node);
+
+        RecordEmittedDeclarationInScope(node);
+        if (IsFirstEmittedDeclarationInScope(node))
+        {
+            // Adjust the source map emit to match the old emitter.
+            if (store.Kind(node) == SyntaxKind.EnumDeclaration)
+            {
+                FactoryEmitNode.SetSourceMapRange(store, store.DeclarationList(statement), new ObjectTextRange { Pos = store.Pos(node), End = store.End(node) });
+            }
+            else
+            {
+                FactoryEmitNode.SetSourceMapRange(store, statement, new ObjectTextRange { Pos = store.Pos(node), End = store.End(node) });
+            }
+
+            // Trailing comments for module declaration should be emitted after the function closure
+            // instead of the variable statement:
+            //
+            //     /** Module comment*/
+            //     module m1 {
+            //         function foo4Export() {
+            //         }
+            //     } // trailing comment module
+            //
+            // Should emit:
+            //
+            //     /** Module comment*/
+            //     var m1;
+            //     (function (m1) {
+            //         function foo4Export() {
+            //         }
+            //     })(m1 || (m1 = {})); // trailing comment module
+            //
+            FactoryEmitNode.SetCommentRange(store, statement, node);
+            FactoryEmitNode.AddEmitFlags(store, statement, EmitFlags.NoTrailingComments);
+            statements.Add(statement);
+            return true;
+        }
+
+        // For an EnumDeclaration or ModuleDeclaration that merges with a preceeding
+        // declaration we do not emit a leading variable declaration.
+        return false;
+    }
+
+    /// <summary>Visits a module declaration node.</summary>
+    private VisitResult VisitModuleDeclaration(Node node)
+    {
+        if (!ShouldEmitModuleDeclaration(node))
+        {
+            return factory.CreateNotEmittedStatement(node);
+        }
+
+        Debug.Assert(store.Kind(store.Name(node)) == SyntaxKind.Identifier, "A TypeScript namespace should have an Identifier name.");
+        EnableSubstitutionForNamespaceExports();
+
+        var statements = new List<Node>();
+
+        // We request to be advised when the printer is about to print this node. This allows
+        // us to set up the correct state for later substitutions.
+        var emitFlags = EmitFlags.AdviseOnEmitNode;
+
+        // If needed, we should emit a variable declaration for the module. If we emit
+        // a leading variable declaration, we should not emit leading comments for the
+        // module body.
+        var varAdded = AddVarForEnumOrModuleDeclaration(statements, node);
+        if (varAdded)
+        {
+            // We should still emit the comments if we are emitting a system module.
+            if (moduleKind != ModuleKind.System || currentLexicalScope != currentSourceFile)
+            {
+                emitFlags |= EmitFlags.NoLeadingComments;
+            }
+        }
+
+        // `parameterName` is the declaration name used inside of the namespace.
+        var parameterName = GetNamespaceParameterName(node);
+
+        // `containerName` is the expression used inside of the namespace for exports.
+        var containerName = GetNamespaceContainerName(node);
+
+        // `exportName` is the expression used within this node's container for any exported references.
+        var exportName = IsExportOfNamespace(node)
+            ? factory.GetExternalModuleOrNamespaceExportName(currentNamespaceContainerName, node, allowComments: false, allowSourceMaps: true)
+            : factory.GetDeclarationName(node, allowComments: false, allowSourceMaps: true);
+
+        //  x || (x = {})
+        //  exports.x || (exports.x = {})
+        var moduleArg = factory.CreateLogicalOr(
+            exportName,
+            factory.CreateAssignment(
+                exportName,
+                factory.CreateObjectLiteralExpression()));
+
+        if (IsExportOfNamespace(node))
+        {
+            // `localName` is the expression used within this node's containing scope for any local references.
+            var localName = factory.GetLocalName(node, allowComments: false, allowSourceMaps: true);
+
+            //  x = (exports.x || (exports.x = {}))
+            moduleArg = factory.CreateAssignment(localName, moduleArg);
+        }
+
+        //  (function (x_1) {
+        //      x_1.y = ...;
+        //  })(x || (x = {}));
+        var moduleStatement = factory.CreateExpressionStatement(
+            factory.CreateCallExpression(
+                factory.CreateFunctionExpression(
+                    default,
+                    default,
+                    default,
+                    default,
+                    factory.CreateNodeArray(new[] { factory.CreateParameterDeclaration(default, default, parameterName) }),
+                    default,
+                    TransformModuleBody(node, containerName)),
+                default,
+                factory.CreateNodeArray(new[] { moduleArg })));
+
+        NodeFactory.SetOriginalNode(store, moduleStatement, node);
+        if (varAdded)
+        {
+            // If a variable was added, synthetic comments are emitted on it, not on the moduleStatement.
+            FactoryEmitNode.SetSyntheticLeadingComments(store, moduleStatement, null);
+            FactoryEmitNode.SetSyntheticTrailingComments(store, moduleStatement, null);
+        }
+        FactoryUtilitiesPublic.SetTextRange(store, moduleStatement, node);
+        FactoryEmitNode.AddEmitFlags(store, moduleStatement, emitFlags);
+        statements.Add(moduleStatement);
+
+        return VisitResult.Many(statements);
+    }
+
+    /// <summary>Transforms the body of a module declaration.</summary>
+    private Node TransformModuleBody(Node node, Node namespaceLocalName)
+    {
+        var savedCurrentNamespaceContainerName = currentNamespaceContainerName;
+        var savedCurrentNamespace = currentNamespace;
+        var savedCurrentScopeFirstDeclarationsOfName = currentScopeFirstDeclarationsOfName;
+        currentNamespaceContainerName = namespaceLocalName;
+        currentNamespace = node;
+        currentScopeFirstDeclarationsOfName = null;
+
+        var statements = new List<Node>();
+        context.StartLexicalEnvironment();
+
+        var hasStatementsLocation = false;
+        var statementsLocation = new ObjectTextRange();
+        var blockLocation = Node.None;
+        var body = store.Body(node);
+        if (!body.IsNone)
+        {
+            if (store.Kind(body) == SyntaxKind.ModuleBlock)
+            {
+                SaveStateAndInvoke(body, b =>
+                {
+                    statements.AddRange(store.Nodes(Visitors.VisitNodes(factory, store.Statements(b), namespaceElementVisitor)));
+                    return 0;
+                });
+                var bodyStatements = store.Statements(body);
+                statementsLocation = new ObjectTextRange { Pos = store.Pos(bodyStatements), End = store.End(bodyStatements) };
+                hasStatementsLocation = true;
+                blockLocation = body;
+            }
+            else
+            {
+                var result = VisitModuleDeclaration(body);
+                if (result.Nodes is not null)
+                {
+                    statements.AddRange(result.Nodes);
+                }
+                else if (!result.Node.IsNone)
+                {
+                    statements.Add(result.Node);
+                }
+
+                var moduleBlock = store.Body(GetInnerMostModuleDeclarationFromDottedModule(node));
+                // moveRangePos(moduleBlock.statements, -1)
+                statementsLocation = new ObjectTextRange { Pos = -1, End = store.End(store.Statements(moduleBlock)) };
+                hasStatementsLocation = true;
+            }
+        }
+
+        InsertStatementsAfterStandardPrologue(statements, context.EndLexicalEnvironment());
+        currentNamespaceContainerName = savedCurrentNamespaceContainerName;
+        currentNamespace = savedCurrentNamespace;
+        currentScopeFirstDeclarationsOfName = savedCurrentScopeFirstDeclarationsOfName;
+
+        var statementList = factory.CreateNodeArray(statements);
+        if (hasStatementsLocation)
+        {
+            Utilities.SetTextRangePosEnd(store, statementList, statementsLocation.Pos, statementsLocation.End);
+        }
+        var block = factory.CreateBlock(statementList, multiLine: true);
+        if (!blockLocation.IsNone)
+        {
+            FactoryUtilitiesPublic.SetTextRange(store, block, blockLocation);
+        }
+
+        // namespace hello.hi.world {
+        //      function foo() {}
+        //
+        //      // TODO, blah
+        // }
+        //
+        // should be emitted as
+        //
+        // var hello;
+        // (function (hello) {
+        //     var hi;
+        //     (function (hi) {
+        //         var world;
+        //         (function (world) {
+        //             function foo() { }
+        //             // TODO, blah
+        //         })(world = hi.world || (hi.world = {}));
+        //     })(hi = hello.hi || (hello.hi = {}));
+        // })(hello || (hello = {}));
+        // We only want to emit comment on the namespace which contains block body itself, not the containing namespaces.
+        if (body.IsNone || store.Kind(body) != SyntaxKind.ModuleBlock)
+        {
+            FactoryEmitNode.SetEmitFlags(store, block, Utilities.GetEmitFlags(store, block) | EmitFlags.NoComments);
+        }
+        return block;
+    }
+
+    private Node GetInnerMostModuleDeclarationFromDottedModule(Node moduleDeclaration)
+    {
+        var body = store.Body(moduleDeclaration);
+        if (store.Kind(body) == SyntaxKind.ModuleDeclaration)
+        {
+            var recursiveInnerModule = GetInnerMostModuleDeclarationFromDottedModule(body);
+            return !recursiveInnerModule.IsNone ? recursiveInnerModule : body;
+        }
+        return Node.None;
     }
 
     private string DeclaredNameInScope(Node node)
@@ -1526,9 +2105,36 @@ internal sealed class TypeScriptTransformer
             return VisitResult.None;
         }
 
-        // (The `var` statement for an import-equals of an entity name is module D2's; until then the declaration is
-        // left as it is, so the unit's .js output differs.)
-        return Visitors.VisitEachChild(node, visitor, context);
+        var moduleReference = FactoryUtilities.CreateExpressionFromEntityName(factory, store.ModuleReference(node));
+        FactoryEmitNode.SetEmitFlags(store, moduleReference, EmitFlags.NoComments | EmitFlags.NoNestedComments);
+
+        if (IsNamedExternalModuleExport(node) || !IsExportOfNamespace(node))
+        {
+            //  export var ${name} = ${moduleReference};
+            //  var ${name} = ${moduleReference};
+            var declaration = factory.CreateVariableDeclaration(
+                store.Name(node),
+                default,
+                default,
+                moduleReference);
+            NodeFactory.SetOriginalNode(store, declaration, node);
+            var statement = factory.CreateVariableStatement(
+                Visitors.VisitNodes(factory, store.Modifiers(node), modifierVisitor),
+                factory.CreateVariableDeclarationList(factory.CreateNodeArray(new[] { declaration })));
+            FactoryUtilitiesPublic.SetTextRange(store, statement, node);
+            NodeFactory.SetOriginalNode(store, statement, node);
+            return statement;
+        }
+        else
+        {
+            // exports.${name} = ${moduleReference};
+            var statement = CreateNamespaceExport(
+                store.Name(node),
+                moduleReference,
+                node);
+            NodeFactory.SetOriginalNode(store, statement, node);
+            return statement;
+        }
     }
 
     /// <summary>Whether to emit an import equals declaration.</summary>
@@ -1554,6 +2160,88 @@ internal sealed class TypeScriptTransformer
     /// <summary>Whether the node is the default export of an external module.</summary>
     private bool IsDefaultExternalModuleExport(Node node) => IsExternalModuleExport(node) && Utilities.HasSyntacticModifier(store, node, ModifierFlags.Default);
 
+    private Node CreateExportMemberAssignmentStatement(Node node)
+    {
+        var expression = factory.CreateAssignment(
+            factory.GetExternalModuleOrNamespaceExportName(currentNamespaceContainerName, node, allowComments: false, allowSourceMaps: true),
+            factory.GetLocalName(node));
+        FactoryEmitNode.SetSourceMapRange(store, expression, new ObjectTextRange { Pos = !store.Name(node).IsNone ? store.Pos(store.Name(node)) : store.Pos(node), End = store.End(node) });
+
+        var statement = factory.CreateExpressionStatement(expression);
+        FactoryEmitNode.SetSourceMapRange(store, statement, new ObjectTextRange { Pos = -1, End = store.End(node) });
+        return statement;
+    }
+
+    private void AddExportMemberAssignment(List<Node> statements, Node node)
+    {
+        statements.Add(CreateExportMemberAssignmentStatement(node));
+    }
+
+    private Node CreateNamespaceExport(Node exportName, Node exportValue, Node location)
+    {
+        return FactoryUtilitiesPublic.SetTextRange(
+            store,
+            factory.CreateExpressionStatement(
+                factory.CreateAssignment(
+                    factory.GetNamespaceMemberName(currentNamespaceContainerName, exportName, allowComments: false, allowSourceMaps: true),
+                    exportValue)),
+            location);
+    }
+
+    private Node CreateNamespaceExportExpression(Node exportName, Node exportValue, Node location)
+    {
+        var assignment = factory.CreateAssignment(GetNamespaceMemberNameWithSourceMapsAndWithoutComments(exportName), exportValue);
+        return location.IsNone ? assignment : FactoryUtilitiesPublic.SetTextRange(store, assignment, location);
+    }
+
+    private Node GetNamespaceMemberNameWithSourceMapsAndWithoutComments(Node name)
+    {
+        return factory.GetNamespaceMemberName(currentNamespaceContainerName, name, allowComments: false, allowSourceMaps: true);
+    }
+
+    /// <summary>Gets the declaration name used inside of a namespace or enum.</summary>
+    private Node GetNamespaceParameterName(Node node)
+    {
+        var name = factory.GetGeneratedNameForNode(node);
+        FactoryEmitNode.SetSourceMapRange(store, name, new ObjectTextRange { Pos = store.Pos(store.Name(node)), End = store.End(store.Name(node)) });
+        return name;
+    }
+
+    /// <summary>Gets the expression used to refer to a namespace or enum within the body of its declaration.</summary>
+    private Node GetNamespaceContainerName(Node node)
+    {
+        return factory.GetGeneratedNameForNode(node);
+    }
+
+    private void EnableSubstitutionForNonQualifiedEnumMembers()
+    {
+        if ((enabledSubstitutions & TypeScriptSubstitutionFlags.NonQualifiedEnumMembers) == 0)
+        {
+            enabledSubstitutions |= TypeScriptSubstitutionFlags.NonQualifiedEnumMembers;
+            context.EnableSubstitution(SyntaxKind.Identifier);
+        }
+    }
+
+    private void EnableSubstitutionForNamespaceExports()
+    {
+        if ((enabledSubstitutions & TypeScriptSubstitutionFlags.NamespaceExports) == 0)
+        {
+            enabledSubstitutions |= TypeScriptSubstitutionFlags.NamespaceExports;
+
+            // We need to enable substitutions for identifiers and shorthand property assignments. This allows us to
+            // substitute the names of exported members of a namespace.
+            context.EnableSubstitution(SyntaxKind.Identifier);
+            context.EnableSubstitution(SyntaxKind.ShorthandPropertyAssignment);
+
+            // We need to be notified when entering and exiting namespaces.
+            context.EnableEmitNotification(SyntaxKind.ModuleDeclaration);
+        }
+    }
+
+    private bool IsTransformedModuleDeclaration(Node node) => store.Kind(TransformerUtilities.GetOriginalNode(store, node)) == SyntaxKind.ModuleDeclaration;
+
+    private bool IsTransformedEnumDeclaration(Node node) => store.Kind(TransformerUtilities.GetOriginalNode(store, node)) == SyntaxKind.EnumDeclaration;
+
     private bool ShouldEmitAliasDeclaration(Node node)
     {
         return compilerOptions.VerbatimModuleSyntax == true || Utilities.IsInJSFile(store, node) || resolver.IsReferencedAliasDeclaration(node);
@@ -1572,8 +2260,15 @@ internal sealed class TypeScriptTransformer
             currentSourceFile = node;
         }
 
-        // (The namespace and enum substitutions are enabled by visitModuleDeclaration and visitEnumDeclaration,
-        // module D2.)
+        if ((enabledSubstitutions & TypeScriptSubstitutionFlags.NamespaceExports) != 0 && IsTransformedModuleDeclaration(node))
+        {
+            applicableSubstitutions |= TypeScriptSubstitutionFlags.NamespaceExports;
+        }
+
+        if ((enabledSubstitutions & TypeScriptSubstitutionFlags.NonQualifiedEnumMembers) != 0 && IsTransformedEnumDeclaration(node))
+        {
+            applicableSubstitutions |= TypeScriptSubstitutionFlags.NonQualifiedEnumMembers;
+        }
 
         previousOnEmitNode(hint, node, emitCallback);
 
@@ -1589,8 +2284,33 @@ internal sealed class TypeScriptTransformer
         {
             return SubstituteExpression(node);
         }
-        // (isShorthandPropertyAssignment: the namespace export substitution, module D2.)
+        else if (store.Kind(node) == SyntaxKind.ShorthandPropertyAssignment)
+        {
+            return SubstituteShorthandPropertyAssignment(node);
+        }
 
+        return node;
+    }
+
+    private Node SubstituteShorthandPropertyAssignment(Node node)
+    {
+        if ((enabledSubstitutions & TypeScriptSubstitutionFlags.NamespaceExports) != 0)
+        {
+            var name = store.Name(node);
+            var exportedName = TrySubstituteNamespaceExportedName(name);
+            if (!exportedName.IsNone)
+            {
+                // A shorthand property with an assignment initializer is probably part of a
+                // destructuring assignment
+                var objectAssignmentInitializer = store.ObjectAssignmentInitializer(node);
+                if (!objectAssignmentInitializer.IsNone)
+                {
+                    var initializer = factory.CreateAssignment(exportedName, objectAssignmentInitializer);
+                    return FactoryUtilitiesPublic.SetTextRange(store, factory.CreatePropertyAssignment(name, initializer), node);
+                }
+                return FactoryUtilitiesPublic.SetTextRange(store, factory.CreatePropertyAssignment(name, exportedName), node);
+            }
+        }
         return node;
     }
 
@@ -1599,15 +2319,44 @@ internal sealed class TypeScriptTransformer
         switch (store.Kind(node))
         {
             case SyntaxKind.Identifier:
-                // substituteExpressionIdentifier: trySubstituteNamespaceExportedName (module D2) substitutes only when
-                // a namespace or enum substitution is enabled.
-                return node;
+                return SubstituteExpressionIdentifier(node);
             case SyntaxKind.PropertyAccessExpression:
             case SyntaxKind.ElementAccessExpression:
                 return SubstituteConstantValue(node);
         }
 
         return node;
+    }
+
+    private Node SubstituteExpressionIdentifier(Node node)
+    {
+        var substitute = TrySubstituteNamespaceExportedName(node);
+        return !substitute.IsNone ? substitute : node;
+    }
+
+    private Node TrySubstituteNamespaceExportedName(Node node)
+    {
+        // If this is explicitly a local name, do not substitute.
+        if ((enabledSubstitutions & applicableSubstitutions) != 0 && !UtilitiesPublic.IsGeneratedIdentifier(store, node) && !FactoryUtilities.IsLocalName(store, node))
+        {
+            // If we are nested within a namespace declaration, we may need to qualifiy
+            // an identifier that is exported from a merged namespace.
+            var container = resolver.GetReferencedExportContainer(node, prefixLocals: false);
+            if (!container.IsNone && store.Kind(container) != SyntaxKind.SourceFile)
+            {
+                var substitute = ((applicableSubstitutions & TypeScriptSubstitutionFlags.NamespaceExports) != 0 && store.Kind(container) == SyntaxKind.ModuleDeclaration) ||
+                    ((applicableSubstitutions & TypeScriptSubstitutionFlags.NonQualifiedEnumMembers) != 0 && store.Kind(container) == SyntaxKind.EnumDeclaration);
+                if (substitute)
+                {
+                    return FactoryUtilitiesPublic.SetTextRange(
+                        store,
+                        factory.CreatePropertyAccessExpression(factory.GetGeneratedNameForNode(container), node),
+                        /*location*/ node);
+                }
+            }
+        }
+
+        return Node.None;
     }
 
     private static string SafeMultiLineComment(string value) => value.Replace("*/", "*_/", StringComparison.Ordinal);

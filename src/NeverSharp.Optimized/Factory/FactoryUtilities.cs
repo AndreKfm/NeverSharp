@@ -24,6 +24,28 @@ internal static partial class FactoryUtilities
         return (Utilities.GetEmitFlags(store, node) & EmitFlags.LocalName) != 0;
     }
 
+    /// <summary>createExpressionFromEntityName (module D2): an entity name as a property access chain of clones.</summary>
+    internal static Node CreateExpressionFromEntityName(NodeFactory factory, Node node)
+    {
+        var store = factory.store;
+        if (store.Kind(node) == SyntaxKind.QualifiedName)
+        {
+            var left = CreateExpressionFromEntityName(factory, store.Left(node));
+            // TODO(rbuckton): Does this need to be parented?
+            var nodeRight = store.Right(node);
+            var right = FactoryUtilitiesPublic.SetTextRange(store, factory.CloneNode(nodeRight), nodeRight);
+            store.SetParent(right, store.Parent(nodeRight));
+            return FactoryUtilitiesPublic.SetTextRange(store, factory.CreatePropertyAccessExpression(left, right), node);
+        }
+        else
+        {
+            // TODO(rbuckton): Does this need to be parented?
+            var clone = FactoryUtilitiesPublic.SetTextRange(store, factory.CloneNode(node), node);
+            store.SetParent(clone, store.Parent(node));
+            return clone;
+        }
+    }
+
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal static bool IsCommaExpression(NodeStore store, Node node)
     {

@@ -139,8 +139,11 @@ internal static class Emitter
                 return;
             }
 
-            // (markLinkedReferences: only for files that are not checked, noCheck or JavaScript without checkJs, whose
-            // .js output Track O never writes: a JavaScript unit's output would overwrite its input.)
+            // (noCheck is not a Track O option.)
+            if (!Program.CanIncludeBindAndCheckDiagnostics(sourceFile, compilerOptions))
+            {
+                MarkLinkedReferences(sourceFile, resolver);
+            }
 
             // Transform the source files
             var transform = Transformers.TransformNodes(resolver, host, factory, compilerOptions, sourceFile.Root, transformers.ScriptTransformers, allowDtsFiles: false);
@@ -164,6 +167,9 @@ internal static class Emitter
                 IsEmitNotificationEnabled = transform.IsEmitNotificationEnabled,
                 SubstituteNode = transform.SubstituteNode,
             });
+            // Track O (module D2): what the printer reads from the nodes in TypeScript: the binder's locals
+            // (generateNameForModuleOrEnum).
+            printer.Binding = sourceFile.Binding;
 
             PrintSourceFile(jsFilePath, emitStore, transform.Transformed, printer);
 
@@ -211,6 +217,52 @@ internal static class Emitter
                 PrintSourceFile(declarationFilePath, emitStore, declarationTransform.Transformed, declarationPrinter);
             }
             declarationTransform.Dispose();
+        }
+
+        // emitter.ts markLinkedReferences (module D2): for a file that is not checked (`// @ts-nocheck`), the resolver
+        // marks the aliases every node references, as checking would have (forEachChildRecursively: preorder, source
+        // order, without the children of skipped nodes).
+        static void MarkLinkedReferences(SourceFile file, EmitResolver resolver)
+        {
+            var store = file.Store;
+            if (store.ScriptKind(file.Root) is ScriptKind.JS or ScriptKind.JSX)
+            {
+                return; // JS files don't use reference calculations as they don't do import ellision, no need to calculate it
+            }
+            var stack = new List<Node>();
+            var children = new List<Node>();
+            PushChildren(file.Root);
+            while (stack.Count > 0)
+            {
+                var n = stack[^1];
+                stack.RemoveAt(stack.Count - 1);
+                var kind = store.Kind(n);
+                // (uncached: nothing writes into a file's store, the modifier flags cache included)
+                if (kind == SyntaxKind.ImportEqualsDeclaration && (Utilities.GetSyntacticModifierFlagsUncached(store, n) & ModifierFlags.Export) == 0)
+                {
+                    continue; // These are deferred and marked in a chain when referenced
+                }
+                if (kind == SyntaxKind.ImportDeclaration)
+                {
+                    continue; // likewise, these are ultimately what get marked by calls on other nodes - we want to skip them
+                }
+                resolver.MarkLinkedReferences(n);
+                PushChildren(n);
+            }
+
+            void PushChildren(Node node)
+            {
+                children.Clear();
+                NodeVisitor.ForEachChild<object>(store, node, child =>
+                {
+                    children.Add(child);
+                    return null;
+                });
+                for (var i = children.Count - 1; i >= 0; i--)
+                {
+                    stack.Add(children[i]);
+                }
+            }
         }
 
         void PrintSourceFile(string jsFilePath, NodeStore emitStore, Node sourceFileNode, Printer printer)

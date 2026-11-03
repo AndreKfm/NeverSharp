@@ -374,6 +374,135 @@ internal sealed partial class Checker
 
     /// <summary>checker.ts isDeclarationVisible (for the resolver).</summary>
     internal bool IsDeclarationVisibleOf(NodeRef node) => IsDeclarationVisible(node);
+
+    /// <summary>
+    /// getEnumMemberValue(member).isSyntacticallyString (module D2, emit only). Phase 3's evaluator
+    /// (<see cref="EvaluateConstantExpression"/>) keeps only the value of TypeScript's EvaluatorResult; this walks the
+    /// initializer as createEvaluator's evaluate does and computes the flag alone, without reporting errors. Only the
+    /// TypeScript transformer reads it, for members whose value is undefined.
+    /// </summary>
+    internal bool IsEnumMemberValueSyntacticallyStringOf(NodeRef member)
+    {
+        var store = StoreOf(member);
+        var initializer = store.Initializer(member.Node);
+        // (computeEnumMemberValue without an initializer: evaluatorResult(undefined) or the auto value, never a
+        // syntactic string.)
+        return !initializer.IsNone && IsSyntacticallyStringOf(At(member, initializer), member, 0);
+    }
+
+    // createEvaluator's evaluate(expr, location).isSyntacticallyString; depth guards against a cycle TypeScript's
+    // memoized getEnumMemberValue would cut.
+    private bool IsSyntacticallyStringOf(NodeRef expr, NodeRef location, int depth)
+    {
+        if (depth > 100)
+        {
+            return false;
+        }
+        var store = StoreOf(expr);
+        var node = Utilities.SkipParentheses(store, expr.Node, false);
+        switch (store.Kind(node))
+        {
+            case SyntaxKind.BinaryExpression:
+                return (IsSyntacticallyStringOf(At(expr, store.Left(node)), location, depth + 1) | IsSyntacticallyStringOf(At(expr, store.Right(node)), location, depth + 1)) &&
+                    store.Kind(store.OperatorToken(node)) == SyntaxKind.PlusToken;
+            case SyntaxKind.StringLiteral:
+            case SyntaxKind.NoSubstitutionTemplateLiteral:
+            case SyntaxKind.TemplateExpression:
+                return true;
+            case SyntaxKind.Identifier:
+                return IsEntityNameSyntacticallyString(At(expr, node), location, depth);
+            case SyntaxKind.PropertyAccessExpression:
+                return Utilities.IsEntityNameExpression(store, node) && IsEntityNameSyntacticallyString(At(expr, node), location, depth);
+            case SyntaxKind.ElementAccessExpression:
+            {
+                // evaluateElementAccessExpression
+                var root = store.Expression(node);
+                var argument = store.ArgumentExpression(node);
+                if (Utilities.IsEntityNameExpression(store, root) && Utilities.IsStringLiteralLike(store, argument))
+                {
+                    var rootSymbol = ResolveEntityName(At(expr, root), SymbolFlags.Value, ignoreErrors: true);
+                    if (!rootSymbol.IsNone && (SymbolFlagsOf(rootSymbol) & SymbolFlags.Enum) != 0)
+                    {
+                        var name = Utilities.EscapeLeadingUnderscores(store.Texts.GetString(store.Text(argument))!);
+                        var member = ExportsOf(rootSymbol)?.Get(name) ?? SymbolRef.None;
+                        if (!member.IsNone)
+                        {
+                            return IsEnumMemberReferenceSyntacticallyString(member, location, depth);
+                        }
+                    }
+                }
+                return false;
+            }
+        }
+        // (PrefixUnaryExpression, NumericLiteral and everything else: false.)
+        return false;
+    }
+
+    // evaluateEntityNameExpression(expr, location).isSyntacticallyString
+    private bool IsEntityNameSyntacticallyString(NodeRef expr, NodeRef location, int depth)
+    {
+        var symbol = ResolveEntityName(expr, SymbolFlags.Value, ignoreErrors: true);
+        if (symbol.IsNone)
+        {
+            return false;
+        }
+        var store = StoreOf(expr);
+        if (store.Kind(expr.Node) == SyntaxKind.Identifier)
+        {
+            var name = store.Texts.GetString(store.EscapedText(expr.Node));
+            if (name is "Infinity" or "NaN" && symbol == GetGlobalSymbol(name, SymbolFlags.Value, null))
+            {
+                return false;
+            }
+        }
+        if ((SymbolFlagsOf(symbol) & SymbolFlags.EnumMember) != 0)
+        {
+            return IsEnumMemberReferenceSyntacticallyString(symbol, location, depth);
+        }
+        if ((SymbolFlagsOf(symbol) & SymbolFlags.Variable) != 0 && (GetDeclarationNodeFlagsFromSymbol(symbol) & NodeFlags.Constant) != 0)
+        {
+            var declaration = ValueDeclarationOf(symbol);
+            if (!declaration.IsNone && Kind(declaration) == SyntaxKind.VariableDeclaration)
+            {
+                var dstore = StoreOf(declaration);
+                var initializer = dstore.Initializer(declaration.Node);
+                if (dstore.Type(declaration.Node).IsNone && !initializer.IsNone &&
+                    (location.IsNone || (declaration != location && IsBlockScopedNameDeclaredBeforeUse(declaration, location))))
+                {
+                    if (!location.IsNone && location.File != declaration.File)
+                    {
+                        return false;
+                    }
+                    return IsSyntacticallyStringOf(At(declaration, initializer), declaration, depth + 1);
+                }
+            }
+        }
+        return false;
+    }
+
+    // evaluateEnumMember(expr, symbol, location).isSyntacticallyString (location is always an enum member or a
+    // variable declaration here)
+    private bool IsEnumMemberReferenceSyntacticallyString(SymbolRef symbol, NodeRef location, int depth)
+    {
+        var declaration = ValueDeclarationOf(symbol);
+        if (declaration.IsNone || declaration == location)
+        {
+            return false;
+        }
+        if (!location.IsNone && !IsBlockScopedNameDeclaredBeforeUse(declaration, location))
+        {
+            return false;
+        }
+        // getEnumMemberValue(declaration).isSyntacticallyString
+        return Kind(declaration) == SyntaxKind.EnumMember && IsEnumMemberValueSyntacticallyStringAt(declaration, depth + 1);
+    }
+
+    private bool IsEnumMemberValueSyntacticallyStringAt(NodeRef member, int depth)
+    {
+        var store = StoreOf(member);
+        var initializer = store.Initializer(member.Node);
+        return !initializer.IsNone && IsSyntacticallyStringOf(At(member, initializer), member, depth);
+    }
 }
 
 /// <summary>
@@ -490,6 +619,23 @@ internal sealed class EmitResolver
     {
         var node = ParseTreeNode(nodeIn);
         return !node.IsNone && checker.Kind(node) == SyntaxKind.EnumMember ? checker.GetConstantValueOf(node) : null;
+    }
+
+    /// <summary>markLinkedReferences (module D2): markLinkedReferences(getParseTreeNode(node), ReferenceHint.Unspecified).</summary>
+    internal void MarkLinkedReferences(Node nodeIn)
+    {
+        var node = ParseTreeNode(nodeIn);
+        if (!node.IsNone)
+        {
+            checker.MarkLinkedReferencesUnspecified(node);
+        }
+    }
+
+    /// <summary>getEnumMemberValue(node).isSyntacticallyString (module D2).</summary>
+    internal bool IsEnumMemberValueSyntacticallyString(Node nodeIn)
+    {
+        var node = ParseTreeNode(nodeIn);
+        return !node.IsNone && checker.Kind(node) == SyntaxKind.EnumMember && checker.IsEnumMemberValueSyntacticallyStringOf(node);
     }
 
     internal NodeRef GetReferencedValueDeclaration(Node referenceIn)
