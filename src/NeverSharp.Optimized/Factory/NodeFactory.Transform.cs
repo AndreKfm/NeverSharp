@@ -98,9 +98,24 @@ internal sealed partial class NodeFactory
 
     //// Generated identifiers
 
-    private Node CreateBaseGeneratedIdentifier(string text, GeneratedIdentifierFlags autoGenerateFlags, string? prefix, string? suffix)
+    private Node CreateBaseGeneratedIdentifier(string text, GeneratedIdentifierFlags autoGenerateFlags, string? prefix, string? suffix, GeneratedNamePart? prefixPart = null)
     {
         var node = CreateIdentifierForGeneratedName(text);
+        FactoryEmitNode.SetIdentifierAutoGenerate(store, node, new AutoGenerateInfo
+        {
+            Flags = autoGenerateFlags,
+            Id = Interlocked.Increment(ref nextAutoGenerateId),
+            Prefix = prefix ?? "",
+            PrefixPart = prefixPart,
+            Suffix = suffix ?? "",
+        });
+        return node;
+    }
+
+    // createBaseGeneratedPrivateIdentifier (module D4)
+    private Node CreateBaseGeneratedPrivateIdentifier(string text, GeneratedIdentifierFlags autoGenerateFlags, string? prefix, string? suffix)
+    {
+        var node = CreateBasePrivateIdentifier(store.Texts.Add(UtilitiesPublic.EscapeLeadingUnderscores(text)));
         FactoryEmitNode.SetIdentifierAutoGenerate(store, node, new AutoGenerateInfo
         {
             Flags = autoGenerateFlags,
@@ -109,6 +124,62 @@ internal sealed partial class NodeFactory
             Suffix = suffix ?? "",
         });
         return node;
+    }
+
+    /// <summary>Create a unique private name based on the supplied text (module D4).</summary>
+    // @api
+    internal Node CreateUniquePrivateName(string? text = null, string? prefix = null, string? suffix = null)
+    {
+        if (!string.IsNullOrEmpty(text) && text[0] != '#')
+        {
+            Debug.Fail("First character of private identifier must be #: " + text);
+        }
+        var autoGenerateFlags = GeneratedIdentifierFlags.ReservedInNestedScopes |
+            (!string.IsNullOrEmpty(text) ? GeneratedIdentifierFlags.Unique : GeneratedIdentifierFlags.Auto);
+        return CreateBaseGeneratedPrivateIdentifier(text ?? "", autoGenerateFlags, prefix, suffix);
+    }
+
+    /// <summary>Create a unique private name generated for a node (module D4).</summary>
+    // @api
+    internal Node GetGeneratedPrivateNameForNode(Node node, string? prefix = null, string? suffix = null)
+    {
+        var text = IsMemberName(store, node) ? FormatGeneratedName(privateName: true, prefix, PrinterUtilities.IdText(store, node), suffix) :
+            "#generated@" + node.Index.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var flags = !string.IsNullOrEmpty(prefix) || !string.IsNullOrEmpty(suffix) ? GeneratedIdentifierFlags.Optimistic : GeneratedIdentifierFlags.None;
+        var name = CreateBaseGeneratedPrivateIdentifier(text, GeneratedIdentifierFlags.Node | flags, prefix, suffix);
+        store.SetOriginal(name, node);
+        return name;
+    }
+
+    /// <summary>`createUniqueName(text, flags, prefix)` with a GeneratedNamePart prefix (module D4).</summary>
+    internal Node CreateUniqueName(string text, GeneratedIdentifierFlags flags, GeneratedNamePart prefix, string? suffix)
+    {
+        Debug.Assert((flags & GeneratedIdentifierFlags.KindMask) == 0, "Argument out of range: flags");
+        return CreateBaseGeneratedIdentifier(text, GeneratedIdentifierFlags.Unique | flags, prefix: null, suffix, prefix);
+    }
+
+    /// <summary>`getGeneratedNameForNode(node, flags, prefix, suffix)` with a GeneratedNamePart prefix (module D4).</summary>
+    internal Node GetGeneratedNameForNode(Node node, GeneratedIdentifierFlags flags, GeneratedNamePart prefix, string? suffix)
+    {
+        Debug.Assert((flags & GeneratedIdentifierFlags.KindMask) == 0, "Argument out of range: flags");
+        var text = node.IsNone ? "" :
+            IsMemberName(store, node) ? FormatGeneratedName(privateName: false, prefix.Prefix + PrinterUtilities.IdText(store, prefix.Node).TrimStart('#') + prefix.Suffix, PrinterUtilities.IdText(store, node), suffix) :
+            "generated@" + node.Index.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        flags |= GeneratedIdentifierFlags.Optimistic;
+        var name = CreateBaseGeneratedIdentifier(text, GeneratedIdentifierFlags.Node | flags, prefix: null, suffix, prefix);
+        store.SetOriginal(name, node);
+        return name;
+    }
+
+    /// <summary>`createTempVariable(undefined, reservedInNestedScopes, prefix, suffix)` with a GeneratedNamePart prefix (module D4).</summary>
+    internal Node CreateTempVariable(bool reservedInNestedScopes, GeneratedNamePart prefix, string? suffix)
+    {
+        var flags = GeneratedIdentifierFlags.Auto;
+        if (reservedInNestedScopes)
+        {
+            flags |= GeneratedIdentifierFlags.ReservedInNestedScopes;
+        }
+        return CreateBaseGeneratedIdentifier("", flags, prefix: null, suffix, prefix);
     }
 
     // createBaseIdentifier(escapeLeadingUnderscores(text)): no transform flags.
@@ -223,7 +294,7 @@ internal sealed partial class NodeFactory
         var autoGenerate = FactoryEmitNode.GetIdentifierAutoGenerate(store, node);
         if (autoGenerate is not null && store.Kind(node) is SyntaxKind.Identifier or SyntaxKind.PrivateIdentifier)
         {
-            FactoryEmitNode.SetIdentifierAutoGenerate(store, clone, new AutoGenerateInfo { Flags = autoGenerate.Flags, Id = autoGenerate.Id, Prefix = autoGenerate.Prefix, Suffix = autoGenerate.Suffix });
+            FactoryEmitNode.SetIdentifierAutoGenerate(store, clone, new AutoGenerateInfo { Flags = autoGenerate.Flags, Id = autoGenerate.Id, Prefix = autoGenerate.Prefix, PrefixPart = autoGenerate.PrefixPart, Suffix = autoGenerate.Suffix });
         }
         else if (store.Kind(node) == SyntaxKind.Identifier && store.EmitNode(node) is EmitNode { IdentifierTypeArguments.IsNone: false } emitNode)
         {
@@ -746,5 +817,230 @@ internal sealed partial class NodeFactory
                 return UpdateExportDeclaration(node, modifierArray, store.IsTypeOnly(node), store.ExportClause(node), store.ModuleSpecifier(node), store.Attributes(node));
         }
         throw Debug.UnexpectedKind(store.Kind(node), "a node with modifiers");
+    }
+
+    //// Module D4: the utilities of nodeFactory.ts the decorator and class-fields transformers use.
+
+    /// <summary>createModifiersFromModifierFlags (none when no flag is set).</summary>
+    internal NodeList CreateModifiersFromModifierFlags(ModifierFlags flags)
+    {
+        var result = new List<Node>();
+        if ((flags & ModifierFlags.Export) != 0) result.Add(CreateToken(SyntaxKind.ExportKeyword));
+        if ((flags & ModifierFlags.Ambient) != 0) result.Add(CreateToken(SyntaxKind.DeclareKeyword));
+        if ((flags & ModifierFlags.Default) != 0) result.Add(CreateToken(SyntaxKind.DefaultKeyword));
+        if ((flags & ModifierFlags.Const) != 0) result.Add(CreateToken(SyntaxKind.ConstKeyword));
+        if ((flags & ModifierFlags.Public) != 0) result.Add(CreateToken(SyntaxKind.PublicKeyword));
+        if ((flags & ModifierFlags.Private) != 0) result.Add(CreateToken(SyntaxKind.PrivateKeyword));
+        if ((flags & ModifierFlags.Protected) != 0) result.Add(CreateToken(SyntaxKind.ProtectedKeyword));
+        if ((flags & ModifierFlags.Abstract) != 0) result.Add(CreateToken(SyntaxKind.AbstractKeyword));
+        if ((flags & ModifierFlags.Static) != 0) result.Add(CreateToken(SyntaxKind.StaticKeyword));
+        if ((flags & ModifierFlags.Override) != 0) result.Add(CreateToken(SyntaxKind.OverrideKeyword));
+        if ((flags & ModifierFlags.Readonly) != 0) result.Add(CreateToken(SyntaxKind.ReadonlyKeyword));
+        if ((flags & ModifierFlags.Accessor) != 0) result.Add(CreateToken(SyntaxKind.AccessorKeyword));
+        if ((flags & ModifierFlags.Async) != 0) result.Add(CreateToken(SyntaxKind.AsyncKeyword));
+        if ((flags & ModifierFlags.In) != 0) result.Add(CreateToken(SyntaxKind.InKeyword));
+        if ((flags & ModifierFlags.Out) != 0) result.Add(CreateToken(SyntaxKind.OutKeyword));
+        return result.Count > 0 ? CreateNodeArray(result) : NodeList.None;
+    }
+
+    internal Node CreateImmediatelyInvokedArrowFunction(List<Node> statements)
+    {
+        return CreateCallExpression(
+            CreateArrowFunction(
+                default,
+                default,
+                CreateNodeArray(ReadOnlySpan<Node>.Empty),
+                default,
+                default,
+                CreateBlock(CreateNodeArray(statements), multiLine: true)),
+            default,
+            CreateNodeArray(ReadOnlySpan<Node>.Empty));
+    }
+
+    internal Node CreateMethodCall(Node @object, string methodName, ReadOnlySpan<Node> argumentsList)
+    {
+        // Preserve the optionality of `object`.
+        if (UtilitiesPublic.IsCallChain(store, @object))
+        {
+            return CreateCallChain(
+                CreatePropertyAccessChain(@object, default, CreateIdentifier(methodName)),
+                default,
+                default,
+                CreateNodeArray(argumentsList));
+        }
+        return CreateCallExpression(
+            CreatePropertyAccessExpression(@object, CreateIdentifier(methodName)),
+            default,
+            CreateNodeArray(argumentsList));
+    }
+
+    private static Node[] Prepend(Node first, ReadOnlySpan<Node> rest)
+    {
+        var all = new Node[rest.Length + 1];
+        all[0] = first;
+        rest.CopyTo(all.AsSpan(1));
+        return all;
+    }
+
+    internal Node CreateFunctionBindCall(Node target, Node thisArg, ReadOnlySpan<Node> argumentsList) =>
+        CreateMethodCall(target, "bind", Prepend(thisArg, argumentsList));
+
+    internal Node CreateFunctionCallCall(Node target, Node thisArg, ReadOnlySpan<Node> argumentsList) =>
+        CreateMethodCall(target, "call", Prepend(thisArg, argumentsList));
+
+    internal Node CreateGlobalMethodCall(string globalObjectName, string methodName, ReadOnlySpan<Node> argumentsList) =>
+        CreateMethodCall(CreateIdentifier(globalObjectName), methodName, argumentsList);
+
+    internal Node CreateObjectDefinePropertyCall(Node target, Node propertyName, Node attributes) =>
+        CreateGlobalMethodCall("Object", "defineProperty", [target, propertyName, attributes]);
+
+    internal Node CreateReflectGetCall(Node target, Node propertyKey, Node receiver = default) =>
+        CreateGlobalMethodCall("Reflect", "get", !receiver.IsNone ? [target, propertyKey, receiver] : [target, propertyKey]);
+
+    internal Node CreateReflectSetCall(Node target, Node propertyKey, Node value, Node receiver = default) =>
+        CreateGlobalMethodCall("Reflect", "set", !receiver.IsNone ? [target, propertyKey, value, receiver] : [target, propertyKey, value]);
+
+    /// <summary>types.ts PropertyDescriptorAttributes (booleans as nullable; `value`, `get`, `set` as nodes).</summary>
+    internal struct PropertyDescriptorAttributes
+    {
+        public bool? Enumerable;
+        public bool? Configurable;
+        public bool? Writable;
+        public Node Value;
+        public Node Get;
+        public Node Set;
+    }
+
+    private bool TryAddPropertyAssignment(List<Node> properties, string propertyName, Node expression)
+    {
+        if (!expression.IsNone)
+        {
+            properties.Add(CreatePropertyAssignment(CreateIdentifier(propertyName), expression));
+            return true;
+        }
+        return false;
+    }
+
+    // asExpression(boolean)
+    private Node AsExpression(bool? value) => value is null ? Node.None : CreateToken(value.Value ? SyntaxKind.TrueKeyword : SyntaxKind.FalseKeyword);
+
+    internal Node CreatePropertyDescriptor(PropertyDescriptorAttributes attributes, bool singleLine = false)
+    {
+        var properties = new List<Node>();
+        TryAddPropertyAssignment(properties, "enumerable", AsExpression(attributes.Enumerable));
+        TryAddPropertyAssignment(properties, "configurable", AsExpression(attributes.Configurable));
+
+        var isData = TryAddPropertyAssignment(properties, "writable", AsExpression(attributes.Writable));
+        isData = TryAddPropertyAssignment(properties, "value", attributes.Value) || isData;
+
+        var isAccessor = TryAddPropertyAssignment(properties, "get", attributes.Get);
+        isAccessor = TryAddPropertyAssignment(properties, "set", attributes.Set) || isAccessor;
+
+        Debug.Assert(!(isData && isAccessor), "A PropertyDescriptor may not be both an accessor descriptor and a data descriptor.");
+        return CreateObjectLiteralExpression(CreateNodeArray(properties), !singleLine);
+    }
+
+    private static bool ShouldBeCapturedInTempVariable(NodeStore store, Node node, bool cacheIdentifiers)
+    {
+        var target = Utilities.SkipParentheses(store, node);
+        switch (store.Kind(target))
+        {
+            case SyntaxKind.Identifier:
+                return cacheIdentifiers;
+            case SyntaxKind.ThisKeyword:
+            case SyntaxKind.NumericLiteral:
+            case SyntaxKind.BigIntLiteral:
+            case SyntaxKind.StringLiteral:
+                return false;
+            case SyntaxKind.ArrayLiteralExpression:
+                return store.Length(store.Elements(target)) != 0;
+            case SyntaxKind.ObjectLiteralExpression:
+                return store.Length(store.Properties(target)) > 0;
+            default:
+                return true;
+        }
+    }
+
+    /// <summary>createCallBinding: the target of a call and its `this` argument.</summary>
+    internal (Node Target, Node ThisArg) CreateCallBinding(Node expression, Action<Node>? recordTempVariable, ScriptTarget? languageVersion = null, bool cacheIdentifiers = false)
+    {
+        var callee = FactoryUtilities.SkipOuterExpressions(store, expression, OuterExpressionKinds.All);
+        Node thisArg;
+        Node target;
+        if (Utilities.IsSuperProperty(store, callee))
+        {
+            thisArg = CreateToken(SyntaxKind.ThisKeyword);
+            target = callee;
+        }
+        else if (store.Kind(callee) == SyntaxKind.SuperKeyword)
+        {
+            thisArg = CreateToken(SyntaxKind.ThisKeyword);
+            target = languageVersion is not null && languageVersion < ScriptTarget.ES2015
+                ? FactoryUtilitiesPublic.SetTextRange(store, CreateIdentifier("_super"), callee)
+                : callee;
+        }
+        else if ((Utilities.GetEmitFlags(store, callee) & EmitFlags.HelperName) != 0)
+        {
+            thisArg = CreateVoidZero();
+            target = Parenthesizer.ParenthesizeLeftSideOfAccess(callee, optionalChain: false);
+        }
+        else if (store.Kind(callee) == SyntaxKind.PropertyAccessExpression)
+        {
+            if (ShouldBeCapturedInTempVariable(store, store.Expression(callee), cacheIdentifiers))
+            {
+                // for `a.b()` target is `(_a = a).b` and thisArg is `_a`
+                thisArg = CreateTempVariable(recordTempVariable);
+                target = CreatePropertyAccessExpression(
+                    FactoryUtilitiesPublic.SetTextRange(store, CreateAssignment(thisArg, store.Expression(callee)), store.Expression(callee)),
+                    store.Name(callee));
+                FactoryUtilitiesPublic.SetTextRange(store, target, callee);
+            }
+            else
+            {
+                thisArg = store.Expression(callee);
+                target = callee;
+            }
+        }
+        else if (store.Kind(callee) == SyntaxKind.ElementAccessExpression)
+        {
+            if (ShouldBeCapturedInTempVariable(store, store.Expression(callee), cacheIdentifiers))
+            {
+                // for `a[b]()` target is `(_a = a)[b]` and thisArg is `_a`
+                thisArg = CreateTempVariable(recordTempVariable);
+                target = CreateElementAccessExpression(
+                    FactoryUtilitiesPublic.SetTextRange(store, CreateAssignment(thisArg, store.Expression(callee)), store.Expression(callee)),
+                    store.ArgumentExpression(callee));
+                FactoryUtilitiesPublic.SetTextRange(store, target, callee);
+            }
+            else
+            {
+                thisArg = store.Expression(callee);
+                target = callee;
+            }
+        }
+        else
+        {
+            // for `a()` target is `a` and thisArg is `void 0`
+            thisArg = CreateVoidZero();
+            target = Parenthesizer.ParenthesizeLeftSideOfAccess(expression, optionalChain: false);
+        }
+
+        return (target, thisArg);
+    }
+
+    internal Node CreateAssignmentTargetWrapper(Node paramName, Node expression)
+    {
+        return CreatePropertyAccessExpression(
+            // Explicit parens required because of v8 regression (https://bugs.chromium.org/p/v8/issues/detail?id=9560)
+            CreateParenthesizedExpression(
+                CreateObjectLiteralExpression(CreateNodeArray(new[]
+                {
+                    CreateSetAccessorDeclaration(
+                        default,
+                        CreateIdentifier("value"),
+                        CreateNodeArray(new[] { CreateParameterDeclaration(default, default, paramName) }),
+                        CreateBlock(CreateNodeArray(new[] { CreateExpressionStatement(expression) }))),
+                }))),
+            CreateIdentifier("value"));
     }
 }

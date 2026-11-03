@@ -345,4 +345,246 @@ internal static class TransformerUtilities
     {
         return store.Kind(expression) != SyntaxKind.Identifier && IsSimpleCopiableExpression(store, expression);
     }
+
+    //// Module D4: the utilities of the decorator and class-fields transformers.
+
+    /// <summary>utilities.ts hasStaticModifier.</summary>
+    internal static bool HasStaticModifier(NodeStore store, Node node) => Utilities.HasSyntacticModifier(store, node, ModifierFlags.Static);
+
+    /// <summary>utilities.ts hasAccessorModifier.</summary>
+    internal static bool HasAccessorModifier(NodeStore store, Node node) => Utilities.HasSyntacticModifier(store, node, ModifierFlags.Accessor);
+
+    /// <summary>utilitiesPublic.ts isAutoAccessorPropertyDeclaration.</summary>
+    internal static bool IsAutoAccessorPropertyDeclaration(NodeStore store, Node node) =>
+        store.Kind(node) == SyntaxKind.PropertyDeclaration && HasAccessorModifier(store, node);
+
+    /// <summary>utilitiesPublic.ts isMethodOrAccessor.</summary>
+    internal static bool IsMethodOrAccessor(NodeStore store, Node node) =>
+        store.Kind(node) is SyntaxKind.MethodDeclaration or SyntaxKind.GetAccessor or SyntaxKind.SetAccessor;
+
+    /// <summary>utilitiesPublic.ts isAccessor.</summary>
+    internal static bool IsAccessor(NodeStore store, Node node) =>
+        store.Kind(node) is SyntaxKind.GetAccessor or SyntaxKind.SetAccessor;
+
+    /// <summary>utilitiesPublic.ts isPrivateIdentifierClassElementDeclaration.</summary>
+    internal static bool IsPrivateIdentifierClassElementDeclaration(NodeStore store, Node node) =>
+        (store.Kind(node) == SyntaxKind.PropertyDeclaration || IsMethodOrAccessor(store, node)) && store.Kind(store.Name(node)) == SyntaxKind.PrivateIdentifier;
+
+    /// <summary>utilitiesPublic.ts isPrivateIdentifierPropertyAccessExpression.</summary>
+    internal static bool IsPrivateIdentifierPropertyAccessExpression(NodeStore store, Node node) =>
+        store.Kind(node) == SyntaxKind.PropertyAccessExpression && store.Kind(store.Name(node)) == SyntaxKind.PrivateIdentifier;
+
+    /// <summary>utilities.ts isAmbientPropertyDeclaration.</summary>
+    internal static bool IsAmbientPropertyDeclaration(NodeStore store, Node node) =>
+        (store.Flags(node) & NodeFlags.Ambient) != 0 || Utilities.HasSyntacticModifier(store, node, ModifierFlags.Ambient);
+
+    /// <summary>utilities.ts getHeritageClause.</summary>
+    internal static Node GetHeritageClause(NodeStore store, NodeList clauses, SyntaxKind kind)
+    {
+        foreach (var clause in store.Nodes(clauses))
+        {
+            if (store.Token(clause) == kind)
+            {
+                return clause;
+            }
+        }
+        return Node.None;
+    }
+
+    /// <summary>utilities.ts getDecorators(node): the decorators among a node's modifiers (null when there are none).</summary>
+    internal static List<Node>? GetDecorators(NodeStore store, Node node)
+    {
+        List<Node>? decorators = null;
+        foreach (var modifier in store.Nodes(store.Modifiers(node)))
+        {
+            if (store.Kind(modifier) == SyntaxKind.Decorator)
+            {
+                (decorators ??= []).Add(modifier);
+            }
+        }
+        return decorators;
+    }
+
+    /// <summary>
+    /// transformers/utilities.ts getAllDecoratorsOfClass(node, useLegacyDecorators: false): the class's decorators (the
+    /// constructor parameters' decorators are legacy decorators only); null for TypeScript's undefined.
+    /// </summary>
+    internal static List<Node>? GetAllDecoratorsOfClass(NodeStore store, Node node) => GetDecorators(store, node);
+
+    /// <summary>transformers/utilities.ts getAllDecoratorsOfClassElement(member, parent, useLegacyDecorators: false).</summary>
+    internal static List<Node>? GetAllDecoratorsOfClassElement(NodeStore store, Node member)
+    {
+        switch (store.Kind(member))
+        {
+            case SyntaxKind.GetAccessor:
+            case SyntaxKind.SetAccessor:
+            case SyntaxKind.MethodDeclaration:
+                // getAllDecoratorsOfMethod
+                return store.Body(member).IsNone ? null : GetDecorators(store, member);
+            case SyntaxKind.PropertyDeclaration:
+                // getAllDecoratorsOfProperty
+                return GetDecorators(store, member);
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>transformers/utilities.ts getProperties(node, requireInitializer, isStatic).</summary>
+    internal static List<Node> GetProperties(NodeStore store, Node node, bool requireInitializer, bool isStatic)
+    {
+        var result = new List<Node>();
+        foreach (var member in store.Nodes(store.Members(node)))
+        {
+            // isInitializedOrStaticProperty
+            if (store.Kind(member) == SyntaxKind.PropertyDeclaration
+                && (!store.Initializer(member).IsNone || !requireInitializer)
+                && HasStaticModifier(store, member) == isStatic)
+            {
+                result.Add(member);
+            }
+        }
+        return result;
+    }
+
+    /// <summary>transformers/utilities.ts getStaticPropertiesAndClassStaticBlock.</summary>
+    internal static List<Node> GetStaticPropertiesAndClassStaticBlock(NodeStore store, Node node)
+    {
+        var result = new List<Node>();
+        foreach (var member in store.Nodes(store.Members(node)))
+        {
+            if (store.Kind(member) == SyntaxKind.PropertyDeclaration && HasStaticModifier(store, member) || store.Kind(member) == SyntaxKind.ClassStaticBlockDeclaration)
+            {
+                result.Add(member);
+            }
+        }
+        return result;
+    }
+
+    /// <summary>transformers/utilities.ts isInitializedProperty.</summary>
+    internal static bool IsInitializedProperty(NodeStore store, Node member) =>
+        store.Kind(member) == SyntaxKind.PropertyDeclaration && !store.Initializer(member).IsNone;
+
+    /// <summary>transformers/utilities.ts isNonStaticMethodOrAccessorWithPrivateName.</summary>
+    internal static bool IsNonStaticMethodOrAccessorWithPrivateName(NodeStore store, Node member) =>
+        !Utilities.IsStatic(store, member) && (IsMethodOrAccessor(store, member) || IsAutoAccessorPropertyDeclaration(store, member)) && store.Kind(store.Name(member)) == SyntaxKind.PrivateIdentifier;
+
+    // utilities.ts canHaveModifiers (the kinds whose `modifiers` the store holds).
+    private static bool CanHaveModifiers(NodeStore store, Node node) => FactoryUtilitiesPublic.CanHaveModifiers(store, node);
+
+    /// <summary>utilities.ts moveRangePastDecorators.</summary>
+    internal static ObjectTextRange MoveRangePastDecorators(NodeStore store, Node node)
+    {
+        var lastDecorator = Node.None;
+        if (CanHaveModifiers(store, node))
+        {
+            foreach (var modifier in store.Nodes(store.Modifiers(node)))
+            {
+                if (store.Kind(modifier) == SyntaxKind.Decorator)
+                {
+                    lastDecorator = modifier;
+                }
+            }
+        }
+        return !lastDecorator.IsNone && !Utilities.PositionIsSynthesized(store.End(lastDecorator))
+            ? new ObjectTextRange { Pos = store.End(lastDecorator), End = store.End(node) }
+            : new ObjectTextRange { Pos = store.Pos(node), End = store.End(node) };
+    }
+
+    /// <summary>utilities.ts moveRangePastModifiers.</summary>
+    internal static ObjectTextRange MoveRangePastModifiers(NodeStore store, Node node)
+    {
+        if (store.Kind(node) is SyntaxKind.PropertyDeclaration or SyntaxKind.MethodDeclaration)
+        {
+            return new ObjectTextRange { Pos = store.Pos(store.Name(node)), End = store.End(node) };
+        }
+        var lastModifier = Node.None;
+        if (CanHaveModifiers(store, node))
+        {
+            var modifiers = store.Nodes(store.Modifiers(node));
+            lastModifier = modifiers.Length > 0 ? modifiers[^1] : Node.None;
+        }
+        return !lastModifier.IsNone && !Utilities.PositionIsSynthesized(store.End(lastModifier))
+            ? new ObjectTextRange { Pos = store.End(lastModifier), End = store.End(node) }
+            : MoveRangePastDecorators(store, node);
+    }
+
+    /// <summary>A node's own range as a text range (TypeScript passes nodes as ranges).</summary>
+    internal static ObjectTextRange RangeOf(NodeStore store, Node node) => new() { Pos = store.Pos(node), End = store.End(node) };
+
+    /// <summary>utilities.ts isCompoundAssignment.</summary>
+    internal static bool IsCompoundAssignment(SyntaxKind token) =>
+        token >= SyntaxKind.FirstCompoundAssignment && token <= SyntaxKind.LastCompoundAssignment;
+
+    /// <summary>utilities.ts getNonAssignmentOperatorForCompoundAssignment.</summary>
+    internal static SyntaxKind GetNonAssignmentOperatorForCompoundAssignment(SyntaxKind kind)
+    {
+        return kind switch
+        {
+            SyntaxKind.PlusEqualsToken => SyntaxKind.PlusToken,
+            SyntaxKind.MinusEqualsToken => SyntaxKind.MinusToken,
+            SyntaxKind.AsteriskEqualsToken => SyntaxKind.AsteriskToken,
+            SyntaxKind.AsteriskAsteriskEqualsToken => SyntaxKind.AsteriskAsteriskToken,
+            SyntaxKind.SlashEqualsToken => SyntaxKind.SlashToken,
+            SyntaxKind.PercentEqualsToken => SyntaxKind.PercentToken,
+            SyntaxKind.LessThanLessThanEqualsToken => SyntaxKind.LessThanLessThanToken,
+            SyntaxKind.GreaterThanGreaterThanEqualsToken => SyntaxKind.GreaterThanGreaterThanToken,
+            SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken => SyntaxKind.GreaterThanGreaterThanGreaterThanToken,
+            SyntaxKind.AmpersandEqualsToken => SyntaxKind.AmpersandToken,
+            SyntaxKind.BarEqualsToken => SyntaxKind.BarToken,
+            SyntaxKind.CaretEqualsToken => SyntaxKind.CaretToken,
+            SyntaxKind.BarBarEqualsToken => SyntaxKind.BarBarToken,
+            SyntaxKind.AmpersandAmpersandEqualsToken => SyntaxKind.AmpersandAmpersandToken,
+            SyntaxKind.QuestionQuestionEqualsToken => SyntaxKind.QuestionQuestionToken,
+            _ => throw Debug.UnexpectedKind(kind, "a compound assignment operator"),
+        };
+    }
+
+    /// <summary>utilities.ts isGeneratedPrivateIdentifier.</summary>
+    internal static bool IsGeneratedPrivateIdentifier(NodeStore store, Node node) =>
+        store.Kind(node) == SyntaxKind.PrivateIdentifier && FactoryEmitNode.GetIdentifierAutoGenerate(store, node) is not null;
+
+    /// <summary>factory/utilities.ts getNodeForGeneratedName: the node a node-generated name was generated for.</summary>
+    internal static Node GetNodeForGeneratedName(NodeStore store, Node name)
+    {
+        var autoGenerate = FactoryEmitNode.GetIdentifierAutoGenerate(store, name)!;
+        if ((autoGenerate.Flags & GeneratedIdentifierFlags.Node) != 0)
+        {
+            var autoGenerateId = autoGenerate.Id;
+            var node = name;
+            var original = store.Original(node);
+            while (!original.IsNone)
+            {
+                node = original;
+                var nodeAutoGenerate = FactoryEmitNode.GetIdentifierAutoGenerate(store, node);
+                // if "node" is a different generated name (having a different "autoGenerateId"), use it and stop traversing.
+                if (store.Kind(node) is SyntaxKind.Identifier or SyntaxKind.PrivateIdentifier &&
+                    (nodeAutoGenerate is null || ((nodeAutoGenerate.Flags & GeneratedIdentifierFlags.Node) != 0 && nodeAutoGenerate.Id != autoGenerateId)))
+                {
+                    break;
+                }
+                original = store.Original(node);
+            }
+            // otherwise, return the original node for the source
+            return node;
+        }
+        return name;
+    }
+
+    /// <summary>utilitiesPublic.ts isArrayBindingOrAssignmentElement.</summary>
+    internal static bool IsArrayBindingOrAssignmentElement(NodeStore store, Node node)
+    {
+        switch (store.Kind(node))
+        {
+            case SyntaxKind.BindingElement:
+            case SyntaxKind.OmittedExpression:
+            case SyntaxKind.SpreadElement:
+            case SyntaxKind.ArrayLiteralExpression:
+            case SyntaxKind.ObjectLiteralExpression:
+            case SyntaxKind.Identifier:
+            case SyntaxKind.PropertyAccessExpression:
+            case SyntaxKind.ElementAccessExpression:
+                return true;
+        }
+        return Utilities.IsAssignmentExpression(store, node, excludeCompoundAssignment: true);
+    }
 }

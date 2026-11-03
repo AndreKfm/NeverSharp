@@ -615,7 +615,7 @@ internal sealed partial class Printer
         {
             // Node names generate unique names based on their original node
             // and are cached based on that node's id.
-            return GenerateNameCached(GetNodeForGeneratedName(name), store.Kind(name) == SyntaxKind.PrivateIdentifier, autoGenerate.Flags, autoGenerate.Prefix, autoGenerate.Suffix);
+            return GenerateNameCached(GetNodeForGeneratedName(name), store.Kind(name) == SyntaxKind.PrivateIdentifier, autoGenerate.Flags, autoGenerate.Prefix, autoGenerate.Suffix, autoGenerate.PrefixPart);
         }
         // Auto, Loop, and Unique names are cached based on their unique
         // autoGenerateId.
@@ -628,15 +628,50 @@ internal sealed partial class Printer
         return generated;
     }
 
-    private string GenerateNameCached(Node node, bool privateName, GeneratedIdentifierFlags flags = GeneratedIdentifierFlags.None, string prefix = "", string suffix = "")
+    private string GenerateNameCached(Node node, bool privateName, GeneratedIdentifierFlags flags = GeneratedIdentifierFlags.None, string prefix = "", string suffix = "", GeneratedNamePart? prefixPart = null)
     {
         var cache = privateName ? nodeIdToGeneratedPrivateName : nodeIdToGeneratedName;
         if (!cache.TryGetValue(node, out var name))
         {
-            name = GenerateNameForNode(node, privateName, flags, NodeFactory.FormatGeneratedNamePart(prefix), NodeFactory.FormatGeneratedNamePart(suffix));
+            name = GenerateNameForNode(node, privateName, flags, FormatGeneratedNamePart(prefix, prefixPart), NodeFactory.FormatGeneratedNamePart(suffix));
             cache[node] = name;
         }
         return name;
+    }
+
+    /// <summary>
+    /// factory/utilities.ts formatGeneratedNamePart(part, generateName) (module D4): a GeneratedNamePart is formatted
+    /// with the text of its node (generated names through generateName).
+    /// </summary>
+    private string FormatGeneratedNamePart(string prefix, GeneratedNamePart? prefixPart)
+    {
+        if (prefixPart is null)
+        {
+            return NodeFactory.FormatGeneratedNamePart(prefix);
+        }
+        // formatGeneratedName(false, part.prefix, part.node, part.suffix, generateName)
+        var partPrefix = NodeFactory.FormatGeneratedNamePart(prefixPart.Prefix);
+        var partSuffix = NodeFactory.FormatGeneratedNamePart(prefixPart.Suffix);
+        var node = prefixPart.Node;
+        // formatIdentifierWorker
+        string baseName;
+        if (IsGeneratedName(node))
+        {
+            baseName = GenerateName(node);
+            if (store.Kind(node) == SyntaxKind.PrivateIdentifier)
+            {
+                baseName = baseName[1..];
+            }
+        }
+        else
+        {
+            baseName = PrinterUtilities.IdText(store, node);
+            if (store.Kind(node) == SyntaxKind.PrivateIdentifier)
+            {
+                baseName = baseName[1..];
+            }
+        }
+        return partPrefix + baseName + partSuffix;
     }
 
     // factory/utilities.ts getNodeForGeneratedName
@@ -1053,7 +1088,7 @@ internal sealed partial class Printer
     private string MakeName(Node name)
     {
         var autoGenerate = FactoryEmitNode.GetIdentifierAutoGenerate(store, name)!;
-        var prefix = NodeFactory.FormatGeneratedNamePart(autoGenerate.Prefix);
+        var prefix = FormatGeneratedNamePart(autoGenerate.Prefix, autoGenerate.PrefixPart);
         var suffix = NodeFactory.FormatGeneratedNamePart(autoGenerate.Suffix);
         var isPrivate = store.Kind(name) == SyntaxKind.PrivateIdentifier;
         switch (autoGenerate.Flags & GeneratedIdentifierFlags.KindMask)

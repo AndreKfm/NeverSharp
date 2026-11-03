@@ -7,7 +7,7 @@
 // Port structure follows internal/ast/ast.go
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
 // Modified: translated from TypeScript to C#; module D1 adds createParenthesizerRules and createNodeConverters for the
-// transformers' factory.
+// transformers' factory, module D4 the assignment-pattern converters.
 
 using NeverSharp.Generated;
 
@@ -861,7 +861,7 @@ internal static class FactoryNodeConverters
 
     /// <summary>
     /// The object createNodeConverters returns. Ported: convertToFunctionBlock, convertToFunctionExpression and
-    /// convertToClassExpression; the assignment-pattern converters (destructuring, module D4) throw.
+    /// convertToClassExpression (module D1); the assignment-pattern converters (module D4).
     /// </summary>
     private sealed class NodeConvertersObject : NodeConverters
     {
@@ -942,16 +942,119 @@ internal static class FactoryNodeConverters
             return updated;
         }
 
-        public Node ConvertToArrayAssignmentElement(Node element) => throw NotImplemented();
+        // (module D4: the assignment-pattern converters)
+        public Node ConvertToArrayAssignmentElement(Node element)
+        {
+            if (store.Kind(element) == SyntaxKind.BindingElement)
+            {
+                if (!store.DotDotDotToken(element).IsNone)
+                {
+                    Debug.AssertNode(store.Name(element), n => store.Kind(n) == SyntaxKind.Identifier);
+                    return NodeFactory.SetOriginalNode(store, FactoryUtilitiesPublic.SetTextRange(store, factory.CreateSpreadElement(store.Name(element)), element), element);
+                }
+                var expression = ConvertToAssignmentElementTarget(store.Name(element));
+                return !store.Initializer(element).IsNone
+                    ? NodeFactory.SetOriginalNode(
+                        store,
+                        FactoryUtilitiesPublic.SetTextRange(
+                            store,
+                            factory.CreateAssignment(expression, store.Initializer(element)),
+                            element),
+                        element)
+                    : expression;
+            }
+            Debug.Assert(UtilitiesPublic.IsExpression(store, element));
+            return element;
+        }
 
-        public Node ConvertToObjectAssignmentElement(Node element) => throw NotImplemented();
+        public Node ConvertToObjectAssignmentElement(Node element)
+        {
+            if (store.Kind(element) == SyntaxKind.BindingElement)
+            {
+                if (!store.DotDotDotToken(element).IsNone)
+                {
+                    Debug.AssertNode(store.Name(element), n => store.Kind(n) == SyntaxKind.Identifier);
+                    return NodeFactory.SetOriginalNode(store, FactoryUtilitiesPublic.SetTextRange(store, factory.CreateSpreadAssignment(store.Name(element)), element), element);
+                }
+                if (!store.PropertyName(element).IsNone)
+                {
+                    var expression = ConvertToAssignmentElementTarget(store.Name(element));
+                    return NodeFactory.SetOriginalNode(store, FactoryUtilitiesPublic.SetTextRange(store, factory.CreatePropertyAssignment(store.PropertyName(element), !store.Initializer(element).IsNone ? factory.CreateAssignment(expression, store.Initializer(element)) : expression), element), element);
+                }
+                Debug.AssertNode(store.Name(element), n => store.Kind(n) == SyntaxKind.Identifier);
+                return NodeFactory.SetOriginalNode(store, FactoryUtilitiesPublic.SetTextRange(store, factory.CreateShorthandPropertyAssignment(store.Name(element), store.Initializer(element)), element), element);
+            }
 
-        public Node ConvertToAssignmentPattern(Node node) => throw NotImplemented();
+            Debug.Assert(UtilitiesPublic.IsObjectLiteralElementLike(store, element));
+            return element;
+        }
 
-        public Node ConvertToObjectAssignmentPattern(Node node) => throw NotImplemented();
+        public Node ConvertToAssignmentPattern(Node node)
+        {
+            switch (store.Kind(node))
+            {
+                case SyntaxKind.ArrayBindingPattern:
+                case SyntaxKind.ArrayLiteralExpression:
+                    return ConvertToArrayAssignmentPattern(node);
 
-        public Node ConvertToArrayAssignmentPattern(Node node) => throw NotImplemented();
+                case SyntaxKind.ObjectBindingPattern:
+                case SyntaxKind.ObjectLiteralExpression:
+                    return ConvertToObjectAssignmentPattern(node);
+            }
+            throw Debug.UnexpectedKind(store.Kind(node), "a binding or assignment pattern");
+        }
 
-        public Node ConvertToAssignmentElementTarget(Node node) => throw NotImplemented();
+        public Node ConvertToObjectAssignmentPattern(Node node)
+        {
+            if (store.Kind(node) == SyntaxKind.ObjectBindingPattern)
+            {
+                var elements = new List<Node>();
+                foreach (var element in store.Nodes(store.Elements(node)))
+                {
+                    elements.Add(ConvertToObjectAssignmentElement(element));
+                }
+                return NodeFactory.SetOriginalNode(
+                    store,
+                    FactoryUtilitiesPublic.SetTextRange(
+                        store,
+                        factory.CreateObjectLiteralExpression(factory.CreateNodeArray(elements)),
+                        node),
+                    node);
+            }
+            Debug.Assert(store.Kind(node) == SyntaxKind.ObjectLiteralExpression);
+            return node;
+        }
+
+        public Node ConvertToArrayAssignmentPattern(Node node)
+        {
+            if (store.Kind(node) == SyntaxKind.ArrayBindingPattern)
+            {
+                var elements = new List<Node>();
+                foreach (var element in store.Nodes(store.Elements(node)))
+                {
+                    elements.Add(ConvertToArrayAssignmentElement(element));
+                }
+                return NodeFactory.SetOriginalNode(
+                    store,
+                    FactoryUtilitiesPublic.SetTextRange(
+                        store,
+                        factory.CreateArrayLiteralExpression(factory.CreateNodeArray(elements)),
+                        node),
+                    node);
+            }
+            Debug.Assert(store.Kind(node) == SyntaxKind.ArrayLiteralExpression);
+            return node;
+        }
+
+        public Node ConvertToAssignmentElementTarget(Node node)
+        {
+            if (store.Kind(node) is SyntaxKind.ObjectBindingPattern or SyntaxKind.ArrayBindingPattern)
+            {
+                return ConvertToAssignmentPattern(node);
+            }
+
+            Debug.Assert(UtilitiesPublic.IsExpression(store, node));
+            return node;
+        }
     }
 }

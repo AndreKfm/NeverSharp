@@ -60,8 +60,17 @@ internal sealed class AutoGenerateInfo
 {
     public GeneratedIdentifierFlags Flags;          // Specifies whether to auto-generate the text for an identifier.
     public int Id;                                  // Ensures unique generated identifiers get unique names, but clones get the same name.
-    public string Prefix = "";                      // Optional prefix to apply to the start of the generated name (TypeScript: string | GeneratedNamePart; the GeneratedNamePart form is not ported yet)
+    public string Prefix = "";                      // Optional prefix to apply to the start of the generated name (the string form of TypeScript's string | GeneratedNamePart)
+    public GeneratedNamePart? PrefixPart;           // The GeneratedNamePart form of the prefix (module D4); Prefix is "" when it is set
     public string Suffix = "";                      // Optional suffix to apply to the end of the generated name
+}
+
+/// <summary>types.ts GeneratedNamePart (module D4): a prefix whose text is sourced from a node when the name is generated.</summary>
+internal sealed class GeneratedNamePart
+{
+    public string Prefix = "";                      // an additional prefix to insert before the text sourced from `node`
+    public Node Node;                               // Identifier | PrivateIdentifier
+    public string Suffix = "";                      // an additional suffix to insert after the text sourced from `node`
 }
 
 /// <summary>types.ts: LexicalEnvironmentFlags (module D1).</summary>

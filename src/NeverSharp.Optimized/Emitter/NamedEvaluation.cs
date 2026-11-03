@@ -2,14 +2,15 @@
 // Portions Copyright (c) Microsoft Corporation.
 // SPDX-License-Identifier: Apache-2.0
 //
-// Ported from src/compiler/transformers/namedEvaluation.ts, classThis.ts (isClassThisAssignmentBlock),
-// factory/utilities.ts (isCallToHelper) and utilities.ts (isNamedEvaluation and its predicates)
+// Ported from src/compiler/transformers/namedEvaluation.ts, classThis.ts, factory/utilities.ts (isCallToHelper) and
+// utilities.ts (isNamedEvaluation and its predicates)
 //   https://github.com/microsoft/TypeScript at commit 050880ce59e30b356b686bd3144efe24f875ebc8
-// Port structure follows internal/transformers/estransforms/namedevaluation.go
+// Port structure follows internal/transformers/estransforms/namedevaluation.go and classthis.go
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
-// Modified: translated from TypeScript to C#; module D3 ports what the ESNext transformer reaches (variable
-// declarations, assignment expressions and export assignments with an anonymous function, arrow function or class).
-// The property, parameter and binding element forms (getAssignedNameOfPropertyName) are module D4's and throw.
+// Modified: translated from TypeScript to C#; module D3 ported what the ESNext transformer reaches (variable
+// declarations, assignment expressions and export assignments), module D4 the rest (property assignments, shorthand
+// property assignments, parameters, binding elements, property declarations with getAssignedNameOfPropertyName, the
+// callbacks of isNamedEvaluation) and classThis.ts.
 
 using NeverSharp.Generated;
 
@@ -53,12 +54,13 @@ internal static class NamedEvaluation
     // utilities.ts isProtoSetter
     private static bool IsProtoSetter(NodeStore store, Node node)
     {
-        return store.Kind(node) == SyntaxKind.Identifier ? store.Texts.Equals(store.EscapedText(node), "__proto__")
+        // idText(node): the unescaped text (the escaped text of `__proto__` is `___proto__`)
+        return store.Kind(node) == SyntaxKind.Identifier ? store.Texts.Equals(UtilitiesPublic.IdText(store, node), "__proto__")
             : store.Kind(node) == SyntaxKind.StringLiteral && store.Texts.Equals(store.Text(node), "__proto__");
     }
 
-    /// <summary>utilities.ts isNamedEvaluation(node) (without a callback).</summary>
-    internal static bool IsNamedEvaluation(NodeStore store, Node node)
+    /// <summary>utilities.ts isNamedEvaluation(node, cb).</summary>
+    internal static bool IsNamedEvaluation(NodeStore store, Node node, Func<Node, bool>? cb = null)
     {
         if (!IsNamedEvaluationSource(store, node))
         {
@@ -71,36 +73,41 @@ internal static class NamedEvaluation
             case SyntaxKind.Parameter:
             case SyntaxKind.BindingElement:
             case SyntaxKind.PropertyDeclaration:
-                return IsAnonymousFunctionDefinition(store, store.Initializer(node));
+                return IsAnonymousFunctionDefinition(store, store.Initializer(node), cb);
             case SyntaxKind.ShorthandPropertyAssignment:
-                return IsAnonymousFunctionDefinition(store, store.ObjectAssignmentInitializer(node));
+                return IsAnonymousFunctionDefinition(store, store.ObjectAssignmentInitializer(node), cb);
             case SyntaxKind.BinaryExpression:
-                return IsAnonymousFunctionDefinition(store, store.Right(node));
+                return IsAnonymousFunctionDefinition(store, store.Right(node), cb);
             case SyntaxKind.ExportAssignment:
-                return IsAnonymousFunctionDefinition(store, store.Expression(node));
+                return IsAnonymousFunctionDefinition(store, store.Expression(node), cb);
         }
         return false;
     }
 
-    /// <summary>
-    /// utilities.ts isAnonymousFunctionDefinition(node) (without a callback). Track O (module D3): a class expression
-    /// without a name counts as anonymous here; classHasExplicitlyAssignedName (a class that already has its named
-    /// evaluation helper block) is module D4's, and the class form of the transformation throws until then.
-    /// </summary>
-    internal static bool IsAnonymousFunctionDefinition(NodeStore store, Node node)
+    /// <summary>utilities.ts isAnonymousFunctionDefinition(node, cb).</summary>
+    internal static bool IsAnonymousFunctionDefinition(NodeStore store, Node node, Func<Node, bool>? cb = null)
     {
         node = FactoryUtilities.SkipOuterExpressions(store, node);
         switch (store.Kind(node))
         {
             case SyntaxKind.ClassExpression:
-                return !ClassHasDeclaredOrExplicitlyAssignedName(store, node);
+                if (ClassHasDeclaredOrExplicitlyAssignedName(store, node))
+                {
+                    return false;
+                }
+                break;
             case SyntaxKind.FunctionExpression:
-                return store.Name(node).IsNone;
+                if (!store.Name(node).IsNone)
+                {
+                    return false;
+                }
+                break;
             case SyntaxKind.ArrowFunction:
-                return true;
+                break;
             default:
                 return false;
         }
+        return cb is null || cb(node);
     }
 
     /// <summary>Gets a string literal to use as the assigned name of an anonymous class or function declaration.</summary>
@@ -267,7 +274,10 @@ internal static class NamedEvaluation
         }
 
         var namedEvaluationBlock = CreateClassNamedEvaluationHelperBlock(context, assignedName, thisExpression);
-        // (setSourceMapRange of the block's statement to the class name: no source maps)
+        if (!store.Name(node).IsNone)
+        {
+            FactoryEmitNode.SetSourceMapRange(store, store.Element(store.Statements(store.Body(namedEvaluationBlock)), 0), TransformerUtilities.RangeOf(store, store.Name(node)));
+        }
 
         var nodeMembers = store.Members(node);
         var memberNodes = store.Nodes(nodeMembers);
@@ -351,8 +361,197 @@ internal static class NamedEvaluation
                     store.Modifiers(node),
                     expression);
             }
+            case SyntaxKind.PropertyAssignment:
+            {
+                var (assignedName, name) = GetAssignedNameOfPropertyName(context, store.Name(node), assignedNameText);
+                var initializer = FinishTransformNamedEvaluation(context, store.Initializer(node), assignedName, ignoreEmptyStringLiteral);
+                return factory.UpdatePropertyAssignment(
+                    node,
+                    name,
+                    initializer);
+            }
+            case SyntaxKind.ShorthandPropertyAssignment:
+            {
+                var assignedName = assignedNameText is not null ? factory.CreateStringLiteral(store.Texts.Add(assignedNameText)) :
+                    GetAssignedNameOfIdentifier(factory, store.Name(node), store.ObjectAssignmentInitializer(node));
+                var objectAssignmentInitializer = FinishTransformNamedEvaluation(context, store.ObjectAssignmentInitializer(node), assignedName, ignoreEmptyStringLiteral);
+                return factory.UpdateShorthandPropertyAssignment(
+                    node,
+                    store.Name(node),
+                    objectAssignmentInitializer);
+            }
+            case SyntaxKind.Parameter:
+            {
+                var assignedName = assignedNameText is not null ? factory.CreateStringLiteral(store.Texts.Add(assignedNameText)) :
+                    GetAssignedNameOfIdentifier(factory, store.Name(node), store.Initializer(node));
+                var initializer = FinishTransformNamedEvaluation(context, store.Initializer(node), assignedName, ignoreEmptyStringLiteral);
+                return factory.UpdateParameterDeclaration(
+                    node,
+                    store.Modifiers(node),
+                    store.DotDotDotToken(node),
+                    store.Name(node),
+                    store.QuestionToken(node),
+                    store.Type(node),
+                    initializer);
+            }
+            case SyntaxKind.BindingElement:
+            {
+                var assignedName = assignedNameText is not null ? factory.CreateStringLiteral(store.Texts.Add(assignedNameText)) :
+                    GetAssignedNameOfIdentifier(factory, store.Name(node), store.Initializer(node));
+                var initializer = FinishTransformNamedEvaluation(context, store.Initializer(node), assignedName, ignoreEmptyStringLiteral);
+                return factory.UpdateBindingElement(
+                    node,
+                    store.DotDotDotToken(node),
+                    store.PropertyName(node),
+                    store.Name(node),
+                    initializer);
+            }
+            case SyntaxKind.PropertyDeclaration:
+            {
+                var (assignedName, name) = GetAssignedNameOfPropertyName(context, store.Name(node), assignedNameText);
+                var initializer = FinishTransformNamedEvaluation(context, store.Initializer(node), assignedName, ignoreEmptyStringLiteral);
+                return factory.UpdatePropertyDeclaration(
+                    node,
+                    store.Modifiers(node),
+                    name,
+                    store.QuestionToken(node).IsNone ? store.ExclamationToken(node) : store.QuestionToken(node),
+                    store.Type(node),
+                    initializer);
+            }
             default:
-                throw new NotSupportedException("transformNamedEvaluation of a " + store.Kind(node) + " is module D4.");
+                throw Debug.UnexpectedKind(store.Kind(node), "a NamedEvaluation");
         }
+    }
+
+    // namedEvaluation.ts getAssignedNameOfPropertyName (module D4)
+    private static (Node AssignedName, Node Name) GetAssignedNameOfPropertyName(TransformationContext context, Node name, string? assignedNameText)
+    {
+        var factory = context.Factory;
+        var store = factory.store;
+        if (assignedNameText is not null)
+        {
+            return (factory.CreateStringLiteral(store.Texts.Add(assignedNameText)), name);
+        }
+
+        if (Utilities.IsPropertyNameLiteral(store, name) || store.Kind(name) == SyntaxKind.PrivateIdentifier)
+        {
+            return (factory.CreateStringLiteralFromNode(name), name);
+        }
+
+        var expression = store.Expression(name);
+        if (Utilities.IsPropertyNameLiteral(store, expression) && store.Kind(expression) != SyntaxKind.Identifier)
+        {
+            return (factory.CreateStringLiteralFromNode(expression), name);
+        }
+
+        var assignedName = factory.GetGeneratedNameForNode(name);
+        context.HoistVariableDeclaration(assignedName);
+
+        var key = context.GetEmitHelperFactory().CreatePropKeyHelper(expression);
+        var assignment = factory.CreateAssignment(assignedName, key);
+        var updatedName = factory.UpdateComputedPropertyName(name, assignment);
+        return (assignedName, updatedName);
+    }
+
+    //// classThis.ts (module D4)
+
+    // classThis.ts createClassThisAssignmentBlock
+    private static Node CreateClassThisAssignmentBlock(NodeFactory factory, Node classThis, Node thisExpression)
+    {
+        // produces:
+        //
+        //  static { _classThis = this; }
+        //
+
+        var store = factory.store;
+        if (thisExpression.IsNone)
+        {
+            thisExpression = factory.CreateToken(SyntaxKind.ThisKeyword);
+        }
+        var expression = factory.CreateAssignment(classThis, thisExpression);
+        var statement = factory.CreateExpressionStatement(expression);
+        var body = factory.CreateBlock(factory.CreateNodeArray(new[] { statement }), multiLine: false);
+        var block = factory.CreateClassStaticBlockDeclaration(body);
+
+        // We use `emitNode.classThis` to indicate this is a `_classThis` assignment helper block
+        // and to stash the variable used for `_classThis`.
+        FactoryEmitNode.GetOrCreateEmitNode(store, block).ClassThis = classThis;
+
+        return block;
+    }
+
+    /// <summary>
+    /// classThis.ts classHasClassThisAssignment: whether a class has a `static {}` block containing only a single
+    /// assignment to a `_classThis` (or similar) variable.
+    /// </summary>
+    internal static bool ClassHasClassThisAssignment(NodeStore store, Node node)
+    {
+        if (store.EmitNode(node) is not EmitNode { ClassThis.IsNone: false })
+        {
+            return false;
+        }
+        foreach (var member in store.Nodes(store.Members(node)))
+        {
+            if (IsClassThisAssignmentBlock(store, member))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// classThis.ts injectClassThisAssignmentIfMissing: injects a class `static {}` block containing only an assignment of
+    /// the static `this` to a `_classThis` (or similar) variable.
+    /// </summary>
+    internal static Node InjectClassThisAssignmentIfMissing(NodeFactory factory, Node node, Node classThis, Node thisExpression = default)
+    {
+        // given:
+        //
+        //  class C {
+        //  }
+        //
+        // produces:
+        //
+        //  class C {
+        //      static { _classThis = this; }
+        //  }
+
+        var store = factory.store;
+        if (ClassHasClassThisAssignment(store, node))
+        {
+            return node;
+        }
+
+        var staticBlock = CreateClassThisAssignmentBlock(factory, classThis, thisExpression);
+        if (!store.Name(node).IsNone)
+        {
+            FactoryEmitNode.SetSourceMapRange(store, store.Element(store.Statements(store.Body(staticBlock)), 0), TransformerUtilities.RangeOf(store, store.Name(node)));
+        }
+
+        var nodeMembers = store.Members(node);
+        var list = new List<Node>(store.Length(nodeMembers) + 1) { staticBlock };
+        list.AddRange(store.Nodes(nodeMembers));
+        var members = factory.CreateNodeArray(list);
+        FactoryUtilitiesPublic.SetTextRange(store, members, nodeMembers);
+
+        var updatedNode = store.Kind(node) == SyntaxKind.ClassDeclaration ?
+            factory.UpdateClassDeclaration(
+                node,
+                store.Modifiers(node),
+                store.Name(node),
+                store.TypeParameters(node),
+                store.HeritageClauses(node),
+                members) :
+            factory.UpdateClassExpression(
+                node,
+                store.Modifiers(node),
+                store.Name(node),
+                store.TypeParameters(node),
+                store.HeritageClauses(node),
+                members);
+
+        FactoryEmitNode.GetOrCreateEmitNode(store, updatedNode).ClassThis = classThis;
+        return updatedNode;
     }
 }

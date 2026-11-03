@@ -9,8 +9,8 @@
 // Modified: translated from TypeScript to C#; module D3. `using` and `await using` declarations (target ES2025 is
 // below ESNext): the __addDisposableResource / __disposeResources helpers with the env object, the hoisting of
 // top-level declarations around the `try` block, `using` in `for` and `for...of`, and the exports at module top level.
-// The assignment-pattern converter (a destructured top-level variable after a top-level `using`) and the class form of
-// named evaluation are module D4's and throw.
+// Module D4 ported the assignment-pattern converter (a destructured top-level variable after a top-level `using`) and
+// the class form of named evaluation.
 
 using NeverSharp.Generated;
 
