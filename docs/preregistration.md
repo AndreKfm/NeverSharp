@@ -431,6 +431,14 @@ In CN1, at equal N:
 **Disclosed:**
 - typescript-go's and tsrs's emitters follow TypeScript 7 and differ from 6.0.3's in places;
 - the repositories' dependencies are not installed and imports are not resolved, which affects import elision and declaration emit identically on all sides;
+- **Parallel emit and the number of checkers:**
+  - With several checkers, the `.d.ts` output and the emit diagnostics depend on the number of checkers, on both the C# side and typescript-go. The `.js` output does not.
+  - Causes: union member order from per-checker type ids, and visibility marked by earlier files' declaration emit, which stays inside the checker that emitted them. This is the same kind of dependence as the parallel check diagnostics of §17.
+  - The emit equivalence with tsc 6.0.3 is therefore taken single-threaded.
+  - Output bytes and file counts of every configuration are reported with every comparison.
+- **Work items:** the C# driver emits one work item per checker, with that checker's files in program order. typescript-go queues one work item per file and locks the file's checker per resolver call.
+- **Tuning emit list:** tsc 6.0.3 cannot emit the tuning list as one program (a `Debug Failure` on 002379, and a TypeError once expando properties merge across global-script units). The tuning emit list leaves out 139 units (`harness/bench/tuning-emit-exclude.txt`). It is used for tuning only, never for the endpoint.
+- **Profile `full`** keeps its earlier set. The emit configurations run only in profile `emit` or with `--configs`.
 - Windows only.
 
 **Status.** Draft, 2026-11-03. To be accepted by the author and tagged `prereg/v11` (OpenTimestamps) after Gate D passes and before any emit measurement.
