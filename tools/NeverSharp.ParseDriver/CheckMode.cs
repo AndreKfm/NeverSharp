@@ -120,8 +120,22 @@ internal static class CheckMode
             if (emit)
             {
                 var perFile = new List<(string FileName, string Text)>?[programFiles];
-                // Each slot is written only by the thread of its file's checker.
-                emitResult = pool.Emit((index, fileName, text) => (perFile[index] ??= []).Add((fileName, text)));
+                string? lastOutput = null;
+                try
+                {
+                    // Each slot is written only by the thread of its file's checker.
+                    emitResult = pool.Emit((index, fileName, text) =>
+                    {
+                        (perFile[index] ??= []).Add((fileName, text));
+                        lastOutput = fileName;
+                    });
+                }
+                catch (Exception) when (single)
+                {
+                    // (single-threaded: the failing file is the one emitted after the last output, or that output's file)
+                    Console.Error.WriteLine($"emit failed; last output written: {lastOutput ?? "none"}");
+                    throw;
+                }
                 outputs = perFile;
             }
             if (dumpDiagnostics is not null)

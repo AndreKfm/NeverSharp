@@ -22,15 +22,17 @@
 // Output: artifacts/bench/emit-equivalence/<repo>.{tsc,cs}.{emit.jsonl,diagnostics.txt} and <repo>.json; a markdown
 // summary on stdout.
 //
-// Usage: node emit-equivalence.mjs [--repos a,b] [--corpus benchmark|tuning|tuning-check] [--skip-tsgo] [--skip-tsrs]
+// --corpus tuning-check: the tuning list without the units of tuning-emit-exclude.txt (tsc 6.0.3 cannot emit the list as
+// one program with them), written to artifacts/bench/filelists/tuning-check-emit.txt and used by every side.
+//
+// Usage: node emit-equivalence.mjs [--repos a,b] [--corpus benchmark|tuning-check] [--skip-tsgo] [--skip-tsrs]
 //                                  [--examples N]
 //        node emit-equivalence.mjs --tsc-dump <file list> <emit out> <diagnostics out>   (internal: the tsc side)
 
 import { spawnSync } from "node:child_process";
 import { closeSync, createReadStream, mkdirSync, openSync, readFileSync, writeFileSync, writeSync } from "node:fs";
 import { createRequire } from "node:module";
-import { createInterface } from "node:readline";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { benchDir, exe, pins, repoRoot } from "./common.mjs";
 
 const arg = (name, fallback) => process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : fallback;
@@ -79,7 +81,20 @@ const csDriver = join(repoRoot, "artifacts", "bin", "cs", "optimized-aot-ws", "p
 const parseGo = join(repoRoot, "artifacts", "bin", "parse-go" + exe);
 const parseRs = join(repoRoot, "artifacts", "bin", "parse-rs" + exe);
 const corpusName = arg("--corpus", "benchmark");
+if (corpusName !== "benchmark" && corpusName !== "tuning-check") throw new Error("--corpus must be benchmark or tuning-check");
 const repos = arg("--repos", undefined)?.split(",") ?? (corpusName === "benchmark" ? pins.benchmarkCorpus.repos.map(r => r.name) : [corpusName]);
+// The file list of a repository; tuning-check: without the units of tuning-emit-exclude.txt.
+function listOf(repo) {
+    if (repo !== "tuning-check") return join(benchDir, "filelists", `${repo}.txt`);
+    const excluded = new Set(readFileSync(join(import.meta.dirname, "tuning-emit-exclude.txt"), "utf8").split(/\r?\n/)
+        .filter(l => l && !l.startsWith("#")).map(l => l.split("\t")[0]));
+    const all = readFileSync(join(benchDir, "filelists", "tuning-check.txt"), "utf8").split(/\r?\n/).filter(Boolean);
+    const files = all.filter(f => !(dirname(f) === join(benchDir, "tuning") && excluded.has(basename(f))));
+    if (all.length - files.length !== excluded.size) throw new Error(`excluded ${all.length - files.length} files, tuning-emit-exclude.txt lists ${excluded.size}`);
+    const list = join(benchDir, "filelists", "tuning-check-emit.txt");
+    writeFileSync(list, files.join("\n") + "\n");
+    return list;
+}
 const examples = Number(arg("--examples", "5"));
 const outDir = join(repoRoot, "artifacts", "bench", "emit-equivalence");
 mkdirSync(outDir, { recursive: true });
@@ -90,14 +105,35 @@ const run = (command, args) => {
     if (r.status !== 0) throw new Error(`${command} ${args.join(" ")} failed (${r.status}): ${r.stderr}`);
     return { output: JSON.parse(r.stdout.trim().split("\n").pop()), seconds: (Date.now() - started) / 1000 };
 };
+// typescript-go and tsrs are only reported: a failure of theirs is recorded (its first stderr line), not fatal.
+const runReported = (command, args) => {
+    try {
+        return run(command, args);
+    } catch (e) {
+        const reason = String(e.message).split("\n").find(l => /panicked|panic:|error/i.test(l)) ?? String(e.message).split("\n")[0];
+        return { output: { outputFiles: "failed", outputBytes: reason.trim().slice(0, 200) }, seconds: 0, failed: true };
+    }
+};
 const readLines = file => readFileSync(file, "utf8").split("\n").filter(Boolean);
+
+// The lines of a file, split at "\n" only (readline would also split at U+2028 and U+2029, which JSON.stringify leaves
+// unescaped in the dump's strings).
+async function* linesOf(file) {
+    let rest = "";
+    for await (const chunk of createReadStream(file, { encoding: "utf8" })) {
+        const parts = (rest + chunk).split("\n");
+        rest = parts.pop();
+        yield* parts;
+    }
+    if (rest) yield rest;
+}
 
 // An emit dump: the outputs in write order (name, text), the emit diagnostic lines, emitSkipped.
 async function readDump(file) {
     const outputs = [];
     const diagnostics = [];
     let emitSkipped;
-    for await (const l of createInterface({ input: createReadStream(file), crlfDelay: Infinity })) {
+    for await (const l of linesOf(file)) {
         if (!l) continue;
         const o = JSON.parse(l);
         if ("output" in o) outputs.push([o.output, o.text]);
@@ -122,15 +158,15 @@ console.log("| Repository | outputs tsc / C# | bytes tsc / C# | outputs identica
 console.log("|---|---:|---:|---|---:|---:|---|---|---:|---:|");
 const details = [];
 for (const repo of repos) {
-    const list = join(benchDir, "filelists", `${repo}.txt`);
+    const list = listOf(repo);
     const files = {
         tscEmit: join(outDir, `${repo}.tsc.emit.jsonl`), tscDiagnostics: join(outDir, `${repo}.tsc.diagnostics.txt`),
         csEmit: join(outDir, `${repo}.cs.emit.jsonl`), csDiagnostics: join(outDir, `${repo}.cs.diagnostics.txt`),
     };
     const tsc = run(node, ["--max-old-space-size=16384", "--stack-size=8192", import.meta.filename, "--tsc-dump", list, files.tscEmit, files.tscDiagnostics]);
     const cs = run(csDriver, ["--check", "--emit", "--single", "--dump-diagnostics", files.csDiagnostics, "--dump-emit", files.csEmit, list]);
-    const tsgo = process.argv.includes("--skip-tsgo") ? null : run(parseGo, ["--check", "--emit", "--single", list]);
-    const tsrs = process.argv.includes("--skip-tsrs") ? null : run(parseRs, ["--check", "--emit", "--single", list]);
+    const tsgo = process.argv.includes("--skip-tsgo") ? null : runReported(parseGo, ["--check", "--emit", "--single", list]);
+    const tsrs = process.argv.includes("--skip-tsrs") ? null : runReported(parseRs, ["--check", "--emit", "--single", list]);
 
     const a = await readDump(files.tscEmit);
     const b = await readDump(files.csEmit);
