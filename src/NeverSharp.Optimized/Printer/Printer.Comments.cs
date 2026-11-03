@@ -786,7 +786,9 @@ internal sealed partial class Printer
                 case SyntaxKind.PartiallyEmittedExpression:
                     if (WillEmitLeadingNewLine(current))
                     {
-                        throw new NotSupportedException("parenthesizeExpressionForNoAsi of a partially emitted expression with a leading new line needs the node factory (module D1).");
+                        // Module D1: the spine changes; rebuild it with the transformers' factory (TypeScript's global
+                        // `factory`), as TypeScript does.
+                        return ParenthesizeExpressionForNoAsiWorker(node);
                     }
                     current = store.Expression(current);
                     continue;
@@ -813,5 +815,66 @@ internal sealed partial class Printer
             }
             return node;
         }
+    }
+
+    // The factory the printer rebuilds nodes with (TypeScript's global `factory`): the transformers' factory of the
+    // store being printed, an emit copy (only transformers create partially emitted expressions).
+    private NodeFactory? printerFactory;
+
+    private NodeFactory PrinterFactory
+    {
+        get
+        {
+            if (printerFactory is null || printerFactory.store != store)
+            {
+                printerFactory = NodeFactory.CreateTransformFactory(store);
+            }
+            return printerFactory;
+        }
+    }
+
+    // emitter.ts parenthesizeExpressionForNoAsi, the rebuilding part.
+    private Node ParenthesizeExpressionForNoAsiWorker(Node node)
+    {
+        var factory = PrinterFactory;
+        switch (store.Kind(node))
+        {
+            case SyntaxKind.PartiallyEmittedExpression:
+                if (WillEmitLeadingNewLine(node))
+                {
+                    var parseNode = UtilitiesPublic.GetParseTreeNode(store, node);
+                    if (!parseNode.IsNone && store.Kind(parseNode) == SyntaxKind.ParenthesizedExpression)
+                    {
+                        // If the original node was a parenthesized expression, restore it to preserve comment and source map emit
+                        var parens = factory.CreateParenthesizedExpression(store.Expression(node));
+                        NodeFactory.SetOriginalNode(store, parens, node);
+                        FactoryUtilitiesPublic.SetTextRange(store, parens, parseNode);
+                        return parens;
+                    }
+                    return factory.CreateParenthesizedExpression(node);
+                }
+                return factory.UpdatePartiallyEmittedExpression(node, ParenthesizeExpressionForNoAsiWorker(store.Expression(node)));
+            case SyntaxKind.PropertyAccessExpression:
+                return factory.UpdatePropertyAccessExpression(node, ParenthesizeExpressionForNoAsiWorker(store.Expression(node)), store.Name(node));
+            case SyntaxKind.ElementAccessExpression:
+                return factory.UpdateElementAccessExpression(node, ParenthesizeExpressionForNoAsiWorker(store.Expression(node)), store.ArgumentExpression(node));
+            case SyntaxKind.CallExpression:
+                return factory.UpdateCallExpression(node, ParenthesizeExpressionForNoAsiWorker(store.Expression(node)), store.TypeArguments(node), store.Arguments(node));
+            case SyntaxKind.TaggedTemplateExpression:
+                return factory.UpdateTaggedTemplateExpression(node, ParenthesizeExpressionForNoAsiWorker(store.Tag(node)), store.TypeArguments(node), store.Template(node));
+            case SyntaxKind.PostfixUnaryExpression:
+                return factory.UpdatePostfixUnaryExpression(node, ParenthesizeExpressionForNoAsiWorker(store.Operand(node)));
+            case SyntaxKind.BinaryExpression:
+                return factory.UpdateBinaryExpression(node, ParenthesizeExpressionForNoAsiWorker(store.Left(node)), store.OperatorToken(node), store.Right(node));
+            case SyntaxKind.ConditionalExpression:
+                return factory.UpdateConditionalExpression(node, ParenthesizeExpressionForNoAsiWorker(store.Condition(node)), store.QuestionToken(node), store.WhenTrue(node), store.ColonToken(node), store.WhenFalse(node));
+            case SyntaxKind.AsExpression:
+                return factory.UpdateAsExpression(node, ParenthesizeExpressionForNoAsiWorker(store.Expression(node)), store.Type(node));
+            case SyntaxKind.SatisfiesExpression:
+                return factory.UpdateSatisfiesExpression(node, ParenthesizeExpressionForNoAsiWorker(store.Expression(node)), store.Type(node));
+            case SyntaxKind.NonNullExpression:
+                return factory.UpdateNonNullExpression(node, ParenthesizeExpressionForNoAsiWorker(store.Expression(node)));
+        }
+        return node;
     }
 }

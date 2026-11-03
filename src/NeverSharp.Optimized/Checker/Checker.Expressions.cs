@@ -1359,14 +1359,60 @@ internal sealed partial class Checker
         // As noted in ECMAScript 6 language spec, arrow functions never have an arguments objects.
         // To avoid that we will give an error to users if they use arguments objects in arrow function so that they
         // can explicitly bound arguments objects
+        var store = StoreOf(node);
         if (symbol == argumentsSymbol)
         {
             if (IsInPropertyInitializerOrClassStaticBlock(node, ignoreArrowFunctions: true))
             {
                 Error(node, Diagnostics.arguments_cannot_be_referenced_in_property_initializers_or_class_static_initialization_blocks);
+                return;
+            }
+
+            // (Module D1: the flags the emit reads. The ES5 errors do not apply to the ES2025 target.)
+            var container = At(node, Utilities.GetContainingFunctionOrNone(store, node.Node));
+            if (!container.IsNone)
+            {
+                NodeLinks.Get(container).Flags |= NodeCheckFlags.CaptureArguments;
+                while (!container.IsNone && store.Kind(container.Node) == SyntaxKind.ArrowFunction)
+                {
+                    container = At(container, Utilities.GetContainingFunctionOrNone(store, container.Node));
+                    if (!container.IsNone)
+                    {
+                        NodeLinks.Get(container).Flags |= NodeCheckFlags.CaptureArguments;
+                    }
+                }
+            }
+            return;
+        }
+        // (deprecation suggestions: C8)
+
+        // Module D1: the class reference flags the emit reads.
+        var localOrExportSymbol = GetExportSymbolOfValueSymbolIfExported(symbol);
+        var declaration = ValueDeclarationOf(localOrExportSymbol);
+        if (!declaration.IsNone && (SymbolFlagsOf(localOrExportSymbol) & SymbolFlags.Class) != 0)
+        {
+            // When we downlevel classes we may emit some code outside of the class body. Due to the fact the
+            // class name is double-bound, we must ensure we mark references to the class name so that we can
+            // emit an alias to the class later.
+            var declarationStore = StoreOf(declaration);
+            if (Utilities.IsClassLike(declarationStore, declaration.Node) && (declaration.File != node.File || declarationStore.Name(declaration.Node) != node.Node))
+            {
+                var container = Utilities.GetThisContainer(store, node.Node, includeArrowFunctions: false, includeClassComputedPropertyName: false);
+                while (store.Kind(container) != SyntaxKind.SourceFile && !(declaration.File == node.File && store.Parent(container) == declaration.Node))
+                {
+                    container = Utilities.GetThisContainer(store, container, includeArrowFunctions: false, includeClassComputedPropertyName: false);
+                }
+
+                if (store.Kind(container) != SyntaxKind.SourceFile)
+                {
+                    NodeLinks.Get(declaration).Flags |= NodeCheckFlags.ContainsConstructorReference;
+                    NodeLinks.Get(At(node, container)).Flags |= NodeCheckFlags.ContainsConstructorReference;
+                    NodeLinks.Get(node).Flags |= NodeCheckFlags.ConstructorReference;
+                }
             }
         }
-        // (deprecation suggestions: C8; the class reference and block-scoped binding flags are emit details)
+
+        // (checkNestedBlockScopedBinding: returns for targets from ES2015 on)
     }
 
     // checker.ts isInPropertyInitializerOrClassStaticBlock

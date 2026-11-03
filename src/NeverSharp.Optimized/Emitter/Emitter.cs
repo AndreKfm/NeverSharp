@@ -102,19 +102,30 @@ internal static class Emitter
         var newLine = EmitTextWriter.GetNewLineCharacter(new PrinterOptions { NewLine = compilerOptions.NewLine });
         var writer = new EmitTextWriter(newLine);
         var emitSkipped = false;
+        var transformers = Transformers.GetTransformers(compilerOptions);
 
         // forEachEmittedFile(host, emitSourceFileOrBundle, getSourceFilesToEmit(host, targetSourceFile, forceDtsEmit), ...)
         foreach (var sourceFile in GetSourceFilesToEmit(host, targetSourceFile))
         {
             var names = GetOutputPathsFor(sourceFile, host, forceDtsPaths: false);
-            EmitJsFile(sourceFile, names.JsFilePath);
-            EmitDeclarationFile(sourceFile, names.DeclarationFilePath);
+
+            // Track O (module D1): the transformers write into the emit copy of the file's store (nothing writes into
+            // the file's own store); the file's resolver comes from the checker that checked it.
+            var emitStore = sourceFile.Store.CreateEmitCopy();
+            var factory = NodeFactory.CreateTransformFactory(emitStore);
+            var resolver = host.Program.GetTypeChecker().GetEmitResolver(sourceFile);
+            resolver.EmitStore = emitStore;
+
+            EmitJsFile(sourceFile, names.JsFilePath, emitStore, factory, resolver);
+            EmitDeclarationFile(sourceFile, names.DeclarationFilePath, emitStore, factory, resolver);
             // (emitBuildInfo: no build info without incremental or composite)
+
+            emitStore.Release();
         }
 
         return new EmitResult(emitSkipped, DiagnosticCollection.SortAndDeduplicate(emitterDiagnostics));
 
-        void EmitJsFile(SourceFile sourceFile, string? jsFilePath)
+        void EmitJsFile(SourceFile sourceFile, string? jsFilePath, NodeStore emitStore, NodeFactory factory, EmitResolver resolver)
         {
             if (jsFilePath is null)
             {
@@ -128,29 +139,54 @@ internal static class Emitter
                 return;
             }
 
-            // (markLinkedReferences, transformNodes(resolver, host, factory, compilerOptions, [sourceFile],
-            // scriptTransformers, allowDtsFiles: false): no script transformers yet, the result is the source file.)
+            // (markLinkedReferences: only for files that are not checked, noCheck or JavaScript without checkJs, whose
+            // .js output Track O never writes: a JavaScript unit's output would overwrite its input.)
+
+            // Transform the source files
+            var transform = Transformers.TransformNodes(resolver, host, factory, compilerOptions, sourceFile.Root, transformers.ScriptTransformers, allowDtsFiles: false);
+
             var printerOptions = new PrinterOptions
             {
                 RemoveComments = compilerOptions.RemoveComments == true,
                 NewLine = compilerOptions.NewLine,
+                // (noEmitHelpers: not an option Track O supports, so false)
                 Target = compilerOptions.GetEmitScriptTarget(),
             };
 
-            // Create a printer to print the nodes (no handlers without transformers)
-            var printer = Printer.CreatePrinter(printerOptions);
-            PrintSourceFile(jsFilePath, sourceFile, printer);
+            // Create a printer to print the nodes
+            var printer = Printer.CreatePrinter(printerOptions, new PrintHandlers
+            {
+                // resolver hooks
+                HasGlobalName = resolver.HasGlobalName,
+
+                // transform hooks
+                OnEmitNode = transform.EmitNodeWithNotification,
+                IsEmitNotificationEnabled = transform.IsEmitNotificationEnabled,
+                SubstituteNode = transform.SubstituteNode,
+            });
+
+            PrintSourceFile(jsFilePath, emitStore, transform.Transformed, printer);
+
+            // Clean up emit nodes on parse tree
+            transform.Dispose();
         }
 
-        void EmitDeclarationFile(SourceFile sourceFile, string? declarationFilePath)
+        void EmitDeclarationFile(SourceFile sourceFile, string? declarationFilePath, NodeStore emitStore, NodeFactory factory, EmitResolver resolver)
         {
             if (declarationFilePath is null)
             {
                 return;
             }
-            // (filesForEmit: the file, it is not JSON; collectLinkedAliases and the declaration transform: no
-            // declaration transformers yet, so no diagnostics and the result is the source file.)
-            var declBlocked = host.IsEmitBlocked(declarationFilePath);
+            // (filesForEmit: the file, it is not JSON; collectLinkedAliases (module D5).)
+            var declarationTransform = Transformers.TransformNodes(resolver, host, factory, compilerOptions, sourceFile.Root, transformers.DeclarationTransformers, allowDtsFiles: false);
+            if (declarationTransform.Diagnostics.Count > 0)
+            {
+                foreach (var diagnostic in declarationTransform.Diagnostics)
+                {
+                    emitterDiagnostics.Add(diagnostic);
+                }
+            }
+            var declBlocked = host.IsEmitBlocked(declarationFilePath) || declarationTransform.Diagnostics.Count > 0;
             emitSkipped = emitSkipped || declBlocked;
             if (!declBlocked)
             {
@@ -162,14 +198,24 @@ internal static class Emitter
                     Target = compilerOptions.Target,
                     OnlyPrintJsDocStyle = true,
                 };
-                var declarationPrinter = Printer.CreatePrinter(printerOptions);
-                PrintSourceFile(declarationFilePath, sourceFile, declarationPrinter);
+                var declarationPrinter = Printer.CreatePrinter(printerOptions, new PrintHandlers
+                {
+                    // resolver hooks
+                    HasGlobalName = resolver.HasGlobalName,
+
+                    // transform hooks
+                    OnEmitNode = declarationTransform.EmitNodeWithNotification,
+                    IsEmitNotificationEnabled = declarationTransform.IsEmitNotificationEnabled,
+                    SubstituteNode = declarationTransform.SubstituteNode,
+                });
+                PrintSourceFile(declarationFilePath, emitStore, declarationTransform.Transformed, declarationPrinter);
             }
+            declarationTransform.Dispose();
         }
 
-        void PrintSourceFile(string jsFilePath, SourceFile sourceFile, Printer printer)
+        void PrintSourceFile(string jsFilePath, NodeStore emitStore, Node sourceFileNode, Printer printer)
         {
-            printer.WriteFile(sourceFile.Store, sourceFile.Root, writer);
+            printer.WriteFile(emitStore, sourceFileNode, writer);
             // (no source map generator)
             writer.WriteLine();
 

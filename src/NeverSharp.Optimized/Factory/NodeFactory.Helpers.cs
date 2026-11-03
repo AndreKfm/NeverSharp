@@ -41,12 +41,10 @@ internal sealed partial class NodeFactory
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     private FactoryParenthesizerRules.NullParenthesizerRulesObject CreateParenthesizer()
     {
-        if ((flags & NodeFactoryFlags.NoParenthesizerRules) == 0)
-        {
-            // createParenthesizerRules (factory/parenthesizerRules.ts) is not ported: the parser's factory
-            // is created with NoParenthesizerRules.
-            Debug.Fail("createParenthesizerRules is not ported");
-        }
+        // (Track O, module D1: a factory without NoParenthesizerRules, the transformers', gets createParenthesizerRules'
+        // object behind the sealed rules class when it is created, CreateTransformFactory; this getter's first call
+        // memoizes the null rules of the parser's factory.)
+        Debug.Assert((flags & NodeFactoryFlags.NoParenthesizerRules) != 0);
         parenthesizerRulesValue = FactoryParenthesizerRules.NullParenthesizerRules;
         return parenthesizerRulesValue;
     }
@@ -59,12 +57,9 @@ internal sealed partial class NodeFactory
         {
             if (convertersValue == null)
             {
-                if ((flags & NodeFactoryFlags.NoNodeConverters) == 0)
-                {
-                    // createNodeConverters (factory/nodeConverters.ts) is not ported: the parser's factory is
-                    // created with NoNodeConverters.
-                    Debug.Fail("createNodeConverters is not ported");
-                }
+                // (Track O, module D1: the transformers' factory gets createNodeConverters' object when it is created,
+                // CreateTransformFactory.)
+                Debug.Assert((flags & NodeFactoryFlags.NoNodeConverters) != 0);
                 convertersValue = FactoryNodeConverters.NullNodeConverters;
             }
             return convertersValue;

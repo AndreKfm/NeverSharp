@@ -191,7 +191,9 @@ internal sealed partial class Printer
     private void EmitClassStaticBlockDeclaration(Node node)
     {
         WriteKeyword("static");
+        PushNameGenerationScope(node);
         EmitBlockFunctionBody(store.Body(node));
+        PopNameGenerationScope(node);
     }
 
     private void EmitConstructor(Node node)
@@ -332,10 +334,15 @@ internal sealed partial class Printer
 
     private void EmitTypeLiteral(Node node)
     {
+        PushNameGenerationScope(node);
+        GenerateMemberNamesOfList(store.Members(node));
+
         WritePunctuation("{");
         var flags = (GetEmitFlags(node) & EmitFlags.SingleLine) != 0 ? ListFormat.SingleLineTypeLiteralMembers : ListFormat.MultiLineTypeLiteralMembers;
         EmitList(node, store.Members(node), flags | ListFormat.NoSpaceIfEmpty);
         WritePunctuation("}");
+
+        PopNameGenerationScope(node);
     }
 
     private void EmitArrayType(Node node)
@@ -585,6 +592,9 @@ internal sealed partial class Printer
 
     private void EmitObjectLiteralExpression(Node node)
     {
+        PushNameGenerationScope(node);
+        GenerateMemberNamesOfList(store.Properties(node));
+
         var indentedFlag = (GetEmitFlags(node) & EmitFlags.Indented) != 0;
         if (indentedFlag)
         {
@@ -599,6 +609,8 @@ internal sealed partial class Printer
         {
             DecreaseIndent();
         }
+
+        PopNameGenerationScope(node);
     }
 
     private void EmitPropertyAccessExpression(Node node)
@@ -887,7 +899,7 @@ internal sealed partial class Printer
                     // onLeft
                     stack[^1] = frame with { State = 1 };
                     var left = store.Left(node);
-                    if (store.Kind(left) == SyntaxKind.BinaryExpression)
+                    if (store.Kind(left) == SyntaxKind.BinaryExpression && !NeedsPipelineBeforeDescend(left))
                     {
                         EnterBinaryExpression(stack, left);
                     }
@@ -911,7 +923,7 @@ internal sealed partial class Printer
                     EmitTrailingCommentsOfPosition(store.End(operatorToken), prefixSpace: true); // Binary operators should have a space before the comment starts
                     WriteLinesAndIndent(linesAfterOperator, writeSpaceIfNotIndenting: true);
                     var right = store.Right(node);
-                    if (store.Kind(right) == SyntaxKind.BinaryExpression)
+                    if (store.Kind(right) == SyntaxKind.BinaryExpression && !NeedsPipelineBeforeDescend(right))
                     {
                         EnterBinaryExpression(stack, right);
                     }
@@ -1367,6 +1379,8 @@ internal sealed partial class Printer
             IncreaseIndent();
         }
 
+        PushNameGenerationScope(node);
+        GenerateNamesOfList(store.Parameters(node));
         switch (emitSignatureHead)
         {
             case SignatureHead.Signature:
@@ -1394,6 +1408,7 @@ internal sealed partial class Printer
                 EmitArrowFunctionBody(node);
                 break;
         }
+        PopNameGenerationScope(node);
 
         if (indentedFlag)
         {
@@ -1476,6 +1491,7 @@ internal sealed partial class Printer
 
     private void EmitBlockFunctionBody(Node body)
     {
+        GenerateNames(body);
         WriteSpace();
         WritePunctuation("{");
         IncreaseIndent();
@@ -1537,7 +1553,10 @@ internal sealed partial class Printer
         WriteSpace();
         WritePunctuation("{");
 
+        PushNameGenerationScope(node);
+        GenerateMemberNamesOfList(store.Members(node));
         EmitList(node, store.Members(node), ListFormat.ClassMembers);
+        PopNameGenerationScope(node);
 
         WritePunctuation("}");
 
@@ -1558,7 +1577,10 @@ internal sealed partial class Printer
         WriteSpace();
         WritePunctuation("{");
 
+        PushNameGenerationScope(node);
+        GenerateMemberNamesOfList(store.Members(node));
         EmitList(node, store.Members(node), ListFormat.InterfaceMembers);
+        PopNameGenerationScope(node);
 
         WritePunctuation("}");
     }
@@ -1619,7 +1641,10 @@ internal sealed partial class Printer
 
     private void EmitModuleBlock(Node node)
     {
+        PushNameGenerationScope(node);
+        GenerateNamesOfList(store.Statements(node));
         EmitBlockStatements(node, forceSingleLine: IsEmptyBlock(node));
+        PopNameGenerationScope(node);
     }
 
     private void EmitCaseBlock(Node node)
@@ -2478,6 +2503,8 @@ internal sealed partial class Printer
     private void EmitSourceFileWorker(Node node)
     {
         var statements = store.Statements(node);
+        PushNameGenerationScope(node);
+        GenerateNamesOfList(statements);
         EmitHelpers(node);
         var nodes = store.Nodes(statements);
         var index = -1;
@@ -2491,6 +2518,7 @@ internal sealed partial class Printer
         }
         EmitTripleSlashDirectivesIfNeeded(node);
         EmitList(node, statements, ListFormat.MultiLine, index == -1 ? nodes.Length : index);
+        PopNameGenerationScope(node);
     }
 
     // Transformation nodes
@@ -2558,16 +2586,6 @@ internal sealed partial class Printer
         {
             WriteComment(shebang);
             WriteLine();
-        }
-    }
-
-    // emitHelpers: the Track O printer does not support emit helpers (transformers add them; parsed trees and the
-    // node builder's type nodes have none).
-    private void EmitHelpers(Node node)
-    {
-        if ((store.EmitNode(node) as EmitNode)?.Helpers is { Count: > 0 })
-        {
-            throw new NotSupportedException("Emit helpers are not supported by the Track O printer.");
         }
     }
 

@@ -1123,7 +1123,13 @@ internal sealed partial class Checker
                         Error(name, Diagnostics.A_namespace_declaration_cannot_be_located_prior_to_a_class_or_function_with_which_it_is_merged);
                     }
                 }
-                // (LexicalModuleMergesWithClass: emit only)
+                // if the module merges with a class declaration in the same lexical scope,
+                // we need to track this to ensure the correct emit. (Module D1: the emit resolver reads it.)
+                var mergedClass = GetDeclarationOfKind(symbol, SyntaxKind.ClassDeclaration);
+                if (!mergedClass.IsNone && InSameLexicalScope(node, mergedClass))
+                {
+                    NodeLinks.Get(node).Flags |= NodeCheckFlags.LexicalModuleMergesWithClass;
+                }
             }
             // (verbatimModuleSyntax in CommonJS files: Gate C does not set verbatimModuleSyntax)
         }

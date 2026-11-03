@@ -169,6 +169,7 @@ internal sealed partial class Printer
 
     private void Reset()
     {
+        ResetNameGeneration();
         currentSourceFile = Node.None;
         currentLineMap = null;
         detachedCommentsInfo = null;
@@ -217,7 +218,7 @@ internal sealed partial class Printer
     // pipelineEmit: without substitution and source maps, the phases are notification (the handler below), comments
     // (pipelineEmitWithComments when shouldEmitComments) and pipelineEmitWithHint, which (without
     // onBeforeEmitNode/onAfterEmitNode and preserveSourceNewlines) is the worker.
-    private void PipelineEmit(EmitHint emitHint, Node node)
+    private void PipelineEmit(EmitHint emitHint, Node node, Func<Node, Node>? parenthesizerRule = null)
     {
         // Track O (module C2): the onEmitNode handler of typeWriter.ts' underlining printer, which toggles the writer's
         // underlining around every node whose fully-synthetic state differs from the current one.
@@ -228,7 +229,22 @@ internal sealed partial class Printer
             writer.Underlining = !writer.Underlining;
             return;
         }
-        PipelineEmitAfterNotification(emitHint, node);
+        if (handlers is null)
+        {
+            PipelineEmitAfterNotification(emitHint, node);
+            return;
+        }
+        // Module D1: the print handlers' notification and substitution phases (getPipelinePhase).
+        currentParenthesizerRule = parenthesizerRule;
+        if (WantsNotification(node))
+        {
+            PipelineEmitWithNotification(emitHint, node);
+        }
+        else
+        {
+            PipelineEmitFromSubstitution(emitHint, node);
+        }
+        currentParenthesizerRule = null;
     }
 
     // getPipelinePhase from PipelinePhase.Substitution on (no substitution, no source maps).
@@ -951,7 +967,7 @@ internal sealed partial class Printer
         var kind = store.Kind(node);
         if (UtilitiesPublic.IsGeneratedIdentifier(store, node) || (kind == SyntaxKind.PrivateIdentifier && IsGeneratedPrivateIdentifier(node)))
         {
-            throw new NotSupportedException("Generated names are not supported by the Track O printer.");
+            return GenerateName(node);
         }
         if (kind == SyntaxKind.StringLiteral && !store.TextSourceNode(node).IsNone)
         {

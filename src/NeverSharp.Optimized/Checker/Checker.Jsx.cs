@@ -1642,8 +1642,11 @@ internal sealed partial class Checker
             // Mark local symbol as referenced here because it might not have been marked
             // if jsx emit was not jsxFactory as there wont be error being emitted
             MarkReferenced(jsxFactorySym, SymbolFlags.All);
-            // (If react/jsxFactory symbol is alias, mark it as refereced: markAliasSymbolAsReferenced serves the emit's
-            // import elision only, not ported)
+            // If react/jsxFactory symbol is alias, mark it as refereced (module D1: the emit's import elision reads it)
+            if (CanCollectAliasData && (SymbolFlagsOf(jsxFactorySym) & SymbolFlags.Alias) != 0 && GetTypeOnlyAliasDeclaration(jsxFactorySym).IsNone)
+            {
+                MarkAliasSymbolAsReferenced(jsxFactorySym);
+            }
         }
         // if JsxFragment, additionally mark jsx pragma as referenced, since `getJsxNamespace` above would have resolved to only the fragment factory if they are distinct
         if (isFragment)
