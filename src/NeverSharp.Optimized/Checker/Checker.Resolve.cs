@@ -2483,7 +2483,9 @@ internal sealed partial class Checker
         var kind = store.Kind(expression.Node);
         if (kind == SyntaxKind.ClassExpression)
         {
-            return GetSymbolOfDeclaration(expression); // (checkExpressionCached(expression).symbol)
+            // The symbol of the type the class expression was first checked with: when a CommonJS export merge of the
+            // class (getCommonJsExportEquals) is recorded later, getSymbolOfDeclaration would give the merged symbol.
+            return SymbolOfType(CheckExpressionCached(expression));
         }
         if (kind is not (SyntaxKind.Identifier or SyntaxKind.QualifiedName) && !Utilities.IsEntityNameExpression(store, expression.Node))
         {
