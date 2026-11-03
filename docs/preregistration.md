@@ -392,3 +392,40 @@ In CN1, at equal N:
 **Diagnostics.** With N checkers a file's diagnostics depend on which types its checker created before (C12), so the 12-checker counts differ from the 4-checker counts, on both sides. They are reported with every comparison, and CN1 found them deterministic from run to run. The fixed assignment *i* mod N can make a larger N slower for some programs (CN1: tuning-check at N = 12 against N = 4), which is disclosed.
 
 **Status.** Accepted by the author on 2026-11-02 and tagged `prereg/v10` (OpenTimestamps) after the harness changes were committed and before any profile-`check12` measurement.
+
+## 19. Phase 4: emitter (draft amendment `prereg/v11`)
+
+**Scope (decided by the author, 2026-11-03).**
+- The emitter of TypeScript 6.0.3 for Track O only: `.js` and `.d.ts` output under TypeScript 6.0.3's default options (target ES2025, module kind ES2022, no source maps, comments kept), plus `declaration: true`.
+- This covers the transformers those options run (`getScriptTransformers` and `getDeclarationTransformers` of `transformer.ts`): TypeScript, ESNext, ES decorators, class fields, the ES module transformer, and declarations, with the emit resolver, emit helpers and comment emission.
+- Transformers only other options need are out of scope: JSX, legacy decorators, downlevel targets, generators, the CommonJS, AMD, UMD and System modules, and source maps.
+- Port rules of §5.4 apply. Plan: [phase4-plan.md](phase4-plan.md).
+
+**Gate D.**
+- Every equivalence unit as a one-file program with Gate C's options (§17) plus `declaration: true` and `newLine: lf`, emitted even when it has errors.
+- The canonical dumps must be byte-identical against tsc 6.0.3 (`program.emit` with an in-memory `writeFile`) in three parts:
+  1. every output file in emit order, with name and text;
+  2. the emit diagnostics, with flattened message chains;
+  3. `emitSkipped`.
+- Track O Gate 2 applies to the emitter code. Gate C and the printer gate stay passed.
+
+**Endpoint.**
+- Each benchmark repository's file list as one program with Gate D's options: parse+bind+check (the semantic and global diagnostics of §17) and emit of every file to memory.
+- `cs-o-aot-ws-emit` against `tsgo7-emit`: typescript-go 7.0.2 with the same diagnostics, then `Program.Emit` with an in-memory `WriteFile`, through its default checker pool of 4. The C# side uses the same number of checkers and the same file assignment.
+- G, interval and decision rule as in §8, from the first protocol-compliant run after Gate D has passed.
+- Measurement profile `emit`, in the style of §16:
+  - `cs-o-aot-ws-emit(-single)`, `cs-o-aot-srv-emit(-single)`, `tsgo7-emit(-single)`, `tsrs-emit(-single)`;
+  - the single-threaded variants of `cs-o-aot-ws-emit` and `tsgo7-emit` are the variance gate's binding rows.
+- **Secondary:**
+  - Server GC at 98.75 % (Bonferroni);
+  - tsrs 0.18.0 (`Program::emit`, the same explicit options) as for §17, with its own checker pool disclosed.
+- **Reported with every comparison:** the output bytes and file counts of every side, and the diagnostic counts as in §17.
+- **Equivalence:** the C# output of each repository program is compared once with tsc 6.0.3's (identical or not, differences by cause).
+- **Options:** TypeScript 6.0.3's defaults, given to typescript-go and tsrs explicitly where their TypeScript 7 defaults differ.
+
+**Disclosed:**
+- typescript-go's and tsrs's emitters follow TypeScript 7 and differ from 6.0.3's in places;
+- the repositories' dependencies are not installed and imports are not resolved, which affects import elision and declaration emit identically on all sides;
+- Windows only.
+
+**Status.** Draft, 2026-11-03. To be accepted by the author and tagged `prereg/v11` (OpenTimestamps) after Gate D passes and before any emit measurement.
