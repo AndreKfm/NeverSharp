@@ -42,10 +42,9 @@ internal static class Transformers
     }
 
     /// <summary>
-    /// transformer.ts getScriptTransformers. Track O (module D1): the TypeScript transformer slot (D2 ports it); the
-    /// slots of the ESNext, ES decorators, class fields (D4) and ES module (D3) transformers are in tsc's order and
-    /// return their input until those modules land. Options that select other transformers are outside Phase 4's
-    /// scope (default options only) and throw.
+    /// transformer.ts getScriptTransformers. Track O: the TypeScript (D1/D2), ESNext (D3), ES decorators and class
+    /// fields (D4) and module (D3) transformers in tsc's order. Options that select other transformers are outside
+    /// Phase 4's scope (default options only) and throw.
     /// </summary>
     internal static List<TransformerFactory> GetScriptTransformers(CompilerOptions compilerOptions)
     {
