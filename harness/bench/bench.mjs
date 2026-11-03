@@ -13,6 +13,10 @@
 // Usage: node bench.mjs [--repos a,b] [--profile full|quick|binder|check | --configs x,y] [--runs 20] [--warmup 3]
 //                       [--mem-runs 5] [--priority high|normal] [--corpus benchmark|tuning|tuning-check] [--label text]
 //        node bench.mjs --check [--repos a,b] [--configs x,y] [--corpus benchmark|tuning|tuning-check]
+//        node bench.mjs --dry-run [the options of a run]   (module D7: lists the selected configurations and exits)
+// Profiles also: check12 (pre-registration §18), emit (draft §19, module D7). Emit configurations (`*-emit`,
+// `*-emit-single`) run the drivers with --check --emit and additionally require output counts above zero; they are not
+// part of profile full.
 //
 // --check: functional check, not a measurement: step 1 only, for every selected configuration and repository
 // plus the empty file list; prints the drivers' file, node and symbol counts and writes nothing.
@@ -82,6 +86,17 @@ const configurations = [
         expectDriver: "tsrs-0.18.0-check-parallel", command: list => [parseRs, "--check", list] },
     { id: "tsrs-check-single", label: "tsrs 0.18.0 (Rust), program parse+bind+check, single-threaded", threads: "single", check: true,
         expectDriver: "tsrs-0.18.0-check-single", command: list => [parseRs, "--check", "--single", list] },
+    // Phase 4 (draft pre-registration §19): the file list as one program with Gate D's options, parse+bind+check (the
+    // diagnostics of the check configurations), then every file emitted to memory (--check --emit); the driver reports
+    // its output files, output bytes and emit diagnostics.
+    { id: "tsgo7-emit", label: "typescript-go 7.0.2, program parse+bind+check+emit, parallel (default checker pool)", threads: "parallel", check: true, emit: true,
+        expectDriver: "tsgo-7.0.2-emit-parallel", command: list => [parseGo, "--check", "--emit", list] },
+    { id: "tsgo7-emit-single", label: "typescript-go 7.0.2, program parse+bind+check+emit, single-threaded", threads: "single", check: true, emit: true,
+        expectDriver: "tsgo-7.0.2-emit-single", command: list => [parseGo, "--check", "--emit", "--single", list] },
+    { id: "tsrs-emit", label: "tsrs 0.18.0 (Rust), program parse+bind+check+emit, parallel (tsrs's default checker pool)", threads: "parallel", check: true, emit: true,
+        expectDriver: "tsrs-0.18.0-emit-parallel", command: list => [parseRs, "--check", "--emit", list] },
+    { id: "tsrs-emit-single", label: "tsrs 0.18.0 (Rust), program parse+bind+check+emit, single-threaded", threads: "single", check: true, emit: true,
+        expectDriver: "tsrs-0.18.0-emit-single", command: list => [parseRs, "--check", "--emit", "--single", list] },
 ];
 // C# configurations of pre-registration §6.4, built by build-cs.mjs. The driver reports the
 // runtime it actually runs with; the runner checks it against the configuration's name.
@@ -121,6 +136,15 @@ for (const [track, prefix] of [["faithful", "cs"], ["optimized", "cs-o"]]) {
                 { id: `${prefix}-${runtime}-check12`, label: `C# Track O, ${description}, program parse+bind+check, parallel (12 checkers)`, threads: "parallel", check: true,
                     expectDriver: `cs-${track}-${runtime}-check-parallel-n12`, command: list => [driver, "--check", "--checkers", "12", list] });
         }
+        // Parse+bind+check+emit of the program (draft pre-registration §19): Track O, NativeAOT runtimes only.
+        if (track === "optimized" && runtime.startsWith("aot-")) {
+            const endpoint = runtime === "aot-ws" ? " (emitter endpoint)" : "";
+            configurations.push(
+                { id: `${prefix}-${runtime}-emit`, label: `C# Track O, ${description}, program parse+bind+check+emit, parallel (4 checkers)${endpoint}`, threads: "parallel", check: true, emit: true,
+                    expectDriver: `cs-${track}-${runtime}-emit-parallel`, command: list => [driver, "--check", "--emit", list] },
+                { id: `${prefix}-${runtime}-emit-single`, label: `C# Track O, ${description}, program parse+bind+check+emit, single-threaded`, threads: "single", check: true, emit: true,
+                    expectDriver: `cs-${track}-${runtime}-emit-single`, command: list => [driver, "--check", "--emit", "--single", list] });
+        }
     }
 }
 
@@ -152,13 +176,29 @@ const PROFILES = {
     // pre-registration §18 (prereg/v10): 12 checkers on both sides (secondary); the single-threaded rows of profile
     // check bind the variance gate; tsrs's program check is reported next to it
     check12: ["tsgo7-check12", "tsgo7-check-single", "tsrs-check", "cs-o-aot-ws-check12", "cs-o-aot-ws-check-single", "cs-o-aot-srv-check12"],
+    // Phase 4 emitter endpoint (draft §19): program check plus emit; binding rows tsgo7-emit-single and
+    // cs-o-aot-ws-emit-single (report.mjs)
+    emit: ["tsgo7-emit", "tsgo7-emit-single", "tsrs-emit", "tsrs-emit-single", "cs-o-aot-ws-emit", "cs-o-aot-ws-emit-single", "cs-o-aot-srv-emit", "cs-o-aot-srv-emit-single"],
 };
 const profile = arg("--profile", configFilter ? undefined : "full");
 if (profile && configFilter) throw new Error("--profile and --configs exclude each other");
 if (profile && profile !== "full" && !PROFILES[profile]) throw new Error(`unknown profile ${profile} (full, ${Object.keys(PROFILES).join(", ")})`);
 const selected = configFilter ?? (profile === "full" ? undefined : PROFILES[profile]);
 for (const id of selected ?? []) if (!configurations.some(c => c.id === id)) throw new Error(`unknown configuration ${id}`);
-const configs = configurations.filter(c => !selected || selected.includes(c.id));
+// Profile full keeps the configuration set it had before the emit configurations (module D7): those run only in profile
+// emit or when selected with --configs.
+const configs = configurations.filter(c => selected ? selected.includes(c.id) : !c.emit);
+
+// --dry-run (module D7): list the run's profile, settings and configurations (id, label, threads, mode flags, expected
+// driver, command with the file list as <list>) as JSON and exit; nothing runs, nothing is written.
+if (process.argv.includes("--dry-run")) {
+    console.log(JSON.stringify({
+        profile: profile ?? "custom", corpus: corpusName, repos, settings: { runs, warmup, memRuns, priority },
+        configurations: configs.map(c => ({ id: c.id, label: c.label, threads: c.threads, bind: c.bind ?? false, check: c.check ?? false, emit: c.emit ?? false,
+            expectDriver: c.expectDriver ?? null, command: c.command("<list>").map(p => p.startsWith(repoRoot) ? relative(repoRoot, p).split("\\").join("/") : p) })),
+    }, null, 1));
+    process.exit(0);
+}
 
 // Step 1 of measure(): one run, checked against the expected file count, the priority class, the driver name and,
 // for parse+bind configurations, a symbol count above zero. Returns the driver's report.
@@ -184,6 +224,8 @@ function validate(name, list, expectedFiles, config, withPeak = false) {
     if (config.bind && expectedFiles > 0 && !(output.symbols > 0)) throw new Error(`${config.id} on ${name}: driver reports ${output.symbols} symbols (no binder behind the driver?)`);
     if (config.check && typeof output.diagnostics !== "number") throw new Error(`${config.id} on ${name}: driver reports no diagnostic count (no check mode?)`);
     if (config.check && expectedFiles > 0 && !(output.programFiles > 0)) throw new Error(`${config.id} on ${name}: driver reports ${output.programFiles} program files (no program behind the driver?)`);
+    if (config.emit && (typeof output.outputFiles !== "number" || typeof output.outputBytes !== "number" || typeof output.emitDiagnostics !== "number")) throw new Error(`${config.id} on ${name}: driver reports no output counts (no emit mode?)`);
+    if (config.emit && expectedFiles > 0 && !(output.outputFiles > 0 && output.outputBytes > 0)) throw new Error(`${config.id} on ${name}: driver reports ${output.outputFiles} output files, ${output.outputBytes} bytes (no emitter behind the driver?)`);
     return output;
 }
 
@@ -192,14 +234,18 @@ function validate(name, list, expectedFiles, config, withPeak = false) {
 if (process.argv.includes("--check")) {
     console.log("| Repository | Configuration | Driver | Files | Nodes | Symbols | Diagnostics | Peak working set (MiB) | Wall (s) |");
     console.log("|---|---|---|---:|---:|---:|---:|---:|---:|");
+    const emitRows = [];
     for (const repo of repos) {
         for (const config of configs) {
             const output = validate(repo, join(benchDir, "filelists", `${repo}.txt`), fileManifest.repos[repo].files, config, existsSync(peakmem));
             const peak = output.peak === undefined ? "-" : (output.peak / 1048576).toFixed(0);
             const seconds = output.peakMs === undefined ? "-" : (output.peakMs / 1000).toFixed(1);
             console.log(`| ${repo} | ${config.id} | ${output.driver} | ${output.files} | ${output.nodes} | ${output.symbols ?? "-"} | ${output.diagnostics ?? "-"} | ${peak} | ${seconds} |`);
+            if (config.emit) emitRows.push(`| ${repo} | ${config.id} | ${output.outputFiles} | ${output.outputBytes} | ${output.emitDiagnostics} | ${output.emitSkipped} |`);
         }
     }
+    // emit configurations (module D7): their output counts
+    if (emitRows.length > 0) console.log(["", "| Repository | Configuration | Output files | Output bytes | Emit diagnostics | emitSkipped |", "|---|---|---:|---:|---:|---|", ...emitRows].join("\n"));
     for (const config of configs) validate("fixed-cost", join(benchDir, "filelists", "empty.txt"), 0, config);
     console.log(`\nok: ${configs.length} configuration(s) on ${repos.join(", ")} and the empty file list`);
     process.exit(0);
