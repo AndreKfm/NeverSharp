@@ -1,6 +1,8 @@
 # TG2: candidates from the tsrs gap that keep results — brief
 
-Implementation step after the analysis [TG1](TG1.md) ([tsrs-gap.md](../tsrs-gap.md)). The author decided on 2026-11-03 to implement the candidates that keep results.
+**Withdrawn 2026-11-03, before any change:** the author closed the checker (Gate C) work after TG1 and moved on to the next phase. Kept for reference.
+
+Implementation step after the analysis [TG1](TG1.md) ([tsrs-gap.md](../tsrs-gap.md)).
 
 Track O only. Written by the orchestrator. The standing rules of [README.md](README.md) apply; run only the tests and gates your change affects. The hard constraint and the working rules of [CO2.md](CO2.md) and [CO6.md](CO6.md) apply unchanged.
 

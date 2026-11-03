@@ -781,3 +781,7 @@ Diagnostics as in the runs before. At 12 checkers the Workstation GC pause is st
 ### Checker optimization closed after CO6 (2026-11-03)
 
 Closed by the author after the additional runs above. CO7 (globals merge once before the checkers start, inference contexts retained by the mapper store) is not pursued; both stay listed as open in [report-v1.md](report-v1.md) §11. Overall report updated to v1.1 (CO6 and the two additional runs; no endpoint changes).
+
+### Checker work closed after TG1 (2026-11-03)
+
+The author closed the checker (Gate C) work after the analysis TG1 ([tsrs-gap.md](tsrs-gap.md)). The TG2 brief was withdrawn before any change (the agent was stopped; no commit, working tree clean). The next phase follows.

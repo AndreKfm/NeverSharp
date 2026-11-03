@@ -301,7 +301,7 @@ All were fixed with a full Gate C.
   - the globals merge, which every checker repeats; merged once before the checkers start, it would also let the checkers share the duplicate-declaration data;
   - inference contexts kept alive by the mapper store;
   - module-resolution strings.
-- **The tsrs gap in the checker:** about 4–5 times; account and ranked candidates in [tsrs-gap.md](tsrs-gap.md) (TG1). Candidates that keep results are being implemented (TG2). Locality assignment and work stealing would change the parallel diagnostics and need the author's decision and an amendment.
+- **The tsrs gap in the checker:** about 4–5 times; account and ranked candidates in [tsrs-gap.md](tsrs-gap.md) (TG1). Not implemented: the author closed the checker work after TG1 (2026-11-03); the TG2 brief was withdrawn before any change. Locality assignment and work stealing would change the parallel diagnostics and need the author's decision and an amendment.
 - **Track O steps not evaluated:**
   - parser: O4, O7b, O8;
   - checker: dynamic scheduling, which would change the parallel diagnostics.
