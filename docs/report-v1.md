@@ -1,8 +1,10 @@
-# NeverSharp: overall report v1.1 (2026-11-03) — Windows only
+# NeverSharp: overall report v1.2 (2026-11-03) — Windows only
 
 This report collects the results of the project, from the pre-registration (`prereg/v1`, 2026-10-21) to the last amendment (`prereg/v10`, 2026-11-02).
 
 **v1.1** (2026-11-03) adds the optimization step CO6 and the two additional runs after it (profile `check` and profile `check12`). No endpoint changes. v1 was f157691.
+
+**v1.2** (2026-11-03) corrects §8, §9 and §11 after the analysis TG1 of the tsrs gap ([tsrs-gap.md](tsrs-gap.md)): what the gap consists of, tsrs's locality assignment and assignment-independent output, and its driver build without PGO. No numbers of the protocol change.
 
 NeverSharp is a C# port of the TypeScript 6.0.3 compiler front end: scanner, parser, binder and type checker. It is measured against typescript-go 7.0.2, Microsoft's Go port, under a pre-registered protocol ([preregistration.md](preregistration.md)). The detailed sources are:
 - the phase summaries: [track-o-summary.md](track-o-summary.md), [phase2-summary.md](phase2-summary.md) and [phase3-summary.md](phase3-summary.md);
@@ -220,7 +222,12 @@ Every claim names the track and scope, and gives G with its interval.
   - The gap grows with the checker count: 3.3 s of pause at 4 checkers, 5.05 s at 12, on vscode after CO6.
   - Go's collector marks concurrently and does not move objects, so typescript-go keeps scaling.
 - **What C# gives an optimized port.** The C# advantages used were value types and spans, arenas in native or pinned memory, SIMD, NativeAOT and the NoAlloc analyzer. They make the optimized parser and binder faster than typescript-go. A faithful port, whose representation follows TypeScript's object graph, cannot use them.
-- **The tsrs gap in the checker** was not analyzed. tsrs reports almost the same diagnostic counts as typescript-go, so it does the same checking work. It runs 16 checkers with work stealing, compared with fixed assignment for typescript-go and Track O; typescript-go itself is 3.2 times as slow as tsrs with 12 checkers.
+- **The tsrs gap in the checker** was analyzed in TG1 ([tsrs-gap.md](tsrs-gap.md); exploratory measurements, not protocol runs).
+  - tsrs does the same checking work: same programs including the default library, and types and symbols within 1–4 % once its lazy members are off. Its switchable shortcuts are worth at most 2–3 %.
+  - Single-threaded, parse and bind cost the same on both sides. The whole gap is the check phase, about 2 times as slow per operation in Track O (geometric mean 1.98).
+  - Parallel, about half of the gap (in log terms) is per-checker speed, not the pool. At typescript-go's pool settings (4 checkers, file *i* to checker *i* mod 4, no stealing), tsrs is still 2.49 times as fast as Track O ws and 1.97 times as fast as srv on vscode.
+  - The rest on vscode: Workstation GC pause 1.26, 16 instead of 4 checkers 1.76, tsrs's assignment by directory locality 1.22, work stealing 1.18.
+  - typescript-go itself is 3.2 times as slow as tsrs with 12 checkers.
 
 ## 9. Disclosed differences
 
@@ -235,10 +242,12 @@ Every claim names the track and scope, and gives G with its interval.
 - **Code generation:** each side is built as its project builds it.
   - Go and Rust target the x86-64 baseline; NativeAOT targets x86-64-v2.
   - No build uses AVX2; an x86-64-v3 build of Track O was not faster.
+  - The tsrs driver is built with fat LTO but without the PGO (and, on Linux, BOLT) of tsrs's release builds. The measured tsrs is therefore slower than the shipped one, by up to about 13 % by tsrs's own measurement.
 - **Checker pools:**
   - Track O and typescript-go use a fixed assignment, 4 checkers (12 in §18).
-  - tsrs uses 16 checkers with work stealing.
-  - With more than one checker, the diagnostics depend on the assignment. This is inherent to tsc's structure and the same in typescript-go: tldraw has 52,608 diagnostics at 12 checkers against 52,604 single-threaded.
+  - tsrs uses 16 checkers on this machine, assigns files by directory locality, and steals work.
+  - With more than one checker, the diagnostics of Track O and typescript-go depend on the assignment. This is inherent to tsc's structure: tldraw has 52,608 diagnostics in typescript-go at 12 checkers against 52,604 single-threaded.
+  - tsrs's default output does not depend on the assignment, by design, apart from known cases; only its `go` mode behaves like typescript-go.
 - **Runtimes:**
   - The checker and binder endpoints report the NativeAOT runtimes only (§16).
   - The primary C# configuration has been NativeAOT with Workstation GC, parallel, since `prereg/v1`. Server GC rows are secondary.
@@ -292,7 +301,7 @@ All were fixed with a full Gate C.
   - the globals merge, which every checker repeats; merged once before the checkers start, it would also let the checkers share the duplicate-declaration data;
   - inference contexts kept alive by the mapper store;
   - module-resolution strings.
-- **The tsrs gap in the checker:** about 4–5 times, not analyzed.
+- **The tsrs gap in the checker:** about 4–5 times; account and ranked candidates in [tsrs-gap.md](tsrs-gap.md) (TG1). Candidates that keep results are being implemented (TG2). Locality assignment and work stealing would change the parallel diagnostics and need the author's decision and an amendment.
 - **Track O steps not evaluated:**
   - parser: O4, O7b, O8;
   - checker: dynamic scheduling, which would change the parallel diagnostics.
@@ -310,7 +319,7 @@ All were fixed with a full Gate C.
 | 2026-10-29 | Gate C passes; `prereg/v9`; checker endpoint (1.680, no parity) |
 | 2026-11-01 | Phase 3 closed (last 1.025) |
 | 2026-11-02 | `prereg/v10`; 12-checker run (ws 1.305, srv 0.890); CO6 |
-| 2026-11-03 | Additional runs after CO6: 4 checkers 0.970 (faster), 12 checkers 1.236 |
+| 2026-11-03 | Additional runs after CO6: 4 checkers 0.970 (faster), 12 checkers 1.236; checker optimization closed; TG1 (tsrs gap analysis) |
 
 The 18-week budget for Phase 1 (to 2027-02-24) was not needed. Every phase finished inside it.
 
