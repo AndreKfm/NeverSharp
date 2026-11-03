@@ -408,6 +408,10 @@ In CN1, at equal N:
   1. every output file in emit order, with name and text;
   2. the emit diagnostics, with flattened message chains;
   3. `emitSkipped`.
+- **Symbol ids (decided by the author, 2026-11-03).** Before comparing, both sides replace tsc's process-wide symbol id with a placeholder. This applies only to the names tsc builds from it: the late-bound name `__@<name>@<id>` and the local name serialization derives from it (`____<name>_<id>`, with `getUnusedName`'s optional suffix).
+  - The id depends on how many symbols the oracle's worker numbered before the unit, not on the unit.
+  - On the corpus this changes 1 unit (015420) and 2 lines. The compare reports the count with every run (`compare-emit.mjs`, `symbolIdNormalized`).
+- **Units on which tsc 6.0.3 itself fails.** Four units (000863, 000913, 002379, 008381) fail with a `Debug Failure`. They match when Track O fails at the same ported assertion. They have no sections.
 - Track O Gate 2 applies to the emitter code. Gate C and the printer gate stay passed.
 
 **Endpoint.**
