@@ -45,6 +45,7 @@ internal sealed partial class Program
     private readonly HashSet<string> libFiles = new(StringComparer.Ordinal);
     private readonly List<ProgramDiagnostic> fileProcessingDiagnostics = [];
     private readonly List<ProgramDiagnostic> configDiagnostics = [];
+    private readonly HashSet<string> hasEmitBlockingDiagnostics = new(StringComparer.Ordinal);
     private List<SourceFile>? processingDefaultLibFiles = [];
     private List<SourceFile>? processingOtherFiles = [];
     private readonly List<SourceFile> files;
@@ -144,6 +145,8 @@ internal sealed partial class Program
             // The program is from either an inferred project or an external project
             var chain = ProgramDiagnostics.ChainDiagnosticMessages(null, Diagnostics.Adding_a_tsconfig_json_file_will_help_organize_projects_that_contain_both_TypeScript_and_JavaScript_files_Learn_more_at_https_Colon_Slash_Slashaka_ms_Slashtsconfig);
             chain = ProgramDiagnostics.ChainDiagnosticMessages([chain], Diagnostics.Cannot_write_file_0_because_it_would_overwrite_input_file, emitFileName);
+            // blockEmittingOfFile
+            hasEmitBlockingDiagnostics.Add(emitFilePath);
             configDiagnostics.Add(ProgramDiagnostics.CreateCompilerDiagnosticFromMessageChain(chain));
         }
         var emitFileKey = !host.UseCaseSensitiveFileNames ? emitFilePath.ToLowerInvariant() : emitFilePath;
@@ -151,12 +154,13 @@ internal sealed partial class Program
         if (!emitFilesSeen.Add(emitFileKey))
         {
             // Already seen the same emit file - report error
+            hasEmitBlockingDiagnostics.Add(emitFilePath);
             configDiagnostics.Add(ProgramDiagnostics.CreateCompilerDiagnosticFromMessageChain(ProgramDiagnostics.ChainDiagnosticMessages(null, Diagnostics.Cannot_write_file_0_because_it_would_be_overwritten_by_multiple_input_files, emitFileName)));
         }
     }
 
     // emitter.ts getOutputExtension
-    private string GetOutputExtension(string fileName)
+    internal string GetOutputExtension(string fileName)
     {
         return TsPath.FileExtensionIs(fileName, ".json") ? ".json"
             : options.Jsx == JsxEmit.Preserve && FileExtensionIsOneOf(fileName, ".jsx", ".tsx") ? ".jsx"
@@ -166,7 +170,7 @@ internal sealed partial class Program
     }
 
     // utilities.ts getDeclarationEmitExtensionForPath
-    private static string GetDeclarationEmitExtensionForPath(string path)
+    internal static string GetDeclarationEmitExtensionForPath(string path)
     {
         return FileExtensionIsOneOf(path, ".mjs", ".mts") ? ".d.mts"
             : FileExtensionIsOneOf(path, ".cjs", ".cts") ? ".d.cts"
@@ -175,7 +179,7 @@ internal sealed partial class Program
     }
 
     // utilities.ts removeFileExtension (extensionsToRemove)
-    private static string RemoveFileExtension(string path)
+    internal static string RemoveFileExtension(string path)
     {
         foreach (var extension in ExtensionsToRemove)
         {
@@ -207,6 +211,11 @@ internal sealed partial class Program
     }
 
     internal CompilerOptions Options => options;
+
+    /// <summary>program.ts isEmitBlocked: an output path that verifyCompilerOptions blocked (TS5055, TS5056).</summary>
+    internal bool IsEmitBlocked(string emitFileName) => hasEmitBlockingDiagnostics.Contains(ToPath(emitFileName));
+
+    internal string CurrentDirectory => currentDirectory;
 
     internal ICompilerHost Host => host;
 

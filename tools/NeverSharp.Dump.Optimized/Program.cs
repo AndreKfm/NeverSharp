@@ -15,10 +15,15 @@
 //                             --jsdoc-mode types|all|none (default types) [--lib-dir <dir>] [--units <file>]
 //                             -> <corpus>/dumps/cs-optimized-checker-<mode>
 //   (--checker with any mode selects the checker dump too)
+//   emit                      emit dump for Gate D (module D0; harness/astdump/dump-ts-emit.mjs has the format)
+//                             [--lib-dir <dir>] [--units <file>] -> <corpus>/dumps/cs-optimized-emit-types
+//   (--emit with any mode selects the emit dump too)
+//   printer --comments keep   the printer dump with removeComments: false (module D0)
 
 using NeverSharp.Dump;
 
 return args.Length == 0 ? Usage()
+    : Array.IndexOf(args, "--emit") >= 0 ? EmitDump.Run(new Options(args))
     : Array.IndexOf(args, "--checker") >= 0 ? CheckerDump.Run(new Options(args))
     : Array.IndexOf(args, "--binder") >= 0 ? BinderDump.Run(new Options(args))
     : Array.IndexOf(args, "--printer") >= 0 ? PrinterDump.Run(new Options(args))
@@ -30,11 +35,12 @@ return args.Length == 0 ? Usage()
         "binder" => BinderDump.Run(new Options(args)),
         "printer" => PrinterDump.Run(new Options(args)),
         "checker" => CheckerDump.Run(new Options(args)),
+        "emit" => EmitDump.Run(new Options(args)),
         _ => Usage(),
     };
 
 static int Usage()
 {
-    Console.Error.WriteLine("usage: NeverSharp.Dump.Optimized tokens|ast|ast-replay|binder|printer|checker [--corpus <dir>] [--out <dir>] [--jsdoc-mode all|none|types] [--timeout-ms <n>] [--lib-dir <dir>] [--units <file or ids>]");
+    Console.Error.WriteLine("usage: NeverSharp.Dump.Optimized tokens|ast|ast-replay|binder|printer|checker|emit [--corpus <dir>] [--out <dir>] [--jsdoc-mode all|none|types] [--timeout-ms <n>] [--lib-dir <dir>] [--units <file or ids>]");
     return 2;
 }

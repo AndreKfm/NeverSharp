@@ -238,7 +238,7 @@ internal static class CheckerDump
         _ => throw new InvalidOperationException(category.ToString()),
     };
 
-    private static void WriteDiagnostics(StringBuilder sb, string tag, List<ProgramDiagnostic> list, string unitName)
+    internal static void WriteDiagnostics(StringBuilder sb, string tag, List<ProgramDiagnostic> list, string unitName)
     {
         foreach (var d in list)
         {

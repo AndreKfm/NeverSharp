@@ -80,6 +80,9 @@ internal sealed class CompilerOptions
 
     public bool? NoImplicitThis { get; set; }
 
+    /// <summary>The emit's new line (module D0; undefined is TypeScript 6.0.3's default, LF).</summary>
+    public NewLineKind? NewLine { get; set; }
+
     public bool? NoLib { get; set; }
 
     public bool? NoPropertyAccessFromIndexSignature { get; set; }
@@ -93,6 +96,9 @@ internal sealed class CompilerOptions
     public bool? NoUnusedParameters { get; set; }
 
     public bool? PreserveConstEnums { get; set; }
+
+    /// <summary>Module D0: the emit's printers (undefined: comments are kept).</summary>
+    public bool? RemoveComments { get; set; }
 
     public bool? ResolveJsonModule { get; set; }
 
