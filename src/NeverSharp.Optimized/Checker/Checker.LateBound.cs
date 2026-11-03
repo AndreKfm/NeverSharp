@@ -176,7 +176,42 @@ internal sealed partial class Checker
                 }
             }
         }
-        resolved = CombineSymbolTables(earlySymbols, lateSymbols) ?? emptySymbols;
+        var combined = CombineSymbolTables(earlySymbols, lateSymbols);
+        // If this is a CommonJS export merge (getCommonJsExportEquals), the late-bound members of the declarations'
+        // own symbols were resolved there (lateBindMember binds a member once), so they are merged in from those
+        if (symbol.IsTransient && cjsExportMerged.ContainsKey(symbol) && DeclarationsOf(symbol) is { } declarations)
+        {
+            foreach (var decl in declarations)
+            {
+                SymTable? original = cache.TryGetValue(NodeSymbol(decl), out var o) ? o : null;
+                if (combined is null)
+                {
+                    combined = original;
+                    continue;
+                }
+                if (original is null)
+                {
+                    continue;
+                }
+                var target = combined.Value;
+                var source = original.Value;
+                for (var i = 0; i < source.Count; i++)
+                {
+                    var name = source.NameIdAt(i);
+                    var s = source.ValueAt(i);
+                    var existing = target.Get(name);
+                    if (existing.IsNone)
+                    {
+                        target.Set(name, s);
+                    }
+                    else if (existing != s)
+                    {
+                        target.Set(name, MergeSymbol(existing, s));
+                    }
+                }
+            }
+        }
+        resolved = combined ?? emptySymbols;
         cache[symbol] = resolved;
         return resolved;
     }
