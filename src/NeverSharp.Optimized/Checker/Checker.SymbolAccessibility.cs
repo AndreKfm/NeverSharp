@@ -12,7 +12,8 @@
 // parent is the enclosing declaration, checker.ts enterNewScope) are a FakeScope chain on top of the enclosing
 // declaration (Track O nodes of a file cannot point at a synthesized parent). Module EO1: the accessibleChainCache
 // (one map per checker keyed by the symbol and TypeScript's key; a fake scope is a key location of its own). Module D5: the node links' isVisible cache (isVisibleLinks), which declaration emit paints
-// (Checker.DeclarationEmit.cs); the versions with aliases to make visible are there.
+// (Checker.DeclarationEmit.cs); the versions with aliases to make visible are there. Module EO2 (Track O / tsrs-only): the loop
+// of getAliasForSymbolInContainer is answered from an index of the export table (Checker.ExportIndex.cs).
 
 using NeverSharp.Generated;
 
@@ -685,14 +686,9 @@ internal sealed partial class Checker
         {
             return quick;
         }
-        for (var i = 0; i < exports.Count; i++)
-        {
-            if (!GetSymbolIfSameReference(exports.ValueAt(i), symbol).IsNone)
-            {
-                return exports.ValueAt(i);
-            }
-        }
-        return SymbolRef.None;
+        // forEachEntry(exports, exported => getSymbolIfSameReference(exported, symbol) ? exported : undefined), answered
+        // from module EO2's index of the table (Track O / tsrs-only, Checker.ExportIndex.cs)
+        return FirstExportOfSameReference(exports, symbol);
     }
 
     // checker.ts getSymbolIfSameReference: checks if two symbols, through aliasing and/or merging, refer to the same thing

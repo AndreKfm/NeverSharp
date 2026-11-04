@@ -2374,6 +2374,7 @@ internal sealed partial class Checker
         var exports = SymTable.OrNew(ref record.Exports, Names);
         var members = SymTable.OrNew(ref record.Members, Names);
         record.Flags |= SymbolFlagsOf(source) & SymbolFlags.Class;
+        symbolStateVersion++; // module EO2: the flags resolveSymbol reads may change (Checker.ExportIndex.cs)
         var sourceExports = ExportsOf(source);
         if (sourceExports is { Count: > 0 } sourceExportsTable)
         {

@@ -299,6 +299,10 @@ internal sealed partial class Checker
     {
         ref var record = ref TransientSymbols.Record(symbol);
         record.Flags |= symbolFlags;
+        if ((record.Flags & SymbolFlags.Alias) != 0)
+        {
+            symbolStateVersion++; // module EO2: resolveSymbol's answer for an alias may change (Checker.ExportIndex.cs)
+        }
         lateSymbolsOfEarlySymbols[memberSymbol] = symbol;
         if (record.Declarations.IsUndefined)
         {

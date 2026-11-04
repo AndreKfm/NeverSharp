@@ -234,7 +234,11 @@ internal sealed partial class Checker
     internal SymbolRef CreateSymbol(SymbolFlags flags, int name, CheckFlags checkFlags = CheckFlags.None) =>
         TransientSymbols.Create(flags, name, checkFlags);
 
-    private void RecordMergedSymbol(SymbolRef target, SymbolRef source) => mergedSymbols[source] = target;
+    private void RecordMergedSymbol(SymbolRef target, SymbolRef source)
+    {
+        mergedSymbols[source] = target;
+        symbolStateVersion++; // module EO2: getMergedSymbol changes (Checker.ExportIndex.cs)
+    }
 
     /// <summary>checker.ts cloneSymbol.</summary>
     private SymbolRef CloneSymbol(SymbolRef symbol)
@@ -349,6 +353,7 @@ internal sealed partial class Checker
                 t.ConstEnumOnlyModule = false;
             }
             t.Flags |= sourceFlags;
+            symbolStateVersion++; // module EO2: the flags resolveSymbol reads may change (Checker.ExportIndex.cs)
             var sourceValueDeclaration = ValueDeclarationOf(source);
             if (!sourceValueDeclaration.IsNone)
             {
@@ -991,10 +996,14 @@ internal sealed partial class Checker
         {
             return cached;
         }
+        // Module EO2 (Track O / tsrs-only, checker_08.rs get_exports_of_module): counted while the table is computed (a
+        // nested computation of the same table, through export * cycles, caches a result that this one then replaces).
+        aliasCacheBlockers++;
         var visited = new List<SymbolRef>();
         var resolved = ResolveExternalModuleSymbol(moduleSymbol);
         var exports = VisitModuleExports(resolved, visited) ?? emptySymbols;
         resolvedModuleExports[moduleSymbol] = exports;
+        aliasCacheBlockers--;
         return exports;
     }
 

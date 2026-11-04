@@ -2264,10 +2264,14 @@ internal sealed partial class Checker
         if (links.AliasTarget.IsNone)
         {
             links.AliasTarget = resolvingSymbol;
+            // Module EO2 (Track O / tsrs-only, checker_08.rs resolve_alias): counted until the target is final (the
+            // circularity report below prints with the provisional target).
+            aliasCacheBlockers++;
             var node = GetDeclarationOfAliasSymbol(symbol);
             if (node.IsNone)
             {
                 AliasSymbolLinks.Get(symbol).AliasTarget = unknownSymbol;
+                aliasCacheBlockers--;
                 return unknownSymbol;
             }
             var target = GetTargetOfAliasDeclaration(node);
@@ -2280,6 +2284,7 @@ internal sealed partial class Checker
             {
                 Error(node, Diagnostics.Circular_definition_of_import_alias_0, SymbolToString(symbol));
             }
+            aliasCacheBlockers--;
         }
         else if (links.AliasTarget == resolvingSymbol)
         {

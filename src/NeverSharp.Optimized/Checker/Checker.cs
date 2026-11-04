@@ -120,6 +120,7 @@ internal sealed partial class Checker
         resolvingSymbol = CreateSymbol(SymbolFlags.None, InternalSymbolName.Resolving);
         CreateIntrinsicTypes();
         InitializeTypeChecker();
+        aliasCacheBlockers--; // module EO2: the globals and augmentations are merged (Checker.ExportIndex.cs)
     }
 
     internal Program Program => program;

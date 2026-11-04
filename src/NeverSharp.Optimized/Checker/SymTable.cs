@@ -73,6 +73,16 @@ internal readonly struct SymTable : IEquatable<SymTable>
         get => store.Count(id);
     }
 
+    /// <summary>
+    /// Module EO2 (Track O / tsrs-only): a number that changes whenever the contents change (Set, Delete, Clear), so an
+    /// index of the table can tell that it is out of date (<see cref="Checker"/>'s export table index).
+    /// </summary>
+    internal int Version
+    {
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+        get => store.Version(id);
+    }
+
     /// <summary>Map.get (None when absent).</summary>
     internal SymbolRef Get(string name)
     {
@@ -190,6 +200,7 @@ internal sealed class SymTableStore
         public int Capacity;
         public int Buckets;   // start of the index range; meaningful when BucketCount > 0
         public int BucketCount; // 0: no index, at most LinearLimit entries, found by a scan
+        public int Version;   // module EO2: counts the changes of the contents (Set, Delete, Clear)
     }
 
     internal struct Entry
@@ -257,6 +268,9 @@ internal sealed class SymTableStore
     internal int Count(int id) => RecordOf(id).Count;
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal int Version(int id) => RecordOf(id).Version;
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal SymbolRef Get(int id, int name)
     {
         ref var r = ref RecordOf(id);
@@ -280,6 +294,7 @@ internal sealed class SymTableStore
     internal void Set(int id, int name, SymbolRef symbol)
     {
         ref var r = ref RecordOf(id);
+        r.Version++;
         var i = Find(ref r, name);
         if (i >= 0)
         {
@@ -325,6 +340,7 @@ internal sealed class SymTableStore
     internal void Clear(int id)
     {
         ref var r = ref RecordOf(id);
+        r.Version++;
         if (r.BucketCount > 0)
         {
             var b = buckets.Span(r.Buckets, r.BucketCount);
@@ -362,6 +378,7 @@ internal sealed class SymTableStore
         var e = entries.Span(r.Entries, r.Count);
         e[(i + 1)..].CopyTo(e[i..]);
         r.Count--;
+        r.Version++;
         if (r.BucketCount > 0)
         {
             if (r.Count <= LinearLimit)
