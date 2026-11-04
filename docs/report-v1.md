@@ -1,13 +1,15 @@
-# NeverSharp: overall report v1.2 (2026-11-03) — Windows only
+# NeverSharp: overall report v1.3 (2026-11-04) — Windows only
 
-This report collects the results of the project, from the pre-registration (`prereg/v1`, 2026-10-21) to the last amendment (`prereg/v10`, 2026-11-02).
+This report collects the results of the project, from the pre-registration (`prereg/v1`, 2026-10-21) to the last amendment (`prereg/v11`, 2026-11-03).
 
 **v1.1** (2026-11-03) adds the optimization step CO6 and the two additional runs after it (profile `check` and profile `check12`). No endpoint changes. v1 was f157691.
 
-**v1.2** (2026-11-03) corrects §8, §9 and §11 after the analysis TG1 of the tsrs gap ([tsrs-gap.md](tsrs-gap.md)): what the gap consists of, tsrs's locality assignment and assignment-independent output, and its driver build without PGO. No numbers of the protocol change.
+**v1.2** (2026-11-03) corrects §8, §9 and §11 after the analysis TG1 of the tsrs gap ([tsrs-gap.md](tsrs-gap.md)): what the gap consists of, tsrs's locality assignment and assignment-independent output, and its driver build without PGO. No numbers of the protocol change. (In v1.3 these sections are numbered §9, §10 and §12.)
 
-NeverSharp is a C# port of the TypeScript 6.0.3 compiler front end: scanner, parser, binder and type checker. It is measured against typescript-go 7.0.2, Microsoft's Go port, under a pre-registered protocol ([preregistration.md](preregistration.md)). The detailed sources are:
-- the phase summaries: [track-o-summary.md](track-o-summary.md), [phase2-summary.md](phase2-summary.md) and [phase3-summary.md](phase3-summary.md);
+**v1.3** (2026-11-04) adds Phase 4, the emitter (§7, amendment `prereg/v11`), with its endpoint: within 20 % of typescript-go (1.030). The checker results are unchanged.
+
+NeverSharp is a C# port of the TypeScript 6.0.3 compiler: scanner, parser, binder, type checker and, for Track O, the emitter. It is measured against typescript-go 7.0.2, Microsoft's Go port, under a pre-registered protocol ([preregistration.md](preregistration.md)). The detailed sources are:
+- the phase summaries: [track-o-summary.md](track-o-summary.md), [phase2-summary.md](phase2-summary.md), [phase3-summary.md](phase3-summary.md) and [phase4-summary.md](phase4-summary.md);
 - the progress log [phase1-progress.md](phase1-progress.md);
 - the result directories under `results/`, each with run.json, report.md, the raw hyperfine exports and a VERDICT.md or NOTE.md.
 
@@ -24,10 +26,11 @@ The pre-registered question (§1) asks:
 
 **A second question was registered separately.** How fast can a performance-optimized C# port of the same compiler be? Track O answers it, and it is never reported in place of the Track F verdict.
 - **Parsing:** Track O parses faster than typescript-go (endpoint G = **0.60**).
-- **Binder and checker:** Track O was extended to the binder (Phase 2) and the checker (Phase 3).
+- **Binder, checker and emitter:** Track O was extended to the binder (Phase 2), the checker (Phase 3) and the emitter (Phase 4).
   - The binder endpoint is **inconclusive** (1.207).
   - The checker endpoint is **no parity** (1.680).
-  - Both endpoints measured the unoptimized ports. Later additional runs, labeled as such, put parse+bind at 0.425 and parse+bind+check at 0.970 of typescript-go's time.
+  - The emitter endpoint, parse+bind+check+emit of a program, is **within 20 %** (1.030), measured after the checker optimizations.
+  - The binder and checker endpoints measured the unoptimized ports. Later additional runs, labeled as such, put parse+bind at 0.425 and parse+bind+check at 0.970 of typescript-go's time.
 
 All numbers below are from one machine: AMD Ryzen 9 3900X, 12 cores / 24 threads, fixed all-core clock ([hardware.md](hardware.md)). All are Windows only; the Linux replication (§8, A4) has not been run and was deferred by the author on 2026-11-01.
 
@@ -50,6 +53,7 @@ G is the geometric mean over the five repositories of median(C#) / median(refere
 | Parsing, optimized (Track O) | `cs-o-aot-ws` vs `tsgo7-parse` | **0.60 [0.59, 0.61]** | **faster** | none | 0.45 | `results/track-o/endpoint/2026-10-22T18-55-52-105Z/` |
 | Parse+bind, optimized | `cs-o-aot-ws-bind` vs `tsgo7-bind` | **1.207 [1.191, 1.219]** | **inconclusive** | sentry | 1.09 | `results/phase2/binder-endpoint/2026-10-24T11-21-53-808Z/` |
 | Parse+bind+check of a program, optimized, 4 checkers | `cs-o-aot-ws-check` vs `tsgo7-check` | **1.680 [1.675, 1.689]** | **no parity** | all five | 0.93 | `results/phase3/checker-endpoint/2026-10-29T14-41-57-488Z/` |
+| Parse+bind+check+emit of a program, optimized, 4 checkers | `cs-o-aot-ws-emit` vs `tsgo7-emit` | **1.030 [1.026, 1.035]** | **within 20 %** | none | 0.56 | `results/phase4/emit/2026-11-03T19-39-41-764Z/` |
 
 **Last additional runs.** These are published next to the endpoints and never replace them.
 
@@ -82,13 +86,14 @@ Peak working set (G) is the geometric mean over the repositories of the C# media
   - Gate 1: AST dumps, including JSDoc.
   - Gate B: binder dumps, in both JSDoc modes.
   - Gate C: diagnostics, types and symbols dumps.
+  - Gate D: emit dumps (every output file, the emit diagnostics, `emitSkipped`).
 - **Measurement:**
   - hyperfine, 20 timed runs after 3 warmups;
   - drivers in the high priority class, peak memory from 5 separate runs;
   - rig checks: fixed processor state, no boost, idle before each run;
   - a variance gate on the binding single-threaded rows: MAD/median < 3 %.
 - **One final measurement:** the endpoint is the first protocol-compliant run after the gate passes. Additional runs never replace it.
-- **Timestamps:** every pre-registration tag (`prereg/v1` … `v10`) has an OpenTimestamps proof anchored in Bitcoin ([timestamps/README.md](timestamps/README.md)). The repository is private until publication.
+- **Timestamps:** every pre-registration tag (`prereg/v1` … `v11`) has an OpenTimestamps proof anchored in Bitcoin ([timestamps/README.md](timestamps/README.md)). The repository is private until publication.
 
 **Kill criteria (§9):** none was triggered.
 - The oracles agreed under the pre-registered normalization: 50,092 units identical, 85 listed divergences.
@@ -179,7 +184,43 @@ On vscode with 12 checkers and Server GC, Track O takes 6.76 s against typescrip
 
 The additional run with 12 checkers after CO6 gave Workstation GC **1.236 [1.226, 1.244]**, still no parity, and Server GC 0.889, unchanged. On vscode the Workstation GC pause fell from 5.80 s to 5.05 s of 10.85 s.
 
-## 7. What may be claimed
+## 7. Phase 4: emitter (Track O only)
+
+The emitter of TypeScript 6.0.3 was ported for Track O only, about 17,500 lines of C#. It produces `.js` and `.d.ts` output under TypeScript 6.0.3's default options plus `declaration: true`:
+- target ES2025, so module kind ES2022;
+- no source maps;
+- comments kept.
+
+This is the author's decision of 2026-11-03; the amendment is `prereg/v11` (§19).
+
+**What was ported:**
+- the transformers TypeScript, ESNext, ES decorators, class fields, ES module, CommonJS for `.cts`/`.cjs`, and declarations;
+- the emit resolver, the emit helpers and comment emission;
+- the node builder's declaration mode.
+
+The work was done in modules D0–D8 ([phase4-summary.md](phase4-summary.md)).
+
+**Equivalence.**
+- **Gate D passes:** the emit dumps are byte-identical with tsc 6.0.3 on 50,177 of 50,177 units.
+  - Four units on which tsc 6.0.3 itself fails with a `Debug Failure` fail in Track O at the same ported assertion.
+  - tsc's process-wide symbol id inside generated names is normalized on both sides: 1 unit, 2 lines.
+- **Programs:** the five repository programs, emitted single-threaded, give output byte-identical with tsc 6.0.3's, for example vscode with 22,942 files and 161,946,338 bytes.
+- **Parallel:** with several checkers the `.d.ts` output depends on the number of checkers, on both the C# side and typescript-go. The `.js` output does not.
+
+**Endpoint (2026-11-03, the first port after Gate D, no emitter optimization).**
+
+> Parse+bind+check+emit of a program, optimized track, 4 checkers: 1.030× [1.026, 1.035] the wall-clock of typescript-go 7.0.2, so **within 20 %**. Per repository: vscode 1.147, sentry 0.812, bluesky 1.153, playwright 1.153, tldraw 0.938; none is above 1.20. Peak working set is 0.56× typescript-go's. Windows only.
+
+Secondary results of the endpoint run:
+- single-threaded, faster (0.821);
+- Server GC, faster (0.894 at 98.75 %);
+- against tsrs, 5.057 parallel and 1.630 single-threaded.
+
+**Where the emit adds time (post hoc).** Compared with the check-only additional run, which is a separate run:
+- On vscode the emit costs Track O 9.1 s under Workstation GC and typescript-go 5.9 s, and the GC pause grows from 3.3 s to 4.4 s.
+- On the other four repositories both sides pay about the same for the emit.
+
+## 8. What may be claimed
 
 Every claim names the track and scope, and gives G with its interval.
 
@@ -190,6 +231,7 @@ Every claim names the track and scope, and gives G with its interval.
 - Parsing is faster than typescript-go: 0.60 [0.59, 0.61].
 - Parse+bind is inconclusive: 1.207.
 - Parse+bind+check of a program with 4 checkers is more than 20 % slower: 1.680.
+- Parse+bind+check+emit of a program with 4 checkers is within 20 % of typescript-go: 1.030 [1.026, 1.035]. Single-threaded it is faster (0.821), and so is Server GC (0.894).
 
 **Optimized track, labeled additional runs:**
 - Parsing is about 2.5 times as fast as typescript-go: 0.40.
@@ -211,9 +253,11 @@ Every claim names the track and scope, and gives G with its interval.
 - that the optimized checker matches typescript-go at its pre-registered endpoint;
 - that any Track O result is faster than tsrs in any phase;
 - that the checker is near tsrs. After CO6 it is 3.9–4.9 times as slow with Workstation GC and 2.8 times with Server GC at 12 checkers;
+- that the emit is faster than typescript-go with Workstation GC: the lower bound is 1.026;
+- that the emit is near tsrs: 5.057 parallel;
 - anything about Linux.
 
-## 8. Why, in short (post hoc)
+## 9. Why, in short (post hoc)
 
 - **Where the time went.** In every phase, the unoptimized C# port was about as fast as typescript-go single-threaded, or faster. The parallel gap was allocation: with Workstation GC, gen0 and gen1 collections stop all worker threads and are collected by one thread.
   - Parsing and binding became nearly allocation-free with arenas and records in per-thread memory. vscode parse+bind: 89 MB allocated, 50 ms of GC pause.
@@ -228,8 +272,9 @@ Every claim names the track and scope, and gives G with its interval.
   - Parallel, about half of the gap (in log terms) is per-checker speed, not the pool. At typescript-go's pool settings (4 checkers, file *i* to checker *i* mod 4, no stealing), tsrs is still 2.49 times as fast as Track O ws and 1.97 times as fast as srv on vscode.
   - The rest on vscode: Workstation GC pause 1.26, 16 instead of 4 checkers 1.76, tsrs's assignment by directory locality 1.22, work stealing 1.18.
   - typescript-go itself is 3.2 times as slow as tsrs with 12 checkers.
+- **The emitter** is the only phase whose endpoint was measured after the checker optimizations. The checker under it was already at 0.970. The emit brings that to 1.030, mostly on vscode, through allocation and Workstation GC pause as before.
 
-## 9. Disclosed differences
+## 10. Disclosed differences
 
 - **Versions:**
   - The C# tracks port TypeScript 6.0.3.
@@ -248,11 +293,15 @@ Every claim names the track and scope, and gives G with its interval.
   - tsrs uses 16 checkers on this machine, assigns files by directory locality, and steals work.
   - With more than one checker, the diagnostics of Track O and typescript-go depend on the assignment. This is inherent to tsc's structure: tldraw has 52,608 diagnostics in typescript-go at 12 checkers against 52,604 single-threaded.
   - tsrs's default output does not depend on the assignment, by design, apart from known cases; only its `go` mode behaves like typescript-go.
+- **Emit:**
+  - typescript-go's and tsrs's emitters follow TypeScript 7. Their output bytes differ from the C# side by at most 0.2 %, and sentry has one output file more (17,841 against 17,840).
+  - Track O emits one work item per checker; typescript-go emits one per file.
+  - The tuning emit list leaves out 139 units that tsc 6.0.3 itself cannot emit together. It was used for tuning only.
 - **Runtimes:**
-  - The checker and binder endpoints report the NativeAOT runtimes only (§16).
+  - The binder, checker and emitter endpoints report the NativeAOT runtimes only (§16).
   - The primary C# configuration has been NativeAOT with Workstation GC, parallel, since `prereg/v1`. Server GC rows are secondary.
 
-## 10. Deviations, decisions after data, and process
+## 11. Deviations, decisions after data, and process
 
 **Amendments.** Every amendment is in §12.2, tagged and timestamped before the measurement it could affect.
 - **Errata or new references, not decided after seeing data:**
@@ -266,6 +315,7 @@ Every claim names the track and scope, and gives G with its interval.
   - v7: binder.
   - v9: checker.
   - v10: 12 checkers.
+  - v11: emitter. The CommonJS transformer and the symbol-id normalization of Gate D were decided by the author while the gate still failed, before any emit measurement.
 - **Decided after seeing data:**
   - **v4,** the variance gate binding fewer rows. It was adopted after M6 runs 1 and 2 failed it only in JIT and Server GC configurations. Those runs carry no verdict, and their primary numbers were 6.45 and 6.28.
   - **v10,** 12 checkers. N = 12 was chosen after the unregistered exploration CN1. This is disclosed in §18, and the measurement is secondary.
@@ -289,12 +339,14 @@ Every claim names the track and scope, and gives G with its interval.
 
 All were fixed with a full Gate C.
 
+**Defects found by the emit equivalence of the programs** (D8): two declaration-emit defects that no one-file unit of Gate D reaches. Both were fixed before `prereg/v11` was tagged.
+
 **Workflow:**
 - Opus 5.5 orchestrated; ports and optimization steps were done by agents in separate attempts.
 - From 2026-10-25, one agent ran at a time, directly on `main`.
 - Gates and the rig checks were rerun by the orchestrator before every merge and every protocol run.
 
-## 11. Open
+## 12. Open
 
 - **Linux replication (A4, §8):** deferred by the author. Until it exists, every result is "Windows only".
 - **The Workstation GC pause in the checker:** still the main reason for the gap with 12 checkers (Server GC with the same code: 0.889). Not pursued after CO6, by the author's decision. Candidates:
@@ -305,9 +357,12 @@ All were fixed with a full Gate C.
 - **Track O steps not evaluated:**
   - parser: O4, O7b, O8;
   - checker: dynamic scheduling, which would change the parallel diagnostics.
-- **Out of scope for v1 (§10):** emitter, language service, incremental parsing, tsserver, public API.
+- **The emitter:** no optimization step was made. vscode (1.147), bluesky and playwright (1.153) are the slowest repositories.
+- **Out of scope (§10, §19):**
+  - the emitter under other options: downlevel targets, JSX, legacy decorators, the AMD, UMD and System modules, source maps;
+  - the language service, incremental parsing, tsserver and the public API.
 
-## 12. Timeline
+## 13. Timeline
 
 | Date | Milestone |
 |---|---|
@@ -319,14 +374,15 @@ All were fixed with a full Gate C.
 | 2026-10-29 | Gate C passes; `prereg/v9`; checker endpoint (1.680, no parity) |
 | 2026-11-01 | Phase 3 closed (last 1.025) |
 | 2026-11-02 | `prereg/v10`; 12-checker run (ws 1.305, srv 0.890); CO6 |
-| 2026-11-03 | Additional runs after CO6: 4 checkers 0.970 (faster), 12 checkers 1.236; checker optimization closed; TG1 (tsrs gap analysis) |
+| 2026-11-03 | Additional runs after CO6: 4 checkers 0.970 (faster), 12 checkers 1.236; checker optimization closed; TG1 (tsrs gap analysis); Phase 4 D0–D8; Gate D passes; `prereg/v11`; emitter endpoint (1.030, within 20 %) |
 
 The 18-week budget for Phase 1 (to 2027-02-24) was not needed. Every phase finished inside it.
 
-## 13. Reproducing
+## 14. Reproducing
 
 - Pins: `pins.json` and `global.json`. Fetch the references with `node scripts/fetch-references.mjs`.
 - Builds: `harness/bench/build-cs.mjs`, `build-go.mjs` and `build-rs.mjs`.
-- Gates: `node harness/port/gate.mjs --track optimized --phase parser|binder|checker`; Track F: `--track faithful`.
-- Protocol runs: `node harness/bench/bench.mjs --profile full|binder|check|check12`, then `node harness/bench/report.mjs <run.json>` ([benchmark-harness.md](benchmark-harness.md)).
+- Gates: `node harness/port/gate.mjs --track optimized --phase parser|binder|checker|emit`; Track F: `--track faithful`.
+- Emit equivalence of the programs: `node harness/bench/emit-equivalence.mjs`.
+- Protocol runs: `node harness/bench/bench.mjs --profile full|binder|check|check12|emit`, then `node harness/bench/report.mjs <run.json>` ([benchmark-harness.md](benchmark-harness.md)).
 - Verify a timestamp: `node scripts/ots.mjs verify docs/timestamps/prereg-vN.txt.ots`.
