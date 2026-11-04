@@ -1059,7 +1059,9 @@ internal sealed partial class Checker
                 context.Depth += 1;
                 return CreateAnonymousTypeNode(type, context, forceClassExpansion: true, forceExpansion: true);
             }
-            return !Types.Object(type).Node.IsNone ? VisitAndTransformType(type, context, t => TypeReferenceToTypeNode(t, context)) : TypeReferenceToTypeNode(type, context);
+            // (a copy of context in this scope, so the closure is created on these paths only, not at every call; Track O)
+            var referenceContext = context;
+            return !Types.Object(type).Node.IsNone ? VisitAndTransformType(type, context, t => TypeReferenceToTypeNode(t, referenceContext)) : TypeReferenceToTypeNode(type, context);
         }
         if ((flags & TypeFlags.TypeParameter) != 0 || (objectFlags & ObjectFlags.ClassOrInterface) != 0)
         {
@@ -1177,7 +1179,8 @@ internal sealed partial class Checker
         }
         if ((flags & TypeFlags.Conditional) != 0)
         {
-            return VisitAndTransformType(type, context, t => ConditionalTypeToTypeNode(t, context));
+            var conditionalContext = context;
+            return VisitAndTransformType(type, context, t => ConditionalTypeToTypeNode(t, conditionalContext));
         }
         if ((flags & TypeFlags.Substitution) != 0)
         {
@@ -1242,7 +1245,8 @@ internal sealed partial class Checker
                 }
                 return CreateElidedInformationPlaceholder(context);
             }
-            return VisitAndTransformType(type, context, t => TypeToTypeNodeHelper(t, context));
+            var helperContext = context;
+            return VisitAndTransformType(type, context, t => TypeToTypeNodeHelper(t, helperContext));
         }
         return TypeToTypeNodeHelper(type, context);
     }

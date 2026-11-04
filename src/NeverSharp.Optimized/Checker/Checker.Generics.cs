@@ -724,6 +724,19 @@ internal sealed partial class Checker
     private bool IsKnownSymbol(SymbolRef symbol) => NameOf(symbol).StartsWith("__@", StringComparison.Ordinal);
 
     // checker.ts getDeclarationModifierFlagsFromSymbol (the accessor declarations and synthetic properties: module C5)
+    // declarations.find(d => d.kind === kind) as a loop (no delegate per call; Track O)
+    private NodeRef FindDeclarationOfKind(Decls declarations, SyntaxKind kind)
+    {
+        foreach (var d in declarations)
+        {
+            if (Kind(d) == kind)
+            {
+                return d;
+            }
+        }
+        return NodeRef.None;
+    }
+
     private ModifierFlags GetDeclarationModifierFlagsFromSymbol(SymbolRef symbol, bool isWrite = false)
     {
         var declaration = ValueDeclarationOf(symbol);
@@ -733,11 +746,11 @@ internal sealed partial class Checker
             var accessor = NodeRef.None;
             if (isWrite && declarations is not null)
             {
-                accessor = declarations.Find(d => Kind(d) == SyntaxKind.SetAccessor);
+                accessor = FindDeclarationOfKind(declarations.Value, SyntaxKind.SetAccessor);
             }
             if (accessor.IsNone && (SymbolFlagsOf(symbol) & SymbolFlags.GetAccessor) != 0 && declarations is not null)
             {
-                accessor = declarations.Find(d => Kind(d) == SyntaxKind.GetAccessor);
+                accessor = FindDeclarationOfKind(declarations.Value, SyntaxKind.GetAccessor);
             }
             if (!accessor.IsNone)
             {
@@ -1385,9 +1398,27 @@ internal sealed partial class Checker
         ((Types.Flags(type) & TypeFlags.Intersection) != 0 && IsReducibleIntersection(type));
 
     /// <summary>checker.ts maybeTypeOfKind.</summary>
-    internal bool MaybeTypeOfKind(Type type, TypeFlags kind) =>
-        (Types.Flags(type) & kind) != 0 ||
-        ((Types.Flags(type) & TypeFlags.UnionOrIntersection) != 0 && ExistsType(Types.Elements(Types.Union(type).Types), t => MaybeTypeOfKind(t, kind)));
+    internal bool MaybeTypeOfKind(Type type, TypeFlags kind)
+    {
+        if ((Types.Flags(type) & kind) != 0)
+        {
+            return true;
+        }
+        if ((Types.Flags(type) & TypeFlags.UnionOrIntersection) == 0)
+        {
+            return false;
+        }
+        // (some(types, t => maybeTypeOfKind(t, kind)) as a loop: no closure per call; tsrs's closures are monomorphized
+        // impl FnMut generics, notes/monomorphization-audit.md; Track O)
+        foreach (var t in Types.Elements(Types.Union(type).Types))
+        {
+            if (MaybeTypeOfKind(t, kind))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
 
     // ---- indexed access types ----
 
@@ -2113,12 +2144,13 @@ internal sealed partial class Checker
     /// checker.ts getResolvedBaseConstraint: noConstraintType when the type variable has no constraint,
     /// circularConstraintType when the constraint circularly references the type variable.
     /// </summary>
-    internal Type GetResolvedBaseConstraint(Type type)
+    internal Type GetResolvedBaseConstraint(Type type) =>
+        resolvedBaseConstraints.TryGetValue(type, out var resolved) ? resolved : GetResolvedBaseConstraintWorker(type);
+
+    // (the cached case above without the nested functions' closure, which is created at the entry of the method whose
+    // locals it captures; Track O)
+    private Type GetResolvedBaseConstraintWorker(Type type)
     {
-        if (resolvedBaseConstraints.TryGetValue(type, out var resolved))
-        {
-            return resolved;
-        }
         var stack = new List<object>();
         var result = GetImmediateBaseConstraint(type);
         resolvedBaseConstraints[type] = result;
@@ -2473,12 +2505,16 @@ internal sealed partial class Checker
 
     // ---- helpers over unions ----
 
+    // The union helpers read the union's stored member list in place (the type store's list arena is append-only, so the
+    // span stays what it was while a callback creates types; tsrs returns the stored slice, notes/cpu-checker.md changes
+    // 7 and 8; Track O).
+
     /// <summary>checker.ts everyType.</summary>
     internal bool EveryType(Type type, Func<Type, bool> f)
     {
         if ((Types.Flags(type) & TypeFlags.Union) != 0)
         {
-            foreach (var t in Types.Elements(Types.Union(type).Types).ToArray())
+            foreach (var t in Types.Elements(Types.Union(type).Types))
             {
                 if (!f(t))
                 {
@@ -2490,6 +2526,52 @@ internal sealed partial class Checker
         return f(type);
     }
 
+    /// <summary>
+    /// A callback over types as a struct (Track O; tsrs's callbacks are <c>impl FnMut</c> generics, monomorphized per
+    /// caller: notes/monomorphization-audit.md): generic methods over it allocate no delegate and no closure.
+    /// </summary>
+    internal interface ITypePredicate
+    {
+        bool Invoke(Type t);
+    }
+
+    /// <summary>checker.ts everyType with a struct callback.</summary>
+    internal bool EveryType<TPredicate>(Type type, TPredicate f)
+        where TPredicate : struct, ITypePredicate
+    {
+        if ((Types.Flags(type) & TypeFlags.Union) != 0)
+        {
+            foreach (var t in Types.Elements(Types.Union(type).Types))
+            {
+                if (!f.Invoke(t))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+        return f.Invoke(type);
+    }
+
+    /// <summary>checker.ts some over a list with a struct callback.</summary>
+    internal static bool ExistsType<TPredicate>(ReadOnlySpan<Type> types, TPredicate f)
+        where TPredicate : struct, ITypePredicate
+    {
+        foreach (var t in types)
+        {
+            if (f.Invoke(t))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>checker.ts someType with a struct callback.</summary>
+    internal bool SomeType<TPredicate>(Type type, TPredicate f)
+        where TPredicate : struct, ITypePredicate =>
+        (Types.Flags(type) & TypeFlags.Union) != 0 ? ExistsType(Types.Elements(Types.Union(type).Types), f) : f.Invoke(type);
+
     /// <summary>checker.ts someType.</summary>
     internal bool SomeType(Type type, Func<Type, bool> f) =>
         (Types.Flags(type) & TypeFlags.Union) != 0 ? ExistsType(Types.Elements(Types.Union(type).Types), f) : f(type);
@@ -2499,7 +2581,7 @@ internal sealed partial class Checker
     {
         if ((Types.Flags(type) & TypeFlags.Union) != 0)
         {
-            foreach (var t in Types.Elements(Types.Union(type).Types).ToArray())
+            foreach (var t in Types.Elements(Types.Union(type).Types))
             {
                 f(t);
             }
@@ -2515,9 +2597,17 @@ internal sealed partial class Checker
     {
         if ((Types.Flags(type) & TypeFlags.Union) != 0)
         {
-            var types = Types.Elements(Types.Union(type).Types).ToArray();
-            var filtered = Array.FindAll(types, t => f(t));
-            if (filtered.Length == types.Length)
+            var types = Types.Elements(Types.Union(type).Types);
+            // (Array.FindAll as a loop over the stored list: no copy and no wrapper closure, Track O)
+            var filtered = new List<Type>(types.Length);
+            foreach (var t in types)
+            {
+                if (f(t))
+                {
+                    filtered.Add(t);
+                }
+            }
+            if (filtered.Count == types.Length)
             {
                 return type;
             }
@@ -2531,20 +2621,27 @@ internal sealed partial class Checker
                 // filtered types are within nested unions in the origin), then we can't construct a new origin type.
                 // Otherwise, if we have exactly one type left in the origin set, return that as the filtered type.
                 // Otherwise, construct a new filtered origin type.
-                var originTypes = Types.Elements(Types.Union(origin).Types).ToArray();
-                var originFiltered = Array.FindAll(originTypes, t => (Types.Flags(t) & TypeFlags.Union) != 0 || f(t));
-                if (originTypes.Length - originFiltered.Length == types.Length - filtered.Length)
+                var originTypes = Types.Elements(Types.Union(origin).Types);
+                var originFiltered = new List<Type>(originTypes.Length);
+                foreach (var t in originTypes)
                 {
-                    if (originFiltered.Length == 1)
+                    if ((Types.Flags(t) & TypeFlags.Union) != 0 || f(t))
+                    {
+                        originFiltered.Add(t);
+                    }
+                }
+                if (originTypes.Length - originFiltered.Count == types.Length - filtered.Count)
+                {
+                    if (originFiltered.Count == 1)
                     {
                         return originFiltered[0];
                     }
-                    newOrigin = CreateOriginUnionOrIntersectionType(TypeFlags.Union, [.. originFiltered]);
+                    newOrigin = CreateOriginUnionOrIntersectionType(TypeFlags.Union, originFiltered);
                 }
             }
             // filtering could remove intersections so `ContainsIntersections` might be forwarded "incorrectly"
             // it is purely an optimization hint so there is no harm in accidentally forwarding it
-            return GetUnionTypeFromSortedList([.. filtered], Types.ObjectFlagsOf(type) & (ObjectFlags.PrimitiveUnion | ObjectFlags.ContainsIntersections), default, default, newOrigin);
+            return GetUnionTypeFromSortedList(filtered, Types.ObjectFlagsOf(type) & (ObjectFlags.PrimitiveUnion | ObjectFlags.ContainsIntersections), default, default, newOrigin);
         }
         return (Types.Flags(type) & TypeFlags.Never) != 0 || f(type) ? type : neverType;
     }
@@ -2554,8 +2651,13 @@ internal sealed partial class Checker
     {
         if ((Types.Flags(type) & TypeFlags.Union) != 0 && !aliasSymbol.IsNone)
         {
-            var types = Types.Elements(Types.Union(type).Types).ToArray();
-            return GetUnionType(Array.ConvertAll(types, t => mapper(t)), UnionReduction.Literal, aliasSymbol, aliasTypeArguments);
+            var types = Types.Elements(Types.Union(type).Types);
+            var mapped = new Type[types.Length];
+            for (var i = 0; i < types.Length; i++)
+            {
+                mapped[i] = mapper(types[i]);
+            }
+            return GetUnionType(mapped, UnionReduction.Literal, aliasSymbol, aliasTypeArguments);
         }
         return MapType(type, mapper);
     }

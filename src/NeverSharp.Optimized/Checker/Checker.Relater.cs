@@ -1204,22 +1204,22 @@ internal sealed partial class Checker
                     expandingFlags |= ExpandingFlags.Target;
                 }
             }
+            // (the variance marker handler's closure only when a handler is set: its captured state in an object created
+            // on that path, not at every call; Track O)
             Action<bool>? originalHandler = null;
-            var propagatingVarianceFlags = RelationComparisonResult.None;
+            VarianceFlagsCapture? capture = null;
             if (c.outofbandVarianceMarkerHandler is not null)
             {
                 originalHandler = c.outofbandVarianceMarkerHandler;
-                c.outofbandVarianceMarkerHandler = onlyUnreliable =>
-                {
-                    propagatingVarianceFlags |= onlyUnreliable ? RelationComparisonResult.ReportsUnreliable : RelationComparisonResult.ReportsUnmeasurable;
-                    originalHandler(onlyUnreliable);
-                };
+                capture = new VarianceFlagsCapture(originalHandler);
+                c.outofbandVarianceMarkerHandler = capture.Handle;
             }
             var result = expandingFlags == ExpandingFlags.Both ? Ternary.Maybe : StructuredTypeRelatedTo(source, target, reportErrors, intersectionState);
             if (c.outofbandVarianceMarkerHandler is not null)
             {
                 c.outofbandVarianceMarkerHandler = originalHandler;
             }
+            var propagatingVarianceFlags = capture?.Flags ?? RelationComparisonResult.None;
             if ((recursionFlags & RecursionFlags.Source) != 0)
             {
                 sourceDepth--;
@@ -1303,7 +1303,7 @@ internal sealed partial class Checker
                 {
                     var constraint = c.GetEffectiveConstraintOfIntersection((sourceFlags & TypeFlags.Intersection) != 0 ? c.Types.Elements(c.Types.Union(source).Types).ToArray() : [source],
                         (targetFlags & TypeFlags.Union) != 0);
-                    if (!constraint.IsNone && c.EveryType(constraint, ct => ct != source))
+                    if (!constraint.IsNone && c.EveryType(constraint, new NotTypePredicate(source)))
                     {
                         // Skip comparison if expansion contains the source itself
                         // TODO: Stack errors so we get a pyramid for the "normal" comparison above, _and_ a second for this
@@ -1337,7 +1337,7 @@ internal sealed partial class Checker
                 //
                 else if (result != Ternary.False && c.IsNonGenericObjectType(target) && !c.IsArrayOrTupleType(target) &&
                     (sourceFlags & TypeFlags.Intersection) != 0 && (c.Types.Flags(c.GetApparentType(source)) & TypeFlags.StructuredType) != 0 &&
-                    !ExistsType(c.Types.Elements(c.Types.Union(source).Types), t => t == target || (c.Types.ObjectFlagsOf(t) & ObjectFlags.NonInferrableType) != 0))
+                    !ExistsType(c.Types.Elements(c.Types.Union(source).Types), new SameOrNonInferrablePredicate(c, target)))
                 {
                     result &= PropertiesRelatedTo(source, target, reportErrors, null, true, intersectionState);
                 }
@@ -1347,6 +1347,30 @@ internal sealed partial class Checker
                 ResetErrorInfo(saveErrorInfo);
             }
             return result;
+        }
+
+        // recursiveTypeRelatedTo's propagatingVarianceFlags and its outofbandVarianceMarkerHandler wrapper
+        private sealed class VarianceFlagsCapture(Action<bool> originalHandler)
+        {
+            internal RelationComparisonResult Flags;
+
+            internal void Handle(bool onlyUnreliable)
+            {
+                Flags |= onlyUnreliable ? RelationComparisonResult.ReportsUnreliable : RelationComparisonResult.ReportsUnmeasurable;
+                originalHandler(onlyUnreliable);
+            }
+        }
+
+        // (the callbacks of structuredTypeRelatedTo as structs: no closure of source and target per call; tsrs's
+        // closures are monomorphized impl FnMut generics; Track O)
+        private readonly struct NotTypePredicate(Type type) : ITypePredicate
+        {
+            public bool Invoke(Type t) => t != type;
+        }
+
+        private readonly struct SameOrNonInferrablePredicate(Checker c, Type target) : ITypePredicate
+        {
+            public bool Invoke(Type t) => t == target || (c.Types.ObjectFlagsOf(t) & ObjectFlags.NonInferrableType) != 0;
         }
 
         private Type GetApparentMappedTypeKeys(Type nameType, Type targetType)

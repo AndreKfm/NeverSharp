@@ -971,7 +971,9 @@ internal sealed partial class Checker
         var access = GetDiscriminantPropertyAccess(f, expr, type);
         if (!access.IsNone)
         {
-            return NarrowTypeByDiscriminant(type, access, t => GetTypeWithFacts(t, assumeTrue ? TypeFacts.Truthy : TypeFacts.Falsy));
+            // (the facts outside the lambda, so the closure is created on this path only, not at every call; Track O)
+            var facts = assumeTrue ? TypeFacts.Truthy : TypeFacts.Falsy;
+            return NarrowTypeByDiscriminant(type, access, t => GetTypeWithFacts(t, facts));
         }
         return type;
     }

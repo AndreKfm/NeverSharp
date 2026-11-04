@@ -940,7 +940,7 @@ internal sealed partial class Checker
                 var resultObjectFlags = Types.ObjectFlagsOf(result);
                 if ((Types.Flags(result) & TypeFlags.ObjectFlagsType) != 0 && (resultObjectFlags & ObjectFlags.CouldContainTypeVariablesComputed) == 0)
                 {
-                    var resultCouldContainTypeVariables = Array.Exists(typeArguments, CouldContainTypeVariables); // one of the input type arguments might be or contain the result
+                    var resultCouldContainTypeVariables = ExistsType(typeArguments, new CouldContainTypeVariablesPredicate(this)); // one of the input type arguments might be or contain the result
                     if ((Types.ObjectFlagsOf(result) & ObjectFlags.CouldContainTypeVariablesComputed) == 0)
                     {
                         // if `result` is one of the object types we tried to make (it may not be, due to how `instantiateMappedType` works), we can carry forward the type variable containment check from the input type arguments
@@ -1175,7 +1175,7 @@ internal sealed partial class Checker
         }
         else if ((flags & TypeFlags.Object) != 0 && !IsNonGenericTopLevelType(type))
         {
-            if ((objectFlags & ObjectFlags.Reference) != 0 && (!Types.Object(type).Node.IsNone || ExistsType(GetTypeArguments(type), CouldContainTypeVariables)))
+            if ((objectFlags & ObjectFlags.Reference) != 0 && (!Types.Object(type).Node.IsNone || ExistsType(GetTypeArguments(type), new CouldContainTypeVariablesPredicate(this))))
             {
                 result = true;
             }
@@ -1190,7 +1190,7 @@ internal sealed partial class Checker
         else
         {
             result = (flags & TypeFlags.UnionOrIntersection) != 0 && (flags & TypeFlags.EnumLiteral) == 0 && !IsNonGenericTopLevelType(type) &&
-                ExistsType(Types.Elements(Types.Union(type).Types), CouldContainTypeVariables);
+                ExistsType(Types.Elements(Types.Union(type).Types), new CouldContainTypeVariablesPredicate(this));
         }
         if ((flags & TypeFlags.ObjectFlagsType) != 0)
         {
@@ -1199,9 +1199,16 @@ internal sealed partial class Checker
         return result;
     }
 
+    // couldContainTypeVariables as a struct callback (no delegate per call; Track O)
+    private readonly struct CouldContainTypeVariablesPredicate(Checker c) : ITypePredicate
+    {
+        public bool Invoke(Type t) => c.CouldContainTypeVariables(t);
+    }
+
     private static bool ExistsType(ReadOnlySpan<Type> types, Func<Type, bool> predicate)
     {
-        foreach (var t in types.ToArray())
+        // (the stored list in place: the arena is append-only; Track O)
+        foreach (var t in types)
         {
             if (predicate(t))
             {

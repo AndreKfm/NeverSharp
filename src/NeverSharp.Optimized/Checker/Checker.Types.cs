@@ -761,7 +761,8 @@ internal sealed partial class Checker
         var types = !origin.IsNone && (Types.Flags(origin) & TypeFlags.Union) != 0 ? Types.Union(origin).Types : Types.Union(type).Types;
         List<Type>? mappedTypes = null;
         var changed = false;
-        var elements = Types.Elements(types).ToArray();
+        // (the stored members in place: the list arena is append-only; tsrs returns the stored slice; Track O)
+        var elements = Types.Elements(types);
         foreach (var t in elements)
         {
             var mapped = (Types.Flags(t) & TypeFlags.Union) != 0 ? MapType(t, mapper, noReductions) : mapper(t);
@@ -876,6 +877,17 @@ internal sealed partial class Checker
     }
 
     /// <summary>checker.ts getIntersectionType (the flags parameter last, IntersectionFlags).</summary>
+    // getIntersectionType's callbacks as structs (no closure of primitiveType at every call; Track O)
+    private readonly struct PrimitiveOrEmptyObjectPredicate(Checker c) : ITypePredicate
+    {
+        public bool Invoke(Type t) => (c.Types.Flags(t) & (TypeFlags.Primitive | TypeFlags.NonPrimitive)) != 0 || c.IsEmptyAnonymousObjectType(t);
+    }
+
+    private readonly struct StrictSubtypeOfPredicate(Checker c, Type target) : ITypePredicate
+    {
+        public bool Invoke(Type t) => c.IsTypeStrictSubtypeOf(t, target);
+    }
+
     internal Type GetIntersectionType(ReadOnlySpan<Type> types, SymbolRef aliasSymbol = default, TypeList aliasTypeArguments = default, IntersectionFlags flags = IntersectionFlags.None)
     {
         var typeSet = new List<Type>();
@@ -942,7 +954,7 @@ internal sealed partial class Checker
                 // We have an intersection T & P or P & T, where T is a type variable and P is a primitive type, the object type, or {}.
                 var constraint = GetBaseConstraintOfType(typeVariable);
                 // Check that T's constraint is similarly composed of primitive types, the object type, or {}.
-                if (!constraint.IsNone && EveryType(constraint, t => (Types.Flags(t) & (TypeFlags.Primitive | TypeFlags.NonPrimitive)) != 0 || IsEmptyAnonymousObjectType(t)))
+                if (!constraint.IsNone && EveryType(constraint, new PrimitiveOrEmptyObjectPredicate(this)))
                 {
                     // If T's constraint is a subtype of P, simply return T. For example, given `T extends "a" | "b"`,
                     // the intersection `T & string` reduces to just T.
@@ -950,7 +962,7 @@ internal sealed partial class Checker
                     {
                         return typeVariable;
                     }
-                    if (!((Types.Flags(constraint) & TypeFlags.Union) != 0 && SomeType(constraint, c => IsTypeStrictSubtypeOf(c, primitiveType))))
+                    if (!((Types.Flags(constraint) & TypeFlags.Union) != 0 && SomeType(constraint, new StrictSubtypeOfPredicate(this, primitiveType))))
                     {
                         // No constituent of T's constraint is a subtype of P. If P is also not a subtype of T's constraint,
                         // then the constraint and P are unrelated, and the intersection reduces to never. For example, given
