@@ -10,8 +10,8 @@
 //   https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b
 // Modified: translated from TypeScript to C#; module C2. The node builder's fake scopes (a Block with locals whose
 // parent is the enclosing declaration, checker.ts enterNewScope) are a FakeScope chain on top of the enclosing
-// declaration (Track O nodes of a file cannot point at a synthesized parent). The accessibleChainCache is left out
-// (a cache of the pure result). Module D5: the node links' isVisible cache (isVisibleLinks), which declaration emit paints
+// declaration (Track O nodes of a file cannot point at a synthesized parent). Module EO1: the accessibleChainCache
+// (one map per checker keyed by the symbol and TypeScript's key; a fake scope is a key location of its own). Module D5: the node links' isVisible cache (isVisibleLinks), which declaration emit paints
 // (Checker.DeclarationEmit.cs); the versions with aliases to make visible are there.
 
 using NeverSharp.Generated;
@@ -122,6 +122,81 @@ internal sealed partial class Checker
         return callback(globals, false, true);
     }
 
+    // checker.ts getAccessibleSymbolChain's firstRelevantLocation, forEachSymbolTableInScope(enclosingDeclaration,
+    // (_, __, ___, node) => node): the location of the first table ForEachSymbolTableInScope visits outside the fake
+    // scopes (the caller takes the innermost fake scope first); NodeRef.None when that is the globals (no scope node).
+    private NodeRef FirstRelevantLocation(NodeRef enclosingDeclaration)
+    {
+        for (var location = enclosingDeclaration; !location.IsNone; location = Parent(location))
+        {
+            var store = StoreOf(location);
+            var n = location.Node;
+            if (Utilities.CanHaveLocals(store, n) && !IsGlobalSourceFile(location) && LocalsOf(location) is not null)
+            {
+                return location;
+            }
+            switch (store.Kind(n))
+            {
+                case SyntaxKind.SourceFile:
+                case SyntaxKind.ModuleDeclaration:
+                    if (store.Kind(n) == SyntaxKind.SourceFile && !Utilities.IsExternalOrCommonJsModule(store, n, BindingOf(location.File)))
+                    {
+                        break;
+                    }
+                    return location;
+                case SyntaxKind.ClassDeclaration:
+                case SyntaxKind.ClassExpression:
+                case SyntaxKind.InterfaceDeclaration:
+                {
+                    // the filtered table of ForEachSymbolTableInScope is visited only when it is not empty
+                    var members = MembersOf(GetSymbolOfDeclaration(location));
+                    if (members is not null)
+                    {
+                        for (var i = 0; i < members.Count; i++)
+                        {
+                            if ((SymbolFlagsOf(members.ValueAt(i)) & (SymbolFlags.Type & ~SymbolFlags.Assignment)) != 0)
+                            {
+                                return location;
+                            }
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+        return NodeRef.None;
+    }
+
+    /// <summary>
+    /// The key of checker.ts's <c>links.accessibleChainCache</c> (<c>`${useOnlyExternalAliasing ? 0 : 1}|${firstRelevantLocation
+    /// ? getNodeId(firstRelevantLocation) : 0}|${meaning}`</c>; typescript-go accessibleChainCacheKey) with the symbol whose
+    /// links hold the map: the checker keeps one map for all its symbols. The first relevant location is a node or, when
+    /// the node builder has pushed fake scopes, the innermost one (TypeScript's fake scope is a synthesized Block with an
+    /// id of its own).
+    /// </summary>
+    private readonly struct AccessibleChainCacheKey(SymbolRef symbol, bool useOnlyExternalAliasing, NodeRef location, FakeScope? fakeScope, SymbolFlags meaning)
+        : IEquatable<AccessibleChainCacheKey>
+    {
+        private readonly SymbolRef symbol = symbol;
+        private readonly bool useOnlyExternalAliasing = useOnlyExternalAliasing;
+        private readonly NodeRef location = location;
+        private readonly FakeScope? fakeScope = fakeScope;
+        private readonly SymbolFlags meaning = meaning;
+
+        public bool Equals(AccessibleChainCacheKey other) =>
+            symbol == other.symbol && useOnlyExternalAliasing == other.useOnlyExternalAliasing && location == other.location
+            && ReferenceEquals(fakeScope, other.fakeScope) && meaning == other.meaning;
+
+        public override bool Equals(object? obj) => obj is AccessibleChainCacheKey other && Equals(other);
+
+        public override int GetHashCode() =>
+            HashCode.Combine(symbol.GetHashCode(), location.GetHashCode(), fakeScope is null ? 0 : System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(fakeScope), (int)meaning, useOnlyExternalAliasing);
+    }
+
+    // checker.ts SymbolLinks.accessibleChainCache (typescript-go ContainingSymbolLinks.accessibleChainCache), per checker;
+    // the cached chains are the lists getAccessibleSymbolChain returned (never modified by their readers)
+    private readonly Dictionary<AccessibleChainCacheKey, List<SymbolRef>?> accessibleChainCache = [];
+
     private static SymbolFlags GetQualifiedLeftMeaning(SymbolFlags rightMeaning) =>
         // If we are looking in value space, the parent meaning is value, other wise it is namespace
         rightMeaning == SymbolFlags.Value ? SymbolFlags.Value : SymbolFlags.Namespace;
@@ -133,12 +208,20 @@ internal sealed partial class Checker
         {
             return null;
         }
+        // Go from enclosingDeclaration to the first scope we check, so the cache is keyed off the scope and thus shared more
+        var key = new AccessibleChainCacheKey(symbol, useOnlyExternalAliasing, fakeScope is null ? FirstRelevantLocation(enclosingDeclaration) : NodeRef.None, fakeScope, meaning);
+        if (accessibleChainCache.TryGetValue(key, out var cached))
+        {
+            return cached;
+        }
         visitedSymbolTablesMap ??= [];
         if (!visitedSymbolTablesMap.TryGetValue(symbol, out var visitedSymbolTables))
         {
             visitedSymbolTablesMap[symbol] = visitedSymbolTables = [];
         }
-        return ForEachSymbolTableInScope(enclosingDeclaration, fakeScope, (table, ignoreQualification, isLocalNameLookup) => GetAccessibleSymbolChainFromSymbolTable(table, ignoreQualification, isLocalNameLookup));
+        var chain = ForEachSymbolTableInScope(enclosingDeclaration, fakeScope, (table, ignoreQualification, isLocalNameLookup) => GetAccessibleSymbolChainFromSymbolTable(table, ignoreQualification, isLocalNameLookup));
+        accessibleChainCache[key] = chain;
+        return chain;
 
         List<SymbolRef>? GetAccessibleSymbolChainFromSymbolTable(SymTable symbols, bool ignoreQualification, bool isLocalNameLookup)
         {
