@@ -370,7 +370,9 @@ internal sealed partial class Checker
     {
         activeTypeMappersCount--;
         activeTypeMappers[activeTypeMappersCount] = default;
-        activeTypeMappersCaches[activeTypeMappersCount].Clear();
+        // (Go clears the map and keeps it for reuse; a table one large instantiation grew is replaced instead: tsrs
+        // checker_11.rs pop_active_mapper, Track O)
+        activeTypeMappersCaches[activeTypeMappersCount].ClearScratch();
     }
 
     private int FindActiveMapper(TypeMapper mapper)

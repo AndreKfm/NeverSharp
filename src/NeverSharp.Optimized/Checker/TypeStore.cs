@@ -1028,6 +1028,29 @@ internal sealed class KeyMap<TValue>
         }
     }
 
+    /// <summary>
+    /// <see cref="Clear"/> for a scratch map that one large use may have grown (Track O; tsrs checker_11.rs
+    /// <c>pop_active_mapper</c> and types.rs <c>clear_scratch</c>, notes/cpu-checker.md changes 1 and 4): clearing
+    /// touches every slot, so a table whose capacity is more than 4 times its entries and more than 64 (hashbrown's
+    /// capacity: half of the slots here) is replaced by a new small one. The map is empty afterwards either way.
+    /// </summary>
+    internal void ClearScratch()
+    {
+        if (count > 0)
+        {
+            if (slots.Length > 128 && slots.Length > 8 * count)
+            {
+                slots = new Slot[64];
+            }
+            else
+            {
+                Array.Clear(slots);
+            }
+            count = 0;
+            keysUsed = 0;
+        }
+    }
+
     /// <summary>Map.get: whether the key is present, and its value.</summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal bool TryGetValue(ReadOnlySpan<int> key, out TValue value)
