@@ -24,18 +24,47 @@ internal sealed partial class Checker
     /// its elaboration on errorNode when one is given.
     /// </summary>
     internal bool CheckTypeRelatedTo(Type source, Type target, Relation relation, NodeRef errorNode, DiagnosticMessage? headMessage = null,
-        Func<DiagnosticMessageChain?>? containingMessageChain = null, ErrorOutputContainer? errorOutputContainer = null) =>
-        new Relater(this, relation, errorNode, headMessage).Check(source, target, containingMessageChain, errorOutputContainer);
+        Func<DiagnosticMessageChain?>? containingMessageChain = null, ErrorOutputContainer? errorOutputContainer = null)
+    {
+        var relater = GetRelater(relation, errorNode, headMessage);
+        var result = relater.Check(source, target, containingMessageChain, errorOutputContainer);
+        PutRelater(relater);
+        return result;
+    }
+
+    // The relaters not in use, chained (typescript-go relater.go getRelater / putRelater, tsrs relater_2.rs get_relater /
+    // put_relater: a relater and its maybe stack, set and recursion stacks are reused instead of created per
+    // checkTypeRelatedTo call; nested checks take another one). Track O: TypeScript creates the closure state per call.
+    private Relater? freeRelater;
+
+    private Relater GetRelater(Relation relation, NodeRef errorNode, DiagnosticMessage? headMessage)
+    {
+        var r = freeRelater ?? new Relater(this);
+        freeRelater = r.Next;
+        r.Next = null;
+        r.Init(relation, errorNode, headMessage);
+        return r;
+    }
+
+    private void PutRelater(Relater r)
+    {
+        r.Reset();
+        r.Next = freeRelater;
+        freeRelater = r;
+    }
 
     // (the error state captured by captureErrorCalculationState)
     private readonly record struct ErrorCalculationState(DiagnosticMessageChain? ErrorInfo, (Type, Type)? LastSkippedInfo, List<(DiagnosticMessage, object?[])>? IncompatibleStack,
         int OverrideNextErrorInfo, int SkipParentCounter, List<ProgramRelatedInformation>? RelatedInfo);
 
-    private sealed class Relater(Checker checker, Relation relationOfCheck, NodeRef errorNode, DiagnosticMessage? headMessage)
+    private sealed class Relater(Checker checker)
     {
         private readonly Checker c = checker;
-        private readonly Relation relation = relationOfCheck;
-        private NodeRef errorNode = errorNode;
+        private Relation relation = null!;
+        private NodeRef errorNode;
+        private DiagnosticMessage? headMessage;
+        internal Relater? Next; // the next free relater (GetRelater / PutRelater)
+        private bool started;   // a key was pushed on the maybe stack in this check (TypeScript: maybeKeys !== undefined)
         private DiagnosticMessageChain? errorInfo;
         private List<ProgramRelatedInformation>? relatedInfo;
         private List<RelationKey>? maybeKeys;
@@ -56,7 +85,44 @@ internal sealed partial class Checker
         private List<(DiagnosticMessage, object?[])>? incompatibleStack;
         // In Node.js, the maximum number of elements in a map is 2^24. We limit the number of entries an invocation
         // of checkTypeRelatedTo can add to a relation to 1/8th of its remaining capacity.
-        private int relationCount = (16_000_000 - relationOfCheck.Results.Count) >> 3;
+        private int relationCount;
+
+        /// <summary>The state checkTypeRelatedTo's closure starts with.</summary>
+        internal void Init(Relation relationOfCheck, NodeRef errorNodeOfCheck, DiagnosticMessage? headMessageOfCheck)
+        {
+            relation = relationOfCheck;
+            errorNode = errorNodeOfCheck;
+            headMessage = headMessageOfCheck;
+            relationCount = (16_000_000 - relationOfCheck.Results.Count) >> 3;
+        }
+
+        /// <summary>
+        /// typescript-go relater.go putRelater: back to the start state, the maybe stack, its set and the recursion
+        /// stacks kept (emptied) for the next check.
+        /// </summary>
+        internal void Reset()
+        {
+            relation = null!;
+            errorNode = NodeRef.None;
+            headMessage = null;
+            started = false;
+            errorInfo = null;
+            relatedInfo = null;
+            if (maybeKeysSet is { Count: > 0 })
+            {
+                maybeKeysSet.Clear();
+            }
+            maybeCount = 0;
+            sourceDepth = 0;
+            targetDepth = 0;
+            expandingFlags = ExpandingFlags.None;
+            overflow = false;
+            overrideNextErrorInfo = 0;
+            skipParentCounter = 0;
+            lastSkippedInfo = null;
+            incompatibleStack = null;
+            relationCount = 0;
+        }
 
         private bool IsIdentity => relation == c.identityRelation;
 
@@ -1154,24 +1220,29 @@ internal sealed partial class Checker
                 overflow = true;
                 return Ternary.False;
             }
-            if (maybeKeys is null)
+            if (!started)
             {
-                maybeKeys = [];
-                maybeKeysSet = [];
-                sourceStack = [];
-                targetStack = [];
+                // (a pooled relater keeps its lists from earlier checks: GetRelater / PutRelater)
+                started = true;
+                maybeKeys ??= [];
+                maybeKeysSet ??= [];
+                if (sourceStack == NoStack)
+                {
+                    sourceStack = [];
+                    targetStack = [];
+                }
             }
             else
             {
                 // If source and target are already being compared, consider them related with assumptions
-                if (maybeKeysSet!.Contains(id))
+                if (MaybeStackHas(id))
                 {
                     return Ternary.Maybe;
                 }
                 // A key that starts with "*" is an indication that we have type references that reference constrained
                 // type parameters. For such keys we also check against the key we would have gotten if all type parameters
                 // were unconstrained.
-                if (id.HasConstraintMarker && maybeKeysSet.Contains(c.GetRelationKey(source, target, intersectionState, relation, ignoreConstraints: true)))
+                if (id.HasConstraintMarker && MaybeStackHas(c.GetRelationKey(source, target, intersectionState, relation, ignoreConstraints: true)))
                 {
                     return Ternary.Maybe;
                 }
@@ -1182,9 +1253,7 @@ internal sealed partial class Checker
                 }
             }
             var maybeStart = maybeCount;
-            SetAt(maybeKeys, maybeCount, id);
-            maybeKeysSet!.Add(id);
-            maybeCount++;
+            MaybeStackPush(id);
             var saveExpandingFlags = expandingFlags;
             if ((recursionFlags & RecursionFlags.Source) != 0)
             {
@@ -1254,16 +1323,68 @@ internal sealed partial class Checker
 
         private void ResetMaybeStack(int maybeStart, bool markAllAsSucceeded, RelationComparisonResult propagatingVarianceFlags)
         {
-            for (var i = maybeStart; i < maybeCount; i++)
+            if (markAllAsSucceeded)
             {
-                maybeKeysSet!.Remove(maybeKeys![i]);
-                if (markAllAsSucceeded)
+                for (var i = maybeStart; i < maybeCount; i++)
                 {
-                    relation.Results[maybeKeys[i]] = RelationComparisonResult.Succeeded | propagatingVarianceFlags;
+                    relation.Results[maybeKeys![i]] = RelationComparisonResult.Succeeded | propagatingVarianceFlags;
                     relationCount--;
                 }
             }
+            // maybeKeysSet mirrors the stack only while it is longer than MaybeStackScanMax (MaybeStackHas)
+            if (maybeStart <= MaybeStackScanMax)
+            {
+                if (maybeCount > MaybeStackScanMax)
+                {
+                    maybeKeysSet!.Clear();
+                }
+            }
+            else
+            {
+                for (var i = maybeStart; i < maybeCount; i++)
+                {
+                    maybeKeysSet!.Remove(maybeKeys![i]);
+                }
+            }
             maybeCount = maybeStart;
+        }
+
+        // tsrs relater_2.rs MAYBE_STACK_SCAN_MAX, maybe_stack_has, maybe_stack_push (tsrs-only, Track O): the maybe stack is
+        // searched by a scan while it has at most this many keys (nearly always); the set holds the keys only beyond
+        // that. A key is on the stack exactly when the scan or the set finds it.
+        private const int MaybeStackScanMax = 32;
+
+        private bool MaybeStackHas(RelationKey key)
+        {
+            if (maybeCount <= MaybeStackScanMax)
+            {
+                for (var i = 0; i < maybeCount; i++)
+                {
+                    if (maybeKeys![i].Equals(key))
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }
+            return maybeKeysSet!.Contains(key);
+        }
+
+        private void MaybeStackPush(RelationKey key)
+        {
+            SetAt(maybeKeys!, maybeCount, key);
+            maybeCount++;
+            if (maybeCount == MaybeStackScanMax + 1)
+            {
+                for (var i = 0; i < maybeCount; i++)
+                {
+                    maybeKeysSet!.Add(maybeKeys![i]);
+                }
+            }
+            else if (maybeCount > MaybeStackScanMax)
+            {
+                maybeKeysSet!.Add(key);
+            }
         }
 
         private static void SetAt<T>(List<T> list, int index, T value)
