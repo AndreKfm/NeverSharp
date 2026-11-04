@@ -26,3 +26,5 @@ Baseline drivers of fcbb5dd (built by the EO1 agent into its scratch `EO1/base/`
 | probe, cache bypassed | 21.526 s | probe-nocache/base 1.005 [1.003, 1.006] |
 
 - Interleaved, final is not slower by the interval. The probe with the cache bypassed does no cache work at all and is still 0.5 % slower than base: differences of this size come from the build (code placement), not from the cache's work.
+
+**Decision (author, 2026-11-04): EO1 kept.**

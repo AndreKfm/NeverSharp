@@ -991,3 +991,5 @@ Allocation and pause unchanged (tuning emit list 10.98 → 10.96 GB). **vscode**
 - **Stability:** `cs-o-aot-ws --check --emit` on the tuning emit list 4 times, no crash (118,020 diagnostics, 41,636 outputs each time).
 - **Gate runs:** Gate C 4 of 6 (sample 2000 after step 1 and after the reverted step 2, the full run, its compare rerun by hand for the summary); Gate D 2 of 3 (one full run, its compare rerun by hand). No `src/` change after the full runs.
 - **Files:** `src/NeverSharp.Optimized/Checker/Checker.SymbolAccessibility.cs`, this file. C# edited with the file tools only.
+
+**Orchestrator measurement and decision:** `results/phase4/EO1/run1/NOTE.md` (tuning emit 0.965, emit single 0.914; check single 1.004 block-wise, 1.002 [0.999, 1.008] interleaved, placement). **Kept by the author on 2026-11-04.**
