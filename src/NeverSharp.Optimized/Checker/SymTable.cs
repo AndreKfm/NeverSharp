@@ -83,6 +83,9 @@ internal readonly struct SymTable : IEquatable<SymTable>
         get => store.Version(id);
     }
 
+    /// <summary>Module EO2 (Track O / tsrs-only): from now on a change of the contents counts in SymTableStore.WatchedChanges.</summary>
+    internal void Watch() => store.Watch(id);
+
     /// <summary>Map.get (None when absent).</summary>
     internal SymbolRef Get(string name)
     {
@@ -201,6 +204,24 @@ internal sealed class SymTableStore
         public int Buckets;   // start of the index range; meaningful when BucketCount > 0
         public int BucketCount; // 0: no index, at most LinearLimit entries, found by a scan
         public int Version;   // module EO2: counts the changes of the contents (Set, Delete, Clear)
+        public bool Watched;  // module EO2: a change also counts in WatchedChanges
+    }
+
+    /// <summary>
+    /// Module EO2 (Track O / tsrs-only): the number of changes of the contents of watched tables (<see cref="Watch"/>), so
+    /// an index that reads many tables can tell with one number that one of them changed (Checker.ExportIndex.cs).
+    /// </summary>
+    internal int WatchedChanges { get; private set; }
+
+    internal void Watch(int id) => RecordOf(id).Watched = true;
+
+    private void Changed(ref Record r)
+    {
+        r.Version++;
+        if (r.Watched)
+        {
+            WatchedChanges++;
+        }
     }
 
     internal struct Entry
@@ -294,7 +315,7 @@ internal sealed class SymTableStore
     internal void Set(int id, int name, SymbolRef symbol)
     {
         ref var r = ref RecordOf(id);
-        r.Version++;
+        Changed(ref r);
         var i = Find(ref r, name);
         if (i >= 0)
         {
@@ -340,7 +361,7 @@ internal sealed class SymTableStore
     internal void Clear(int id)
     {
         ref var r = ref RecordOf(id);
-        r.Version++;
+        Changed(ref r);
         if (r.BucketCount > 0)
         {
             var b = buckets.Span(r.Buckets, r.BucketCount);
@@ -378,7 +399,7 @@ internal sealed class SymTableStore
         var e = entries.Span(r.Entries, r.Count);
         e[(i + 1)..].CopyTo(e[i..]);
         r.Count--;
-        r.Version++;
+        Changed(ref r);
         if (r.BucketCount > 0)
         {
             if (r.Count <= LinearLimit)

@@ -13,7 +13,8 @@
 // declaration (Track O nodes of a file cannot point at a synthesized parent). Module EO1: the accessibleChainCache
 // (one map per checker keyed by the symbol and TypeScript's key; a fake scope is a key location of its own). Module D5: the node links' isVisible cache (isVisibleLinks), which declaration emit paints
 // (Checker.DeclarationEmit.cs); the versions with aliases to make visible are there. Module EO2 (Track O / tsrs-only): the loop
-// of getAliasForSymbolInContainer is answered from an index of the export table (Checker.ExportIndex.cs).
+// of getAliasForSymbolInContainer is answered from an index of the export table, and the loop over all external modules of
+// getAlternativeContainingModules from an index of the modules by what they export (Checker.ExportIndex.cs).
 
 using NeverSharp.Generated;
 
@@ -608,6 +609,13 @@ internal sealed partial class Checker
             return cached;
         }
         // No results from files already being imported by this file - expand search (expensive, but not location-specific, so cached)
+        // (module EO2, Track O / tsrs-only: answered from the module export index when that is exact, Checker.ExportIndex.cs)
+        var exporting = ModulesExporting(symbol);
+        if (exporting is not null)
+        {
+            extendedContainers[symbol] = exporting;
+            return exporting;
+        }
         var files = program.SourceFiles;
         for (var f = 1; f <= files.Count; f++)
         {

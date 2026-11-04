@@ -2760,6 +2760,7 @@ internal sealed partial class Checker
                 if (sourceExports is null)
                 {
                     sourceExports = TransientSymbols.Record(resolvedSymbol).Exports = new SymTable(Names);
+                    symbolStateVersion++; // module EO2: symbol.exports of an existing symbol replaced (Checker.ExportIndex.cs)
                 }
             }
             else

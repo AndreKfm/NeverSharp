@@ -3,18 +3,19 @@
 // Portions Copyright 2026 Max Schwenk and the tsrs contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Ported from crates/tsrs_checker/src/printer.rs (exports_by_target, ExportsByTarget, get_symbol_target_for_alias_lookup)
-// and checker.rs (alias_cache_blockers, counted in checker_08.rs resolve_alias, get_exports_of_module) of tsrs
+// Ported from crates/tsrs_checker/src/printer.rs (exports_by_target, ExportsByTarget, get_symbol_target_for_alias_lookup,
+// modules_exporting, summarize_module_exports, ModuleExportIndex) and checker.rs (alias_cache_blockers) of tsrs
 //   https://github.com/oxc-project/tsrs at tag v0.18.0 (5f92808bc92bb97b06212153ab73d28d551c0b9b)
-// Track O / tsrs-only, no counterpart in TypeScript 6.0.3: an index for the loop of src/compiler/checker.ts
-// getAliasForSymbolInContainer   https://github.com/microsoft/TypeScript at commit 050880ce59e30b356b686bd3144efe24f875ebc8
+// Track O / tsrs-only, no counterpart in TypeScript 6.0.3: indexes for loops of src/compiler/checker.ts
+// (getAliasForSymbolInContainer, getAlternativeContainingModules) at commit 050880ce59e30b356b686bd3144efe24f875ebc8
 // Modified: translated from Rust to C#; module EO2. tsrs ports typescript-go's loop, which collects every matching entry and so
 // resolves every entry; TypeScript 6.0.3's loop (forEachEntry) stops at the first match, so this index covers the
 // prefix of the table that the loops have resolved so far and grows in the loop's order. The entries are found by
 // position (one target per entry, plus an open-addressing index of the first position per target for larger tables)
 // instead of tsrs's sorted (target, entry) pairs. tsrs's size guard for replaced tables is a version of the table's
 // contents here (SymTable.Version), and a version of the symbol state getMergedSymbol and resolveSymbol read
-// (symbolStateVersion) is added.
+// (symbolStateVersion) is added. The module export index is dropped when that state or a table it read changes
+// (SymTableStore.WatchedChanges), and the modules asked after such a change are asked as the loop asks them.
 
 using NeverSharp.Generated;
 
@@ -132,6 +133,228 @@ internal sealed partial class Checker
     // tsrs printer.rs get_symbol_target_for_alias_lookup: one side of getSymbolIfSameReference.
     private SymbolRef GetSymbolTargetForAliasLookup(SymbolRef symbol) => GetMergedSymbol(ResolveSymbol(GetMergedSymbol(symbol)));
 
+    // tsrs checker.rs module_export_index
+    private readonly ModuleExportIndex moduleExportIndex = new();
+    // tsrs printer.rs modules_exporting: the loop over every external module of the program in
+    // getAlternativeContainingModules, that is the module symbols m (in program order) for which
+    // getAliasForSymbolInContainer(m, symbol) is not undefined; null when the loop has to run instead. The memo
+    // (extendedContainers) misses for every fresh (instantiated) symbol, so declaration emit runs that loop often.
+    //
+    // For a module whose answer no longer has effects, the answer is decided by data that is fixed: it is not undefined
+    // iff m is symbol's parent, or m's `export=` entry or an entry of its export table resolves (merged) to symbol's
+    // merged resolved target. Such a module is "summarized": its targets go into a reverse index. That holds once its
+    // export table is final (cached by getExportsOfModule, no computation in progress), the export table index has
+    // indexed all of that table (every entry resolved) and its `export=` entry is resolved. Modules not summarized yet
+    // are asked in program order exactly as the loop does (which may summarize them); summarized ones are pure to ask
+    // and are answered from the index. symbol's own target is computed up front, so this is used only when that has no
+    // effect either (not an alias with an unresolved target), and not while an alias resolution is in progress.
+    //
+    // Module EO2 adds: the summaries are dropped when the symbol state (symbolStateVersion) or a table they read (the
+    // watched tables of the SymTableStore) changes. The summarized answers are taken before any pending module is
+    // asked (the loop asks some of the summarized modules earlier, some later, all with that state unless asking a
+    // pending module changes it); if asking a pending module changes the state, the modules after it in program order
+    // are asked as the loop asks them, and the summaries are dropped.
+    private List<SymbolRef>? ModulesExporting(SymbolRef symbol)
+    {
+        if (aliasCacheBlockers != 0 || !TryGetPureAliasLookupTarget(symbol, out var target))
+        {
+            return null;
+        }
+        var index = moduleExportIndex;
+        var tables = Names.Tables;
+        var files = program.SourceFiles;
+        if (index.Started && (index.StateVersion != symbolStateVersion || index.WatchedChanges != tables.WatchedChanges))
+        {
+            index.Reset();
+        }
+        if (!index.Started)
+        {
+            index.Start(symbolStateVersion, tables.WatchedChanges);
+            for (var f = 1; f <= files.Count; f++)
+            {
+                if (Utilities.IsExternalModule(files[f - 1].Store, files[f - 1].Root))
+                {
+                    index.Pending.Add(f);
+                }
+            }
+        }
+        var stateVersion = symbolStateVersion;
+        var watchedChanges = tables.WatchedChanges;
+        // the summarized modules' answers, with the state before any pending module is asked
+        var found = new List<(int File, SymbolRef Module)>();
+        index.AddFilesWithTarget(target, found, this);
+        var parent = GetParentOfSymbol(symbol);
+        if (!parent.IsNone && index.BySymbol.TryGetValue(parent, out var parentFile))
+        {
+            found.Add((parentFile, parent));
+        }
+        var pending = index.Pending;
+        var stillPending = new List<int>(pending.Count);
+        for (var j = 0; j < pending.Count; j++)
+        {
+            var f = pending[j];
+            var sym = GetSymbolOfDeclaration(new NodeRef(f, files[f - 1].Root));
+            if (!GetAliasForSymbolInContainer(sym, symbol).IsNone)
+            {
+                found.Add((f, sym));
+            }
+            if (symbolStateVersion != stateVersion || tables.WatchedChanges != watchedChanges || aliasCacheBlockers != 0)
+            {
+                // the loop from here: the summarized answers hold for the modules before f (the loop asked them before
+                // the change); the modules after f are asked as the loop asks them
+                found.RemoveAll(e => e.File > f);
+                for (var g = f + 1; g <= files.Count; g++)
+                {
+                    if (!Utilities.IsExternalModule(files[g - 1].Store, files[g - 1].Root))
+                    {
+                        continue;
+                    }
+                    var other = GetSymbolOfDeclaration(new NodeRef(g, files[g - 1].Root));
+                    if (!GetAliasForSymbolInContainer(other, symbol).IsNone)
+                    {
+                        found.Add((g, other));
+                    }
+                }
+                index.Reset();
+                return InProgramOrder(found);
+            }
+            if (!SummarizeModuleExports(f, sym))
+            {
+                stillPending.Add(f);
+            }
+        }
+        index.Pending = stillPending;
+        return InProgramOrder(found);
+
+        static List<SymbolRef> InProgramOrder(List<(int File, SymbolRef Module)> found)
+        {
+            found.Sort((a, b) => a.File.CompareTo(b.File));
+            var result = new List<SymbolRef>(found.Count);
+            for (var i = 0; i < found.Count; i++)
+            {
+                if (i == 0 || found[i].File != found[i - 1].File)
+                {
+                    result.Add(found[i].Module);
+                }
+            }
+            return result;
+        }
+    }
+
+    // tsrs printer.rs summarize_module_exports: true when module file `file` (symbol `sym`) is summarized (see
+    // ModulesExporting). Module EO2: the export table index must cover the whole table and be current, and the tables
+    // the summary reads are watched.
+    private bool SummarizeModuleExports(int file, SymbolRef sym)
+    {
+        var flags = SymbolFlagsOf(sym);
+        if (aliasCacheBlockers != 0 || (flags & SymbolFlags.Module) == 0 || (flags & SymbolFlags.LateBindingContainer) != 0 ||
+            !resolvedModuleExports.TryGetValue(sym, out var table) || moduleExportIndex.BySymbol.ContainsKey(sym))
+        {
+            return false;
+        }
+        ExportTableIndex? tableIndex = null;
+        if (table.Count > 0 &&
+            (!exportTableIndexes.TryGetValue(table, out tableIndex) || tableIndex.Count != table.Count ||
+             tableIndex.TableVersion != table.Version || tableIndex.StateVersion != symbolStateVersion))
+        {
+            return false;
+        }
+        var ownExports = ExportsOf(sym);
+        var exportEqualsTarget = SymbolRef.None;
+        var exportEquals = ownExports?.Get(InternalSymbolName.ExportEquals) ?? SymbolRef.None;
+        if (!exportEquals.IsNone && !TryGetPureAliasLookupTarget(exportEquals, out exportEqualsTarget))
+        {
+            return false;
+        }
+        for (var i = 0; tableIndex is not null && i < tableIndex.Count; i++)
+        {
+            moduleExportIndex.AddFileWithTarget(tableIndex.TargetAt(i), file);
+        }
+        if (!exportEquals.IsNone)
+        {
+            moduleExportIndex.AddFileWithTarget(exportEqualsTarget, file);
+        }
+        moduleExportIndex.BySymbol.Add(sym, file);
+        table.Watch();
+        ownExports?.Watch();
+        return true;
+    }
+
+    /// <summary>tsrs printer.rs ModuleExportIndex: which external modules export what (<see cref="ModulesExporting"/>).</summary>
+    private sealed class ModuleExportIndex
+    {
+        private const int End = -1;
+
+        // merged resolved target -> the head of a list in `files` of the summarized modules with an entry resolving to
+        // it (most recent first; usually one module, so no list per target)
+        private readonly Dictionary<SymbolRef, int> byTarget = [];
+
+        // list nodes of byTarget: (file number, next node or End)
+        private readonly List<(int File, int Next)> files = [];
+
+        internal bool Started { get; private set; }
+
+        internal int StateVersion { get; private set; }
+
+        internal int WatchedChanges { get; private set; }
+
+        /// <summary>The file numbers of the external modules not summarized yet, in program order.</summary>
+        internal List<int> Pending { get; set; } = [];
+
+        /// <summary>Summarized module symbol -> its file number.</summary>
+        internal Dictionary<SymbolRef, int> BySymbol { get; } = [];
+
+        internal void Start(int stateVersion, int watchedChanges)
+        {
+            Started = true;
+            StateVersion = stateVersion;
+            WatchedChanges = watchedChanges;
+        }
+
+        internal void Reset()
+        {
+            Started = false;
+            Pending = [];
+            byTarget.Clear();
+            files.Clear();
+            BySymbol.Clear();
+        }
+
+        /// <summary>Adds the summarized modules with an entry resolving to <paramref name="target"/>.</summary>
+        internal void AddFilesWithTarget(SymbolRef target, List<(int File, SymbolRef Module)> into, Checker checker)
+        {
+            if (!byTarget.TryGetValue(target, out var node))
+            {
+                return;
+            }
+            var sourceFiles = checker.program.SourceFiles;
+            for (; node != End; node = files[node].Next)
+            {
+                var file = files[node].File;
+                into.Add((file, checker.GetSymbolOfDeclaration(new NodeRef(file, sourceFiles[file - 1].Root))));
+            }
+        }
+
+        /// <summary>
+        /// Records that module <paramref name="file"/> has an entry resolving to <paramref name="target"/> (once per
+        /// consecutive repeat).
+        /// </summary>
+        internal void AddFileWithTarget(SymbolRef target, int file)
+        {
+            ref var head = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(byTarget, target, out var exists);
+            if (!exists)
+            {
+                head = files.Count;
+                files.Add((file, End));
+            }
+            else if (files[head].File != file)
+            {
+                files.Add((file, head));
+                head = files.Count - 1;
+            }
+        }
+    }
+
     /// <summary>
     /// tsrs printer.rs ExportsByTarget, for a prefix of the table: the targets of the entries [0, Count) by position,
     /// and for more than <see cref="LinearLimit"/> entries an open-addressing index (linear probing, load at most 1/2)
@@ -159,6 +382,9 @@ internal sealed partial class Checker
 
         /// <summary>The number of entries indexed (a prefix of the table).</summary>
         internal int Count { get; private set; }
+
+        /// <summary>The target of indexed entry <paramref name="i"/>.</summary>
+        internal SymbolRef TargetAt(int i) => targets[i];
 
         internal void Reset(int tableVersion, int stateVersion)
         {

@@ -111,6 +111,7 @@ internal sealed partial class Checker
         resolvedLateExports.Remove(symbol);
         resolvedLateMembers.Remove(symbol);
         resolvedModuleExports.Remove(symbol);
+        symbolStateVersion++; // module EO2: a cached export table is dropped (Checker.ExportIndex.cs)
     }
 
     /// <summary>checker.ts getResolvedMembersOrExportsOfSymbol.</summary>
