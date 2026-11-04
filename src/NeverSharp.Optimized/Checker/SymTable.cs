@@ -106,6 +106,10 @@ internal readonly struct SymTable : IEquatable<SymTable>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal bool Has(int name) => store.Find(id, name) >= 0;
 
+    /// <summary>Module EO2: the position of the entry named <paramref name="name"/> (a name id) in table order, -1 when absent.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal int IndexOf(int name) => store.Find(id, name);
+
     /// <summary>Map.set.</summary>
     internal void Set(string name, SymbolRef symbol) => store.Set(id, store.Names.Intern(name), symbol);
 

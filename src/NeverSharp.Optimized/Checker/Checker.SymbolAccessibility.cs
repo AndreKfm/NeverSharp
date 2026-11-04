@@ -265,7 +265,76 @@ internal sealed partial class Checker
                 return [symbol];
             }
             // Check if symbol is any of the aliases in scope
-            for (var i = 0; i < symbols.Count; i++)
+            var aliasPositions = GetAliasPositions(symbols);
+            if (aliasPositions is null)
+            {
+                for (var i = 0; i < symbols.Count; i++)
+                {
+                    var result = TryEntry(symbols, i, ignoreQualification, isLocalNameLookup);
+                    if (result is not null)
+                    {
+                        return result;
+                    }
+                }
+            }
+            else
+            {
+                // Module EO2 (Track O, typescript-go getSymbolTableAliases / tsrs get_symbol_table_aliases): only the alias
+                // entries and the entry named like `symbol` can end the loop; the loop body does nothing (and reads only)
+                // for the others. So these are visited in table order, as the loop visits them; if visiting one changes the
+                // table or the symbol state the positions depend on, the rest is the loop itself.
+                var tableVersion = symbols.Version;
+                var stateVersion = symbolStateVersion;
+                var namedPosition = symbols.IndexOf(NameIdOf(symbol));
+                var a = 0;
+                while (true)
+                {
+                    var nextAlias = a < aliasPositions.Length ? aliasPositions[a] : int.MaxValue;
+                    int p;
+                    if (namedPosition >= 0 && namedPosition <= nextAlias)
+                    {
+                        p = namedPosition;
+                        namedPosition = -1;
+                        if (p == nextAlias)
+                        {
+                            a++;
+                        }
+                    }
+                    else if (nextAlias != int.MaxValue)
+                    {
+                        p = nextAlias;
+                        a++;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                    var result = TryEntry(symbols, p, ignoreQualification, isLocalNameLookup);
+                    if (result is not null)
+                    {
+                        return result;
+                    }
+                    if (symbols.Version != tableVersion || symbolStateVersion != stateVersion)
+                    {
+                        for (var i = p + 1; i < symbols.Count; i++)
+                        {
+                            result = TryEntry(symbols, i, ignoreQualification, isLocalNameLookup);
+                            if (result is not null)
+                            {
+                                return result;
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+            // If there's no result and we're looking at the global symbol table, treat `globalThis` like an alias and try to lookup thru that
+            return symbols == globals ?GetCandidateListForSymbol(globalThisSymbol, globalThisSymbol, ignoreQualification) : null;
+        }
+
+        // the body of trySymbolTable's forEachEntry for entry i: the chain, or null to go on
+        List<SymbolRef>? TryEntry(SymTable symbols, int i, bool ignoreQualification, bool isLocalNameLookup)
+        {
             {
                 var symbolFromSymbolTable = symbols.ValueAt(i);
                 var name = NameOf(symbolFromSymbolTable);
@@ -296,8 +365,7 @@ internal sealed partial class Checker
                     }
                 }
             }
-            // If there's no result and we're looking at the global symbol table, treat `globalThis` like an alias and try to lookup thru that
-            return symbols == globals ?GetCandidateListForSymbol(globalThisSymbol, globalThisSymbol, ignoreQualification) : null;
+            return null;
         }
 
         List<SymbolRef>? GetCandidateListForSymbol(SymbolRef symbolFromSymbolTable, SymbolRef resolvedImportedSymbol, bool ignoreQualification)

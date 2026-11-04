@@ -15,7 +15,10 @@
 // instead of tsrs's sorted (target, entry) pairs. tsrs's size guard for replaced tables is a version of the table's
 // contents here (SymTable.Version), and a version of the symbol state getMergedSymbol and resolveSymbol read
 // (symbolStateVersion) is added. The module export index is dropped when that state or a table it read changes
-// (SymTableStore.WatchedChanges), and the modules asked after such a change are asked as the loop asks them.
+// (SymTableStore.WatchedChanges), and the modules asked after such a change are asked as the loop asks them. The alias
+// positions of large symbol tables for trySymbolTable follow internal/checker/symbolaccessibility.go getSymbolTableAliases
+// of typescript-go (https://github.com/microsoft/typescript-go at commit 2bd066d87f5bafd315be9f40889d0a60b9e58e0b) and
+// tsrs printer.rs get_symbol_table_aliases.
 
 using NeverSharp.Generated;
 
@@ -132,6 +135,53 @@ internal sealed partial class Checker
 
     // tsrs printer.rs get_symbol_target_for_alias_lookup: one side of getSymbolIfSameReference.
     private SymbolRef GetSymbolTargetForAliasLookup(SymbolRef symbol) => GetMergedSymbol(ResolveSymbol(GetMergedSymbol(symbol)));
+
+    // Module EO2 (Track O, no counterpart in TypeScript 6.0.3): typescript-go symbolaccessibility.go getSymbolTableAliases
+    // and tsrs printer.rs get_symbol_table_aliases (symbol_table_alias_cache): the alias entries of a large symbol table,
+    // for trySymbolTable's loop in getAccessibleSymbolChain. Kept per table (by identity) with the table's version and
+    // the symbol state version (symbol flags only grow; a flag change that can add Alias to an existing symbol changes
+    // symbolStateVersion). Only tables of at least AliasPositionsMinimumCount entries: the scan of a small table is cheap,
+    // and the node builder's freshly made tables (filtered class members, fake scope locals) are small.
+    private const int AliasPositionsMinimumCount = 64;
+    private readonly Dictionary<SymTable, AliasPositions> aliasPositionCache = [];
+
+    private sealed class AliasPositions(int tableVersion, int stateVersion, int[] positions)
+    {
+        internal int TableVersion { get; } = tableVersion;
+
+        internal int StateVersion { get; } = stateVersion;
+
+        internal int[] Positions { get; } = positions;
+    }
+
+    /// <summary>
+    /// The positions of the entries of <paramref name="symbols"/> with SymbolFlags.Alias, in table order; null for a small
+    /// table (the caller scans it).
+    /// </summary>
+    private int[]? GetAliasPositions(SymTable symbols)
+    {
+        var count = symbols.Count;
+        if (count < AliasPositionsMinimumCount)
+        {
+            return null;
+        }
+        var tableVersion = symbols.Version;
+        if (aliasPositionCache.TryGetValue(symbols, out var cached) && cached.TableVersion == tableVersion && cached.StateVersion == symbolStateVersion)
+        {
+            return cached.Positions;
+        }
+        var positions = new List<int>();
+        for (var i = 0; i < count; i++)
+        {
+            if ((SymbolFlagsOf(symbols.ValueAt(i)) & SymbolFlags.Alias) != 0)
+            {
+                positions.Add(i);
+            }
+        }
+        var result = positions.ToArray();
+        aliasPositionCache[symbols] = new AliasPositions(tableVersion, symbolStateVersion, result);
+        return result;
+    }
 
     // tsrs checker.rs module_export_index
     private readonly ModuleExportIndex moduleExportIndex = new();
