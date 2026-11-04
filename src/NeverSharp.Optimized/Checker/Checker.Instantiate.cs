@@ -458,8 +458,8 @@ internal sealed partial class Checker
                 if ((objectFlags & ObjectFlags.Reference) != 0 && Types.Object(type).Node.IsNone)
                 {
                     var resolvedTypeArguments = Types.Object(type).ResolvedTypeArguments;
-                    var newTypeArguments = InstantiateTypes(Types.Elements(resolvedTypeArguments).ToArray(), mapper, out var changed);
-                    return changed ? CreateNormalizedTypeReference(Types.Object(type).Target, newTypeArguments) : type;
+                    var newTypeArguments = InstantiateTypesChanged(Types.Elements(resolvedTypeArguments), mapper);
+                    return newTypeArguments is not null ? CreateNormalizedTypeReference(Types.Object(type).Target, newTypeArguments) : type;
                 }
                 if ((objectFlags & ObjectFlags.ReverseMapped) != 0)
                 {
@@ -473,17 +473,24 @@ internal sealed partial class Checker
         {
             var origin = (flags & TypeFlags.Union) != 0 ? Types.Union(type).Origin : Type.None;
             var types = !origin.IsNone && (Types.Flags(origin) & TypeFlags.UnionOrIntersection) != 0 ? Types.Union(origin).Types : Types.Union(type).Types;
-            var newTypes = InstantiateTypes(Types.Elements(types).ToArray(), mapper, out var changed);
+            // (tsrs checker_11.rs instantiate_type_worker: the stored members, a pooled buffer only when one changed)
+            var changedTypes = InstantiateTypesChangedPooled(Types.Elements(types), mapper);
             ref var record = ref Types.Record(type);
-            if (!changed && aliasSymbol == record.AliasSymbol)
+            if (changedTypes is null && aliasSymbol == record.AliasSymbol)
             {
                 return type;
             }
             var newAliasSymbol = !aliasSymbol.IsNone ? aliasSymbol : Types.Record(type).AliasSymbol;
             var newAliasTypeArguments = !aliasSymbol.IsNone ? aliasTypeArguments : InstantiateTypeList(Types.Record(type).AliasTypeArguments, mapper);
-            return (flags & TypeFlags.Intersection) != 0 || (!origin.IsNone && (Types.Flags(origin) & TypeFlags.Intersection) != 0)
+            var newTypes = changedTypes is not null ? System.Runtime.InteropServices.CollectionsMarshal.AsSpan(changedTypes) : Types.Elements(types);
+            var result = (flags & TypeFlags.Intersection) != 0 || (!origin.IsNone && (Types.Flags(origin) & TypeFlags.Intersection) != 0)
                 ? GetIntersectionType(newTypes, newAliasSymbol, newAliasTypeArguments)
                 : GetUnionType(newTypes, UnionReduction.Literal, newAliasSymbol, newAliasTypeArguments);
+            if (changedTypes is not null)
+            {
+                FreeTypeList(changedTypes);
+            }
+            return result;
         }
         if ((flags & TypeFlags.Index) != 0)
         {
@@ -538,24 +545,75 @@ internal sealed partial class Checker
     /// <summary>checker.ts instantiateTypes (changed: whether some element changed; the input array otherwise).</summary>
     internal Type[] InstantiateTypes(Type[] types, TypeMapper mapper, out bool changed)
     {
-        changed = false;
-        Type[]? result = null;
+        var result = InstantiateTypesChanged(types, mapper);
+        changed = result is not null;
+        return result ?? types;
+    }
+
+    /// <summary>
+    /// instantiateTypes over a stored list, for callers that only read the result (Track O; tsrs checker_11.rs
+    /// <c>instantiate_types_changed</c>, notes/cpu-checker.md changes 7 and 8: the stored slice instead of a copy).
+    /// Null when no element changed (where TypeScript's instantiateList returns its input), else a new array. Instantiates
+    /// the same elements in the same order. The span may be one of the type store's lists: the arena is append-only, so
+    /// the elements read stay what they were while instantiation creates new lists.
+    /// </summary>
+    internal Type[]? InstantiateTypesChanged(ReadOnlySpan<Type> types, TypeMapper mapper)
+    {
         for (var i = 0; i < types.Length; i++)
         {
             var item = types[i];
             var mapped = InstantiateType(item, mapper);
             if (item != mapped)
             {
-                result ??= (Type[])types.Clone();
+                var result = new Type[types.Length];
+                types[..i].CopyTo(result);
                 result[i] = mapped;
+                for (var j = i + 1; j < types.Length; j++)
+                {
+                    result[j] = InstantiateType(types[j], mapper);
+                }
+                return result;
             }
         }
-        if (result is null)
+        return null;
+    }
+
+    /// <summary>
+    /// <see cref="InstantiateTypesChanged"/> into a pooled buffer (tsrs checker.rs <c>free_type_lists</c>, Track O):
+    /// null when no element changed, else a buffer to give back with <see cref="FreeTypeList"/> once the result is read.
+    /// </summary>
+    private List<Type>? InstantiateTypesChangedPooled(ReadOnlySpan<Type> types, TypeMapper mapper)
+    {
+        for (var i = 0; i < types.Length; i++)
         {
-            return types;
+            var item = types[i];
+            var mapped = InstantiateType(item, mapper);
+            if (item != mapped)
+            {
+                var result = freeTypeLists.Count > 0 ? freeTypeLists.Pop() : new List<Type>(types.Length);
+                result.AddRange(types[..i]);
+                result.Add(mapped);
+                for (var j = i + 1; j < types.Length; j++)
+                {
+                    result.Add(InstantiateType(types[j], mapper));
+                }
+                return result;
+            }
         }
-        changed = true;
-        return result;
+        return null;
+    }
+
+    // tsrs checker.rs free_type_lists: empty buffers for InstantiateTypesChangedPooled (Track O)
+    private readonly Stack<List<Type>> freeTypeLists = new();
+
+    // tsrs checker_11.rs free_type_list
+    private void FreeTypeList(List<Type> list)
+    {
+        if (list.Capacity <= 256)
+        {
+            list.Clear();
+            freeTypeLists.Push(list);
+        }
     }
 
     /// <summary>instantiateTypes for a stored type list (the same list when nothing changed).</summary>
@@ -565,8 +623,14 @@ internal sealed partial class Checker
         {
             return list;
         }
-        var result = InstantiateTypes(Types.Elements(list).ToArray(), mapper, out var changed);
-        return changed ? Types.CreateList(result) : list;
+        var result = InstantiateTypesChangedPooled(Types.Elements(list), mapper);
+        if (result is null)
+        {
+            return list;
+        }
+        var created = Types.CreateList(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(result));
+        FreeTypeList(result);
+        return created;
     }
 
     /// <summary>checker.ts instantiateSignatures.</summary>
