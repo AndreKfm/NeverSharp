@@ -10,6 +10,7 @@
 // Modified: per-checker stores keyed by SymbolRef / NodeRef (docs/phase3-checker-layout.md); module C0 defines the
 // stores and the first link kinds, the checker modules add the kinds they need (one store per kind, as typescript-go).
 
+using System.Runtime.CompilerServices;
 using NeverSharp.Generated;
 
 namespace NeverSharp.Optimized;
@@ -18,21 +19,26 @@ namespace NeverSharp.Optimized;
 /// One int per symbol of a checker's program (module CO2): binder symbol <c>i</c> of file <c>f</c> at
 /// <c>bases[f] + i</c> (the file regions are sized by the files' symbol record counts; binder indices are dense),
 /// transient symbols after the last file. The ints live in pages of <see cref="Size"/> allocated on first write, so a
-/// checker has a few hundred arrays per kind instead of one per file, and none of them holds references.
+/// checker has a few hundred pages per kind instead of one array per file, and none of them holds references. Module
+/// AR1 (Track O / tsrs-only; tsrs crates/tsrs_checker/src/links.rs IdLinkStore's dense pages,
+/// notes/mem-dense-link-tables.md): the pages are
+/// native blocks of the checker's <see cref="CheckerArena"/>, not arrays the collector copies.
 /// </summary>
-internal sealed class SymbolSlots
+internal sealed unsafe class SymbolSlots
 {
     private const int Shift = 14;
     private const int Size = 1 << Shift;
     private const int Mask = Size - 1;
 
     private readonly int[] bases; // [file] -> start of its region; [0] -> start of the transient symbols
-    private int[]?[] pages;
+    private readonly CheckerArena arena;
+    private nint[] pages; // native int[Size] blocks (0: not allocated)
 
-    internal SymbolSlots(int[] bases)
+    internal SymbolSlots(int[] bases, CheckerArena arena)
     {
         this.bases = bases;
-        pages = new int[]?[(bases[0] >> Shift) + 16];
+        this.arena = arena;
+        pages = new nint[(bases[0] >> Shift) + 16];
     }
 
     /// <summary>The regions of the program's files (shared by the slot tables of one checker).</summary>
@@ -64,8 +70,12 @@ internal sealed class SymbolSlots
         {
             Array.Resize(ref pages, Math.Max(p + 1, pages.Length * 2));
         }
-        var page = pages[p] ??= new int[Size];
-        return ref page[i & Mask];
+        var page = pages[p];
+        if (page == 0)
+        {
+            page = pages[p] = (nint)arena.Allocate(Size * sizeof(int));
+        }
+        return ref ((int*)page)[i & Mask];
     }
 
     /// <summary>The value of <paramref name="symbol"/>'s slot (0 when it has none).</summary>
@@ -75,7 +85,7 @@ internal sealed class SymbolSlots
         // (no region check: a slot is only written through Slot, which checks it)
         var i = bases[symbol.File] + symbol.Index;
         var p = i >> Shift;
-        return p < pages.Length && pages[p] is { } page ? page[i & Mask] : 0;
+        return p < pages.Length && pages[p] is var page and not 0 ? ((int*)page)[i & Mask] : 0;
     }
 }
 
@@ -83,18 +93,21 @@ internal sealed class SymbolSlots
 /// typescript-go's <c>core.LinkStore[*ast.Symbol, V]</c> for one link kind <typeparamref name="T"/>: the links of a
 /// symbol, created zeroed on first access. Keyed by <see cref="SymbolRef"/> through the checker's
 /// <see cref="SymbolSlots"/> layout (module CO2; before: a slot array per file), the records in chunks in creation
-/// order. Only symbols that have links of this kind cost a record.
+/// order. Only symbols that have links of this kind cost a record. Module AR1: slot pages and record chunks in the
+/// checker's <see cref="CheckerArena"/> (tsrs crates/tsrs_checker/src/links.rs IdLinkStore: link records outside any
+/// collector).
 /// </summary>
 internal sealed class SymbolLinkStore<T>
-    where T : struct
+    where T : unmanaged
 {
     private readonly SymbolSlots slots; // record index (0: none)
-    private readonly Chunks<T> records = new(); // records[0] unused
+    private readonly NativeChunks<T> records; // records[0] unused
     private int count;
 
-    internal SymbolLinkStore(int[] slotBases)
+    internal SymbolLinkStore(int[] slotBases, CheckerArena arena)
     {
-        slots = new SymbolSlots(slotBases);
+        slots = new SymbolSlots(slotBases, arena);
+        records = new NativeChunks<T>(arena);
     }
 
     /// <summary>The links of <paramref name="symbol"/>, created zeroed if it has none (getSymbolLinks).</summary>
@@ -118,9 +131,12 @@ internal sealed class SymbolLinkStore<T>
 /// typescript-go's <c>core.LinkStore[*ast.Node, V]</c> for one link kind <typeparamref name="T"/>: the links of a node,
 /// created zeroed on first access. Node handles are record offsets (sparse), so per file an open-addressing map from
 /// node handle to record index (linear probing, load at most 1/2, as the binder's node maps; module CO2: one array of
-/// (handle, record) pairs per file instead of two), the records in one array.
+/// (handle, record) pairs per file instead of two), the records in one array. Module AR1 (Track O / tsrs-only; tsrs
+/// crates/tsrs_checker/src/links.rs NodeLinkStore, notes/mem-dense-link-tables.md): the per-file maps are native blocks of the
+/// checker's <see cref="CheckerArena"/>, and so are the records when they hold no references (in 4,096-record chunks
+/// that never move); records with references stay in a managed array.
 /// </summary>
-internal sealed class NodeLinkStore<T>
+internal sealed unsafe class NodeLinkStore<T>
     where T : struct
 {
     private struct Entry
@@ -129,18 +145,33 @@ internal sealed class NodeLinkStore<T>
         public int Record;
     }
 
-    private readonly Entry[][] maps; // [file]
+    private const int ChunkShift = 12;
+    private const int ChunkSize = 1 << ChunkShift;
+    private const int ChunkMask = ChunkSize - 1;
+
+    // (an intrinsic the compiler folds per instantiation)
+    private static bool NativeRecords
+    {
+        get => !RuntimeHelpers.IsReferenceOrContainsReferences<T>();
+    }
+
+    private readonly CheckerArena arena;
+    private readonly nint[] maps; // [file] -> native Entry[capacities[file]] (0: none yet)
+    private readonly int[] capacities;
     private readonly int[] counts;
-    private T[] records = new T[64]; // records[0] unused
+    private T[] records = []; // records[0] unused (records with references)
+    private nint[] chunks = new nint[4]; // native record chunks (reference-free records)
     private int count;
 
-    internal NodeLinkStore(int fileCount)
+    internal NodeLinkStore(int fileCount, CheckerArena arena)
     {
-        maps = new Entry[fileCount + 1][];
+        this.arena = arena;
+        maps = new nint[fileCount + 1];
+        capacities = new int[fileCount + 1];
         counts = new int[fileCount + 1];
-        for (var i = 0; i < maps.Length; i++)
+        if (!NativeRecords)
         {
-            maps[i] = [];
+            records = new T[64];
         }
     }
 
@@ -148,46 +179,66 @@ internal sealed class NodeLinkStore<T>
     internal ref T Get(NodeRef node)
     {
         var file = node.File;
-        if ((counts[file] + 1) * 2 > maps[file].Length)
+        if ((counts[file] + 1) * 2 > capacities[file])
         {
             Grow(file);
         }
-        var map = maps[file];
-        var mask = map.Length - 1;
+        var map = (Entry*)maps[file];
+        var capacity = capacities[file];
+        var mask = capacity - 1;
         var handle = node.Node.Index;
-        for (var i = Slot(handle, map.Length); ; i = (i + 1) & mask)
+        for (var i = Slot(handle, capacity); ; i = (i + 1) & mask)
         {
             ref var entry = ref map[i];
             if (entry.Node == handle)
             {
-                return ref records[entry.Record];
+                return ref Record(entry.Record);
             }
             if (entry.Node == 0)
             {
-                if (count + 1 == records.Length)
+                var record = ++count;
+                if (NativeRecords)
+                {
+                    var c = record >> ChunkShift;
+                    if (c >= chunks.Length)
+                    {
+                        Array.Resize(ref chunks, chunks.Length * 2);
+                    }
+                    if (chunks[c] == 0)
+                    {
+                        chunks[c] = (nint)arena.Allocate((nint)ChunkSize * Unsafe.SizeOf<T>());
+                    }
+                }
+                else if (record == records.Length)
                 {
                     Array.Resize(ref records, records.Length * 2);
                 }
                 entry.Node = handle;
-                entry.Record = ++count;
+                entry.Record = record;
                 counts[file]++;
-                return ref records[count];
+                return ref Record(record);
             }
         }
     }
+
+    private ref T Record(int record) =>
+        ref NativeRecords
+            ? ref Unsafe.Add(ref Unsafe.AsRef<T>((void*)chunks[record >> ChunkShift]), record & ChunkMask)
+            : ref records[record];
 
     /// <summary>Whether <paramref name="node"/> has links of this kind.</summary>
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal bool Has(NodeRef node)
     {
-        var map = maps[node.File];
-        if (map.Length == 0)
+        var capacity = capacities[node.File];
+        if (capacity == 0)
         {
             return false;
         }
-        var mask = map.Length - 1;
+        var map = (Entry*)maps[node.File];
+        var mask = capacity - 1;
         var handle = node.Node.Index;
-        for (var i = Slot(handle, map.Length); ; i = (i + 1) & mask)
+        for (var i = Slot(handle, capacity); ; i = (i + 1) & mask)
         {
             if (map[i].Node == handle)
             {
@@ -205,12 +256,14 @@ internal sealed class NodeLinkStore<T>
 
     private void Grow(int file)
     {
-        var old = maps[file];
-        var capacity = Math.Max(16, old.Length * 2);
-        var grown = new Entry[capacity];
+        var old = (Entry*)maps[file];
+        var oldCapacity = capacities[file];
+        var capacity = Math.Max(16, oldCapacity * 2);
+        var grown = (Entry*)arena.Allocate((nint)capacity * sizeof(Entry));
         var mask = capacity - 1;
-        foreach (var entry in old)
+        for (var k = 0; k < oldCapacity; k++)
         {
+            var entry = old[k];
             if (entry.Node == 0)
             {
                 continue;
@@ -222,7 +275,9 @@ internal sealed class NodeLinkStore<T>
             }
             grown[i] = entry;
         }
-        maps[file] = grown;
+        maps[file] = (nint)grown;
+        capacities[file] = capacity;
+        arena.Free(old, (nint)oldCapacity * sizeof(Entry));
     }
 }
 

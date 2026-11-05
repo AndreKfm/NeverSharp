@@ -41,7 +41,7 @@ internal sealed partial class Checker
 {
     private NodeLinkStore<ExpressionNodeLinks>? expressionLinks;
 
-    private NodeLinkStore<ExpressionNodeLinks> ExpressionLinks => expressionLinks ??= new NodeLinkStore<ExpressionNodeLinks>(program.SourceFiles.Count);
+    private NodeLinkStore<ExpressionNodeLinks> ExpressionLinks => expressionLinks ??= new NodeLinkStore<ExpressionNodeLinks>(program.SourceFiles.Count, Arena);
 
     // checker.ts contextualTypeNodes / contextualTypes / contextualIsCache
     private NodeRef[] contextualTypeNodes = new NodeRef[16];

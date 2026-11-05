@@ -82,7 +82,7 @@ internal sealed partial class Checker
 
     private NodeLinkStore<JsxElementLinks>? jsxElementLinks;
 
-    private NodeLinkStore<JsxElementLinks> JsxElementLinks => jsxElementLinks ??= new NodeLinkStore<JsxElementLinks>(program.SourceFiles.Count);
+    private NodeLinkStore<JsxElementLinks> JsxElementLinks => jsxElementLinks ??= new NodeLinkStore<JsxElementLinks>(program.SourceFiles.Count, Arena);
 
     // sourceFileLinks.jsxFragmentType per file
     private readonly Dictionary<int, Type> jsxFragmentTypes = [];

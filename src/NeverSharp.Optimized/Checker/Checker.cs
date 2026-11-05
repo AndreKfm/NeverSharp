@@ -84,15 +84,15 @@ internal sealed partial class Checker
         Signatures = new SignatureStore();
         TransientSymbols = new TransientSymbolStore(Names);
         emptySymbols = new SymTable(Names);
-        ValueSymbolLinks = new SymbolLinkStore<ValueSymbolLinks>(symbolSlotBases);
-        AliasSymbolLinks = new SymbolLinkStore<AliasSymbolLinks>(symbolSlotBases);
-        ExportTypeLinks = new SymbolLinkStore<ExportTypeLinks>(symbolSlotBases);
-        DeclaredTypeLinks = new SymbolLinkStore<DeclaredTypeLinks>(symbolSlotBases);
-        NodeLinks = new NodeLinkStore<NodeLinks>(files.Count);
-        SymbolNodeLinks = new NodeLinkStore<SymbolNodeLinks>(files.Count);
-        TypeNodeLinks = new NodeLinkStore<TypeNodeLinks>(files.Count);
-        SignatureLinks = new NodeLinkStore<SignatureLinks>(files.Count);
-        binderNames = new SymbolSlots(symbolSlotBases);
+        ValueSymbolLinks = new SymbolLinkStore<ValueSymbolLinks>(symbolSlotBases, Arena);
+        AliasSymbolLinks = new SymbolLinkStore<AliasSymbolLinks>(symbolSlotBases, Arena);
+        ExportTypeLinks = new SymbolLinkStore<ExportTypeLinks>(symbolSlotBases, Arena);
+        DeclaredTypeLinks = new SymbolLinkStore<DeclaredTypeLinks>(symbolSlotBases, Arena);
+        NodeLinks = new NodeLinkStore<NodeLinks>(files.Count, Arena);
+        SymbolNodeLinks = new NodeLinkStore<SymbolNodeLinks>(files.Count, Arena);
+        TypeNodeLinks = new NodeLinkStore<TypeNodeLinks>(files.Count, Arena);
+        SignatureLinks = new NodeLinkStore<SignatureLinks>(files.Count, Arena);
+        binderNames = new SymbolSlots(symbolSlotBases, Arena);
 
         languageVersion = compilerOptions.GetEmitScriptTarget();
         moduleKind = compilerOptions.GetEmitModuleKind();
@@ -127,6 +127,12 @@ internal sealed partial class Checker
 
     // The layout of the per-symbol tables (SymbolSlots.Bases), shared by the symbol link stores.
     private readonly int[] symbolSlotBases;
+
+    /// <summary>
+    /// The native memory of this checker's reference-free stores (module AR1, Track O / tsrs-only: tsrs's per-thread
+    /// checker arenas); freed in one piece when the checker and its stores are unreachable.
+    /// </summary>
+    internal CheckerArena Arena { get; } = new();
 
     internal TypeStore Types { get; }
 
