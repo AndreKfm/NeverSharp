@@ -1,0 +1,59 @@
+[
+ {
+  "name": "base-srv-tsrs",
+  "exe": "C:/Users/akn/AppData/Local/Temp/claude/3c25817852539760/fdf5d608-b70b-4fbe-99c0-1f5238dfd2f7/scratchpad/FE1/base/optimized-aot-srv/parse-cs-optimized-aot-srv.exe",
+  "flags": [
+   "--check",
+   "--pool",
+   "tsrs"
+  ]
+ },
+ {
+  "name": "final-srv-tsrs",
+  "exe": "C:/Users/akn/AppData/Local/Temp/claude/3c25817852539760/fdf5d608-b70b-4fbe-99c0-1f5238dfd2f7/scratchpad/FE1/s4/optimized-aot-srv/parse-cs-optimized-aot-srv.exe",
+  "flags": [
+   "--check",
+   "--pool",
+   "tsrs"
+  ]
+ },
+ {
+  "name": "base-ws-tsrs",
+  "exe": "C:/Users/akn/AppData/Local/Temp/claude/3c25817852539760/fdf5d608-b70b-4fbe-99c0-1f5238dfd2f7/scratchpad/FE1/base/optimized-aot-ws/parse-cs-optimized-aot-ws.exe",
+  "flags": [
+   "--check",
+   "--pool",
+   "tsrs"
+  ]
+ },
+ {
+  "name": "final-ws-tsrs",
+  "exe": "C:/Users/akn/AppData/Local/Temp/claude/3c25817852539760/fdf5d608-b70b-4fbe-99c0-1f5238dfd2f7/scratchpad/FE1/s4/optimized-aot-ws/parse-cs-optimized-aot-ws.exe",
+  "flags": [
+   "--check",
+   "--pool",
+   "tsrs"
+  ]
+ },
+ {
+  "name": "final-ws-default",
+  "exe": "C:/Users/akn/AppData/Local/Temp/claude/3c25817852539760/fdf5d608-b70b-4fbe-99c0-1f5238dfd2f7/scratchpad/FE1/s4/optimized-aot-ws/parse-cs-optimized-aot-ws.exe",
+  "flags": [
+   "--check"
+  ]
+ },
+ {
+  "name": "tsrs",
+  "exe": "D:/Private/Source/Andre/projects/NeverSharp/artifacts/bin/parse-rs.exe",
+  "flags": [
+   "--check"
+  ]
+ },
+ {
+  "name": "tsgo",
+  "exe": "D:/Private/Source/Andre/projects/NeverSharp/artifacts/bin/parse-go.exe",
+  "flags": [
+   "--check"
+  ]
+ }
+]

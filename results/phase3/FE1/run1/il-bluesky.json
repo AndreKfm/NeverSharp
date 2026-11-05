@@ -1,0 +1,167 @@
+{
+ "list": "D:/Private/Source/Andre/projects/NeverSharp/artifacts/bench/filelists/bluesky.txt",
+ "results": [
+  {
+   "command": "base-srv-tsrs",
+   "flags": [
+    "--check",
+    "--pool",
+    "tsrs"
+   ],
+   "env": {},
+   "times": [
+    0.5109474,
+    0.5719526,
+    0.5351535,
+    0.6064075,
+    0.5462218
+   ],
+   "pause": [
+    73.904,
+    83.934,
+    79.827,
+    82.829,
+    73.605
+   ],
+   "stats": []
+  },
+  {
+   "command": "final-srv-tsrs",
+   "flags": [
+    "--check",
+    "--pool",
+    "tsrs"
+   ],
+   "env": {},
+   "times": [
+    0.4892027,
+    0.4923189,
+    0.4803004,
+    0.4979376,
+    0.4440195
+   ],
+   "pause": [
+    90.484,
+    85.854,
+    80.221,
+    85.158,
+    65.178
+   ],
+   "stats": []
+  },
+  {
+   "command": "base-ws-tsrs",
+   "flags": [
+    "--check",
+    "--pool",
+    "tsrs"
+   ],
+   "env": {},
+   "times": [
+    0.6338538,
+    0.6143547,
+    0.6205032,
+    0.6467861,
+    0.6385151
+   ],
+   "pause": [
+    236.182,
+    237.191,
+    232.741,
+    234.832,
+    235.711
+   ],
+   "stats": []
+  },
+  {
+   "command": "final-ws-tsrs",
+   "flags": [
+    "--check",
+    "--pool",
+    "tsrs"
+   ],
+   "env": {},
+   "times": [
+    0.5642475,
+    0.6024535,
+    0.5860836,
+    0.5777533,
+    0.5954622
+   ],
+   "pause": [
+    222.769,
+    217.695,
+    228.571,
+    221.542,
+    225.045
+   ],
+   "stats": []
+  },
+  {
+   "command": "final-ws-default",
+   "flags": [
+    "--check"
+   ],
+   "env": {},
+   "times": [
+    0.8383074,
+    0.8718047,
+    0.8361457,
+    0.8220283,
+    0.847661
+   ],
+   "pause": [
+    141.38,
+    147.134,
+    141.214,
+    143.674,
+    145.212
+   ],
+   "stats": []
+  },
+  {
+   "command": "tsrs",
+   "flags": [
+    "--check"
+   ],
+   "env": {},
+   "times": [
+    0.2007567,
+    0.2064115,
+    0.2117197,
+    0.204107,
+    0.2149266
+   ],
+   "pause": [
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "stats": []
+  },
+  {
+   "command": "tsgo",
+   "flags": [
+    "--check"
+   ],
+   "env": {},
+   "times": [
+    0.807594,
+    0.9168746,
+    0.8087579,
+    0.8411943,
+    0.814958
+   ],
+   "pause": [
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "stats": []
+  }
+ ]
+}
