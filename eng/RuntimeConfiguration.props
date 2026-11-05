@@ -29,6 +29,21 @@
   </PropertyGroup>
   <!-- ConcurrentGarbageCollection and GC dynamic adaptation (DATAS): defaults. -->
 
+  <!--
+    Gen0 budget of the Workstation GC build (module AR2): an amendment of pre-registration §6.4 (A7), decided by the
+    author on 2026-11-05, to be recorded in the pre-registration at the end with the other conformity work.
+    GCgen0size = 0x2000000 (32 MB; the GC reads the value as hexadecimal). ILC embeds it into the binary as a runtime
+    option (the same channel the SDK uses for gcServer=1); NativeAOT's GC reads it at startup. Chosen by measurement
+    against 48, 64, 128 and 256 MB (64 MB and more made single-threaded runs slower). Server GC keeps its default
+    budgets (every value measured made it slower).
+    The JIT configuration jit-ws has no build-time channel for this knob: CoreCLR reads GCgen0size only from the
+    environment (DOTNET_GCgen0size=2000000), not from runtimeconfig.json, so jit-ws runs set that variable to stay
+    comparable with aot-ws.
+  -->
+  <ItemGroup Condition="'$(NeverSharpRuntime)' == 'aot-ws'">
+    <IlcArg Include="--runtimeopt:GCgen0size=2000000" />
+  </ItemGroup>
+
   <Target Name="NeverSharpCheckRuntime" BeforeTargets="Build"
           Condition="'$(NeverSharpRuntime)' != 'aot-ws' And '$(NeverSharpRuntime)' != 'aot-srv' And '$(NeverSharpRuntime)' != 'jit-ws' And '$(NeverSharpRuntime)' != 'jit-srv'">
     <Error Text="NeverSharpRuntime must be aot-ws, aot-srv, jit-ws or jit-srv (got '$(NeverSharpRuntime)')." />
