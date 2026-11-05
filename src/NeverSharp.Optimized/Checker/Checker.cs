@@ -188,6 +188,7 @@ internal sealed partial class Checker
         }
 
         amalgamatedDuplicates = new AmalgamatedDuplicates();
+        var mergeStart = System.Diagnostics.Stopwatch.GetTimestamp();
 
         // Initialize global symbol table
         List<(int File, List<Node> Names)>? augmentations = null;
@@ -321,9 +322,22 @@ internal sealed partial class Checker
             }
         }
 
+        var duplicatesStart = System.Diagnostics.Stopwatch.GetTimestamp();
         ReportAmalgamatedDuplicates();
         amalgamatedDuplicates = null;
+        var end = System.Diagnostics.Stopwatch.GetTimestamp();
+        InitializeMergeSeconds = (duplicatesStart - mergeStart) / (double)System.Diagnostics.Stopwatch.Frequency;
+        InitializeDuplicatesSeconds = (end - duplicatesStart) / (double)System.Diagnostics.Stopwatch.Frequency;
     }
+
+    /// <summary>
+    /// Wall seconds of initializeTypeChecker's globals merge (the files' globals, augmentations and global types) and of
+    /// its duplicate-declaration report (module FE1's phase probe).
+    /// </summary>
+    internal double InitializeMergeSeconds { get; private set; }
+
+    /// <inheritdoc cref="InitializeMergeSeconds"/>
+    internal double InitializeDuplicatesSeconds { get; private set; }
 
     /// <summary>
     /// program.ts collectExternalModuleReferences: the names of the file's module augmentations (sourceFile.moduleAugmentations,

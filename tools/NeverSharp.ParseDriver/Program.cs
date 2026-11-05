@@ -45,6 +45,9 @@
 //   NEVERSHARP_POOL_STATS=1: one JSON line per checker on stderr (creation and check seconds, files, stolen files,
 //   weight, types, transient symbols). NEVERSHARP_POOL_SLOW=<seconds>: one JSON line on stderr per file whose check
 //   took at least that long (checker, position on it, seconds, types created).
+// - Module FE1 (Track O, development probe, off by default): NEVERSHARP_PHASES=1 prints one JSON line on stderr after
+//   the result line with the wall-time phases of a --check run (CheckMode.cs Phases) and the Unix times of the driver's
+//   start and last output.
 //   Usage: parse-cs-optimized-<runtime> [--bind | --check [--emit [--dump-emit <file>]] [--checkers N] [--assignment locality|modulo] [--steal] [--pool tsrs] [--dump-diagnostics <file>]] [--single] <file list>
 
 using System.Diagnostics;
@@ -57,6 +60,9 @@ using NeverSharp.Faithful;
 #endif
 using NeverSharp.Generated;
 
+#if TRACK_OPTIMIZED
+Phases.Begin();
+#endif
 var single = false;
 var bind = false;
 var check = false;

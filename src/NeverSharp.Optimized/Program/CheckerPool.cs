@@ -68,9 +68,12 @@ internal sealed class CheckerPool
 
         // The imports of the program's files (module CO4: resolved after the program's walk, parallel unless
         // single-threaded), before the files are bound, as in the walk, and before any checker reads them.
+        var t0 = Stopwatch.GetTimestamp();
         program.ResolveImportedModules(singleThreaded);
+        var t1 = Stopwatch.GetTimestamp();
         // checker.NewChecker calls program.BindSourceFiles (parallel unless single-threaded) before anything else.
         program.BindSourceFiles(singleThreaded);
+        var t2 = Stopwatch.GetTimestamp();
 
         var files = program.SourceFiles;
         if (assignment == CheckerAssignmentKind.Locality && checkerCount > 1)
@@ -90,9 +93,28 @@ internal sealed class CheckerPool
             weights = CheckerAssignment.CheckedFileWeights(program);
         }
         Stats = new CheckerStats[checkerCount];
+        var t3 = Stopwatch.GetTimestamp();
+        ResolveSeconds = (t1 - t0) / (double)Stopwatch.Frequency;
+        BindSeconds = (t2 - t1) / (double)Stopwatch.Frequency;
+        AssignSeconds = (t3 - t2) / (double)Stopwatch.Frequency;
     }
 
     internal int Count => checkers.Length;
+
+    /// <summary>
+    /// Wall seconds of the constructor's phases: import resolution, binding, and the assignment (with the weights of
+    /// stealing). Module FE1 (the driver's phase probe, NEVERSHARP_PHASES=1).
+    /// </summary>
+    internal double ResolveSeconds { get; }
+
+    /// <inheritdoc cref="ResolveSeconds"/>
+    internal double BindSeconds { get; }
+
+    /// <inheritdoc cref="ResolveSeconds"/>
+    internal double AssignSeconds { get; }
+
+    /// <summary>Wall seconds of the deduplication of the file-less diagnostics after the check pass (module FE1's probe).</summary>
+    internal double DedupeSeconds { get; private set; }
 
     /// <summary>Per checker: what its work items did (module SC1; the driver prints it with NEVERSHARP_POOL_STATS=1).</summary>
     internal CheckerStats[] Stats { get; }
@@ -101,6 +123,8 @@ internal sealed class CheckerPool
     internal struct CheckerStats
     {
         public double CreateSeconds;
+        public double MergeSeconds;
+        public double DuplicatesSeconds;
         public double CheckSeconds;
         public int Files;
         public int StolenFiles;
@@ -176,6 +200,7 @@ internal sealed class CheckerPool
                 RecordStats(checkerIndex, checker, start, created);
             });
         }
+        var dedupeStart = Stopwatch.GetTimestamp();
         if (checkers.Length > 1)
         {
             // GetSemanticDiagnostics(ctx, nil) sorts and deduplicates the concatenation of all files' diagnostics. Each
@@ -199,6 +224,7 @@ internal sealed class CheckerPool
                 });
             }
         }
+        DedupeSeconds = (Stopwatch.GetTimestamp() - dedupeStart) / (double)Stopwatch.Frequency;
         return diagnostics;
     }
 
@@ -235,6 +261,8 @@ internal sealed class CheckerPool
     {
         var end = Stopwatch.GetTimestamp();
         Stats[checkerIndex].CreateSeconds = (created - start) / (double)Stopwatch.Frequency;
+        Stats[checkerIndex].MergeSeconds = checker.InitializeMergeSeconds;
+        Stats[checkerIndex].DuplicatesSeconds = checker.InitializeDuplicatesSeconds;
         Stats[checkerIndex].CheckSeconds = (end - created) / (double)Stopwatch.Frequency;
         Stats[checkerIndex].Types = checker.Types.Count;
         Stats[checkerIndex].TransientSymbols = checker.TransientSymbols.Count;

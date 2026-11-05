@@ -73,14 +73,22 @@ internal sealed class DefaultLibrary
         return files.TryGetValue(name, out var lazy) && lazy.IsValueCreated && ReferenceEquals(lazy.Value, file);
     }
 
+    /// <summary>
+    /// Stopwatch ticks spent in <see cref="Load"/> in this process, summed over the loads (module FE1's phase probe;
+    /// the loads of one program run one after another).
+    /// </summary>
+    internal static long LoadTicks;
+
     private SourceFile Load(string path, string name)
     {
+        var start = System.Diagnostics.Stopwatch.GetTimestamp();
         // tsc's host: sys.readFile (Track O's reader has its semantics, step O1), then createSourceFile.
         var file = Parser.ParseFile(path, name, parseOptions, setParentNodes: false, ScriptKind.TS);
         // Written once here, read by every program afterwards: the line map (otherwise computed lazily on first use)
         // and the binder output (checker.ts initializeTypeChecker binds every file that is not bound yet).
         Scanner.GetLineStarts(new SourceFileNodeLike(file.Store, file.Root));
         Binder.BindSourceFile(file, bindOptions);
+        Interlocked.Add(ref LoadTicks, System.Diagnostics.Stopwatch.GetTimestamp() - start);
         return file;
     }
 

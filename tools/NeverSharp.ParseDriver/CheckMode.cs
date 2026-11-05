@@ -23,6 +23,63 @@ internal sealed class PoolSettings
     public bool Custom;
 }
 
+/// <summary>
+/// NEVERSHARP_PHASES=1 (module FE1, development probe, never set by bench.mjs): the wall-time phases of a --check run
+/// from the driver's start to its last output, one JSON line on stderr after the result line. Each mark records the
+/// Stopwatch time and the process's GC pause so far; the line also carries the Unix times (ms) of the driver's start and
+/// of its last output, so that a caller can measure process start and exit from outside.
+/// </summary>
+internal static class Phases
+{
+    internal static readonly bool On = Environment.GetEnvironmentVariable("NEVERSHARP_PHASES") == "1";
+    private static readonly List<(string Name, long Ticks, double PauseMs, long Allocated, int Gen0, int Gen1, int Gen2)> Marks = [];
+    private static double mainUnixMs;
+
+    private static double UnixMs() => (DateTime.UtcNow - DateTime.UnixEpoch).TotalMilliseconds;
+
+    internal static void Begin()
+    {
+        if (On)
+        {
+            mainUnixMs = UnixMs();
+            Mark("start");
+        }
+    }
+
+    internal static void Mark(string name)
+    {
+        if (On)
+        {
+            Marks.Add((name, System.Diagnostics.Stopwatch.GetTimestamp(), GC.GetTotalPauseDuration().TotalMilliseconds, GC.GetTotalAllocatedBytes(false),
+                GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2)));
+        }
+    }
+
+    /// <summary>The phase line: each mark's seconds since the previous one and the GC pause in between, then <paramref name="extra"/> (JSON members).</summary>
+    internal static void Write(string extra)
+    {
+        if (!On)
+        {
+            return;
+        }
+        var inv = CultureInfo.InvariantCulture;
+        var sb = new StringBuilder("{\"phases\":[");
+        for (var i = 1; i < Marks.Count; i++)
+        {
+            var (m, p) = (Marks[i], Marks[i - 1]);
+            sb.Append(inv, $"{(i > 1 ? "," : "")}{{\"name\":\"{m.Name}\",\"s\":{(m.Ticks - p.Ticks) / (double)System.Diagnostics.Stopwatch.Frequency:0.0000},\"pauseS\":{(m.PauseMs - p.PauseMs) / 1000:0.0000}," +
+                $"\"allocMB\":{(m.Allocated - p.Allocated) >> 20},\"gcs\":\"{m.Gen0 - p.Gen0}/{m.Gen1 - p.Gen1}/{m.Gen2 - p.Gen2}\"}}");
+        }
+        using (var self = System.Diagnostics.Process.GetCurrentProcess())
+        {
+            sb.Append(inv, $"],{extra}\"privateMB\":{self.PrivateMemorySize64 >> 20},\"workingSetMB\":{self.WorkingSet64 >> 20},\"peakWorkingSetMB\":{self.PeakWorkingSet64 >> 20},\"threads\":{self.Threads.Count},");
+        }
+        sb.Append(inv, $"\"mainUnixMs\":{mainUnixMs:0.000},\"endUnixMs\":");
+        var text = sb.ToString();
+        Console.Error.WriteLine(text + UnixMs().ToString("0.000", inv) + "}");
+    }
+}
+
 internal static class CheckMode
 {
     /// <summary>
@@ -71,6 +128,7 @@ internal static class CheckMode
 
     private static int RunCore(string[] files, bool single, int checkerCount, PoolSettings poolSettings, string priority, string? dumpDiagnostics, bool emit, string? dumpEmit)
     {
+        Phases.Mark("list");
         var programOptions = emit ? EmitProgramOptions() : ProgramOptions();
         // tsc's host parses with the program's createSourceFile options: languageVersion = the emit target, jsDocParsingMode
         // = the host's (executeCommandLine.ts: ParseForTypeErrors).
@@ -105,6 +163,7 @@ internal static class CheckMode
             }
             Task.WaitAll(tasks);
         }
+        Phases.Mark("parse");
 
         // The default library next to the executable (build-cs.mjs copies TypeScript 6.0.3's lib folder there), named by
         // its real path, as tsc's host names it.
@@ -127,6 +186,7 @@ internal static class CheckMode
         // --emit: the outputs of each program file (name, text), in write order, kept in memory (an in-memory WriteFile)
         List<(string FileName, string Text)>?[] outputs = [];
         EmitResult? emitResult = null;
+        var phaseExtra = "";
         if (files.Length == 0)
         {
             // createProgram with no root files: no default library, no checker work, nothing to emit.
@@ -137,16 +197,33 @@ internal static class CheckMode
         }
         else
         {
+            Phases.Mark("host");
             var program = TsProgram.Create(names, programOptions, host);
+            Phases.Mark("program");
+            if (Phases.On)
+            {
+                // (the probe only: the pool's constructor resolves and binds the same way; its calls then do nothing)
+                program.ResolveImportedModules(single);
+                Phases.Mark("resolve");
+                program.BindSourceFiles(single);
+                Phases.Mark("bind");
+            }
             var pool = !poolSettings.Custom
                 ? (checkerCount > 0 ? new CheckerPool(program, single, checkerCount) : new CheckerPool(program, single))
                 : new CheckerPool(program, single, checkerCount > 0 ? checkerCount : 4, poolSettings.Assignment, poolSettings.Steal);
+            Phases.Mark("pool");
             if (Environment.GetEnvironmentVariable("NEVERSHARP_POOL_SLOW") is { } slow)
             {
                 pool.SlowFileSeconds = double.Parse(slow, CultureInfo.InvariantCulture);
             }
             semantic = pool.GetSemanticDiagnostics();
+            Phases.Mark("check");
             global = pool.GetGlobalDiagnostics();
+            Phases.Mark("global");
+            if (Phases.On)
+            {
+                phaseExtra = PhaseExtra(pool);
+            }
             if (Environment.GetEnvironmentVariable("NEVERSHARP_POOL_STATS") == "1")
             {
                 WritePoolStats(pool);
@@ -192,6 +269,7 @@ internal static class CheckMode
             }
             GC.KeepAlive(program);
         }
+        Phases.Mark("emit+dumps");
 
         long outputFiles = 0, outputBytes = 0;
         foreach (var list in outputs)
@@ -246,9 +324,35 @@ internal static class CheckMode
             $"\"diagnostics\":{total},\"errors\":{errors},\"warnings\":{warnings},\"suggestions\":{suggestions},\"messages\":{messages},{emitFields}\"priority\":\"{priority}\"," +
             $"\"allocatedBytes\":{GC.GetTotalAllocatedBytes(true)},\"gen0\":{GC.CollectionCount(0)},\"gen1\":{GC.CollectionCount(1)},\"gen2\":{GC.CollectionCount(2)}," +
             $"\"gcPauseMs\":{GC.GetTotalPauseDuration().TotalMilliseconds.ToString("0.###", inv)}}}"));
+        Phases.Mark("output");
+        Phases.Write(phaseExtra);
         GC.KeepAlive(sourceFiles);
         GC.KeepAlive(outputs);
         return 0;
+    }
+
+    // The phase probe's members of the pool (module FE1): the constructor's phases, the deduplication, the library
+    // load, and per checker the maximum and mean of creation, globals merge and duplicate-declaration report.
+    private static string PhaseExtra(CheckerPool pool)
+    {
+        var inv = CultureInfo.InvariantCulture;
+        double maxCreate = 0, sumCreate = 0, maxMerge = 0, sumMerge = 0, maxDup = 0, sumDup = 0, maxTotal = 0;
+        foreach (var s in pool.Stats)
+        {
+            maxCreate = Math.Max(maxCreate, s.CreateSeconds);
+            sumCreate += s.CreateSeconds;
+            maxMerge = Math.Max(maxMerge, s.MergeSeconds);
+            sumMerge += s.MergeSeconds;
+            maxDup = Math.Max(maxDup, s.DuplicatesSeconds);
+            sumDup += s.DuplicatesSeconds;
+            maxTotal = Math.Max(maxTotal, s.CreateSeconds + s.CheckSeconds);
+        }
+        var n = Math.Max(pool.Stats.Length, 1);
+        return string.Create(inv,
+            $"\"resolve\":{pool.ResolveSeconds:0.0000},\"bind\":{pool.BindSeconds:0.0000},\"assign\":{pool.AssignSeconds:0.0000},\"dedupe\":{pool.DedupeSeconds:0.0000}," +
+            $"\"libLoad\":{DefaultLibrary.LoadTicks / (double)System.Diagnostics.Stopwatch.Frequency:0.0000}," +
+            $"\"createMax\":{maxCreate:0.0000},\"createMean\":{sumCreate / n:0.0000},\"mergeMax\":{maxMerge:0.0000},\"mergeMean\":{sumMerge / n:0.0000}," +
+            $"\"dupMax\":{maxDup:0.0000},\"dupMean\":{sumDup / n:0.0000},\"slowestChecker\":{maxTotal:0.0000},");
     }
 
     // NEVERSHARP_POOL_STATS=1 (module SC1, development probe, never set by bench.mjs): one JSON line per checker of the
@@ -260,7 +364,7 @@ internal static class CheckMode
         {
             var s = pool.Stats[i];
             Console.Error.WriteLine(string.Create(inv,
-                $"{{\"checker\":{i},\"createSeconds\":{s.CreateSeconds:0.000},\"checkSeconds\":{s.CheckSeconds:0.000},\"files\":{s.Files},\"stolen\":{s.StolenFiles},\"weight\":{s.Weight},\"types\":{s.Types},\"transientSymbols\":{s.TransientSymbols}}}"));
+                $"{{\"checker\":{i},\"createSeconds\":{s.CreateSeconds:0.000},\"mergeSeconds\":{s.MergeSeconds:0.000},\"duplicatesSeconds\":{s.DuplicatesSeconds:0.000},\"checkSeconds\":{s.CheckSeconds:0.000},\"files\":{s.Files},\"stolen\":{s.StolenFiles},\"weight\":{s.Weight},\"types\":{s.Types},\"transientSymbols\":{s.TransientSymbols}}}"));
         }
     }
 
