@@ -74,7 +74,8 @@ internal sealed class InferenceInfo
 /// <summary>types.ts InferenceContext.</summary>
 internal sealed class InferenceContext
 {
-    public List<InferenceInfo> Inferences = [];
+    // (module AR1: an array, not a List; the inferences of a context are never added to or removed after it is created)
+    public InferenceInfo[] Inferences = [];
     public Signature Signature;          // None: undefined
     public InferenceFlags Flags;
     public Func<Type, Type, bool> CompareTypes = null!;
@@ -96,20 +97,20 @@ internal sealed partial class Checker
     /// <summary>checker.ts createInferenceContext.</summary>
     internal InferenceContext CreateInferenceContext(ReadOnlySpan<Type> typeParameters, Signature signature, InferenceFlags flags, Func<Type, Type, bool>? compareTypes = null)
     {
-        var inferences = new List<InferenceInfo>(typeParameters.Length);
-        foreach (var tp in typeParameters)
+        var inferences = new InferenceInfo[typeParameters.Length];
+        for (var i = 0; i < inferences.Length; i++)
         {
-            inferences.Add(CreateInferenceInfo(tp));
+            inferences[i] = CreateInferenceInfo(typeParameters[i]);
         }
         return CreateInferenceContextWorker(inferences, signature, flags, compareTypes ?? CompareTypesAssignableFunc);
     }
 
     /// <summary>checker.ts cloneInferenceContext.</summary>
     internal InferenceContext? CloneInferenceContext(InferenceContext? context, InferenceFlags extraFlags = InferenceFlags.None) =>
-        context is null ? null : CreateInferenceContextWorker(context.Inferences.ConvertAll(CloneInferenceInfo), context.Signature, context.Flags | extraFlags, context.CompareTypes);
+        context is null ? null : CreateInferenceContextWorker(Array.ConvertAll(context.Inferences, CloneInferenceInfo), context.Signature, context.Flags | extraFlags, context.CompareTypes);
 
     // checker.ts createInferenceContextWorker
-    private InferenceContext CreateInferenceContextWorker(List<InferenceInfo> inferences, Signature signature, InferenceFlags flags, Func<Type, Type, bool> compareTypes)
+    private InferenceContext CreateInferenceContextWorker(InferenceInfo[] inferences, Signature signature, InferenceFlags flags, Func<Type, Type, bool> compareTypes)
     {
         var context = new InferenceContext { Inferences = inferences, Signature = signature, Flags = flags, CompareTypes = compareTypes };
         // (module CO6: both mappers refer to the context by one slot of the mapper store's object table)
@@ -142,7 +143,7 @@ internal sealed partial class Checker
     private TypeMapper MakeNonFixingMapperForContext(int contextSlot) => Mappers.Add(TypeMapKind.NonFixing, contextSlot, 0);
 
     // checker.ts clearCachedInferences
-    private static void ClearCachedInferences(List<InferenceInfo> inferences)
+    private static void ClearCachedInferences(InferenceInfo[] inferences)
     {
         foreach (var inference in inferences)
         {
@@ -195,8 +196,8 @@ internal sealed partial class Checker
     /// <summary>checker.ts cloneInferredPartOfContext.</summary>
     internal InferenceContext? CloneInferredPartOfContext(InferenceContext context)
     {
-        var inferences = context.Inferences.FindAll(HasInferenceCandidates);
-        return inferences.Count > 0 ? CreateInferenceContextWorker(inferences.ConvertAll(CloneInferenceInfo), context.Signature, context.Flags, context.CompareTypes) : null;
+        var inferences = Array.FindAll(context.Inferences, HasInferenceCandidates);
+        return inferences.Length > 0 ? CreateInferenceContextWorker(Array.ConvertAll(inferences, CloneInferenceInfo), context.Signature, context.Flags, context.CompareTypes) : null;
     }
 
     /// <summary>checker.ts getMapperFromContext.</summary>
@@ -205,7 +206,7 @@ internal sealed partial class Checker
     // checker.ts createBackreferenceMapper
     private TypeMapper CreateBackreferenceMapper(InferenceContext context, int index)
     {
-        var count = context.Inferences.Count - index;
+        var count = context.Inferences.Length - index;
         var sources = new Type[count];
         var targets = new Type[count];
         for (var i = 0; i < count; i++)
@@ -562,11 +563,11 @@ internal sealed partial class Checker
         : Type.None;
 
     /// <summary>checker.ts inferTypes.</summary>
-    internal void InferTypes(List<InferenceInfo> inferences, Type originalSource, Type originalTarget, InferencePriority priority = InferencePriority.None, bool contravariant = false) =>
+    internal void InferTypes(InferenceInfo[] inferences, Type originalSource, Type originalTarget, InferencePriority priority = InferencePriority.None, bool contravariant = false) =>
         new InferenceState(this, inferences, originalTarget, priority, contravariant).InferFromTypes(originalSource, originalTarget);
 
     // checker.ts inferTypes: the state its nested functions share
-    private sealed class InferenceState(Checker c, List<InferenceInfo> inferences, Type originalTarget, InferencePriority priority, bool contravariant)
+    private sealed class InferenceState(Checker c, InferenceInfo[] inferences, Type originalTarget, InferencePriority priority, bool contravariant)
     {
         private bool bivariant;
         private Type propagationType;
@@ -1652,7 +1653,7 @@ internal sealed partial class Checker
                     var preferCovariantType = !inferredCovariantType.IsNone && (inferredContravariantType.IsNone ||
                         ((Types.Flags(inferredCovariantType) & (TypeFlags.Never | TypeFlags.Any)) == 0 &&
                             inference.ContraCandidates!.Exists(t => IsTypeAssignableTo(inferredCovariantType, t)) &&
-                            context.Inferences.TrueForAll(other =>
+                            Array.TrueForAll(context.Inferences, other =>
                                 (other != inference && GetConstraintOfTypeParameter(other.TypeParameter) != inference.TypeParameter) ||
                                 other.Candidates is null || other.Candidates.TrueForAll(t => IsTypeAssignableTo(t, inferredCovariantType)))));
                     inferredType = preferCovariantType ? inferredCovariantType : inferredContravariantType;
@@ -1717,7 +1718,7 @@ internal sealed partial class Checker
     /// <summary>checker.ts getInferredTypes.</summary>
     internal Type[] GetInferredTypes(InferenceContext context)
     {
-        var result = new Type[context.Inferences.Count];
+        var result = new Type[context.Inferences.Length];
         for (var i = 0; i < result.Length; i++)
         {
             result[i] = GetInferredType(context, i);
@@ -1890,9 +1891,9 @@ internal sealed partial class Checker
     internal bool HasInferenceCandidatesOrDefault(InferenceInfo info) => info.Candidates is not null || info.ContraCandidates is not null || HasTypeParameterDefault(info.TypeParameter);
 
     // checker.ts hasOverlappingInferences
-    private static bool HasOverlappingInferences(List<InferenceInfo> a, List<InferenceInfo> b)
+    private static bool HasOverlappingInferences(InferenceInfo[] a, InferenceInfo[] b)
     {
-        for (var i = 0; i < a.Count; i++)
+        for (var i = 0; i < a.Length; i++)
         {
             if (HasInferenceCandidates(a[i]) && HasInferenceCandidates(b[i]))
             {
@@ -1903,9 +1904,9 @@ internal sealed partial class Checker
     }
 
     // checker.ts mergeInferences
-    private static void MergeInferences(List<InferenceInfo> target, List<InferenceInfo> source)
+    private static void MergeInferences(InferenceInfo[] target, InferenceInfo[] source)
     {
-        for (var i = 0; i < target.Count; i++)
+        for (var i = 0; i < target.Length; i++)
         {
             if (!HasInferenceCandidates(target[i]) && HasInferenceCandidates(source[i]))
             {

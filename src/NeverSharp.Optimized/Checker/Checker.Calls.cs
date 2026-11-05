@@ -1783,7 +1783,7 @@ internal sealed partial class Checker
                     var returnContext = CreateInferenceContext(typeParameters, signature, context.Flags);
                     var returnSourceType = InstantiateType(contextualType, outerContext is null ? TypeMapper.None : CreateOuterReturnMapper(outerContext));
                     InferTypes(returnContext.Inferences, returnSourceType, inferenceTargetType);
-                    context.ReturnMapper = returnContext.Inferences.Exists(HasInferenceCandidates) ? GetMapperFromContext(CloneInferredPartOfContext(returnContext)) : TypeMapper.None;
+                    context.ReturnMapper = Array.Exists(returnContext.Inferences, HasInferenceCandidates) ? GetMapperFromContext(CloneInferredPartOfContext(returnContext)) : TypeMapper.None;
                 }
             }
         }
@@ -1791,7 +1791,7 @@ internal sealed partial class Checker
         var argCount = !restType.IsNone ? Math.Min(GetParameterCount(signature) - 1, args.Count) : args.Count;
         if (!restType.IsNone && (Types.Flags(restType) & TypeFlags.TypeParameter) != 0)
         {
-            var info = context.Inferences.Find(i => i.TypeParameter == restType);
+            var info = Array.Find(context.Inferences, i => i.TypeParameter == restType);
             if (info is not null)
             {
                 info.ImpliedArity = GetSpreadArgumentIndex(args, argCount) < 0 ? args.Count - argCount : null;

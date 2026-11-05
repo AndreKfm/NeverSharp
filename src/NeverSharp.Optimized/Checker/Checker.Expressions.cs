@@ -710,7 +710,7 @@ internal sealed partial class Checker
                         // potentially add inferred type parameters to the outer function return type.
                         var returnType = !context.Signature.IsNone ? GetReturnTypeOfSignature(context.Signature) : Type.None;
                         var returnSignature = !returnType.IsNone ? GetSingleCallOrConstructSignature(returnType) : Signature.None;
-                        if (!returnSignature.IsNone && Signatures.Record(returnSignature).TypeParameters.Count == 0 && !context.Inferences.TrueForAll(HasInferenceCandidates))
+                        if (!returnSignature.IsNone && Signatures.Record(returnSignature).TypeParameters.Count == 0 && !Array.TrueForAll(context.Inferences, HasInferenceCandidates))
                         {
                             // Instantiate the signature with its own type parameters as type arguments, possibly
                             // renaming the type parameters to ensure they have unique names.
@@ -718,9 +718,9 @@ internal sealed partial class Checker
                             var instantiatedSignature = GetSignatureInstantiationWithoutFillingInTypeArguments(signature, uniqueTypeParameters);
                             // Infer from the parameters of the instantiated signature to the parameters of the
                             // contextual signature starting with an empty set of inference candidates.
-                            var inferences = context.Inferences.ConvertAll(info => CreateInferenceInfo(info.TypeParameter));
+                            var inferences = Array.ConvertAll(context.Inferences, info => CreateInferenceInfo(info.TypeParameter));
                             ApplyToParameterTypes(instantiatedSignature, contextualSignature, (source, target) => InferTypes(inferences, source, target, InferencePriority.None, contravariant: true));
-                            if (inferences.Exists(HasInferenceCandidates))
+                            if (Array.Exists(inferences, HasInferenceCandidates))
                             {
                                 // We have inference candidates, indicating that one or more type parameters are referenced
                                 // in the parameter types of the contextual signature. Now also infer from the return type.

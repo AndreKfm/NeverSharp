@@ -270,7 +270,7 @@ internal sealed partial class Checker
                 var context = (InferenceContext)Mappers.ObjectAt(record.A);
                 var fixing = record.Kind == TypeMapKind.Fixing;
                 var inferences = context.Inferences;
-                for (var i = 0; i < inferences.Count; i++)
+                for (var i = 0; i < inferences.Length; i++)
                 {
                     if (inferences[i].TypeParameter == type)
                     {
