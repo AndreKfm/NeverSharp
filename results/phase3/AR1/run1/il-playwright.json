@@ -1,0 +1,167 @@
+{
+ "list": "D:/Private/Source/Andre/projects/NeverSharp/artifacts/bench/filelists/playwright.txt",
+ "results": [
+  {
+   "command": "base-srv-tsrs",
+   "flags": [
+    "--check",
+    "--pool",
+    "tsrs"
+   ],
+   "env": {},
+   "times": [
+    0.6823421,
+    0.6927202,
+    0.6955938,
+    0.7724684,
+    0.7005802
+   ],
+   "pause": [
+    114.519,
+    127.986,
+    128.568,
+    152.707,
+    110.058
+   ],
+   "stats": []
+  },
+  {
+   "command": "final-srv-tsrs",
+   "flags": [
+    "--check",
+    "--pool",
+    "tsrs"
+   ],
+   "env": {},
+   "times": [
+    0.6470015,
+    0.7088129,
+    0.6641938,
+    0.6823521,
+    0.6798422
+   ],
+   "pause": [
+    102.604,
+    122.751,
+    105.754,
+    101.753,
+    111.076
+   ],
+   "stats": []
+  },
+  {
+   "command": "base-ws-tsrs",
+   "flags": [
+    "--check",
+    "--pool",
+    "tsrs"
+   ],
+   "env": {},
+   "times": [
+    0.9900653,
+    0.9680061,
+    0.9913984,
+    0.988785,
+    1.0329916
+   ],
+   "pause": [
+    425.494,
+    428.448,
+    431.398,
+    427.863,
+    442.104
+   ],
+   "stats": []
+  },
+  {
+   "command": "final-ws-tsrs",
+   "flags": [
+    "--check",
+    "--pool",
+    "tsrs"
+   ],
+   "env": {},
+   "times": [
+    0.9422257,
+    0.9119195,
+    0.866238,
+    0.8895969,
+    0.8856731
+   ],
+   "pause": [
+    338.043,
+    340.869,
+    334.098,
+    328.993,
+    331.241
+   ],
+   "stats": []
+  },
+  {
+   "command": "final-ws-default",
+   "flags": [
+    "--check"
+   ],
+   "env": {},
+   "times": [
+    1.4524063,
+    1.4443025,
+    1.4073784,
+    1.4202833,
+    1.398096
+   ],
+   "pause": [
+    190.881,
+    197.849,
+    188.374,
+    193.497,
+    188.557
+   ],
+   "stats": []
+  },
+  {
+   "command": "tsrs",
+   "flags": [
+    "--check"
+   ],
+   "env": {},
+   "times": [
+    0.3149129,
+    0.3217288,
+    0.3271892,
+    0.316287,
+    0.3115862
+   ],
+   "pause": [
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "stats": []
+  },
+  {
+   "command": "tsgo",
+   "flags": [
+    "--check"
+   ],
+   "env": {},
+   "times": [
+    1.4771058,
+    1.5159052,
+    1.5483564,
+    1.4748896,
+    1.4805782
+   ],
+   "pause": [
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "stats": []
+  }
+ ]
+}
