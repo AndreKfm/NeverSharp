@@ -1034,3 +1034,73 @@ Brief: [modules/EO2.md](modules/EO2.md) (second emitter optimization step, EA1 c
 - **Stability:** `cs-o-aot-ws --check --emit` on the tuning emit list 4 times, no crash (41,636 outputs each time).
 - **Gate runs:** Gate C 6 of 7 (sample 2000 after step 1, whose header check failed on the new file's header, fixed and `check-headers.mjs` run by hand; sample 2000 after steps 2 and 5; the full run; its compare rerun by hand for the summary). Gate D 2 of 3 (the full run, its compare rerun by hand). No `src/` change after the full runs.
 - **Files:** `src/NeverSharp.Optimized/Checker/Checker.ExportIndex.cs` (new), `Checker.SymbolAccessibility.cs`, `SymTable.cs`, `Checker.Symbols.cs`, `Checker.Resolve.cs`, `Checker.LateBound.cs`, `Checker.Members.cs`, `Checker.cs`, this file. C# edited with the file tools only.
+
+## RS1: the checker with tsrs's structures (2026-11-04/05)
+
+Brief: [modules/RS1.md](modules/RS1.md) (TG1 candidates 1, 3 and 5, EO2's method). One attempt (Opus 5.5, medium effort, alone, directly on main); commits 09ecd3d (step 1), bb216a5 (step 2), 09ca8bd (step 3), be7fdc9 (step 4) and this entry. Baseline drivers built from 5af33ed before the first change (scratch `RS1/base/`: aot-ws, aot-srv, jit-ws). **Every number below is exploratory** (interleaved with `results/phase4/EO1/run1/follow-up/interleave.mjs`, 10 rounds after 2 warm-up rounds, AOT ws, medians and the 95 % bootstrap interval of the median ratio; not rig-compliant). Every build ran with `WarningsNotAsErrors=NU1903` (not committed).
+
+**Profile before the first step** (`dotnet-trace collect --profile cpu-sampling` of the jit-ws driver with `DOTNET_TieredCompilation=0`, `--check --single`, samples of the checking thread inside its `CheckSourceFile` window, read with a scratch tool built on EA1's acctool, `RS1/prof`):
+- **vscode** (38.65 s window, 20,171 samples): `PollGC` 11.4 %; `MemberwiseClone` 7.3 %, of which 7.0 % in `InstantiateTypes` (union and type-reference instantiation copied the stored member list to an array and cloned it again when an element changed); `ZeroMemory` 2.7 %, of which 2.3 % in `PopActiveMapper` (clearing every slot of an active-mapper cache that one large instantiation had grown); `TableOf` 2.6 %; GC waits charged to `InstantiateIndexInfos` 2.5 % and `CheckGrammarObjectLiteralExpression` 2.1 %; `ResolveNameHelper` 2.2 %; `HashSet<RelationKey>` add and resize 1.5 % (the relater's maybe-key set, new per `checkTypeRelatedTo`); `GetRelationKey` 0.1 %.
+- **tuning-check** (22.05 s, 11,658 samples): `PollGC` 10.6 %; `GetTypeAtFlowNode` 7.4 % and `GetTypeAtFlowAssignment` 4.3 % exclusive (the shared-flow scan and the antecedent walk, the same in typescript-go and tsrs `flow.rs`); `Memmove` 6.2 % (`ItemArena.Store` of `getNamedMembers` 2.2 %, `ReorderCandidates` 1.2 %, `AddTypeToUnion` 0.9 %); `MemberwiseClone` 4.6 % (`InstantiateTypes` 4.5 %); `SymTableStore.Find` 2.8 %; `PopActiveMapper` zeroing 1.6 %.
+- **Allocation account**, tuning-check `--check` at 4 checkers (`GCAllocationTick` of the jit-ws driver by type and first own frame): 9.74 GB sampled (driver: 9.59 GB). Retained stores (symbol table ranges, chunks, arenas) are the largest rows. The largest garbage group is **delegates and closures, 1.22 GB (12.6 %)**: `MaybeTypeOfKind` 104 MB (a closure of its parameter created at every call), `GetObjectTypeInstantiation` 75, `IsJSDocTypeExpressionOrChild` 62 (parser utilities), `InstantiateTypeWithSingleGenericCallSignature` 54, `GetIntersectionType` 50 (a closure of a local, created for every two-member intersection), `RecursiveTypeRelatedTo` 42 (the variance handler's closure, created at every call), `GetDeclarationModifierFlagsFromSymbol` 33, `FilterType` 30, `GetResolvedBaseConstraint` 28 (created also on cache hits). Also `Relater` objects 149 MB and `Type[]` 667 MB.
+- **Mapped to tsrs:** the clones are tsrs's stored slices (`notes/cpu-checker.md` changes 7 and 8; `checker_11.rs` `instantiate_types_changed` with `free_type_lists`); the mapper-cache clear is `cpu-checker.md` changes 1 and 4 (`pop_active_mapper`, `clear_scratch`); the closures are tsrs's `impl FnMut` generics (`notes/monomorphization-audit.md`); the relater set is typescript-go's and tsrs's relater pool plus tsrs's maybe-stack scan (`relater_2.rs`); `SymTableStore.Find` is tsrs's per-table filter (`perf-checker-cpu3.md` change 1). `RelationKey` strings (brief candidate 3) are 0.1 % and were not changed.
+
+**Steps** (each: aot-ws build; `--dump-diagnostics` at 4 and 12 checkers on tuning-check and `--dump-emit` at 4 on the tuning emit list identical with the base driver's; Gate C `--sample 2000` pass; measured against the previous step):
+1. **Instantiation over the stored type lists** (09ecd3d; tsrs `instantiate_types_changed`, `free_type_list`). `InstantiateTypesChanged(ReadOnlySpan<Type>)` reads the store's list in place and makes a new array only when an element changed. Unions, intersections and `InstantiateTypeList` use a pooled buffer (`freeTypeLists`, kept up to 256 elements, as in tsrs). Exactness: the same elements are instantiated in the same order; the type-list arena is append-only, so a span read during instantiation stays what it was. Results: `--check` 1.001 [0.995, 1.012], `--checkers 12` 1.001 [0.995, 1.008], `--single` 0.995 [0.990, 1.005], emit `--single` 0.998 [0.991, 1.001]. Not slower, so kept (the clone cost in the JIT profile does not show in AOT).
+2. **Active-mapper caches cleared as scratch** (bb216a5; tsrs `pop_active_mapper`). `KeyMap.ClearScratch`: a cache whose capacity is more than 4 times its entries and more than 64 is replaced by a small one instead of clearing every slot. The cache is empty afterwards either way. Results: `--checkers 12` 0.988 [0.976, 0.998], `--single` 0.994 [0.982, 1.006], emit `--single` 0.989 [0.986, 0.991]; `--check` 0.985 [0.976, 1.035] (two rounds disturbed by a build of mine), repeated 0.997 [0.983, 1.010].
+3. **Callbacks without closures, union helpers over the stored lists** (09ca8bd). `ITypePredicate` structs for generic `EveryType` / `SomeType` / `ExistsType` overloads (`couldContainTypeVariables`, `getIntersectionType`'s and `structuredTypeRelatedTo`'s callbacks); `maybeTypeOfKind` as a loop. Closures that captured a parameter or a method-level local, and so were created at every call, are now created only on their path: `recursiveTypeRelatedTo`'s variance handler (an object created only when a handler is set), `narrowTypeByTruthiness`, `typeToTypeNodeWorker`, `getResolvedBaseConstraint`'s cached case. The accessor search in `getDeclarationModifierFlagsFromSymbol` is a loop. `everyType`, `someType`, `forEachType`, `filterType`, `mapType`, `mapTypeWithAlias` and `ExistsType` no longer copy the member list. Exactness: the same callbacks run on the same types in the same order. Allocation `--single` 6.50 → 6.13 GB (gen0 564 → 519). Results: emit `--single` 0.987 [0.984, 0.988], `--checkers 12` 0.995 [0.991, 1.003], `--single` 0.998 [0.994, 1.018], `--check` 1.007 [1.000, 1.014] and repeated 1.010 [0.998, 1.015]. Not slower by the interval, so kept. **The median at 4 checkers is about 1 % higher in both rounds** (disclosed; the step does work in that configuration).
+4. **Pooled relaters, maybe stack searched by a scan** (be7fdc9; typescript-go `getRelater` / `putRelater`, tsrs `get_relater` / `put_relater`, tsrs-only `MAYBE_STACK_SCAN_MAX`). `checkTypeRelatedTo` takes a relater from a per-checker free list and gives it back reset: the maybe stack, its set and the recursion stacks are reused, and nested checks take another relater. A `started` flag keeps TypeScript's `maybeKeys === undefined` case of the first push. The maybe stack is scanned while it has at most 32 keys; the set mirrors it only beyond that (`maybe_stack_has` / `maybe_stack_push` / `reset_maybe_stack`). Exactness: a key is found exactly when it is on the stack, and a reset relater is in the state a new one has. Results: `--check` 0.995 [0.962, 1.000], `--checkers 12` 0.985 [0.981, 0.994], `--single` 0.997 [0.992, 1.008], emit `--single` 0.996 [0.995, 1.001].
+
+**Tried and reverted:** step 5, a 64-bit name filter per symbol table checked before the linear scan (tsrs `SymbolTable` filter, `perf-checker-cpu3.md` change 1; patch in scratch `RS1/step5-reverted.patch`). Dumps identical. `--single` 0.990 [0.988, 0.993], but `--checkers 12` 1.012 [1.005, 1.022] and repeated 1.008 [1.005, 1.018]; `--check` 1.006 [0.998, 1.012], emit `--single` 1.003 [0.999, 1.006]. Slower in a configuration where it does work, so reverted (no Gate C run).
+
+**Base against final** (5af33ed drivers against be7fdc9, 10 rounds after 2 warm-up):
+
+| Configuration | base | final | ratio [95 %] |
+|---|---:|---:|---|
+| tuning-check `--check` | 13.781 s | 13.660 s | 0.991 [0.974, 1.013] |
+| tuning-check `--check --checkers 12` | 15.086 s | 14.726 s | 0.976 [0.965, 0.988] |
+| tuning-check `--check --single` | 21.327 s | 21.064 s | 0.988 [0.984, 0.991] |
+| tuning emit list `--check --emit` | 13.074 s | 12.929 s | 0.989 [0.972, 0.994] |
+| tuning emit list `--check --emit --single` | 21.867 s | 21.463 s | 0.981 [0.967, 0.990] |
+
+**Workstation GC** (driver JSON, medians of 3):
+- tuning-check `--check`: allocated 9.59 → 8.89 GB, gen0 681 → 595, pause 1.48 → 1.43 s.
+- `--checkers 12`: 13.03 → 12.21 GB, gen0 839 → 738, pause 2.55 → 2.53 s.
+- So there are fewer collections but almost the same pause: the pause follows the surviving data, which the CPU steps did not change. No GC step was made.
+- The surviving sources stay those of CO6: inference contexts kept by the mapper store's object table, the signature record and parameter arrays, the instantiable kinds' data classes, and the per-checker globals merge at 12 checkers.
+- Their tsrs counterparts are not local. tsrs never collects (leak arenas per thread) and frees inference contexts at recycling sites behind an escape bit (`notes/mem-scoped-arenas.md`, `notes/mem-checker-scratch.md`); it merges the globals per checker too (`new_checker`). No new promoted-bytes account was taken.
+
+**vscode** (account only, 3 alternating rounds, base against final, medians; diagnostics unchanged, 101,474 / 101,471 / 101,493):
+- `--check`: 14.26 → 13.91 s (0.975); 13.51 → 11.78 GB, gen0 1197 → 986, pause 3.25 → 3.13 s.
+- `--checkers 12`: 11.53 → 10.89 s (0.944); 15.86 → 13.94 GB, pause 5.26 → 4.93 s.
+- `--single`: 37.53 → 36.75 s (0.979); 11.45 → 9.90 GB, pause 1.69 → 1.56 s.
+
+**Re-profile** (jit-ws at be7fdc9, as before):
+- **vscode** (37.46 s, 19,873 samples), by innermost own frame, with tsrs's counterpart:
+  - GC waits 11.5 % (tsrs: no collector, arenas);
+  - `TableOf` 3.1 % (tsrs reads the binder's tables directly, `notes/mem-flat-symbol-tables.md`; EO2's local variant was slower);
+  - GC waits charged to `InstantiateIndexInfos` 3.1 % (tsrs `instantiate_list`, the same shape) and to `CheckGrammarObjectLiteralExpression` 2.5 % (tsrs builds a fresh map there too);
+  - `ResolveNameHelper` 2.4 % exclusive, 9.6 % inclusive (tsrs: the same resolver; hashing once per walk measured nothing there);
+  - `KeyMap.ClearScratch` 2.3 % (step 2's rule; what remains is clearing caches that are full);
+  - `MarkNodeAssignments` 1.8 % (the same algorithm);
+  - GC waits in `GetTypeAtFlowLoopLabel` 1.6 %;
+  - `NameTable.Intern` 1.5 % (tsrs compares names by pointer and length; interning was rejected in `mem-round2.md`);
+  - the `SymbolNodeLinks` store 1.5 % (tsrs `IdLinkStore` pages by vector, `cpu-checker.md` change 3);
+  - `SymTableStore.Find` 1.5 % (tsrs's filter, tried as step 5).
+  - `InstantiateTypes*` fell from 7.0 to 2.5 % inclusive; `PopActiveMapper` and `HashSet<RelationKey>` are gone.
+- **tuning-check** (21.58 s, 11,691 samples):
+  - GC waits 10.4 %;
+  - `GetTypeAtFlowNode` 7.0 %, `GetTypeAtFlowAssignment` 4.3 %, `IsMatchingReference` 2.1 %, `ContainsMatchingReference` 1.5 % (tsrs `flow.rs`: the same walk and shared-flow scan; its flow memo is a tsrs-only cache, not ported);
+  - `ItemArena.Store` 2.5 % (copies of `getNamedMembers`; tsrs stores the same slice);
+  - `SymTableStore.Find` 2.0 %; `CreateUnionOrIntersectionProperty` 1.8 %; `InferTypesFromTemplateLiteralType` 1.7 %; `KeyMap.ClearScratch` 1.5 %; `GetDiagnostics` 1.4 % (diagnostic sorting).
+  - Allocation at 4 checkers fell from 9.74 to 9.01 GB sampled: closures and delegates 1.22 → 0.85 GB, `Relater` 149 → 0 MB, `Type[]` 667 → 510 MB.
+- **Left:** each remaining candidate with a tsrs counterpart is below 1 % of the check or was already tried (step 5, EO2 step 3). The larger rest is GC waiting and the surviving data above.
+
+**Tests:**
+- **Gate C, last run (full): pass.** `{"mode":"types","sections":["diagnostics","types","symbols"],"units":50177,"identical":50177,"differing":0,"crashed":0,"outcomeMismatch":0,"identicalPerSection":{"diagnostics":50177,"types":50177,"symbols":50177},"library":"identical"}`.
+- **Gate D, last run (full): pass.** `{"units":50177,"identical":50177,"differing":0,"crashed":0,"outcomeMismatch":0}`, js / dts / diagnostics 50,173 each, `symbolIdNormalized` 1 unit, 2 lines, no-transformer units 301 / 301.
+- **Emit equivalence** (`emit-equivalence.mjs --skip-tsgo --skip-tsrs`, rebuilt drivers): identical with tsc 6.0.3 on the tuning emit list (41,681 outputs, 39,725,430 bytes, check diagnostics 122,937) and the five repositories (vscode 22,942 outputs / 161,946,338 bytes, sentry 17,840, bluesky 3,373, playwright 2,670, tldraw 4,948; check diagnostics identical).
+- **Parallel dumps** (base driver against be7fdc9): `--dump-diagnostics` at 4 and 12 checkers identical on tuning-check, the tuning emit list and the five repositories; `--dump-emit` at 4 checkers identical on the tuning emit list and the five repositories.
+- **Stability:** `cs-o-aot-ws --check --checkers 12` 4 times on tuning-check (128,748 diagnostics each) and on the tuning emit list (116,656 each), and `--check --emit` 4 times on the tuning emit list (118,020 each): no crash.
+- **Gate runs:** Gate C 6 of 10 (sample 2000 after steps 1 to 4, the full run, its compare rerun by hand for the summary); Gate D 2 of 3 (the full run, its compare rerun by hand). No `src/` change after the full runs.
+- **Files:** `src/NeverSharp.Optimized/Checker/Checker.Instantiate.cs`, `TypeStore.cs`, `Checker.Generics.cs`, `Checker.Types.cs`, `Checker.Relater.cs`, `Checker.Narrowing.cs`, `Checker.NodeBuilder.cs`, this file. C# edited with the file tools only.
