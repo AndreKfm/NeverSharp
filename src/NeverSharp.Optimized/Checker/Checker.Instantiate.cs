@@ -869,6 +869,31 @@ internal sealed partial class Checker
     private readonly Dictionary<NodeRef, Type[]> outerTypeParametersOfDeclarations = [];
 
     /// <summary>checker.ts getObjectTypeInstantiation.</summary>
+    // getObjectTypeInstantiation's first instantiation of a declaration (module AR2, Track O: in a method of its own, so
+    // that the closure over allDeclarations is made only here, not at the entry of every call; tsrs checker_11.rs
+    // get_object_type_instantiation makes no closure object)
+    private Type[] GetOuterTypeParametersOfInstantiatedDeclaration(Type type, Type target, NodeRef declaration, ObjectFlags objectFlags)
+    {
+        // The first time an anonymous type is instantiated we compute and store a list of the type
+        // parameters that are in scope (and therefore potentially referenced). For type literals that
+        // aren't the right hand side of a generic type alias declaration we optimize by reducing the
+        // set of type parameters to those that are possibly referenced in the literal.
+        var outerTypeParameters = GetOuterTypeParameters(declaration, includeThisTypes: true);
+        // (JavaScript constructor functions' template tag parameters: C9)
+        Type[] typeParameters = outerTypeParameters is null ? [] : [.. outerTypeParameters];
+        var targetFlags = Types.ObjectFlagsOf(target);
+        var targetSymbol = Types.Symbol(target);
+        if (((targetFlags & (ObjectFlags.Reference | ObjectFlags.InstantiationExpressionType)) != 0 ||
+            (!targetSymbol.IsNone && (SymbolFlagsOf(targetSymbol) & (SymbolFlags.Method | SymbolFlags.TypeLiteral)) != 0)) &&
+            !Types.Record(target).AliasTypeArguments.IsPresent)
+        {
+            var allDeclarations = (objectFlags & (ObjectFlags.Reference | ObjectFlags.InstantiationExpressionType)) != 0 ? [declaration] : DeclarationsOf(Types.Symbol(type))!.Value;
+            typeParameters = Array.FindAll(typeParameters, tp => allDeclarations.Exists(d => IsTypeParameterPossiblyReferenced(tp, d)));
+        }
+        outerTypeParametersOfDeclarations[declaration] = typeParameters;
+        return typeParameters;
+    }
+
     private Type GetObjectTypeInstantiation(Type type, TypeMapper mapper, SymbolRef aliasSymbol, TypeList aliasTypeArguments)
     {
         var typeData = Types.Object(type);
@@ -881,23 +906,7 @@ internal sealed partial class Checker
             : type;
         if (!outerTypeParametersOfDeclarations.TryGetValue(declaration, out var typeParameters))
         {
-            // The first time an anonymous type is instantiated we compute and store a list of the type
-            // parameters that are in scope (and therefore potentially referenced). For type literals that
-            // aren't the right hand side of a generic type alias declaration we optimize by reducing the
-            // set of type parameters to those that are possibly referenced in the literal.
-            var outerTypeParameters = GetOuterTypeParameters(declaration, includeThisTypes: true);
-            // (JavaScript constructor functions' template tag parameters: C9)
-            typeParameters = outerTypeParameters is null ? [] : [.. outerTypeParameters];
-            var targetFlags = Types.ObjectFlagsOf(target);
-            var targetSymbol = Types.Symbol(target);
-            if (((targetFlags & (ObjectFlags.Reference | ObjectFlags.InstantiationExpressionType)) != 0 ||
-                (!targetSymbol.IsNone && (SymbolFlagsOf(targetSymbol) & (SymbolFlags.Method | SymbolFlags.TypeLiteral)) != 0)) &&
-                !Types.Record(target).AliasTypeArguments.IsPresent)
-            {
-                var allDeclarations = (objectFlags & (ObjectFlags.Reference | ObjectFlags.InstantiationExpressionType)) != 0 ? [declaration] : DeclarationsOf(Types.Symbol(type))!.Value;
-                typeParameters = Array.FindAll(typeParameters, tp => allDeclarations.Exists(d => IsTypeParameterPossiblyReferenced(tp, d)));
-            }
-            outerTypeParametersOfDeclarations[declaration] = typeParameters;
+            typeParameters = GetOuterTypeParametersOfInstantiatedDeclaration(type, target, declaration, objectFlags);
         }
         if (typeParameters.Length > 0)
         {

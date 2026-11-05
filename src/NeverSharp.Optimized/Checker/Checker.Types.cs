@@ -775,6 +775,44 @@ internal sealed partial class Checker
         return changed ? mappedTypes is null ? Type.None : GetUnionType(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(mappedTypes), noReductions ? UnionReduction.None : UnionReduction.Literal) : type;
     }
 
+    /// <summary>
+    /// A mapper over types as a struct (module AR2, Track O; tsrs checker_12.rs map_type / map_type_ex take an
+    /// <c>impl FnMut</c>, monomorphized per caller: notes/monomorphization-audit.md): <see cref="MapType{TMapper}"/> over it makes no delegate and no closure.
+    /// </summary>
+    internal interface ITypeMapFn
+    {
+        Type Invoke(Type t);
+    }
+
+    /// <summary>checker.ts mapType with a struct mapper: the same steps as <see cref="MapType(Type, Func{Type, Type}, bool)"/>.</summary>
+    internal Type MapType<TMapper>(Type type, TMapper mapper, bool noReductions = false)
+        where TMapper : struct, ITypeMapFn
+    {
+        if ((Types.Flags(type) & TypeFlags.Never) != 0)
+        {
+            return type;
+        }
+        if ((Types.Flags(type) & TypeFlags.Union) == 0)
+        {
+            return mapper.Invoke(type);
+        }
+        var origin = Types.Union(type).Origin;
+        var types = !origin.IsNone && (Types.Flags(origin) & TypeFlags.Union) != 0 ? Types.Union(origin).Types : Types.Union(type).Types;
+        List<Type>? mappedTypes = null;
+        var changed = false;
+        var elements = Types.Elements(types);
+        foreach (var t in elements)
+        {
+            var mapped = (Types.Flags(t) & TypeFlags.Union) != 0 ? MapType(t, mapper, noReductions) : mapper.Invoke(t);
+            changed |= t != mapped;
+            if (!mapped.IsNone)
+            {
+                (mappedTypes ??= []).Add(mapped);
+            }
+        }
+        return changed ? mappedTypes is null ? Type.None : GetUnionType(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(mappedTypes), noReductions ? UnionReduction.None : UnionReduction.Literal) : type;
+    }
+
     // ---- intersection types ----
 
     private bool IsEmptyAnonymousObjectType(Type type)

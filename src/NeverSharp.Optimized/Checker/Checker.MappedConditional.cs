@@ -1073,7 +1073,15 @@ internal sealed partial class Checker
             // We are instantiating a conditional type that has one or more type parameters in scope. Apply the
             // mapper to the type parameters to produce the effective list of type arguments, and compute the
             // instantiation cache key from the type IDs of the type arguments.
-            var typeArguments = Array.ConvertAll(root.OuterTypeParameters, t => GetMappedType(t, mapper));
+            // (module AR2, Track O: a loop instead of Array.ConvertAll with a closure over the mapper, and the new
+            // instantiation in a method of its own, so that no closure is made at the entry of every call; tsrs
+            // checker_11.rs get_conditional_type_instantiation maps the outer type parameters in a loop)
+            var outer = root.OuterTypeParameters;
+            var typeArguments = new Type[outer.Length];
+            for (var i = 0; i < outer.Length; i++)
+            {
+                typeArguments[i] = GetMappedType(outer[i], mapper);
+            }
             var mark = keyScratch.Mark();
             keyScratch.Add(root.Id);
             keyScratch.Add(forConstraint ? 1 : 0);
@@ -1082,21 +1090,27 @@ internal sealed partial class Checker
             var id = keyScratch.Since(mark);
             if (!conditionalInstantiations.TryGetValue(id, out var result))
             {
-                var newMapper = CreateTypeMapper(root.OuterTypeParameters, typeArguments);
-                var checkType = root.CheckType;
-                var distributionType = root.IsDistributive ? GetReducedType(GetMappedType(checkType, newMapper)) : Type.None;
-                // Distributive conditional types are distributed over union types. For example, when the
-                // distributive conditional type T extends U ? X : Y is instantiated with A | B for T, the
-                // result is (A extends U ? X : Y) | (B extends U ? X : Y).
-                result = !distributionType.IsNone && checkType != distributionType && (Types.Flags(distributionType) & (TypeFlags.Union | TypeFlags.Never)) != 0
-                    ? MapTypeWithAlias(distributionType, t => GetConditionalType(root, PrependTypeMapping(checkType, t, newMapper), forConstraint), aliasSymbol, aliasTypeArguments)
-                    : GetConditionalType(root, newMapper, forConstraint, aliasSymbol, aliasTypeArguments);
+                result = CreateConditionalTypeInstantiation(root, typeArguments, forConstraint, aliasSymbol, aliasTypeArguments);
                 conditionalInstantiations.Set(id, result);
             }
             keyScratch.Release(mark);
             return result;
         }
         return type;
+    }
+
+    // getConditionalTypeInstantiation's new instantiation (module AR2: see above)
+    private Type CreateConditionalTypeInstantiation(ConditionalRoot root, Type[] typeArguments, bool forConstraint, SymbolRef aliasSymbol, TypeList aliasTypeArguments)
+    {
+        var newMapper = CreateTypeMapper(root.OuterTypeParameters!, typeArguments);
+        var checkType = root.CheckType;
+        var distributionType = root.IsDistributive ? GetReducedType(GetMappedType(checkType, newMapper)) : Type.None;
+        // Distributive conditional types are distributed over union types. For example, when the
+        // distributive conditional type T extends U ? X : Y is instantiated with A | B for T, the
+        // result is (A extends U ? X : Y) | (B extends U ? X : Y).
+        return !distributionType.IsNone && checkType != distributionType && (Types.Flags(distributionType) & (TypeFlags.Union | TypeFlags.Never)) != 0
+            ? MapTypeWithAlias(distributionType, t => GetConditionalType(root, PrependTypeMapping(checkType, t, newMapper), forConstraint), aliasSymbol, aliasTypeArguments)
+            : GetConditionalType(root, newMapper, forConstraint, aliasSymbol, aliasTypeArguments);
     }
 
     /// <summary>checker.ts getTrueTypeFromConditionalType.</summary>

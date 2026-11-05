@@ -568,7 +568,42 @@ internal sealed partial class Scanner
     /// <summary>We assume the first line starts at position 0 and 'position' is non-negative.</summary>
     internal static int ComputeLineOfPosition(IReadOnlyList<int> lineStarts, int position, int? lowerBound = null)
     {
-        var lineNumber = Core.BinarySearch(lineStarts, position, Core.Identity, (a, b) => Core.CompareValues(a, b), lowerBound);
+        // (module AR2, Track O: core.ts binarySearch(lineStarts, position, identity, compareValues, lowerBound) as a loop
+        // over the ints, the same steps as Core.BinarySearchKey without the closure it makes per call; tsrs
+        // crates/tsrs_scanner/src/scanner.rs compute_line_of_position is the same loop)
+        int lineNumber;
+        if (lineStarts is null || lineStarts.Count == 0)
+        {
+            lineNumber = -1;
+        }
+        else
+        {
+            var low = lowerBound ?? 0;
+            var high = lineStarts.Count - 1;
+            lineNumber = int.MinValue;
+            while (low <= high)
+            {
+                var middle = low + ((high - low) >> 1);
+                var midKey = lineStarts[middle];
+                if (midKey < position)
+                {
+                    low = middle + 1;
+                }
+                else if (midKey == position)
+                {
+                    lineNumber = middle;
+                    break;
+                }
+                else
+                {
+                    high = middle - 1;
+                }
+            }
+            if (lineNumber == int.MinValue)
+            {
+                lineNumber = ~low;
+            }
+        }
         if (lineNumber < 0)
         {
             // If the actual position was not found,

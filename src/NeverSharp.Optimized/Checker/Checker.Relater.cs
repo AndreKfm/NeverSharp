@@ -64,6 +64,7 @@ internal sealed partial class Checker
         private NodeRef errorNode;
         private DiagnosticMessage? headMessage;
         internal Relater? Next; // the next free relater (GetRelater / PutRelater)
+        private Func<SymbolRef, Type>? nonMissingTypeOfSymbol; // c.GetNonMissingTypeOfSymbol, made once (module AR2)
         private bool started;   // a key was pushed on the maybe stack in this check (TypeScript: maybeKeys !== undefined)
         private DiagnosticMessageChain? errorInfo;
         private List<ProgramRelatedInformation>? relatedInfo;
@@ -2861,7 +2862,9 @@ internal sealed partial class Checker
                     var sourceProp = c.GetPropertyOfType(source, name);
                     if (!sourceProp.IsNone && sourceProp != targetProp)
                     {
-                        var related = PropertyRelatedTo(source, target, sourceProp, targetProp, c.GetNonMissingTypeOfSymbol, reportErrors, intersectionState, relation == c.comparableRelation);
+                        // (module AR2, Track O: the method group as one delegate per relater, not one per property;
+                        // tsrs relater_2.rs passes a fn item)
+                        var related = PropertyRelatedTo(source, target, sourceProp, targetProp, nonMissingTypeOfSymbol ??= c.GetNonMissingTypeOfSymbol, reportErrors, intersectionState, relation == c.comparableRelation);
                         if (related == Ternary.False)
                         {
                             return Ternary.False;
@@ -3145,7 +3148,16 @@ internal sealed partial class Checker
                 return IndexSignaturesIdenticalTo(source, target);
             }
             var indexInfos = c.GetIndexInfosOfType(target);
-            var targetHasStringIndex = indexInfos.Exists(info => info.KeyType == c.stringType);
+            // (module AR2, Track O: a loop instead of a closure per call; tsrs relater_2.rs uses iter().any)
+            var targetHasStringIndex = false;
+            foreach (var info in indexInfos)
+            {
+                if (info.KeyType == c.stringType)
+                {
+                    targetHasStringIndex = true;
+                    break;
+                }
+            }
             var result = Ternary.True;
             foreach (var targetInfo in indexInfos)
             {

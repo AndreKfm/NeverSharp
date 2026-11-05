@@ -701,47 +701,56 @@ internal sealed partial class Checker
                             SkippedGenericFunction(node, checkMode);
                             return anyFunctionType;
                         }
-                        var context = GetInferenceContext(node)!;
-                        // We have an expression that is an argument of a generic function for which we are performing
-                        // type argument inference. The expression is of a function type with a single generic call
-                        // signature and a contextual function type with a single non-generic call signature. Now check
-                        // if the outer function returns a function type with a single non-generic call signature and
-                        // if some of the outer function type parameters have no inferences so far. If so, we can
-                        // potentially add inferred type parameters to the outer function return type.
-                        var returnType = !context.Signature.IsNone ? GetReturnTypeOfSignature(context.Signature) : Type.None;
-                        var returnSignature = !returnType.IsNone ? GetSingleCallOrConstructSignature(returnType) : Signature.None;
-                        if (!returnSignature.IsNone && Signatures.Record(returnSignature).TypeParameters.Count == 0 && !Array.TrueForAll(context.Inferences, HasInferenceCandidates))
-                        {
-                            // Instantiate the signature with its own type parameters as type arguments, possibly
-                            // renaming the type parameters to ensure they have unique names.
-                            var uniqueTypeParameters = GetUniqueTypeParameters(context, Types.Elements(Signatures.Record(signature).TypeParameters).ToArray());
-                            var instantiatedSignature = GetSignatureInstantiationWithoutFillingInTypeArguments(signature, uniqueTypeParameters);
-                            // Infer from the parameters of the instantiated signature to the parameters of the
-                            // contextual signature starting with an empty set of inference candidates.
-                            var inferences = Array.ConvertAll(context.Inferences, info => CreateInferenceInfo(info.TypeParameter));
-                            ApplyToParameterTypes(instantiatedSignature, contextualSignature, (source, target) => InferTypes(inferences, source, target, InferencePriority.None, contravariant: true));
-                            if (Array.Exists(inferences, HasInferenceCandidates))
-                            {
-                                // We have inference candidates, indicating that one or more type parameters are referenced
-                                // in the parameter types of the contextual signature. Now also infer from the return type.
-                                ApplyToReturnTypes(instantiatedSignature, contextualSignature, (source, target) => InferTypes(inferences, source, target));
-                                // If the type parameters for which we produced candidates do not have any inferences yet,
-                                // we adopt the new inference candidates and add the type parameters of the expression type
-                                // to the set of inferred type parameters for the outer function return type.
-                                if (!HasOverlappingInferences(context.Inferences, inferences))
-                                {
-                                    MergeInferences(context.Inferences, inferences);
-                                    (context.InferredTypeParameters ??= []).AddRange(uniqueTypeParameters);
-                                    return GetOrCreateTypeFromSignature(instantiatedSignature);
-                                }
-                            }
-                        }
-                        return GetOrCreateTypeFromSignature(InstantiateSignatureInContextOf(signature, contextualSignature, context));
+                        return InstantiateSingleGenericCallSignatureInContext(node, signature, contextualSignature);
                     }
                 }
             }
         }
         return type;
+    }
+
+    // instantiateTypeWithSingleGenericCallSignature's inference part (module AR2, from RS2's saved patch; Track O: in a
+    // method of its own, so that the closure over the inferences is made only here: the compiler creates it at the
+    // entry of the method whose locals it captures, which was every call; tsrs checker_04.rs
+    // instantiate_type_with_single_generic_call_signature makes no closure object)
+    private Type InstantiateSingleGenericCallSignatureInContext(NodeRef node, Signature signature, Signature contextualSignature)
+    {
+        var context = GetInferenceContext(node)!;
+        // We have an expression that is an argument of a generic function for which we are performing
+        // type argument inference. The expression is of a function type with a single generic call
+        // signature and a contextual function type with a single non-generic call signature. Now check
+        // if the outer function returns a function type with a single non-generic call signature and
+        // if some of the outer function type parameters have no inferences so far. If so, we can
+        // potentially add inferred type parameters to the outer function return type.
+        var returnType = !context.Signature.IsNone ? GetReturnTypeOfSignature(context.Signature) : Type.None;
+        var returnSignature = !returnType.IsNone ? GetSingleCallOrConstructSignature(returnType) : Signature.None;
+        if (!returnSignature.IsNone && Signatures.Record(returnSignature).TypeParameters.Count == 0 && !Array.TrueForAll(context.Inferences, HasInferenceCandidates))
+        {
+            // Instantiate the signature with its own type parameters as type arguments, possibly
+            // renaming the type parameters to ensure they have unique names.
+            var uniqueTypeParameters = GetUniqueTypeParameters(context, Types.Elements(Signatures.Record(signature).TypeParameters).ToArray());
+            var instantiatedSignature = GetSignatureInstantiationWithoutFillingInTypeArguments(signature, uniqueTypeParameters);
+            // Infer from the parameters of the instantiated signature to the parameters of the
+            // contextual signature starting with an empty set of inference candidates.
+            var inferences = Array.ConvertAll(context.Inferences, info => CreateInferenceInfo(info.TypeParameter));
+            ApplyToParameterTypes(instantiatedSignature, contextualSignature, (source, target) => InferTypes(inferences, source, target, InferencePriority.None, contravariant: true));
+            if (Array.Exists(inferences, HasInferenceCandidates))
+            {
+                // We have inference candidates, indicating that one or more type parameters are referenced
+                // in the parameter types of the contextual signature. Now also infer from the return type.
+                ApplyToReturnTypes(instantiatedSignature, contextualSignature, (source, target) => InferTypes(inferences, source, target));
+                // If the type parameters for which we produced candidates do not have any inferences yet,
+                // we adopt the new inference candidates and add the type parameters of the expression type
+                // to the set of inferred type parameters for the outer function return type.
+                if (!HasOverlappingInferences(context.Inferences, inferences))
+                {
+                    MergeInferences(context.Inferences, inferences);
+                    (context.InferredTypeParameters ??= []).AddRange(uniqueTypeParameters);
+                    return GetOrCreateTypeFromSignature(instantiatedSignature);
+                }
+            }
+        }
+        return GetOrCreateTypeFromSignature(InstantiateSignatureInContextOf(signature, contextualSignature, context));
     }
 
     // checker.ts skippedGenericFunction

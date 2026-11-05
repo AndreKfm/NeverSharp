@@ -1217,13 +1217,7 @@ internal sealed partial class Checker
             }
             else if ((flags & TypeFlags.Union) != 0)
             {
-                var members = Types.Elements(Types.Union(type).Types).ToArray();
-                var unionContext = context ?? new WideningContext { Siblings = [.. members] };
-                var widenedMembers = Array.ConvertAll(members, t => (Types.Flags(t) & TypeFlags.Nullable) != 0 ? t : GetWidenedTypeWithContext(t, unionContext));
-                // Widening an empty object literal transitions from a highly restrictive type to
-                // a highly inclusive one. For that reason we perform subtype reduction here if the
-                // union includes empty object types (e.g. reducing {} | string to just {}).
-                result = GetUnionType(widenedMembers, Array.Exists(widenedMembers, IsEmptyObjectType) ? UnionReduction.Subtype : UnionReduction.Literal);
+                result = GetWidenedUnionTypeWithContext(type, context);
             }
             else if ((flags & TypeFlags.Intersection) != 0)
             {
@@ -1240,6 +1234,20 @@ internal sealed partial class Checker
             return result.IsNone ? type : result;
         }
         return type;
+    }
+
+    // getWidenedTypeWithContext's union case (module AR2, from RS2's saved patch; Track O: in a method of its own, so that
+    // the closure over the context is made only for unions, not at the entry of every call; tsrs checker_09.rs
+    // get_widened_type_with_context makes no closure object)
+    private Type GetWidenedUnionTypeWithContext(Type type, WideningContext? context)
+    {
+        var members = Types.Elements(Types.Union(type).Types).ToArray();
+        var unionContext = context ?? new WideningContext { Siblings = [.. members] };
+        var widenedMembers = Array.ConvertAll(members, t => (Types.Flags(t) & TypeFlags.Nullable) != 0 ? t : GetWidenedTypeWithContext(t, unionContext));
+        // Widening an empty object literal transitions from a highly restrictive type to
+        // a highly inclusive one. For that reason we perform subtype reduction here if the
+        // union includes empty object types (e.g. reducing {} | string to just {}).
+        return GetUnionType(widenedMembers, Array.Exists(widenedMembers, IsEmptyObjectType) ? UnionReduction.Subtype : UnionReduction.Literal);
     }
 
     // checker.ts reportWideningErrorsInType

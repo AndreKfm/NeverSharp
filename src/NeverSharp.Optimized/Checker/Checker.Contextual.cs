@@ -156,6 +156,8 @@ internal sealed partial class Checker
         return (result.FirstSpreadIndex, result.LastSpreadIndex);
     }
 
+    private Func<Type, Type>? apparentTypeOfContextualTypeMapper;
+
     /// <summary>checker.ts getApparentTypeOfContextualType.</summary>
     internal Type GetApparentTypeOfContextualType(NodeRef node, ContextFlags contextFlags)
     {
@@ -169,7 +171,9 @@ internal sealed partial class Checker
             // That would evaluate mapped types with array or tuple type constraints too eagerly
             // and thus it would prevent `getTypeOfPropertyOfContextualType` from obtaining per-position contextual type for elements of array literal expressions.
             // Apparent type of other mapped types is already the mapped type itself so we can just avoid calling `getApparentType` here for all mapped types.
-            var apparentType = MapType(instantiatedType, t => (Types.ObjectFlagsOf(t) & ObjectFlags.Mapped) != 0 ? t : GetApparentType(t), noReductions: true);
+            // (module AR2, from RS2's saved patch; Track O: the mapper captures only the checker, so it is made once;
+            // tsrs passes a closure the compiler monomorphizes)
+            var apparentType = MapType(instantiatedType, apparentTypeOfContextualTypeMapper ??= t => (Types.ObjectFlagsOf(t) & ObjectFlags.Mapped) != 0 ? t : GetApparentType(t), noReductions: true);
             var store = StoreOf(node);
             if ((Types.Flags(apparentType) & TypeFlags.Union) != 0 && store.Kind(node.Node) == SyntaxKind.ObjectLiteralExpression)
             {
@@ -835,9 +839,19 @@ internal sealed partial class Checker
     }
 
     /// <summary>checker.ts getTypeOfPropertyOfContextualType.</summary>
-    internal Type GetTypeOfPropertyOfContextualType(Type type, string name, Type nameType = default)
+    internal Type GetTypeOfPropertyOfContextualType(Type type, string name, Type nameType = default) =>
+        MapType(type, new PropertyOfContextualTypeMapper(this, name, nameType), noReductions: true);
+
+    // getTypeOfPropertyOfContextualType's mapper as a struct (module AR2, from RS2's saved patch; Track O: no closure per
+    // call; tsrs checker_12.rs map_type takes the closure as an impl FnMut)
+    private readonly struct PropertyOfContextualTypeMapper(Checker c, string name, Type nameType) : ITypeMapFn
     {
-        return MapType(type, t =>
+        public Type Invoke(Type t) => c.GetTypeOfPropertyOfContextualTypeWorker(t, name, nameType);
+    }
+
+    // getTypeOfPropertyOfContextualType's mapper
+    private Type GetTypeOfPropertyOfContextualTypeWorker(Type t, string name, Type nameType)
+    {
         {
             if ((Types.Flags(t) & TypeFlags.Intersection) != 0)
             {
@@ -897,7 +911,7 @@ internal sealed partial class Checker
             }
             var concrete = GetTypeOfConcretePropertyOfContextualType(t, name);
             return !concrete.IsNone ? concrete : GetTypeFromIndexInfosOfContextualType(t, name, nameType);
-        }, noReductions: true);
+        }
     }
 
     // checker.ts appendContextualPropertyTypeConstituent
@@ -1013,9 +1027,15 @@ internal sealed partial class Checker
         {
             var nameType = GetLiteralTypeFromPropertyName(At(element, elementName));
             // We avoid calling getApplicableIndexInfo here because it performs potentially expensive intersection reduction.
-            return MapType(type, t => GetApplicableIndexInfoOf(GetIndexInfosOfStructuredType(t), nameType)?.Type ?? Type.None, noReductions: true);
+            return MapType(type, new ApplicableIndexInfoTypeMapper(this, nameType), noReductions: true);
         }
         return Type.None;
+    }
+
+    // getContextualTypeForObjectLiteralElement's index info mapper as a struct (module AR2; Track O: no closure per call)
+    private readonly struct ApplicableIndexInfoTypeMapper(Checker c, Type nameType) : ITypeMapFn
+    {
+        public Type Invoke(Type t) => c.GetApplicableIndexInfoOf(c.GetIndexInfosOfStructuredType(t), nameType)?.Type ?? Type.None;
     }
 
     // checker.ts getIndexInfosOfStructuredType
@@ -1039,7 +1059,19 @@ internal sealed partial class Checker
         {
             return Type.None;
         }
-        return MapType(type, t =>
+        return MapType(type, new ElementOfContextualTypeMapper(this, index, length, firstSpreadIndex, lastSpreadIndex), noReductions: true);
+    }
+
+    // getContextualTypeForElementExpression's mapper as a struct (module AR2; Track O: no closure per call; tsrs
+    // checker_12.rs map_type takes the closure as an impl FnMut)
+    private readonly struct ElementOfContextualTypeMapper(Checker c, int index, int? length, int firstSpreadIndex, int lastSpreadIndex) : ITypeMapFn
+    {
+        public Type Invoke(Type t) => c.GetContextualTypeForElementOfType(t, index, length, firstSpreadIndex, lastSpreadIndex);
+    }
+
+    // getContextualTypeForElementExpression's mapper
+    private Type GetContextualTypeForElementOfType(Type t, int index, int? length, int firstSpreadIndex, int lastSpreadIndex)
+    {
         {
             if (IsTupleType(t))
             {
@@ -1078,7 +1110,7 @@ internal sealed partial class Checker
                 }
             }
             return GetIteratedTypeOrElementType(IterationUse.Element, t, undefinedType, NodeRef.None, checkAssignability: false);
-        }, noReductions: true);
+        }
     }
 
     // checker.ts getContextualTypeForConditionalOperand

@@ -39,10 +39,12 @@ internal sealed partial class Checker
     internal Type CheckNonNullExpression(NodeRef node) => CheckNonNullType(CheckExpression(node), node);
 
     /// <summary>checker.ts checkNonNullType.</summary>
-    internal Type CheckNonNullType(Type type, NodeRef node) => CheckNonNullTypeWithReporter(type, node, ReportObjectPossiblyNullOrUndefinedError);
+    internal Type CheckNonNullType(Type type, NodeRef node) => CheckNonNullTypeWithReporter(type, node, cannotInvoke: false);
 
-    // checker.ts checkNonNullTypeWithReporter
-    private Type CheckNonNullTypeWithReporter(Type type, NodeRef node, Action<NodeRef, TypeFacts> reportError)
+    // checker.ts checkNonNullTypeWithReporter (module AR2, from RS2's saved patch; Track O: the reporter as a flag,
+    // reportObjectPossiblyNullOrUndefinedError or reportCannotInvokePossiblyNullOrUndefinedError, instead of a delegate
+    // made at every call; tsrs checker_04.rs check_non_null_type_with_reporter takes an impl FnMut, monomorphized)
+    private Type CheckNonNullTypeWithReporter(Type type, NodeRef node, bool cannotInvoke)
     {
         if (strictNullChecks && (Types.Flags(type) & TypeFlags.Unknown) != 0)
         {
@@ -62,7 +64,14 @@ internal sealed partial class Checker
         var facts = GetTypeFacts(type, TypeFacts.IsUndefinedOrNull);
         if ((facts & TypeFacts.IsUndefinedOrNull) != 0)
         {
-            reportError(node, facts);
+            if (cannotInvoke)
+            {
+                ReportCannotInvokePossiblyNullOrUndefinedError(node, facts);
+            }
+            else
+            {
+                ReportObjectPossiblyNullOrUndefinedError(node, facts);
+            }
             var t = GetNonNullableType(type);
             return (Types.Flags(t) & (TypeFlags.Nullable | TypeFlags.Never)) != 0 ? errorType : t;
         }

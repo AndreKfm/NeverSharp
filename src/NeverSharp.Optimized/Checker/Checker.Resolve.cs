@@ -3609,21 +3609,47 @@ internal sealed partial class Checker
                 return At(location, store.Nodes(store.Arguments(leftmost))[0]);
             }
         }
-        var importCall = FindAncestorRef(location, SyntaxKind.CallExpression, Utilities.IsImportCall);
+        // (module AR2, Track O: the three findAncestor walks as loops over the parents, without a delegate and a closure
+        // per call; tsrs checker_08.rs resolve_external_module passes fn items to find_ancestor)
+        var importCall = Node.None;
+        for (var a = node; !a.IsNone; a = store.Parent(a))
+        {
+            if (store.Kind(a) == SyntaxKind.CallExpression && Utilities.IsImportCall(store, a))
+            {
+                importCall = a;
+                break;
+            }
+        }
         if (!importCall.IsNone)
         {
-            var arguments = store.Nodes(store.Arguments(importCall.Node));
+            var arguments = store.Nodes(store.Arguments(importCall));
             if (arguments.Length > 0)
             {
                 return At(location, arguments[0]);
             }
         }
-        var declaration = UtilitiesPublic.FindAncestor(store, node, n => store.Kind(n) is SyntaxKind.ImportDeclaration or SyntaxKind.JSDocImportTag or SyntaxKind.ExportDeclaration);
+        var declaration = Node.None;
+        for (var a = node; !a.IsNone; a = store.Parent(a))
+        {
+            if (store.Kind(a) is SyntaxKind.ImportDeclaration or SyntaxKind.JSDocImportTag or SyntaxKind.ExportDeclaration)
+            {
+                declaration = a;
+                break;
+            }
+        }
         if (!declaration.IsNone && store.ModuleSpecifier(declaration) is var moduleSpecifier && !moduleSpecifier.IsNone)
         {
             return At(location, moduleSpecifier);
         }
-        var importEquals = UtilitiesPublic.FindAncestor(store, node, n => Utilities.IsExternalModuleImportEqualsDeclaration(store, n));
+        var importEquals = Node.None;
+        for (var a = node; !a.IsNone; a = store.Parent(a))
+        {
+            if (Utilities.IsExternalModuleImportEqualsDeclaration(store, a))
+            {
+                importEquals = a;
+                break;
+            }
+        }
         if (!importEquals.IsNone)
         {
             return At(location, store.Expression(store.ModuleReference(importEquals)));

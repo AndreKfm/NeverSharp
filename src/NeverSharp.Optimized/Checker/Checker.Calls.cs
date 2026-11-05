@@ -788,7 +788,7 @@ internal sealed partial class Checker
         {
             callChainFlags = SignatureFlags.None;
         }
-        funcType = CheckNonNullTypeWithReporter(funcType, expression, ReportCannotInvokePossiblyNullOrUndefinedError);
+        funcType = CheckNonNullTypeWithReporter(funcType, expression, cannotInvoke: true);
         if (funcType == silentNeverType)
         {
             return silentNeverSignature;
@@ -861,17 +861,29 @@ internal sealed partial class Checker
             return resolvingSignature;
         }
         // If the function is explicitly marked with `@class`, then it must be constructed.
-        if (callSignatures.Exists(sig =>
-            {
-                var declaration = Signatures.Record(sig).Declaration;
-                return !declaration.IsNone && Utilities.IsInJSFile(StoreOf(declaration), declaration.Node) &&
-                    !GetFirstJSDocTagOfKind(StoreOf(declaration), declaration.Node, SyntaxKind.JSDocClassTag).IsNone;
-            }))
+        if (HasJSDocClassSignature(callSignatures))
         {
             Error(node, Diagnostics.Value_of_type_0_is_not_callable_Did_you_mean_to_include_new, TypeToString(funcType));
             return ResolveErrorCall(node);
         }
         return ResolveCall(node, callSignatures, candidatesOutArray, checkMode, callChainFlags);
+    }
+
+    // resolveCallExpression's some(callSignatures, sig => ... JSDocClassTag) (module AR2, Track O: a loop instead of a
+    // delegate made at every call; tsrs checker_04.rs resolve_call_expression tests its signatures with iter().any, a
+    // closure the compiler inlines)
+    private bool HasJSDocClassSignature(Items<Signature> callSignatures)
+    {
+        foreach (var sig in callSignatures)
+        {
+            var declaration = Signatures.Record(sig).Declaration;
+            if (!declaration.IsNone && Utilities.IsInJSFile(StoreOf(declaration), declaration.Node) &&
+                !GetFirstJSDocTagOfKind(StoreOf(declaration), declaration.Node, SyntaxKind.JSDocClassTag).IsNone)
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     // checker.ts isGenericFunctionReturningFunction
