@@ -227,6 +227,9 @@ internal sealed partial class Program
     /// <summary>program.getSourceFile(fileName).</summary>
     internal SourceFile? GetSourceFile(string fileName) => filesByName.TryGetValue(ToPath(fileName), out var file) ? file : null;
 
+    /// <summary>sourceFile.path: the file's canonical absolute path (module SC1: the locality assignment's directory groups).</summary>
+    internal string PathOf(SourceFile file) => ToPath(file.Store.FileName(file.Root));
+
     /// <summary>program.isSourceFileDefaultLibrary: the file was included as a default library file.</summary>
     internal bool IsSourceFileDefaultLibrary(SourceFile file) => libFiles.Contains(ToPath(file.Store.FileName(file.Root)));
 

@@ -34,6 +34,13 @@ internal sealed partial class Program
     internal ResolvedModuleFull? GetResolvedModule(SourceFile file, string moduleName, ModuleKind? mode) =>
         resolvedModules.TryGetValue(file, out var resolutions) && resolutions.TryGetValue((moduleName, mode), out var resolved) ? resolved : null;
 
+    /// <summary>
+    /// The resolutions recorded for <paramref name="file"/>'s module names (null: not resolved), in the map's order
+    /// (module SC1: the import graph of the locality assignment, CheckerAssignment.ImportTargets).
+    /// </summary>
+    internal IEnumerable<ResolvedModuleFull?> ResolvedModulesOf(SourceFile file) =>
+        resolvedModules.TryGetValue(file, out var resolutions) ? resolutions.Values : [];
+
     // The files whose imports processImportedModules records, in the order the program found them (module CO4: resolved
     // by ResolveImportedModules once the program's files are known).
     private readonly List<SourceFile> importedModuleFiles = [];

@@ -45,16 +45,16 @@ internal sealed partial class Checker
     internal void EnterThread() => UtilitiesPublic.CheckerEmptyJsDocLists = emptyJsDocLists;
 
     internal Checker(Program program)
-        : this(program, 0, 1)
+        : this(program, null)
     {
     }
 
     /// <summary>
-    /// A checker of a checker pool of <paramref name="poolCount"/> checkers that checks the files i with
-    /// i % <paramref name="poolCount"/> == <paramref name="poolIndex"/> (module CO4: only their diagnostics are kept,
-    /// <see cref="DiagnosticCollection.KeptFiles"/>).
+    /// A checker of a checker pool that checks the files in <paramref name="keptFiles"/> (module CO4: only their
+    /// diagnostics are kept, <see cref="DiagnosticCollection.KeptFiles"/>; null: every file's, as for a checker of its
+    /// own or a pool whose checkers may take each other's files, module SC1).
     /// </summary>
-    internal Checker(Program program, int poolIndex, int poolCount)
+    internal Checker(Program program, HashSet<SourceFile>? keptFiles)
     {
         ArgumentNullException.ThrowIfNull(program);
         this.program = program;
@@ -65,15 +65,10 @@ internal sealed partial class Checker
         {
             fileIndex[files[i]] = i + 1;
         }
-        if (poolCount > 1)
+        if (keptFiles is not null)
         {
-            var kept = new HashSet<SourceFile>(ReferenceEqualityComparer.Instance);
-            for (var i = poolIndex; i < files.Count; i += poolCount)
-            {
-                kept.Add(files[i]);
-            }
-            diagnostics.KeptFiles = kept;
-            suggestionDiagnostics.KeptFiles = kept;
+            diagnostics.KeptFiles = keptFiles;
+            suggestionDiagnostics.KeptFiles = keptFiles;
         }
         // The program's module resolutions, if no checker pool has resolved them yet (module CO4: the program resolves
         // its files' imports after its walk, before they are bound)

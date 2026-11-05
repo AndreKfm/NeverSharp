@@ -36,7 +36,14 @@
 //   instead of "-check" and the JSON line adds "outputFiles", "outputBytes" (UTF-8), "emitDiagnostics" and
 //   "emitSkipped". --dump-emit <file> writes the outputs and emit diagnostics canonically (JSON lines) for
 //   harness/bench/emit-equivalence.mjs (never in timed runs).
-//   Usage: parse-cs-optimized-<runtime> [--bind | --check [--emit [--dump-emit <file>]] [--checkers N] [--dump-diagnostics <file>]] [--single] <file list>
+// - Module SC1 (Track O / tsrs-only, exploratory, all off by default; with --check, not with --single): tsrs's work
+//   distribution over the checkers. --assignment locality: tsrs's locality assignment (directory-subtree groups placed
+//   with FENNEL over the import edges) instead of file i to checker i % N (--assignment modulo); --steal: tsrs's tail
+//   stealing in the check pass (with it the parallel diagnostics may vary from run to run); --pool tsrs: both, with
+//   CheckMode.TsrsPoolCheckers checkers unless --checkers N is given. The driver name's mode adds "-loc" and "-steal".
+//   NEVERSHARP_POOL_STATS=1: one JSON line per checker on stderr (creation and check seconds, files, stolen files,
+//   weight, types, transient symbols).
+//   Usage: parse-cs-optimized-<runtime> [--bind | --check [--emit [--dump-emit <file>]] [--checkers N] [--assignment locality|modulo] [--steal] [--pool tsrs] [--dump-diagnostics <file>]] [--single] <file list>
 
 using System.Diagnostics;
 using System.Globalization;
@@ -55,6 +62,9 @@ var emit = false;
 string? dumpDiagnostics = null;
 string? dumpEmit = null;
 var checkerCount = 0;
+#if TRACK_OPTIMIZED
+var poolSettings = new PoolSettings();
+#endif
 var argIndex = 0;
 for (; argIndex < args.Length && args[argIndex].StartsWith("--", StringComparison.Ordinal); argIndex++)
 {
@@ -85,6 +95,36 @@ for (; argIndex < args.Length && args[argIndex].StartsWith("--", StringCompariso
                 return 2;
             }
             break;
+#if TRACK_OPTIMIZED
+        case "--assignment":
+            switch (argIndex + 1 < args.Length ? args[++argIndex] : "")
+            {
+                case "locality":
+                    poolSettings.Assignment = CheckerAssignmentKind.Locality;
+                    break;
+                case "modulo":
+                    poolSettings.Assignment = CheckerAssignmentKind.Modulo;
+                    break;
+                default:
+                    Console.Error.WriteLine("--assignment needs locality or modulo");
+                    return 2;
+            }
+            poolSettings.Custom = true;
+            break;
+        case "--steal":
+            poolSettings.Steal = true;
+            poolSettings.Custom = true;
+            break;
+        case "--pool":
+            if (argIndex + 1 >= args.Length || args[++argIndex] != "tsrs")
+            {
+                Console.Error.WriteLine("--pool needs tsrs");
+                return 2;
+            }
+            poolSettings.Tsrs = true;
+            poolSettings.Custom = true;
+            break;
+#endif
         default:
             Console.Error.WriteLine($"unknown option {args[argIndex]}");
             return 2;
@@ -107,6 +147,13 @@ if (checkerCount > 0 && (!check || single))
     Console.Error.WriteLine("--checkers needs --check and excludes --single");
     return 2;
 }
+#if TRACK_OPTIMIZED
+if (poolSettings.Custom && (!check || single))
+{
+    Console.Error.WriteLine("--assignment, --steal and --pool need --check and exclude --single");
+    return 2;
+}
+#endif
 if ((emit && !check) || (dumpEmit is not null && !emit))
 {
     Console.Error.WriteLine("--emit needs --check; --dump-emit needs --emit");
@@ -141,7 +188,7 @@ var options = new CreateSourceFileOptions { LanguageVersion = ScriptTarget.Lates
 #if TRACK_OPTIMIZED
 if (check)
 {
-    return CheckMode.Run(files, single, checkerCount, priority, dumpDiagnostics, emit, dumpEmit);
+    return CheckMode.Run(files, single, checkerCount, poolSettings, priority, dumpDiagnostics, emit, dumpEmit);
 }
 #endif
 

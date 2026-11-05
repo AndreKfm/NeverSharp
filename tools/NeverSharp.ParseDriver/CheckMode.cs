@@ -14,8 +14,20 @@ using NeverSharp.Generated;
 using NeverSharp.Optimized;
 using TsProgram = NeverSharp.Optimized.Program;
 
+/// <summary>The driver's pool switches of module SC1 (--assignment, --steal, --pool tsrs).</summary>
+internal sealed class PoolSettings
+{
+    public CheckerAssignmentKind Assignment = CheckerAssignmentKind.Modulo;
+    public bool Steal;
+    public bool Tsrs;
+    public bool Custom;
+}
+
 internal static class CheckMode
 {
+    /// <summary>--pool tsrs: the checker count without --checkers N (module SC1).</summary>
+    internal const int TsrsPoolCheckers = 16;
+
     /// <summary>
     /// The options of the checked program: TypeScript 6.0.3's defaults with noResolve (Gate C's options; the table of the
     /// computed values the Go driver passes explicitly is in docs/benchmark-harness.md §4.1).
@@ -29,21 +41,31 @@ internal static class CheckMode
     private static CompilerOptions EmitProgramOptions() => new() { NoResolve = true, Declaration = true, NewLine = NewLineKind.LineFeed };
 
     /// <param name="checkerCount">--checkers N (pre-registration §18), 0: the pool's default of 4.</param>
-    internal static int Run(string[] files, bool single, int checkerCount, string priority, string? dumpDiagnostics, bool emit, string? dumpEmit)
+    /// <param name="pool">--assignment, --steal, --pool tsrs (module SC1).</param>
+    internal static int Run(string[] files, bool single, int checkerCount, PoolSettings pool, string priority, string? dumpDiagnostics, bool emit, string? dumpEmit)
     {
+        if (pool.Tsrs)
+        {
+            pool.Assignment = CheckerAssignmentKind.Locality;
+            pool.Steal = true;
+            if (checkerCount == 0)
+            {
+                checkerCount = TsrsPoolCheckers;
+            }
+        }
         int exitCode = 0;
         if (single)
         {
             // Everything sequential on one thread whose stack is the checker threads' (Go stacks grow on demand).
-            var thread = new Thread(() => exitCode = RunCore(files, single, checkerCount, priority, dumpDiagnostics, emit, dumpEmit), CheckerPool.StackSize);
+            var thread = new Thread(() => exitCode = RunCore(files, single, checkerCount, pool, priority, dumpDiagnostics, emit, dumpEmit), CheckerPool.StackSize);
             thread.Start();
             thread.Join();
             return exitCode;
         }
-        return RunCore(files, single, checkerCount, priority, dumpDiagnostics, emit, dumpEmit);
+        return RunCore(files, single, checkerCount, pool, priority, dumpDiagnostics, emit, dumpEmit);
     }
 
-    private static int RunCore(string[] files, bool single, int checkerCount, string priority, string? dumpDiagnostics, bool emit, string? dumpEmit)
+    private static int RunCore(string[] files, bool single, int checkerCount, PoolSettings poolSettings, string priority, string? dumpDiagnostics, bool emit, string? dumpEmit)
     {
         var programOptions = emit ? EmitProgramOptions() : ProgramOptions();
         // tsc's host parses with the program's createSourceFile options: languageVersion = the emit target, jsDocParsingMode
@@ -112,9 +134,15 @@ internal static class CheckMode
         else
         {
             var program = TsProgram.Create(names, programOptions, host);
-            var pool = checkerCount > 0 ? new CheckerPool(program, single, checkerCount) : new CheckerPool(program, single);
+            var pool = !poolSettings.Custom
+                ? (checkerCount > 0 ? new CheckerPool(program, single, checkerCount) : new CheckerPool(program, single))
+                : new CheckerPool(program, single, checkerCount > 0 ? checkerCount : 4, poolSettings.Assignment, poolSettings.Steal);
             semantic = pool.GetSemanticDiagnostics();
             global = pool.GetGlobalDiagnostics();
+            if (Environment.GetEnvironmentVariable("NEVERSHARP_POOL_STATS") == "1")
+            {
+                WritePoolStats(pool);
+            }
             programFiles = program.SourceFiles.Count;
             checkers = pool.Count;
             if (emit)
@@ -185,6 +213,14 @@ internal static class CheckMode
 
         var runtime = $"{(System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported ? "jit" : "aot")}-{(System.Runtime.GCSettings.IsServerGC ? "srv" : "ws")}";
         var mode = single ? "single" : checkerCount > 0 ? $"parallel-n{checkerCount.ToString(CultureInfo.InvariantCulture)}" : "parallel";
+        if (poolSettings.Assignment == CheckerAssignmentKind.Locality)
+        {
+            mode += "-loc";
+        }
+        if (poolSettings.Steal)
+        {
+            mode += "-steal";
+        }
         var inv = CultureInfo.InvariantCulture;
         var emitFields = emit
             ? string.Create(inv, $"\"outputFiles\":{outputFiles},\"outputBytes\":{outputBytes},\"emitDiagnostics\":{emitResult?.Diagnostics.Count ?? 0},\"emitSkipped\":{(emitResult?.EmitSkipped == true ? "true" : "false")},")
@@ -197,6 +233,19 @@ internal static class CheckMode
         GC.KeepAlive(sourceFiles);
         GC.KeepAlive(outputs);
         return 0;
+    }
+
+    // NEVERSHARP_POOL_STATS=1 (module SC1, development probe, never set by bench.mjs): one JSON line per checker of the
+    // check pass on stderr.
+    private static void WritePoolStats(CheckerPool pool)
+    {
+        var inv = CultureInfo.InvariantCulture;
+        for (var i = 0; i < pool.Stats.Length; i++)
+        {
+            var s = pool.Stats[i];
+            Console.Error.WriteLine(string.Create(inv,
+                $"{{\"checker\":{i},\"createSeconds\":{s.CreateSeconds:0.000},\"checkSeconds\":{s.CheckSeconds:0.000},\"files\":{s.Files},\"stolen\":{s.StolenFiles},\"weight\":{s.Weight},\"types\":{s.Types},\"transientSymbols\":{s.TransientSymbols}}}"));
+        }
     }
 
     /// <summary>
