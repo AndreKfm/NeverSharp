@@ -66,6 +66,36 @@ internal sealed class DefaultLibrary
     /// <summary>The library file, parsed and bound (shared, read-only); null when it does not exist.</summary>
     internal SourceFile? GetFile(string fileName) => files.TryGetValue(fileName, out var file) ? file.Value : null;
 
+    // the files Preload has started (module FE1)
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> preloaded = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Module FE1 (Track O / tsrs-only): starts parsing and binding <paramref name="fileName"/> and every library file
+    /// its <c>/// &lt;reference lib="..." /&gt;</c> directives reach, each file on a thread-pool work item, and returns
+    /// at once (tsrs parses the lib chain in its loader rounds in parallel with the program's files,
+    /// notes/perf-frontend-64.md). A file is loaded once either way (<see cref="GetFile"/> waits for a load in
+    /// progress), so the files are the same; only the time of their loading changes.
+    /// </summary>
+    internal void Preload(string fileName)
+    {
+        if (!files.TryGetValue(fileName, out var lazy) || !preloaded.TryAdd(fileName, true))
+        {
+            return;
+        }
+        Task.Run(() =>
+        {
+            var file = lazy.Value;
+            var references = file.Store.LibReferenceDirectives(file.Root);
+            for (var i = 0; i < references.Count; i++)
+            {
+                if (LibraryNames.GetLibFileNameFromLibReference(references[i].FileName) is { } libFileName)
+                {
+                    Preload(virtualFolder + "/" + libFileName);
+                }
+            }
+        });
+    }
+
     /// <summary>Whether <paramref name="file"/> is one of this library's shared files.</summary>
     internal bool Owns(SourceFile file)
     {

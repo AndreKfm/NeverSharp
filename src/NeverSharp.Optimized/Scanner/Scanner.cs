@@ -509,35 +509,38 @@ internal sealed partial class Scanner
         return CharCodeToRegExpFlag.TryGetValue((CharacterCodes)ch, out var flag) ? flag : null;
     }
 
+    // The line terminators of IsLineBreak (module FE1).
+    private static readonly System.Buffers.SearchValues<char> LineTerminators = System.Buffers.SearchValues.Create(
+        [(char)CharacterCodes.lineFeed, (char)CharacterCodes.carriageReturn, (char)CharacterCodes.lineSeparator, (char)CharacterCodes.paragraphSeparator]);
+
+    /// <summary>
+    /// scanner.ts computeLineStarts. Module FE1 (Track O): the characters between line terminators are skipped with a
+    /// vectorized search for the four terminators instead of one test per character, and the list is sized by a
+    /// vectorized count of line feeds first (tsrs-only shape: the memchr passes of tsrs's line count, #140 in
+    /// notes/perf-front-end-fixed-costs.md); every terminator is handled as by the loop of scanner.ts, so the line
+    /// starts are the same.
+    /// </summary>
     internal static List<int> ComputeLineStarts(ReadOnlySpan<char> text)
     {
-        var result = new List<int>();
+        var result = new List<int>(System.MemoryExtensions.Count(text, (char)CharacterCodes.lineFeed) + 1);
         var pos = 0;
         var lineStart = 0;
         while (pos < text.Length)
         {
+            var next = text[pos..].IndexOfAny(LineTerminators);
+            if (next < 0)
+            {
+                break;
+            }
+            pos += next;
             int ch = text[pos];
             pos++;
-            switch (ch)
+            if (ch == (int)CharacterCodes.carriageReturn && CharCodeAt(text, pos) == (int)CharacterCodes.lineFeed)
             {
-                case (int)CharacterCodes.carriageReturn:
-                    if (CharCodeAt(text, pos) == (int)CharacterCodes.lineFeed)
-                    {
-                        pos++;
-                    }
-                    goto case (int)CharacterCodes.lineFeed;
-                case (int)CharacterCodes.lineFeed:
-                    result.Add(lineStart);
-                    lineStart = pos;
-                    break;
-                default:
-                    if (ch > (int)CharacterCodes.maxAsciiCharacter && IsLineBreak(ch))
-                    {
-                        result.Add(lineStart);
-                        lineStart = pos;
-                    }
-                    break;
+                pos++;
             }
+            result.Add(lineStart);
+            lineStart = pos;
         }
         result.Add(lineStart);
         return result;

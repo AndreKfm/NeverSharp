@@ -153,6 +153,12 @@ internal static class CheckMode
             sourceFiles[i] = file;
         }
 
+        // The default library next to the executable (build-cs.mjs copies TypeScript 6.0.3's lib folder there), named by
+        // its real path, as tsc's host names it.
+        var libDirectory = Path.Combine(AppContext.BaseDirectory, "lib");
+        var libFolder = TsPath.NormalizeSlashes(Path.GetFullPath(libDirectory)).TrimEnd('/');
+        var library = DefaultLibrary.Get(libDirectory, libFolder, programOptions, JSDocParsingMode.ParseForTypeErrors);
+
         if (single)
         {
             for (var i = 0; i < files.Length; i++)
@@ -162,6 +168,13 @@ internal static class CheckMode
         }
         else
         {
+            if (files.Length > 0)
+            {
+                // Module FE1 (Track O / tsrs-only): the default library file (DiskCompilerHost.GetDefaultLibFileName) and
+                // the library files it references are parsed and bound on the thread pool alongside the program's files,
+                // instead of one after another in the program's walk (DefaultLibrary.Preload).
+                library.Preload(libFolder + "/" + programOptions.GetDefaultLibFileName());
+            }
             var tasks = new Task[files.Length];
             for (var i = 0; i < files.Length; i++)
             {
@@ -171,12 +184,6 @@ internal static class CheckMode
             Task.WaitAll(tasks);
         }
         Phases.Mark("parse");
-
-        // The default library next to the executable (build-cs.mjs copies TypeScript 6.0.3's lib folder there), named by
-        // its real path, as tsc's host names it.
-        var libDirectory = Path.Combine(AppContext.BaseDirectory, "lib");
-        var libFolder = TsPath.NormalizeSlashes(Path.GetFullPath(libDirectory)).TrimEnd('/');
-        var library = DefaultLibrary.Get(libDirectory, libFolder, programOptions, JSDocParsingMode.ParseForTypeErrors);
         var currentDirectory = TsPath.NormalizeSlashes(Environment.CurrentDirectory);
         var host = new DiskCompilerHost(sourceFiles, library, libFolder, currentDirectory, JSDocParsingMode.ParseForTypeErrors);
 
