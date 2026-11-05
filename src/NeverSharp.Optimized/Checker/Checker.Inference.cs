@@ -106,8 +106,8 @@ internal unsafe struct CandidateList
     internal readonly List<Type> ToList() => [.. Span];
 }
 
-/// <summary>types.ts InferenceInfo.</summary>
-internal sealed class InferenceInfo
+/// <summary>types.ts InferenceInfo: the record (module AR1: in the checker's <see cref="CheckerArena"/>).</summary>
+internal struct InferenceInfoRecord
 {
     public Type TypeParameter;
     public CandidateList Candidates;      // (module AR1: IsNone = undefined)
@@ -117,6 +117,52 @@ internal sealed class InferenceInfo
     public bool TopLevel;
     public bool IsFixed;
     public int? ImpliedArity;
+}
+
+/// <summary>
+/// types.ts InferenceInfo (module AR1, Track O / tsrs-only: tsrs keeps inference infos in its checker arena,
+/// crates/tsrs_checker/src/checker.rs InferenceInfo behind a P pointer): a handle to an <see cref="InferenceInfoRecord"/>
+/// in a native block of the checker's <see cref="CheckerArena"/>, read and written through the members below like the
+/// class it replaces; <c>==</c> is the identity of the info object. <c>default</c> (<see cref="IsNone"/>) stands for
+/// undefined. The arena frees the record with the checker, so a handle never outlives its block.
+/// </summary>
+internal readonly unsafe struct InferenceInfo : IEquatable<InferenceInfo>
+{
+    private readonly InferenceInfoRecord* record;
+
+    internal InferenceInfo(CheckerArena arena, Type typeParameter)
+    {
+        record = (InferenceInfoRecord*)arena.Allocate(sizeof(InferenceInfoRecord));
+        record->TypeParameter = typeParameter;
+    }
+
+    internal bool IsNone => record == null;
+
+    public ref Type TypeParameter => ref record->TypeParameter;
+
+    public ref CandidateList Candidates => ref record->Candidates;
+
+    public ref CandidateList ContraCandidates => ref record->ContraCandidates;
+
+    public ref Type InferredType => ref record->InferredType;
+
+    public ref InferencePriority? Priority => ref record->Priority;
+
+    public ref bool TopLevel => ref record->TopLevel;
+
+    public ref bool IsFixed => ref record->IsFixed;
+
+    public ref int? ImpliedArity => ref record->ImpliedArity;
+
+    public static bool operator ==(InferenceInfo left, InferenceInfo right) => left.record == right.record;
+
+    public static bool operator !=(InferenceInfo left, InferenceInfo right) => left.record != right.record;
+
+    public bool Equals(InferenceInfo other) => record == other.record;
+
+    public override bool Equals(object? obj) => obj is InferenceInfo other && record == other.record;
+
+    public override int GetHashCode() => ((nint)record).GetHashCode();
 }
 
 /// <summary>types.ts InferenceContext.</summary>
@@ -227,20 +273,26 @@ internal sealed partial class Checker
     }
 
     // checker.ts createInferenceInfo
-    private static InferenceInfo CreateInferenceInfo(Type typeParameter) => new() { TypeParameter = typeParameter, TopLevel = true };
+    private InferenceInfo CreateInferenceInfo(Type typeParameter)
+    {
+        var info = new InferenceInfo(Arena, typeParameter);
+        info.TopLevel = true;
+        return info;
+    }
 
     // checker.ts cloneInferenceInfo
-    private InferenceInfo CloneInferenceInfo(InferenceInfo inference) => new()
+    private InferenceInfo CloneInferenceInfo(InferenceInfo inference)
     {
-        TypeParameter = inference.TypeParameter,
-        Candidates = inference.Candidates.Clone(Arena),
-        ContraCandidates = inference.ContraCandidates.Clone(Arena),
-        InferredType = inference.InferredType,
-        Priority = inference.Priority,
-        TopLevel = inference.TopLevel,
-        IsFixed = inference.IsFixed,
-        ImpliedArity = inference.ImpliedArity,
-    };
+        var info = new InferenceInfo(Arena, inference.TypeParameter);
+        info.Candidates = inference.Candidates.Clone(Arena);
+        info.ContraCandidates = inference.ContraCandidates.Clone(Arena);
+        info.InferredType = inference.InferredType;
+        info.Priority = inference.Priority;
+        info.TopLevel = inference.TopLevel;
+        info.IsFixed = inference.IsFixed;
+        info.ImpliedArity = inference.ImpliedArity;
+        return info;
+    }
 
     /// <summary>checker.ts cloneInferredPartOfContext.</summary>
     internal InferenceContext? CloneInferredPartOfContext(InferenceContext context)
@@ -741,7 +793,7 @@ internal sealed partial class Checker
             {
                 // (isFromInferenceBlockedSource: language service only)
                 var inference = GetInferenceInfoForType(target);
-                if (inference is not null)
+                if (!inference.IsNone)
                 {
                     // If target is a type parameter, make an inference, unless the source type contains
                     // a "non-inferrable" type. Types with this flag set are markers used to prevent inference.
@@ -1026,7 +1078,8 @@ internal sealed partial class Checker
             }
         }
 
-        private InferenceInfo? GetInferenceInfoForType(Type type)
+        // (module AR1: default, IsNone, for undefined)
+        private InferenceInfo GetInferenceInfoForType(Type type)
         {
             if ((Types.Flags(type) & TypeFlags.TypeVariable) != 0)
             {
@@ -1038,7 +1091,7 @@ internal sealed partial class Checker
                     }
                 }
             }
-            return null;
+            return default;
         }
 
         private Type GetSingleTypeVariableFromIntersectionTypes(Type[] types)
@@ -1051,7 +1104,7 @@ internal sealed partial class Checker
                 {
                     foreach (var member in Members(type))
                     {
-                        if (GetInferenceInfoForType(member) is not null)
+                        if (!GetInferenceInfoForType(member).IsNone)
                         {
                             t = member;
                             break;
@@ -1082,7 +1135,7 @@ internal sealed partial class Checker
                 // parameter.
                 foreach (var t in targets)
                 {
-                    if (GetInferenceInfoForType(t) is not null)
+                    if (!GetInferenceInfoForType(t).IsNone)
                     {
                         nakedTypeVariable = t;
                         typeVariableCount++;
@@ -1143,7 +1196,7 @@ internal sealed partial class Checker
                 // of being first in the candidates array.
                 foreach (var t in targets)
                 {
-                    if (GetInferenceInfoForType(t) is not null)
+                    if (!GetInferenceInfoForType(t).IsNone)
                     {
                         typeVariableCount++;
                     }
@@ -1161,7 +1214,7 @@ internal sealed partial class Checker
             {
                 foreach (var t in targets)
                 {
-                    if (GetInferenceInfoForType(t) is not null)
+                    if (!GetInferenceInfoForType(t).IsNone)
                     {
                         InferWithPriority(source, t, InferencePriority.NakedTypeVariable);
                     }
@@ -1188,7 +1241,7 @@ internal sealed partial class Checker
                 // type and then make a secondary inference from that type to T. We make a secondary inference
                 // such that direct inferences to T get priority over inferences to Partial<T>, for example.
                 var inference = GetInferenceInfoForType(Types.Data<IndexData>(constraintType).Type);
-                if (inference is not null && !inference.IsFixed)
+                if (!inference.IsNone && !inference.IsFixed)
                 {
                     var inferredType = c.InferTypeForHomomorphicMappedType(source, target, constraintType);
                     if (!inferredType.IsNone)
@@ -1273,7 +1326,7 @@ internal sealed partial class Checker
                 if ((Types.Flags(matchSource) & TypeFlags.StringLiteral) != 0 && (Types.Flags(matchTarget) & TypeFlags.TypeVariable) != 0)
                 {
                     var inferenceContext = GetInferenceInfoForType(matchTarget);
-                    var constraint = inferenceContext is not null ? c.GetBaseConstraintOfType(inferenceContext.TypeParameter) : Type.None;
+                    var constraint = !inferenceContext.IsNone ? c.GetBaseConstraintOfType(inferenceContext.TypeParameter) : Type.None;
                     if (!constraint.IsNone && !c.IsTypeAny(constraint))
                     {
                         var constraintTypes = (Types.Flags(constraint) & TypeFlags.Union) != 0 ? Members(constraint) : [constraint];
@@ -1457,7 +1510,7 @@ internal sealed partial class Checker
                     {
                         // Middle of target is [...T, ...U] and source is tuple type
                         var targetInfo = GetInferenceInfoForType(elementTypes[startLength]);
-                        if (targetInfo is not null && targetInfo.ImpliedArity is { } impliedArity)
+                        if (!targetInfo.IsNone && targetInfo.ImpliedArity is { } impliedArity)
                         {
                             // Infer slices from source based on implied arity of T.
                             InferFromTypes(c.SliceTupleType(source, startLength, endLength + sourceArity - impliedArity), elementTypes[startLength]);
@@ -1468,7 +1521,7 @@ internal sealed partial class Checker
                     {
                         // Middle of target is [...T, ...rest] and source is tuple type
                         // if T is constrained by a fixed-size tuple we might be able to use its arity to infer T
-                        var param = GetInferenceInfoForType(elementTypes[startLength])?.TypeParameter ?? Type.None;
+                        var param = GetInferenceInfoForType(elementTypes[startLength]) is { IsNone: false } paramInfo ? paramInfo.TypeParameter : Type.None;
                         var constraint = !param.IsNone ? c.GetBaseConstraintOfType(param) : Type.None;
                         if (!constraint.IsNone && c.IsTupleType(constraint) && (c.TupleTarget(constraint).CombinedFlags & ElementFlags.Variable) == 0)
                         {
@@ -1481,7 +1534,7 @@ internal sealed partial class Checker
                     {
                         // Middle of target is [...rest, ...T] and source is tuple type
                         // if T is constrained by a fixed-size tuple we might be able to use its arity to infer T
-                        var param = GetInferenceInfoForType(elementTypes[startLength + 1])?.TypeParameter ?? Type.None;
+                        var param = GetInferenceInfoForType(elementTypes[startLength + 1]) is { IsNone: false } paramInfo ? paramInfo.TypeParameter : Type.None;
                         var constraint = !param.IsNone ? c.GetBaseConstraintOfType(param) : Type.None;
                         if (!constraint.IsNone && c.IsTupleType(constraint) && (c.TupleTarget(constraint).CombinedFlags & ElementFlags.Variable) == 0)
                         {

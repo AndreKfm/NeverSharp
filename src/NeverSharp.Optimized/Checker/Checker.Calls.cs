@@ -1792,7 +1792,7 @@ internal sealed partial class Checker
         if (!restType.IsNone && (Types.Flags(restType) & TypeFlags.TypeParameter) != 0)
         {
             var info = Array.Find(context.Inferences, i => i.TypeParameter == restType);
-            if (info is not null)
+            if (!info.IsNone)
             {
                 info.ImpliedArity = GetSpreadArgumentIndex(args, argCount) < 0 ? args.Count - argCount : null;
             }
