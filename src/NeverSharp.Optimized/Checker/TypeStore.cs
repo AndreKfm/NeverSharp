@@ -529,7 +529,9 @@ internal sealed class SignatureStore
         public int ResolvedMinArgumentCount;
         public NodeRef Declaration;
         public TypeList TypeParameters;
-        public SymbolRef[] Parameters;  // the parameter symbols (C1: an array per signature)
+        // the parameter symbols (C1: an array per signature; module AR1: a stored list of the store's parameter arena,
+        // read with SignatureStore.ParametersOf; default: none)
+        public ItemRange<SymbolRef> Parameters;
         public SymbolRef ThisParameter;
         public Type ResolvedReturnType;
         public Signature Target;
@@ -568,6 +570,22 @@ internal sealed class SignatureStore
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     internal ref SignatureRecord Record(Signature signature) => ref signatures[signature.Id];
+
+    // Module AR1 (Track O / tsrs-only; tsrs keeps a signature's parameters as an arena slice, crates/tsrs_checker
+    // types.rs Signature.parameters): the parameter lists of all signatures in one append-only arena of chunks that never
+    // move, instead of one array per signature. Sharing a list (TypeScript assigns the same array) copies the range.
+    private readonly ItemArena<SymbolRef> parameterLists = new();
+
+    /// <summary>A stored parameter list with these symbols (a copy).</summary>
+    internal ItemRange<SymbolRef> StoreParameters(ReadOnlySpan<SymbolRef> parameters) => parameterLists.Store(parameters);
+
+    /// <summary>The parameter symbols of a stored list (valid for good: the arena's chunks never move).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal ReadOnlySpan<SymbolRef> ParametersOf(ItemRange<SymbolRef> parameters) => parameterLists.View(parameters).AsSpan();
+
+    /// <summary>signature.parameters.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal ReadOnlySpan<SymbolRef> ParametersOf(Signature signature) => parameterLists.View(signatures[signature.Id].Parameters).AsSpan();
 }
 
 /// <summary>

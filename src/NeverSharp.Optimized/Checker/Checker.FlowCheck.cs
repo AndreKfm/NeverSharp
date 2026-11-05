@@ -80,7 +80,7 @@ internal sealed partial class Checker
             }
             else if (!declaration.IsNone && Utilities.IsFunctionLikeDeclaration(StoreOf(declaration), declaration.Node) &&
                 (Signatures.Record(signature).ResolvedReturnType.IsNone || (Types.Flags(Signatures.Record(signature).ResolvedReturnType) & TypeFlags.Boolean) != 0) &&
-                (Signatures.Record(signature).Parameters?.Length ?? 0) > 0)
+                Signatures.Record(signature).Parameters.Count > 0)
             {
                 resolvedTypePredicates[signature] = null; // avoid infinite loop
                 predicate = GetTypePredicateFromBody(declaration);
@@ -295,12 +295,21 @@ internal sealed partial class Checker
             return new TypePredicateInfo { Kind = asserts ? TypePredicateKind.AssertsThis : TypePredicateKind.This, ParameterName = null, ParameterIndex = -1, Type = type };
         }
         var name = store.Texts.GetString(store.EscapedText(parameterName))!;
-        var parameters = Signatures.Record(signature).Parameters ?? [];
+        var parameters = Signatures.ParametersOf(signature);
+        var parameterIndex = -1;
+        for (var i = 0; i < parameters.Length; i++)
+        {
+            if (NameOf(parameters[i]) == name)
+            {
+                parameterIndex = i;
+                break;
+            }
+        }
         return new TypePredicateInfo
         {
             Kind = asserts ? TypePredicateKind.AssertsIdentifier : TypePredicateKind.Identifier,
             ParameterName = Utilities.UnescapeLeadingUnderscores(name),
-            ParameterIndex = Array.FindIndex(parameters, p => NameOf(p) == name),
+            ParameterIndex = parameterIndex,
             Type = type,
         };
     }
@@ -372,9 +381,9 @@ internal sealed partial class Checker
             if (store.Length(parameters) >= 2 && IsContextSensitiveFunctionOrObjectLiteralMethod(store, func.Node))
             {
                 var contextualSignature = GetContextualSignature(func);
-                if (!contextualSignature.IsNone && Signatures.Record(contextualSignature).Parameters.Length == 1 && SignatureHasRestParameter(contextualSignature))
+                if (!contextualSignature.IsNone && Signatures.Record(contextualSignature).Parameters.Count == 1 && SignatureHasRestParameter(contextualSignature))
                 {
-                    var restType = GetReducedApparentType(InstantiateType(GetTypeOfSymbol(Signatures.Record(contextualSignature).Parameters[0]), GetInferenceContext(func) is { } inferenceContext ? inferenceContext.NonFixingMapper : TypeMapper.None));
+                    var restType = GetReducedApparentType(InstantiateType(GetTypeOfSymbol(Signatures.ParametersOf(contextualSignature)[0]), GetInferenceContext(func) is { } inferenceContext ? inferenceContext.NonFixingMapper : TypeMapper.None));
                     var anyAssigned = false;
                     var position = 0;
                     var index = -1;

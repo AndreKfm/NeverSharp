@@ -599,7 +599,7 @@ internal sealed partial class Checker
         {
             var signature = GetSignatureFromDeclaration(node);
             ref var record = ref Signatures.Record(signature);
-            return EnterNewScope(context, node, record.Parameters, Types.Elements(record.TypeParameters).ToArray());
+            return EnterNewScope(context, node, Signatures.ParametersOf(record.Parameters).ToArray(), Types.Elements(record.TypeParameters).ToArray());
         }
         var typeParameters = store.Kind(node.Node) == SyntaxKind.ConditionalType
             ? GetInferTypeParameters(node) ?? []

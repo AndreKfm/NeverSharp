@@ -700,8 +700,9 @@ internal sealed partial class Checker
         // because using `mapper` now could trigger inferences to become fixed. (See `createInferenceContext`.)
         // See GH#17600.
         var thisParameter = source.ThisParameter.IsNone ? SymbolRef.None : InstantiateSymbol(source.ThisParameter, mapper);
-        var parameters = source.Parameters ?? [];
-        var newParameters = new SymbolRef[parameters.Length];
+        // (module AR1: the instantiated list is stored only when an element changed; else the source's list is shared)
+        var parameters = Signatures.ParametersOf(source.Parameters);
+        var newParameters = parameters.Length <= 16 ? stackalloc SymbolRef[parameters.Length] : new SymbolRef[parameters.Length];
         var changed = false;
         for (var i = 0; i < parameters.Length; i++)
         {
@@ -710,7 +711,7 @@ internal sealed partial class Checker
         }
         var result = Signatures.Create(source.Flags & SignatureFlags.PropagatingFlags, source.Declaration, freshTypeParameters, thisParameter, source.MinArgumentCount);
         ref var record = ref Signatures.Record(result);
-        record.Parameters = changed ? newParameters : parameters;
+        record.Parameters = changed ? Signatures.StoreParameters(newParameters) : source.Parameters;
         record.SyntheticFunctionTypeDeclaration = source.SyntheticFunctionTypeDeclaration;
         record.Target = signature;
         record.Mapper = MapperHandle(mapper);

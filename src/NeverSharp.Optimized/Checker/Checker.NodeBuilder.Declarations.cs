@@ -2095,7 +2095,7 @@ internal sealed partial class Checker
 
         private SymbolRef FirstParameter(Signature signature)
         {
-            var parameters = c.Signatures.Record(signature).Parameters;
+            var parameters = c.Signatures.ParametersOf(signature);
             return parameters.Length > 0 ? parameters[0] : SymbolRef.None;
         }
 
@@ -2111,7 +2111,7 @@ internal sealed partial class Checker
                 var allEmpty = true;
                 foreach (var s in signatures)
                 {
-                    if (c.Signatures.Record(s).Parameters.Length != 0)
+                    if (c.Signatures.Record(s).Parameters.Count != 0)
                     {
                         allEmpty = false;
                     }

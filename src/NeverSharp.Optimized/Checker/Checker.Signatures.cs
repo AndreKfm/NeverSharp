@@ -22,7 +22,8 @@ internal sealed partial class Checker
     // checker.ts signatureHasRestParameter
     private bool SignatureHasRestParameter(Signature signature) => (Signatures.Record(signature).Flags & SignatureFlags.HasRestParameter) != 0;
 
-    private SymbolRef[] ParametersOf(Signature signature) => Signatures.Record(signature).Parameters ?? [];
+    // signature.parameters (module AR1: a span of the signature store's parameter arena)
+    private ReadOnlySpan<SymbolRef> ParametersOf(Signature signature) => Signatures.ParametersOf(signature);
 
     /// <summary>checker.ts getTypeOfParameter.</summary>
     internal Type GetTypeOfParameter(SymbolRef symbol)

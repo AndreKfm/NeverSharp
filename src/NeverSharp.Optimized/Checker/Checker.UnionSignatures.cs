@@ -43,7 +43,11 @@ internal sealed partial class Checker
     private Signature silentNeverSignature => silentNeverSignatureValue.IsNone ? silentNeverSignatureValue = CreateSignature(NodeRef.None, TypeList.Empty, SymbolRef.None, [], silentNeverType, 0, SignatureFlags.None) : silentNeverSignatureValue;
 
     /// <summary>checker.ts createSignature.</summary>
-    internal Signature CreateSignature(NodeRef declaration, TypeList typeParameters, SymbolRef thisParameter, SymbolRef[] parameters, Type resolvedReturnType, int minArgumentCount, SignatureFlags flags)
+    internal Signature CreateSignature(NodeRef declaration, TypeList typeParameters, SymbolRef thisParameter, ReadOnlySpan<SymbolRef> parameters, Type resolvedReturnType, int minArgumentCount, SignatureFlags flags) =>
+        CreateSignature(declaration, typeParameters, thisParameter, Signatures.StoreParameters(parameters), resolvedReturnType, minArgumentCount, flags);
+
+    /// <summary>checker.ts createSignature with a stored parameter list (shared as TypeScript shares the array; module AR1).</summary>
+    internal Signature CreateSignature(NodeRef declaration, TypeList typeParameters, SymbolRef thisParameter, ItemRange<SymbolRef> parameters, Type resolvedReturnType, int minArgumentCount, SignatureFlags flags)
     {
         var signature = Signatures.Create(flags, declaration, typeParameters, thisParameter, minArgumentCount);
         ref var record = ref Signatures.Record(signature);
@@ -56,7 +60,7 @@ internal sealed partial class Checker
     internal Signature CloneSignature(Signature sig)
     {
         var source = Signatures.Record(sig);
-        var result = CreateSignature(source.Declaration, source.TypeParameters, source.ThisParameter, source.Parameters ?? [], Type.None, source.MinArgumentCount, source.Flags & SignatureFlags.PropagatingFlags);
+        var result = CreateSignature(source.Declaration, source.TypeParameters, source.ThisParameter, source.Parameters, Type.None, source.MinArgumentCount, source.Flags & SignatureFlags.PropagatingFlags);
         ref var record = ref Signatures.Record(result);
         record.Target = source.Target;
         record.Mapper = source.Mapper;

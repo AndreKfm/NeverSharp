@@ -1250,9 +1250,9 @@ internal sealed partial class Checker
         {
             var s = signatures[0];
             ref var record = ref Signatures.Record(s);
-            if (record.TypeParameters.Count == 0 && record.Parameters is { Length: 1 } && (record.Flags & SignatureFlags.HasRestParameter) != 0)
+            if (record.TypeParameters.Count == 0 && record.Parameters.Count == 1 && (record.Flags & SignatureFlags.HasRestParameter) != 0)
             {
-                var paramType = GetTypeOfSymbol(record.Parameters[0]);
+                var paramType = GetTypeOfSymbol(Signatures.ParametersOf(record.Parameters)[0]);
                 return (Types.Flags(paramType) & TypeFlags.Any) != 0 || (IsArrayType(paramType) && (Types.Flags(GetTypeArguments(paramType)[0]) & TypeFlags.Any) != 0);
             }
         }
@@ -1271,7 +1271,7 @@ internal sealed partial class Checker
         {
             var signature = Signatures.Create(isAbstract ? SignatureFlags.Abstract : SignatureFlags.None, NodeRef.None, Types.Object(classType).LocalTypeParameters, SymbolRef.None, 0);
             ref var record = ref Signatures.Record(signature);
-            record.Parameters = [];
+            record.Parameters = default;
             record.ResolvedReturnType = classType;
             return [signature];
         }
@@ -1813,7 +1813,7 @@ internal sealed partial class Checker
             flags |= SignatureFlags.Abstract;
         }
         var signature = Signatures.Create(flags, declaration, typeParameters, thisParameter, minArgumentCount);
-        Signatures.Record(signature).Parameters = [.. parameters];
+        Signatures.Record(signature).Parameters = Signatures.StoreParameters(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(parameters));
         SignatureLinks.Get(declaration).ResolvedSignature = signature;
         return signature;
     }

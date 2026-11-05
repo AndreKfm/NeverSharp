@@ -25,7 +25,7 @@ internal sealed partial class Checker
         ref var record = ref Signatures.Record(signature);
         var expandedParams = GetExpandedParameters(signature, skipUnionExpanding: true)[0];
         var signatureTypeParameters = Types.Elements(record.TypeParameters).ToArray();
-        var cleanup = EnterNewScope(context, record.Declaration, expandedParams, signatureTypeParameters, record.Parameters, GetSignatureMapper(signature));
+        var cleanup = EnterNewScope(context, record.Declaration, expandedParams, signatureTypeParameters, Signatures.ParametersOf(record.Parameters).ToArray(), GetSignatureMapper(signature));
         context.ApproximateLength += 3; // Usually a signature contributes a few more characters than this, but 3 is the minimum
 
         var target = Signatures.Record(signature).Target;
@@ -54,7 +54,7 @@ internal sealed partial class Checker
         {
             if ((GetCheckFlags(expandedParams[i]) & CheckFlags.RestParameter) != 0)
             {
-                parameterSymbols = Signatures.Record(signature).Parameters ?? [];
+                parameterSymbols = Signatures.ParametersOf(signature).ToArray();
                 break;
             }
         }

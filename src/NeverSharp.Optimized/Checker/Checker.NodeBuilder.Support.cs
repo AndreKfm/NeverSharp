@@ -325,7 +325,7 @@ internal sealed partial class Checker
     {
         var signature = Signatures.Create(SignatureFlags.None, declaration, default, SymbolRef.None, parameters.Length);
         ref var record = ref Signatures.Record(signature);
-        record.Parameters = parameters;
+        record.Parameters = Signatures.StoreParameters(parameters);
         record.ResolvedReturnType = returnType;
         return signature;
     }
@@ -333,7 +333,7 @@ internal sealed partial class Checker
     // checker.ts getExpandedParameters (module C6)
     private SymbolRef[][] GetExpandedParameters(Signature signature, bool skipUnionExpanding)
     {
-        var parameters = Signatures.Record(signature).Parameters ?? [];
+        var parameters = Signatures.ParametersOf(signature).ToArray();
         if (SignatureHasRestParameter(signature))
         {
             var restIndex = parameters.Length - 1;

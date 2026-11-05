@@ -303,7 +303,7 @@ internal sealed partial class Checker
     private bool IsTopSignature(Signature s)
     {
         ref var record = ref Signatures.Record(s);
-        var parameters = record.Parameters ?? [];
+        var parameters = Signatures.ParametersOf(record.Parameters);
         if (record.TypeParameters.Count == 0 && (record.ThisParameter.IsNone || (Types.Flags(GetTypeOfParameter(record.ThisParameter)) & TypeFlags.Any) != 0) &&
             parameters.Length == 1 && SignatureHasRestParameter(s))
         {
