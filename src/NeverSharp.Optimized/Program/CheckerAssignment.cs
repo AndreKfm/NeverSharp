@@ -50,13 +50,14 @@ internal static class CheckerAssignment
             if (weights[i] > 0)
             {
                 order.Add(i);
-                paths[i] = program.PathOf(files[i]);
             }
         }
         if (order.Count == 0)
         {
             return associations;
         }
+        // (module FE1: the canonical paths on the worker pool; each is a function of its file)
+        Parallel.For(0, order.Count, k => paths[order[k]] = program.PathOf(files[order[k]]));
         // A total order (ties by index).
         order.Sort((a, b) =>
         {
@@ -72,14 +73,16 @@ internal static class CheckerAssignment
         var threshold = total / (checkerCount * LocalityGroupFraction);
 
         // Checked weight of every directory subtree (keys are path prefixes ending before a '/').
+        // (module FE1: the prefixes are looked up as spans of the path; a string is made only for a new key)
         var subtreeWeights = new Dictionary<string, long>(StringComparer.Ordinal);
+        var subtreeWeightsBySpan = subtreeWeights.GetAlternateLookup<ReadOnlySpan<char>>();
         foreach (var i in order)
         {
             var path = paths[i];
             for (var pos = path.IndexOf('/', StringComparison.Ordinal); pos >= 0; pos = path.IndexOf('/', pos + 1))
             {
-                var key = path[..pos];
-                subtreeWeights[key] = subtreeWeights.GetValueOrDefault(key) + weights[i];
+                var key = path.AsSpan(0, pos);
+                subtreeWeightsBySpan[key] = (subtreeWeightsBySpan.TryGetValue(key, out var weight) ? weight : 0) + weights[i];
             }
         }
         var groupIds = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -92,10 +95,9 @@ internal static class CheckerAssignment
             var key = path;
             for (var pos = path.IndexOf('/', StringComparison.Ordinal); pos >= 0; pos = path.IndexOf('/', pos + 1))
             {
-                var dir = path[..pos];
-                if (subtreeWeights[dir] <= threshold)
+                if (subtreeWeightsBySpan[path.AsSpan(0, pos)] <= threshold)
                 {
-                    key = dir;
+                    key = path[..pos];
                     break;
                 }
             }
@@ -276,20 +278,34 @@ internal static class CheckerAssignment
         {
             fileIndices[files[i]] = i;
         }
+        // Module FE1 (tsrs speed-frontend change 5: "per-file import targets on the worker pool, adjacency built in file
+        // order as before"): each file's list on a work item of its own, in the same order; the program file index of
+        // a resolved file name (-1: none) is looked up once per name (program.getSourceFile normalizes the name each
+        // time; the answer depends only on the name).
+        // (one memo per worker thread: no shared writes)
         var targets = new List<int>[files.Count];
-        for (var i = 0; i < files.Count; i++)
+        Parallel.For(0, files.Count, () => new Dictionary<string, int>(StringComparer.Ordinal), (i, _, indexOfName) =>
         {
             var list = new List<int>();
             foreach (var resolved in program.ResolvedModulesOf(files[i]))
             {
-                if (resolved is not null && program.GetSourceFile(resolved.ResolvedFileName) is { } imported
-                    && fileIndices.TryGetValue(imported, out var importedIndex) && importedIndex != i)
+                if (resolved is null)
+                {
+                    continue;
+                }
+                if (!indexOfName.TryGetValue(resolved.ResolvedFileName, out var importedIndex))
+                {
+                    importedIndex = program.GetSourceFile(resolved.ResolvedFileName) is { } imported && fileIndices.TryGetValue(imported, out var index) ? index : -1;
+                    indexOfName.Add(resolved.ResolvedFileName, importedIndex);
+                }
+                if (importedIndex >= 0 && importedIndex != i)
                 {
                     list.Add(importedIndex);
                 }
             }
             targets[i] = list;
-        }
+            return indexOfName;
+        }, _ => { });
         return targets;
     }
 
