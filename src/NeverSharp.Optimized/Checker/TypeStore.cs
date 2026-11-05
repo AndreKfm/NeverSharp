@@ -1258,6 +1258,9 @@ internal sealed class NameTable
     /// <summary>The id of a name, -1 when no table of this checker has it.</summary>
     internal int Find(string name) => ids.TryGetValue(name, out var id) ? id : -1;
 
+    /// <summary>The id of a name given by its characters, -1 when no table of this checker has it (nothing is added; module AR2).</summary>
+    internal int Find(ReadOnlySpan<char> name) => ids.GetAlternateLookup<ReadOnlySpan<char>>().TryGetValue(name, out var id) ? id : -1;
+
     private int Add(string name)
     {
         if (count == names.Length)

@@ -1916,6 +1916,22 @@ internal sealed partial class Checker
 
     // ---- identifiers ----
 
+    /// <summary>
+    /// A name's text as a string (module AR2, from RS2's saved patch; Track O): the name table's string when a symbol
+    /// table of this checker has the name, without making a copy; a new string otherwise. The same characters either
+    /// way, so every comparison and lookup gives the same result. tsrs keeps names in its arenas and passes slices
+    /// (notes/mem-checker-heap.md).
+    /// </summary>
+    private string NameText(NodeStore store, TextRef text)
+    {
+        if (text.IsNone)
+        {
+            return store.Texts.GetString(text)!; // (null, as before)
+        }
+        var id = Names.Find(store.Texts.Span(text));
+        return id >= 0 ? Names[id] : store.Texts.GetString(text)!;
+    }
+
     /// <summary>checker.ts getResolvedSymbol: the symbol an identifier in an expression refers to (unknownSymbol if none).</summary>
     internal SymbolRef GetResolvedSymbol(NodeRef node)
     {
@@ -1926,7 +1942,7 @@ internal sealed partial class Checker
             var resolved = SymbolRef.None;
             if (!Utilities.NodeIsMissing(store, node.Node))
             {
-                resolved = ResolveName(node, store.Texts.GetString(store.EscapedText(node.Node))!, node,
+                resolved = ResolveName(node, NameText(store, store.EscapedText(node.Node)), node,
                     SymbolFlags.Value | SymbolFlags.ExportValue, GetCannotFindNameDiagnosticForName(node), !Utilities.IsWriteOnlyAccess(store, node.Node));
             }
             SymbolNodeLinks.Get(node).ResolvedSymbol = resolved.IsNone ? unknownSymbol : resolved;
@@ -1938,7 +1954,9 @@ internal sealed partial class Checker
     internal DiagnosticMessage GetCannotFindNameDiagnosticForName(NodeRef node)
     {
         var store = StoreOf(node);
-        var text = store.Texts.GetString(store.EscapedText(node.Node));
+        // (module AR2, from RS2's saved patch; Track O: the text compared without making a string, for every resolved
+        // identifier; tsrs checker_07.rs get_cannot_find_name_diagnostic_for_name matches on the arena text)
+        var text = store.Texts.Span(store.EscapedText(node.Node));
         switch (text)
         {
             case "document":
@@ -2101,7 +2119,7 @@ internal sealed partial class Checker
         {
             var message = meaning == namespaceMeaning ? Diagnostics.Cannot_find_namespace_0 : GetCannotFindNameDiagnosticForName(At(name, Utilities.GetFirstIdentifier(store, name.Node)));
             var symbolFromJSPrototype = Utilities.IsInJSFile(store, name.Node) ? ResolveEntityNameFromAssignmentDeclaration(name, meaning) : SymbolRef.None;
-            symbol = GetMergedSymbol(ResolveName(location.IsNone ? name : location, store.Texts.GetString(store.EscapedText(name.Node))!, name, meaning,
+            symbol = GetMergedSymbol(ResolveName(location.IsNone ? name : location, NameText(store, store.EscapedText(name.Node)), name, meaning,
                 ignoreErrors || !symbolFromJSPrototype.IsNone ? null : message, isUse: true));
             if (symbol.IsNone)
             {
@@ -2122,7 +2140,7 @@ internal sealed partial class Checker
                 return ns;
             }
             // (CommonJS require namespaces: module C9)
-            var rightName = store.Texts.GetString(store.EscapedText(right.Node))!;
+            var rightName = NameText(store, store.EscapedText(right.Node));
             symbol = GetMergedSymbol(GetSymbol(GetExportsOfSymbol(ns), rightName, meaning));
             if (symbol.IsNone && (SymbolFlagsOf(ns) & SymbolFlags.Alias) != 0)
             {
@@ -3146,7 +3164,8 @@ internal sealed partial class Checker
         {
             return SymbolRef.None;
         }
-        var nameText = ModuleExportNameTextEscaped(store, name);
+        // (module AR2: an identifier's name from the name table when it has it, see NameText)
+        var nameText = store.Kind(name) == SyntaxKind.StringLiteral ? ModuleExportNameTextEscaped(store, name) : NameText(store, store.EscapedText(name));
         var suppressInteropError = nameText == InternalSymbolName.Default && compilerOptions.GetAllowSyntheticDefaultImports();
         var targetSymbol = ResolveESModuleSymbol(moduleSymbol, moduleSpecifier, dontResolveAlias: false, suppressInteropError);
         if (targetSymbol.IsNone)
@@ -3372,7 +3391,8 @@ internal sealed partial class Checker
     private DiagnosticMessage? GetCannotResolveModuleNameErrorForSpecificModule(NodeRef moduleName)
     {
         var store = StoreOf(moduleName);
-        if (store.Kind(moduleName.Node) == SyntaxKind.StringLiteral && NodeCoreModules.Contains(store.Texts.GetString(store.Text(moduleName.Node))!))
+        // (module AR2, Track O: the text looked up without making a string)
+        if (store.Kind(moduleName.Node) == SyntaxKind.StringLiteral && NodeCoreModules.GetAlternateLookup<ReadOnlySpan<char>>().Contains(store.Texts.Span(store.Text(moduleName.Node))))
         {
             return Diagnostics.Cannot_find_name_0_Do_you_need_to_install_type_definitions_for_node_Try_npm_i_save_dev_types_Slashnode_and_then_add_node_to_the_types_field_in_your_tsconfig;
         }

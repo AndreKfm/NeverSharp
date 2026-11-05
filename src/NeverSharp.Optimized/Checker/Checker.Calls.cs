@@ -318,7 +318,7 @@ internal sealed partial class Checker
         var isStatic = Utilities.HasSyntacticModifierUncached(store, n, ModifierFlags.Static);
         var name = store.Name(n);
         var isPrivate = store.Kind(name) == SyntaxKind.PrivateIdentifier;
-        var nameType = isPrivate ? GetStringLiteralType(store.Texts.GetString(UtilitiesPublic.IdText(store, name)) ?? "") : GetLiteralTypeFromPropertyName(At(node, name));
+        var nameType = isPrivate ? GetStringLiteralType(store, UtilitiesPublic.IdText(store, name)) : GetLiteralTypeFromPropertyName(At(node, name)); // (module AR2)
         var contextType = store.Kind(n) switch
         {
             SyntaxKind.MethodDeclaration => CreateClassMemberDecoratorType(ref deferredGlobalClassMethodDecoratorContextType, "ClassMethodDecoratorContext", thisType, valueType),
@@ -533,10 +533,10 @@ internal sealed partial class Checker
         switch (store.Kind(name))
         {
             case SyntaxKind.Identifier:
-                return GetStringLiteralType(store.Texts.GetString(UtilitiesPublic.IdText(store, name)) ?? "");
+                return GetStringLiteralType(store, UtilitiesPublic.IdText(store, name)); // (module AR2; none: "")
             case SyntaxKind.NumericLiteral:
             case SyntaxKind.StringLiteral:
-                return GetStringLiteralType(store.Texts.GetString(store.Text(name)) ?? "");
+                return GetStringLiteralType(store, store.Text(name)); // (module AR2; none: "")
             case SyntaxKind.ComputedPropertyName:
                 var nameType = CheckComputedPropertyName(At(element, name));
                 return IsTypeAssignableToKind(nameType, TypeFlags.ESSymbolLike) ? nameType : stringType;

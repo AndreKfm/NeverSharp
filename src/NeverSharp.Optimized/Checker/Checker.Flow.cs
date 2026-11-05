@@ -488,7 +488,9 @@ internal sealed partial class Checker
         switch (store.Kind(n))
         {
             case SyntaxKind.PropertyAccessExpression:
-                return store.Texts.GetString(store.EscapedText(store.Name(n)));
+                // (module AR2: the name table's string when it has the name, see NameText; isMatchingReference asks
+                // for both sides' names at every flow step)
+                return NameText(store, store.EscapedText(store.Name(n)));
             case SyntaxKind.ElementAccessExpression:
                 return TryGetElementAccessExpressionName(access);
             case SyntaxKind.BindingElement:

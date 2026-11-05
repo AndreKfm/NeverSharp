@@ -248,7 +248,7 @@ internal sealed partial class Checker
             case SyntaxKind.NoSubstitutionTemplateLiteral:
             case SyntaxKind.StringLiteral:
                 // (hasSkipDirectInferenceFlag: set by the language service only)
-                return GetFreshTypeOfLiteralType(GetStringLiteralType(store.Texts.GetString(store.Text(n))!));
+                return GetFreshTypeOfLiteralType(GetStringLiteralType(store, store.Text(n))); // (module AR2: no string for a known literal)
             case SyntaxKind.NumericLiteral:
                 CheckGrammarNumericLiteral(node);
                 return GetFreshTypeOfLiteralType(GetNumberLiteralType(JsNumber.FromString(store.Texts.GetString(store.Text(n))!)));

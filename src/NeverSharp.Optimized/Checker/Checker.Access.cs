@@ -264,7 +264,7 @@ internal sealed partial class Checker
         }
         else
         {
-            rightName = store.Texts.GetString(store.EscapedText(right.Node))!;
+            rightName = NameText(store, store.EscapedText(right.Node)); // (module AR2: see NameText)
             if (isAnyLike)
             {
                 if (store.Kind(left.Node) == SyntaxKind.Identifier && !parentSymbol.IsNone)
@@ -584,7 +584,9 @@ internal sealed partial class Checker
         }
         ProgramDiagnostic? diagnosticMessage = null;
         var store = StoreOf(right);
-        var declarationName = store.Texts.GetString(Utilities.IdText(store, right.Node))!;
+        // (module AR2, Track O: the name is read only for a diagnostic, so it is made only then; tsrs passes the arena text)
+        string DeclarationName() => store.Texts.GetString(Utilities.IdText(store, right.Node))!;
+        string? declarationName = null;
         var vstore = StoreOf(valueDeclaration);
         if (IsInPropertyInitializerOrClassStaticBlock(node) &&
             !IsOptionalPropertyDeclaration(valueDeclaration) &&
@@ -593,18 +595,18 @@ internal sealed partial class Checker
             !(vstore.Kind(valueDeclaration.Node) == SyntaxKind.MethodDeclaration && (Utilities.GetCombinedModifierFlags(vstore, valueDeclaration.Node) & ModifierFlags.Static) != 0) &&
             (compilerOptions.GetUseDefineForClassFields() || !IsPropertyDeclaredInAncestorClass(prop)))
         {
-            diagnosticMessage = Error(right, Diagnostics.Property_0_is_used_before_its_initialization, declarationName);
+            diagnosticMessage = Error(right, Diagnostics.Property_0_is_used_before_its_initialization, declarationName = DeclarationName());
         }
         else if (vstore.Kind(valueDeclaration.Node) == SyntaxKind.ClassDeclaration &&
             StoreOf(node).Kind(StoreOf(node).Parent(node.Node)) != SyntaxKind.TypeReference &&
             (vstore.Flags(valueDeclaration.Node) & NodeFlags.Ambient) == 0 &&
             !IsBlockScopedNameDeclaredBeforeUse(valueDeclaration, right))
         {
-            diagnosticMessage = Error(right, Diagnostics.Class_0_used_before_its_declaration, declarationName);
+            diagnosticMessage = Error(right, Diagnostics.Class_0_used_before_its_declaration, declarationName = DeclarationName());
         }
         if (diagnosticMessage is not null)
         {
-            AddRelatedInfo(diagnosticMessage, CreateRelatedForNode(valueDeclaration, Diagnostics._0_is_declared_here, declarationName));
+            AddRelatedInfo(diagnosticMessage, CreateRelatedForNode(valueDeclaration, Diagnostics._0_is_declared_here, declarationName!));
         }
     }
 

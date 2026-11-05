@@ -792,7 +792,7 @@ internal sealed partial class Checker
             case SyntaxKind.Identifier:
             case SyntaxKind.StringLiteral:
             case SyntaxKind.NoSubstitutionTemplateLiteral:
-                return GetStringLiteralType(store.Texts.GetString(Utilities.GetTextOfIdentifierOrLiteral(store, name.Node))!);
+                return GetStringLiteralType(store, Utilities.GetTextOfIdentifierOrLiteral(store, name.Node)); // (module AR2)
             case SyntaxKind.BigIntLiteral:
                 return GetRegularTypeOfLiteralType(CheckExpression(name));
         }

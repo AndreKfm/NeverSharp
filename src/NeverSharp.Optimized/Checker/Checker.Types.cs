@@ -287,6 +287,23 @@ internal sealed partial class Checker
         return type;
     }
 
+    /// <summary>
+    /// checker.ts getStringLiteralType for a value given by its characters (module AR2, Track O: the cache is asked
+    /// with the characters, and a string is made only for a new literal type; tsrs checker_12.rs get_string_literal_type
+    /// takes a &amp;str slice).
+    /// </summary>
+    internal Type GetStringLiteralType(ReadOnlySpan<char> value)
+    {
+        if (stringLiteralTypes.GetAlternateLookup<ReadOnlySpan<char>>().TryGetValue(value, out var type))
+        {
+            return type;
+        }
+        return GetStringLiteralType(value.ToString());
+    }
+
+    /// <summary>getStringLiteralType of a node's text (module AR2: see the span overload).</summary>
+    internal Type GetStringLiteralType(NodeStore store, TextRef text) => GetStringLiteralType(store.Texts.Span(text));
+
     internal Type GetNumberLiteralType(double value)
     {
         if (!numberLiteralTypes.TryGetValue(value, out var type))
