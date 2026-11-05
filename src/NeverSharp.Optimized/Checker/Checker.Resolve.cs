@@ -43,11 +43,23 @@ internal sealed partial class Checker
         var withinDeferredContext = false;
         var file = location.File;
         var store = location.IsNone ? null : StoreOf(location);
+        var nameIsConst = name == "const";
         while (!location.IsNone)
         {
             var node = location.Node;
             var kind = store!.Kind(node);
-            if (name == "const" && Utilities.IsConstAssertion(store, node))
+            if (PassThroughScopeKinds[(int)kind])
+            {
+                // Track O / tsrs-only (tsrs crates/tsrs_binder/src/nameresolver.rs, resolve: is_pass_through_scope_kind):
+                // for these kinds the loop below only moves to the parent. They cannot have locals, have no case in
+                // the kind switch, are never a deferred context or a self-reference location, not a const assertion,
+                // not a module or enum declaration and not a JSDoc tag, so the result is the same.
+                lastLocation = location;
+                var parent = store.Parent(node);
+                location = parent.IsNone ? NodeRef.None : new NodeRef(location.File, parent);
+                continue;
+            }
+            if (nameIsConst && Utilities.IsConstAssertion(store, node))
             {
                 // `const` in an `as const` has no symbol, but issues no error because there is no *actual* lookup of the type
                 // (it refers to the constant type of the expression instead)
@@ -595,6 +607,39 @@ internal sealed partial class Checker
             or SyntaxKind.ExpressionWithTypeArguments or SyntaxKind.JSDocAllType or SyntaxKind.JSDocUnknownType
             or SyntaxKind.JSDocNullableType or SyntaxKind.JSDocNonNullableType or SyntaxKind.JSDocOptionalType
             or SyntaxKind.JSDocFunctionType or SyntaxKind.JSDocVariadicType;
+
+    /// <summary>
+    /// Track O / tsrs-only (tsrs crates/tsrs_binder/src/nameresolver.rs is_pass_through_scope_kind): the kinds of the
+    /// ancestors a name is most often resolved through, for which resolveNameHelper does nothing but move to the parent.
+    /// </summary>
+    private static readonly bool[] PassThroughScopeKinds = CreatePassThroughScopeKinds();
+
+    private static bool[] CreatePassThroughScopeKinds()
+    {
+        var table = new bool[(int)SyntaxKind.Count];
+        foreach (var kind in (ReadOnlySpan<SyntaxKind>)[
+            SyntaxKind.Identifier, SyntaxKind.QualifiedName, SyntaxKind.CallExpression, SyntaxKind.NewExpression,
+            SyntaxKind.PropertyAccessExpression, SyntaxKind.ElementAccessExpression, SyntaxKind.ExpressionStatement,
+            SyntaxKind.ReturnStatement, SyntaxKind.IfStatement, SyntaxKind.SwitchStatement, SyntaxKind.CaseClause,
+            SyntaxKind.DefaultClause, SyntaxKind.WhileStatement, SyntaxKind.DoStatement, SyntaxKind.TryStatement,
+            SyntaxKind.ThrowStatement, SyntaxKind.LabeledStatement, SyntaxKind.ModuleBlock, SyntaxKind.VariableDeclaration,
+            SyntaxKind.VariableDeclarationList, SyntaxKind.VariableStatement, SyntaxKind.ObjectLiteralExpression,
+            SyntaxKind.PropertyAssignment, SyntaxKind.ShorthandPropertyAssignment, SyntaxKind.SpreadAssignment,
+            SyntaxKind.ArrayLiteralExpression, SyntaxKind.BinaryExpression, SyntaxKind.ParenthesizedExpression,
+            SyntaxKind.ConditionalExpression, SyntaxKind.PrefixUnaryExpression, SyntaxKind.PostfixUnaryExpression,
+            SyntaxKind.TypeOfExpression, SyntaxKind.VoidExpression, SyntaxKind.DeleteExpression, SyntaxKind.AwaitExpression,
+            SyntaxKind.YieldExpression, SyntaxKind.SpreadElement, SyntaxKind.SatisfiesExpression, SyntaxKind.NonNullExpression,
+            SyntaxKind.TemplateExpression, SyntaxKind.TemplateSpan, SyntaxKind.TaggedTemplateExpression, SyntaxKind.JsxElement,
+            SyntaxKind.JsxSelfClosingElement, SyntaxKind.JsxOpeningElement, SyntaxKind.JsxAttributes, SyntaxKind.JsxAttribute,
+            SyntaxKind.JsxExpression, SyntaxKind.JsxFragment, SyntaxKind.TypeReference, SyntaxKind.PropertySignature,
+            SyntaxKind.TypeLiteral, SyntaxKind.UnionType, SyntaxKind.IntersectionType, SyntaxKind.ArrayType,
+            SyntaxKind.IndexedAccessType, SyntaxKind.ParenthesizedType, SyntaxKind.TupleType, SyntaxKind.TypeOperator,
+            SyntaxKind.TypePredicate, SyntaxKind.TypeParameter, SyntaxKind.HeritageClause, SyntaxKind.EnumMember])
+        {
+            table[(int)kind] = true;
+        }
+        return table;
+    }
 
     private bool GetIsDeferredContext(NodeRef location, NodeRef lastLocation)
     {
