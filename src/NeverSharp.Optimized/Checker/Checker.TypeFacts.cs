@@ -238,7 +238,13 @@ internal sealed partial class Checker
     }
 
     /// <summary>checker.ts getTypeWithFacts.</summary>
-    internal Type GetTypeWithFacts(Type type, TypeFacts include) => FilterType(type, t => HasTypeFacts(t, include));
+    internal Type GetTypeWithFacts(Type type, TypeFacts include) => FilterType(type, new HasTypeFactsPredicate(this, include));
+
+    // getTypeWithFacts' predicate as a struct (module AR2, Track O: no closure per call)
+    private readonly struct HasTypeFactsPredicate(Checker c, TypeFacts include) : ITypePredicate
+    {
+        public bool Invoke(Type t) => c.HasTypeFacts(t, include);
+    }
 
     /// <summary>checker.ts isFunctionObjectType.</summary>
     internal bool IsFunctionObjectType(Type type)

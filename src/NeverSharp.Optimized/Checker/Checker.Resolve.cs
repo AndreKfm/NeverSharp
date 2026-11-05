@@ -1004,7 +1004,16 @@ internal sealed partial class Checker
             {
                 exportSymbol = target;
             }
-            var typeOnly = (DeclarationsOf(exportSymbol) ?? []).Find(IsTypeOnlyImportOrExportDeclaration);
+            // (module AR2, Track O: find as a loop, without a delegate for the method group per call)
+            var typeOnly = NodeRef.None;
+            foreach (var d in DeclarationsOf(exportSymbol) ?? [])
+            {
+                if (IsTypeOnlyImportOrExportDeclaration(d))
+                {
+                    typeOnly = d;
+                    break;
+                }
+            }
             if (typeOnly.IsNone && (SymbolFlagsOf(exportSymbol) & SymbolFlags.Alias) != 0 && AliasSymbolLinks.Get(exportSymbol).TypeOnlyState == 2)
             {
                 typeOnly = AliasSymbolLinks.Get(exportSymbol).TypeOnlyDeclaration;

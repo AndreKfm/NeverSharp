@@ -1332,11 +1332,24 @@ internal sealed partial class Checker
             }
         }
         var symbol = SymbolNodeLinks.Has(node) ? SymbolNodeLinks.Get(node).ResolvedSymbol : SymbolRef.None;
-        if (!symbol.IsNone && DeclarationsOf(symbol) is { } declarations &&
-            declarations.Exists(d => IsTypeDeclaration(d) && (StoreOf(d).Flags(d.Node) & NodeFlags.Deprecated) != 0))
+        if (!symbol.IsNone && DeclarationsOf(symbol) is { } declarations && HasDeprecatedTypeDeclaration(declarations))
         {
             AddDeprecatedSuggestion(GetDeprecatedSuggestionNode(node), declarations, NameOf(symbol));
         }
+    }
+
+    // checkTypeReferenceOrImport's some(declarations, d => isTypeDeclaration(d) && d.flags & Deprecated) (module AR2,
+    // Track O: a loop instead of a delegate per type reference; tsrs uses iter().any)
+    private bool HasDeprecatedTypeDeclaration(Decls declarations)
+    {
+        foreach (var d in declarations)
+        {
+            if (IsTypeDeclaration(d) && (StoreOf(d).Flags(d.Node) & NodeFlags.Deprecated) != 0)
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     // checker.ts checkTypePredicate

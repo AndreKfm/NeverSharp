@@ -1038,7 +1038,19 @@ internal sealed partial class Checker
     private NodeRef GetClassLikeDeclarationOfSymbol(SymbolRef symbol)
     {
         var declarations = symbol.IsNone ? null : DeclarationsOf(symbol);
-        return declarations is null ? NodeRef.None : declarations.Find(d => Utilities.IsClassLike(StoreOf(d), d.Node));
+        if (declarations is null)
+        {
+            return NodeRef.None;
+        }
+        // (module AR2, Track O: find as a loop, without a delegate per call; tsrs uses iter().find)
+        foreach (var d in declarations.Value)
+        {
+            if (Utilities.IsClassLike(StoreOf(d), d.Node))
+            {
+                return d;
+            }
+        }
+        return NodeRef.None;
     }
 
     // checker.ts symbolHasNonMethodDeclaration

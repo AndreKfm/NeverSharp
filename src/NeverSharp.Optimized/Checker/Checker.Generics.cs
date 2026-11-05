@@ -2593,23 +2593,46 @@ internal sealed partial class Checker
     }
 
     /// <summary>checker.ts filterType.</summary>
-    internal Type FilterType(Type type, Func<Type, bool> f)
+    internal Type FilterType(Type type, Func<Type, bool> f) => FilterType(type, new DelegateTypePredicate(f));
+
+    // a delegate as a struct predicate (module AR2)
+    private readonly struct DelegateTypePredicate(Func<Type, bool> f) : ITypePredicate
+    {
+        public bool Invoke(Type t) => f(t);
+    }
+
+    /// <summary>
+    /// checker.ts filterType with a struct predicate (module AR2, Track O: no delegate per call, and no list while every
+    /// member passes; the predicate is called once per member in order, as before; tsrs checker_13.rs filter_type takes
+    /// an impl FnMut).
+    /// </summary>
+    internal Type FilterType<TPredicate>(Type type, TPredicate f)
+        where TPredicate : struct, ITypePredicate
     {
         if ((Types.Flags(type) & TypeFlags.Union) != 0)
         {
             var types = Types.Elements(Types.Union(type).Types);
             // (Array.FindAll as a loop over the stored list: no copy and no wrapper closure, Track O)
-            var filtered = new List<Type>(types.Length);
-            foreach (var t in types)
+            var kept = 0;
+            while (kept < types.Length && f.Invoke(types[kept]))
             {
-                if (f(t))
-                {
-                    filtered.Add(t);
-                }
+                kept++;
             }
-            if (filtered.Count == types.Length)
+            if (kept == types.Length)
             {
                 return type;
+            }
+            var filtered = new List<Type>(types.Length);
+            for (var i = 0; i < kept; i++)
+            {
+                filtered.Add(types[i]);
+            }
+            for (var i = kept + 1; i < types.Length; i++)
+            {
+                if (f.Invoke(types[i]))
+                {
+                    filtered.Add(types[i]);
+                }
             }
             // module C7: the origin of the filtered union
             var origin = Types.Union(type).Origin;
@@ -2625,7 +2648,7 @@ internal sealed partial class Checker
                 var originFiltered = new List<Type>(originTypes.Length);
                 foreach (var t in originTypes)
                 {
-                    if ((Types.Flags(t) & TypeFlags.Union) != 0 || f(t))
+                    if ((Types.Flags(t) & TypeFlags.Union) != 0 || f.Invoke(t))
                     {
                         originFiltered.Add(t);
                     }
@@ -2643,7 +2666,7 @@ internal sealed partial class Checker
             // it is purely an optimization hint so there is no harm in accidentally forwarding it
             return GetUnionTypeFromSortedList(filtered, Types.ObjectFlagsOf(type) & (ObjectFlags.PrimitiveUnion | ObjectFlags.ContainsIntersections), default, default, newOrigin);
         }
-        return (Types.Flags(type) & TypeFlags.Never) != 0 || f(type) ? type : neverType;
+        return (Types.Flags(type) & TypeFlags.Never) != 0 || f.Invoke(type) ? type : neverType;
     }
 
     // checker.ts mapTypeWithAlias

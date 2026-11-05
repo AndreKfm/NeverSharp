@@ -1064,8 +1064,20 @@ internal sealed partial class Checker
         if ((flags & TypeFlags.Object) != 0)
         {
             var resolved = ResolveStructuredTypeMembers(type);
-            return resolved.CallSignatures.Count == 0 && resolved.ConstructSignatures.Count == 0 && resolved.IndexInfos.Count == 0 &&
-                resolved.Properties.Count > 0 && Types.View(resolved.Properties).TrueForAll(p => (SymbolFlagsOf(p) & SymbolFlags.Optional) != 0);
+            if (resolved.CallSignatures.Count != 0 || resolved.ConstructSignatures.Count != 0 || resolved.IndexInfos.Count != 0 || resolved.Properties.Count == 0)
+            {
+                return false;
+            }
+            // (module AR2, Track O: every(properties, p => optional) as a loop, without a delegate per call; tsrs
+            // relater_1.rs is_weak_type uses iter().all)
+            foreach (var p in Types.View(resolved.Properties))
+            {
+                if ((SymbolFlagsOf(p) & SymbolFlags.Optional) == 0)
+                {
+                    return false;
+                }
+            }
+            return true;
         }
         if ((flags & TypeFlags.Substitution) != 0)
         {

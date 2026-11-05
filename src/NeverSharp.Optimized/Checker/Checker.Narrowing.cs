@@ -927,11 +927,22 @@ internal sealed partial class Checker
     // finalize all evolving array types.
     private Type GetUnionOrEvolvingArrayType(FlowState f, List<Type> types, UnionReduction subtypeReduction)
     {
+        // (module AR2, Track O: map(types, ...) into one array, without a delegate and a list per junction; tsrs
+        // flow.rs maps into a Vec)
+        var mapped = new Type[types.Count];
         if (IsEvolvingArrayTypeList(types))
         {
-            return GetEvolvingArrayType(GetUnionType(types.ConvertAll(GetElementTypeOfEvolvingArrayType).ToArray()));
+            for (var i = 0; i < mapped.Length; i++)
+            {
+                mapped[i] = GetElementTypeOfEvolvingArrayType(types[i]);
+            }
+            return GetEvolvingArrayType(GetUnionType(mapped));
         }
-        var result = RecombineUnknownType(GetUnionType(types.ConvertAll(FinalizeEvolvingArrayType).ToArray(), subtypeReduction));
+        for (var i = 0; i < mapped.Length; i++)
+        {
+            mapped[i] = FinalizeEvolvingArrayType(types[i]);
+        }
+        var result = RecombineUnknownType(GetUnionType(mapped, subtypeReduction));
         var declaredType = f.DeclaredType;
         if (result != declaredType && (Types.Flags(result) & Types.Flags(declaredType) & TypeFlags.Union) != 0 &&
             Types.Elements(Types.Union(result).Types).SequenceEqual(Types.Elements(Types.Union(declaredType).Types)))
@@ -1141,12 +1152,15 @@ internal sealed partial class Checker
         var access = GetDiscriminantPropertyAccess(f, expr, type);
         if (!access.IsNone)
         {
-            // (the facts outside the lambda, so the closure is created on this path only, not at every call; Track O)
-            var facts = assumeTrue ? TypeFacts.Truthy : TypeFacts.Falsy;
-            return NarrowTypeByDiscriminant(type, access, t => GetTypeWithFacts(t, facts));
+            return NarrowTypeByTruthinessOfDiscriminant(type, access, assumeTrue ? TypeFacts.Truthy : TypeFacts.Falsy);
         }
         return type;
     }
+
+    // narrowTypeByTruthiness's discriminant case (module AR2, Track O: in a method of its own, so that the closure over
+    // the facts is made only here; the compiler made it at the entry of every call)
+    private Type NarrowTypeByTruthinessOfDiscriminant(Type type, NodeRef access, TypeFacts facts) =>
+        NarrowTypeByDiscriminant(type, access, t => GetTypeWithFacts(t, facts));
 
     private bool IsTypePresencePossible(Type type, string propName, bool assumeTrue)
     {
