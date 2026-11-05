@@ -146,6 +146,14 @@ internal sealed class CheckerPool
     {
         var files = program.SourceFiles;
         var diagnostics = new List<ProgramDiagnostic>[files.Count];
+        if (SlowFileSeconds > 0)
+        {
+            SlowFiles = new List<(int, int, double, int)>[checkers.Length];
+            for (var c = 0; c < SlowFiles.Length; c++)
+            {
+                SlowFiles[c] = [];
+            }
+        }
         if (steal)
         {
             CheckWithStealing(diagnostics);
@@ -162,8 +170,7 @@ internal sealed class CheckerPool
                 {
                     if (owners[i] == checkerIndex)
                     {
-                        diagnostics[i] = program.GetSemanticDiagnostics(files[i], checker);
-                        Stats[checkerIndex].Files++;
+                        CheckFile(checkerIndex, checker, i, diagnostics);
                     }
                 }
                 RecordStats(checkerIndex, checker, start, created);
@@ -193,6 +200,35 @@ internal sealed class CheckerPool
             }
         }
         return diagnostics;
+    }
+
+    /// <summary>
+    /// When positive (module SC1, a development probe set by the driver): the files whose check takes at least this many
+    /// seconds are recorded in <see cref="SlowFiles"/>.
+    /// </summary>
+    internal double SlowFileSeconds { get; set; }
+
+    /// <summary>Per checker: (program file index, check order on the checker, seconds, types created) of the slow files.</summary>
+    internal List<(int File, int Order, double Seconds, int Types)>[] SlowFiles { get; private set; } = [];
+
+    private void CheckFile(int checkerIndex, Checker checker, int i, List<ProgramDiagnostic>[] diagnostics)
+    {
+        if (SlowFileSeconds <= 0)
+        {
+            diagnostics[i] = program.GetSemanticDiagnostics(program.SourceFiles[i], checker);
+        }
+        else
+        {
+            var start = Stopwatch.GetTimestamp();
+            var types = checker.Types.Count;
+            diagnostics[i] = program.GetSemanticDiagnostics(program.SourceFiles[i], checker);
+            var seconds = (Stopwatch.GetTimestamp() - start) / (double)Stopwatch.Frequency;
+            if (seconds >= SlowFileSeconds)
+            {
+                SlowFiles[checkerIndex].Add((i, Stats[checkerIndex].Files, seconds, checker.Types.Count - types));
+            }
+        }
+        Stats[checkerIndex].Files++;
     }
 
     private void RecordStats(int checkerIndex, Checker checker, long start, long created)
@@ -283,8 +319,7 @@ internal sealed class CheckerPool
                     owners[i] = checkerIndex;
                     Stats[checkerIndex].StolenFiles++;
                 }
-                diagnostics[i] = program.GetSemanticDiagnostics(files[i], checker);
-                Stats[checkerIndex].Files++;
+                CheckFile(checkerIndex, checker, i, diagnostics);
                 Stats[checkerIndex].Weight += w[i];
             }
             RecordStats(checkerIndex, checker, start, created);

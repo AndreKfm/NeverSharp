@@ -40,9 +40,11 @@
 //   distribution over the checkers. --assignment locality: tsrs's locality assignment (directory-subtree groups placed
 //   with FENNEL over the import edges) instead of file i to checker i % N (--assignment modulo); --steal: tsrs's tail
 //   stealing in the check pass (with it the parallel diagnostics may vary from run to run); --pool tsrs: both, with
-//   CheckMode.TsrsPoolCheckers checkers unless --checkers N is given. The driver name's mode adds "-loc" and "-steal".
+//   CheckMode.TsrsPoolCheckers checkers (16 with Server GC, 12 with Workstation GC) unless --checkers N. The driver
+//   name's mode adds "-loc" and "-steal".
 //   NEVERSHARP_POOL_STATS=1: one JSON line per checker on stderr (creation and check seconds, files, stolen files,
-//   weight, types, transient symbols).
+//   weight, types, transient symbols). NEVERSHARP_POOL_SLOW=<seconds>: one JSON line on stderr per file whose check
+//   took at least that long (checker, position on it, seconds, types created).
 //   Usage: parse-cs-optimized-<runtime> [--bind | --check [--emit [--dump-emit <file>]] [--checkers N] [--assignment locality|modulo] [--steal] [--pool tsrs] [--dump-diagnostics <file>]] [--single] <file list>
 
 using System.Diagnostics;

@@ -25,8 +25,12 @@ internal sealed class PoolSettings
 
 internal static class CheckMode
 {
-    /// <summary>--pool tsrs: the checker count without --checkers N (module SC1).</summary>
-    internal const int TsrsPoolCheckers = 16;
+    /// <summary>
+    /// --pool tsrs: the checker count without --checkers N (module SC1): tsrs's default on this machine (16) with Server
+    /// GC; 12 with Workstation GC, whose pause grows with the checker count so that 16 checkers are slower than 12
+    /// (SC1's checker-count curve on vscode and sentry).
+    /// </summary>
+    internal static int TsrsPoolCheckers => System.Runtime.GCSettings.IsServerGC ? 16 : 12;
 
     /// <summary>
     /// The options of the checked program: TypeScript 6.0.3's defaults with noResolve (Gate C's options; the table of the
@@ -137,11 +141,23 @@ internal static class CheckMode
             var pool = !poolSettings.Custom
                 ? (checkerCount > 0 ? new CheckerPool(program, single, checkerCount) : new CheckerPool(program, single))
                 : new CheckerPool(program, single, checkerCount > 0 ? checkerCount : 4, poolSettings.Assignment, poolSettings.Steal);
+            if (Environment.GetEnvironmentVariable("NEVERSHARP_POOL_SLOW") is { } slow)
+            {
+                pool.SlowFileSeconds = double.Parse(slow, CultureInfo.InvariantCulture);
+            }
             semantic = pool.GetSemanticDiagnostics();
             global = pool.GetGlobalDiagnostics();
             if (Environment.GetEnvironmentVariable("NEVERSHARP_POOL_STATS") == "1")
             {
                 WritePoolStats(pool);
+            }
+            for (var c = 0; c < pool.SlowFiles.Length; c++)
+            {
+                foreach (var (file, order, seconds, types) in pool.SlowFiles[c])
+                {
+                    Console.Error.WriteLine(string.Create(CultureInfo.InvariantCulture,
+                        $"{{\"slowFile\":{Json(program.SourceFiles[file].Store.FileName(program.SourceFiles[file].Root))},\"checker\":{c},\"order\":{order},\"seconds\":{seconds:0.000},\"types\":{types}}}"));
+                }
             }
             programFiles = program.SourceFiles.Count;
             checkers = pool.Count;
