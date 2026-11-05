@@ -58,12 +58,60 @@ internal enum InferencePriority
     Circularity = -1,                      // Inference circularity (value less than all other priorities)
 }
 
+/// <summary>
+/// An inference's candidate types (module AR1, Track O / tsrs-only: tsrs crates/tsrs_checker/src/checker.rs
+/// InferenceInfo.candidates, a LazyVec): a growable list in a native block of the checker's <see cref="CheckerArena"/>
+/// instead of a <c>List</c> and its array. <c>default</c> (no elements) is TypeScript's undefined: a list is created by
+/// its first <see cref="Add"/>. A list that outgrows its block moves to a new one; the old block stays allocated until
+/// the arena is freed, so a span taken before an <see cref="Add"/> stays readable, as a span of a <c>List</c>'s old array.
+/// </summary>
+internal unsafe struct CandidateList
+{
+    private Type* items;
+    private int count;
+    private int capacity;
+
+    internal readonly bool IsNone => count == 0;
+
+    internal readonly int Count => count;
+
+    internal readonly ReadOnlySpan<Type> Span => new(items, count);
+
+    internal readonly bool Contains(Type type) => Span.Contains(type);
+
+    internal void Add(CheckerArena arena, Type type)
+    {
+        if (count == capacity)
+        {
+            var grown = Math.Max(4, capacity * 2);
+            var block = (Type*)arena.Allocate((nint)grown * sizeof(Type));
+            Span.CopyTo(new Span<Type>(block, grown));
+            items = block;
+            capacity = grown;
+        }
+        items[count++] = type;
+    }
+
+    /// <summary>A copy (candidates.slice()), in a block of its own.</summary>
+    internal readonly CandidateList Clone(CheckerArena arena)
+    {
+        var copy = default(CandidateList);
+        foreach (var type in Span)
+        {
+            copy.Add(arena, type);
+        }
+        return copy;
+    }
+
+    internal readonly List<Type> ToList() => [.. Span];
+}
+
 /// <summary>types.ts InferenceInfo.</summary>
 internal sealed class InferenceInfo
 {
     public Type TypeParameter;
-    public List<Type>? Candidates;
-    public List<Type>? ContraCandidates;
+    public CandidateList Candidates;      // (module AR1: IsNone = undefined)
+    public CandidateList ContraCandidates;
     public Type InferredType;            // None: not computed
     public InferencePriority? Priority;  // null: undefined
     public bool TopLevel;
@@ -74,7 +122,8 @@ internal sealed class InferenceInfo
 /// <summary>types.ts InferenceContext.</summary>
 internal sealed class InferenceContext
 {
-    // (module AR1: an array, not a List; the inferences of a context are never added to or removed after it is created)
+    // (module AR1, Track O / tsrs-only: an array, not a List, as tsrs keeps them as one slice, crates/tsrs_checker/src/
+    // checker.rs InferenceContext.inferences; the inferences of a context are never added to or removed after it is created)
     public InferenceInfo[] Inferences = [];
     public Signature Signature;          // None: undefined
     public InferenceFlags Flags;
@@ -181,11 +230,11 @@ internal sealed partial class Checker
     private static InferenceInfo CreateInferenceInfo(Type typeParameter) => new() { TypeParameter = typeParameter, TopLevel = true };
 
     // checker.ts cloneInferenceInfo
-    private static InferenceInfo CloneInferenceInfo(InferenceInfo inference) => new()
+    private InferenceInfo CloneInferenceInfo(InferenceInfo inference) => new()
     {
         TypeParameter = inference.TypeParameter,
-        Candidates = inference.Candidates is null ? null : [.. inference.Candidates],
-        ContraCandidates = inference.ContraCandidates is null ? null : [.. inference.ContraCandidates],
+        Candidates = inference.Candidates.Clone(Arena),
+        ContraCandidates = inference.ContraCandidates.Clone(Arena),
         InferredType = inference.InferredType,
         Priority = inference.Priority,
         TopLevel = inference.TopLevel,
@@ -558,8 +607,8 @@ internal sealed partial class Checker
 
     // checker.ts getTypeFromInference (None: undefined)
     private Type GetTypeFromInference(InferenceInfo inference) =>
-        inference.Candidates is not null ? GetUnionType(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(inference.Candidates), UnionReduction.Subtype)
-        : inference.ContraCandidates is not null ? GetIntersectionType(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(inference.ContraCandidates))
+        !inference.Candidates.IsNone ? GetUnionType(inference.Candidates.Span, UnionReduction.Subtype)
+        : !inference.ContraCandidates.IsNone ? GetIntersectionType(inference.ContraCandidates.Span)
         : Type.None;
 
     /// <summary>checker.ts inferTypes.</summary>
@@ -709,8 +758,8 @@ internal sealed partial class Checker
                         }
                         if (inference.Priority is null || priority < inference.Priority.Value)
                         {
-                            inference.Candidates = null;
-                            inference.ContraCandidates = null;
+                            inference.Candidates = default;
+                            inference.ContraCandidates = default;
                             inference.TopLevel = true;
                             inference.Priority = priority;
                         }
@@ -720,15 +769,15 @@ internal sealed partial class Checker
                             // i.e. only if we have not descended into a bivariant position.
                             if (contravariant && !bivariant)
                             {
-                                if (inference.ContraCandidates is null || !inference.ContraCandidates.Contains(candidate))
+                                if (!inference.ContraCandidates.Contains(candidate))
                                 {
-                                    (inference.ContraCandidates ??= []).Add(candidate);
+                                    inference.ContraCandidates.Add(c.Arena, candidate);
                                     ClearCachedInferences(inferences);
                                 }
                             }
-                            else if (inference.Candidates is null || !inference.Candidates.Contains(candidate))
+                            else if (!inference.Candidates.Contains(candidate))
                             {
-                                (inference.Candidates ??= []).Add(candidate);
+                                inference.Candidates.Add(c.Arena, candidate);
                                 ClearCachedInferences(inferences);
                             }
                         }
@@ -1584,6 +1633,35 @@ internal sealed partial class Checker
             TypeFlags.Primitive | TypeFlags.Index | TypeFlags.TemplateLiteral | TypeFlags.StringMapping);
     }
 
+    // getInferredType: inference.contraCandidates.some(t => isTypeAssignableTo(inferredCovariantType, t)) (module AR1:
+    // a loop over the candidate list's span)
+    private bool IsAssignableToSomeContraCandidate(Type inferredCovariantType, InferenceInfo inference)
+    {
+        var candidates = inference.ContraCandidates.Span;
+        for (var i = 0; i < candidates.Length; i++)
+        {
+            if (IsTypeAssignableTo(inferredCovariantType, candidates[i]))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // getInferredType: other.candidates.every(t => isTypeAssignableTo(t, inferredCovariantType)) (module AR1)
+    private bool AreCandidatesAssignableTo(InferenceInfo other, Type inferredCovariantType)
+    {
+        var candidates = other.Candidates.Span;
+        for (var i = 0; i < candidates.Length; i++)
+        {
+            if (!IsTypeAssignableTo(candidates[i], inferredCovariantType))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
     // checker.ts unionObjectAndArrayLiteralCandidates
     private List<Type> UnionObjectAndArrayLiteralCandidates(List<Type> candidates)
     {
@@ -1604,14 +1682,14 @@ internal sealed partial class Checker
     // checker.ts getContravariantInference
     private Type GetContravariantInference(InferenceInfo inference) =>
         (inference.Priority!.Value & InferencePriority.PriorityImpliesCombination) != 0
-            ? GetIntersectionType(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(inference.ContraCandidates!))
-            : GetCommonSubtype(inference.ContraCandidates!);
+            ? GetIntersectionType(inference.ContraCandidates.Span)
+            : GetCommonSubtype(inference.ContraCandidates.ToList());
 
     // checker.ts getCovariantInference
     private Type GetCovariantInference(InferenceInfo inference, Signature signature)
     {
         // Extract all object and array literal types and replace them with a single widened and normalized type.
-        var candidates = UnionObjectAndArrayLiteralCandidates(inference.Candidates!);
+        var candidates = UnionObjectAndArrayLiteralCandidates(inference.Candidates.ToList());
         // We widen inferred literal types if
         // all inferences were made to top-level occurrences of the type parameter, and
         // the type parameter has no constraint or its constraint includes no primitive or literal types, and
@@ -1640,8 +1718,8 @@ internal sealed partial class Checker
             var fallbackType = Type.None;
             if (!context.Signature.IsNone)
             {
-                var inferredCovariantType = inference.Candidates is not null ? GetCovariantInference(inference, context.Signature) : Type.None;
-                var inferredContravariantType = inference.ContraCandidates is not null ? GetContravariantInference(inference) : Type.None;
+                var inferredCovariantType = !inference.Candidates.IsNone ? GetCovariantInference(inference, context.Signature) : Type.None;
+                var inferredContravariantType = !inference.ContraCandidates.IsNone ? GetContravariantInference(inference) : Type.None;
                 if (!inferredCovariantType.IsNone || !inferredContravariantType.IsNone)
                 {
                     // If we have both co- and contra-variant inferences, we prefer the co-variant inference if it is not 'never',
@@ -1652,10 +1730,10 @@ internal sealed partial class Checker
                     // and it would spoil the overall inference.
                     var preferCovariantType = !inferredCovariantType.IsNone && (inferredContravariantType.IsNone ||
                         ((Types.Flags(inferredCovariantType) & (TypeFlags.Never | TypeFlags.Any)) == 0 &&
-                            inference.ContraCandidates!.Exists(t => IsTypeAssignableTo(inferredCovariantType, t)) &&
+                            IsAssignableToSomeContraCandidate(inferredCovariantType, inference) &&
                             Array.TrueForAll(context.Inferences, other =>
                                 (other != inference && GetConstraintOfTypeParameter(other.TypeParameter) != inference.TypeParameter) ||
-                                other.Candidates is null || other.Candidates.TrueForAll(t => IsTypeAssignableTo(t, inferredCovariantType)))));
+                                other.Candidates.IsNone || AreCandidatesAssignableTo(other, inferredCovariantType))));
                     inferredType = preferCovariantType ? inferredCovariantType : inferredContravariantType;
                     fallbackType = preferCovariantType ? inferredContravariantType : inferredCovariantType;
                 }
@@ -1885,10 +1963,10 @@ internal sealed partial class Checker
     }
 
     /// <summary>checker.ts hasInferenceCandidates.</summary>
-    internal static bool HasInferenceCandidates(InferenceInfo info) => info.Candidates is not null || info.ContraCandidates is not null;
+    internal static bool HasInferenceCandidates(InferenceInfo info) => !info.Candidates.IsNone || !info.ContraCandidates.IsNone;
 
     /// <summary>checker.ts hasInferenceCandidatesOrDefault.</summary>
-    internal bool HasInferenceCandidatesOrDefault(InferenceInfo info) => info.Candidates is not null || info.ContraCandidates is not null || HasTypeParameterDefault(info.TypeParameter);
+    internal bool HasInferenceCandidatesOrDefault(InferenceInfo info) => !info.Candidates.IsNone || !info.ContraCandidates.IsNone || HasTypeParameterDefault(info.TypeParameter);
 
     // checker.ts hasOverlappingInferences
     private static bool HasOverlappingInferences(InferenceInfo[] a, InferenceInfo[] b)
