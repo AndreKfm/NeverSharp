@@ -1104,3 +1104,86 @@ Brief: [modules/RS1.md](modules/RS1.md) (TG1 candidates 1, 3 and 5, EO2's method
 - **Stability:** `cs-o-aot-ws --check --checkers 12` 4 times on tuning-check (128,748 diagnostics each) and on the tuning emit list (116,656 each), and `--check --emit` 4 times on the tuning emit list (118,020 each): no crash.
 - **Gate runs:** Gate C 6 of 10 (sample 2000 after steps 1 to 4, the full run, its compare rerun by hand for the summary); Gate D 2 of 3 (the full run, its compare rerun by hand). No `src/` change after the full runs.
 - **Files:** `src/NeverSharp.Optimized/Checker/Checker.Instantiate.cs`, `TypeStore.cs`, `Checker.Generics.cs`, `Checker.Types.cs`, `Checker.Relater.cs`, `Checker.Narrowing.cs`, `Checker.NodeBuilder.cs`, this file. C# edited with the file tools only.
+
+## RS2: fast loop on the check where tsrs is faster (2026-11-05)
+
+Brief: [modules/RS2.md](modules/RS2.md), with the author's changes of 2026-11-05 relayed by the orchestrator: no full gates, Gate C `--sample 200` instead of 2000, larger candidates after three small ones failed, then wrap up for the work-distribution step. One attempt (Opus 5.5, medium effort, alone, directly on main); commits bda23e7 (step 1), b956f67 (step 5) and this entry. Baseline drivers built from 0571bbe before the first change (scratch `RS2/base/`: aot-ws, jit-ws). **Every number is exploratory**: interleaved with `results/phase4/EO1/run1/follow-up/interleave.mjs`, 7 rounds after 1 warm-up unless stated, AOT ws, median ratio with the 95 % bootstrap interval of `bootstrapMedianRatio`. Every build ran with `WarningsNotAsErrors=NU1903` (not committed). **The full gates (Gate C full, Gate D full, emit equivalence, parallel dumps on the five repositories) were not run, by the author's decision.**
+
+**Per-step correctness:** `--dump-diagnostics` single and at 4 checkers on bluesky, playwright and tldraw, and at 4 checkers on tuning-check, identical with the base driver for every step (kept and rejected).
+
+**Profile note:** in the jit-ws EventPipe profile, `Thread.PollGCWorker` (about 10 %) is mostly the sampler's suspension caught at `FastPollGC` after reference-array copies, not GC. A probe timed every sorted insert into the diagnostic lists on bluesky at 1.9 ms in total, while the profile put 3–5 % of its samples there. The real Workstation GC pause in AOT is 4.5–6 % of the check (playwright 150 ms, bluesky 99 ms). The rest of the profile is flat, about 1–2 % per function. An A/A run (the same binary twice) gives 1.002 [1.000, 1.008] and 0.999 [0.991, 1.006], so 7 rounds resolve about 0.5–1 %.
+
+**Flow census (probe, before step 5):**
+
+| list | time in flow walks, single | walks | flow nodes visited | revisits of a (reference key, node) pair |
+|---|---:|---:|---:|---:|
+| bluesky | 304 ms | 234,437 | 2.39 M | 80 % |
+| playwright | 317 ms | 308,881 | 3.27 M | 83 % |
+| tldraw | 328 ms | 331,259 | 1.88 M | 66 % |
+| tuning-check | 4.0 s | 586,192 | 105.5 M | 99 % |
+
+| step | hot spot (share) | tsrs source | change | bluesky single | playwright single | result |
+|---|---|---|---|---|---|---|
+| 1 | `ResolveNameHelper`, 1.3–1.8 % exclusive, about 7 % inclusive | `nameresolver.rs` `is_pass_through_scope_kind` | resolveName moves past 62 kinds of ancestors that cannot hold locals without the per-kind tests | 0.976 [0.960, 0.986] | 0.989 [0.978, 1.002]; repeat 0.979 [0.976, 0.988] | kept, bda23e7 |
+| 2 | `AddTypeToUnion` memmove, 0.7 % | `add_types_to_union`, merge of sorted runs | out-of-order types gathered and merged at the end; no copy of nested unions | 1.003 [0.993, 1.009] | 1.013 [1.005, 1.023] | rejected |
+| 3 | `IsMatchingReference` string copies | `flow.rs` `get_accessed_property_name` (borrowed `Cow`) | two property accesses compare name texts | 1.009 [0.998, 1.019] | 1.003 [0.999, 1.011] | rejected |
+| 4 | `FileAt`/`StoreOf` through `IReadOnlyList` | none (Track O) | per-checker file and store arrays | 1.006 [0.991, 1.013] | 1.005 [1.000, 1.010] | rejected |
+| 5 | flow walks, 10–18 % of the check (census above) | `flowmemo.rs`, `flow.rs` (flow memo) | flow memo, below | 0.945 [0.926, 0.951] | 0.983 [0.973, 0.988] | kept, b956f67 |
+| 6 | garbage closures, delegates and strings: about 200 MB of 994 MB allocated on playwright single | monomorphized closures, borrowed names | allocation-cut bundle, below | 1.008 [0.991, 1.020] | 1.001 [0.996, 1.022] | rejected, saved |
+
+Ratios are against the previous kept step: steps 2–4 against step 1, step 6 against step 5.
+- Step 1 at 4 checkers: bluesky 0.983 [0.967, 0.994]; playwright 1.007 [0.970, 1.026], with 15 rounds 0.991 [0.974, 1.012].
+- Step 5 at 4 checkers: bluesky 0.942 [0.921, 0.972], playwright 0.996 [0.981, 1.029].
+- Step 5, other lists: tuning-check single 0.859 [0.711, 0.879] (3 rounds; 20.85 → 17.91 s), tuning-check at 4 checkers 0.884 [0.872, 0.892] (5 rounds).
+
+**Step 5, the flow memo** (new file `Checker.FlowMemo.cs`, hooks in `Checker.Narrowing.cs`, `Checker.Flow.cs`, `Checker.Expressions.cs`, `Checker.Calls.cs`, `Checker.Contextual.cs`, `Checker.Members.cs`, `Checker.Instantiate.cs`; Track O / tsrs-only).
+
+What it does:
+- It keeps each `getTypeAtFlowNode` frame's result across walks, keyed by flow node and reference key.
+- Only identifiers with a cached resolved symbol, `this`, and plain property-access chains get a key. The key also holds the declared type, the initial type and the flow container.
+- A frame consults the memo at its first node, at the node that ends its iteration, and at hash-chosen checkpoints, and stores its result under all of them.
+
+Exactness follows tsrs, with serial-number taint:
+- in-process loop entries, cycles in the resolution stack, re-entered `getResolvedSignature` and contextual `resolvingSignature`, reduce labels, the inline limit and the depth limit taint the frames that consumed them;
+- reading the reference's position (`getNarrowableTypeForReference`) or a property access's resolved symbol (`isConstantReference`) taints the walk;
+- frames that instantiated or created a type, symbol or signature, or that ran inside an active instantiation, are not stored. Reaching TS2589 counts as an instantiation;
+- `flowTypeCache` epochs and the instantiation-count reset are tracked;
+- the height bound applies, and a walk that reaches the depth limit after using the memo is redone without it.
+
+It stores less than tsrs:
+- nothing is consulted or stored under loop analysis;
+- a reduce label or a cycle taints every active frame, because TypeScript 6.0.3 installs reduce labels for all walks.
+
+Verification:
+- An uncommitted shadow probe walked every memo answer for real and compared the two (patch `RS2/flowmemo-shadow.patch`). It found 0 differences in bluesky 760,331, playwright 785,759, tldraw 491,305, sentry 2,084,686 and vscode 7,059,205 checks, and in tuning-check 18,958,085 checks single and 19,103,246 at 4 checkers.
+- Gate C `--sample 200` passed.
+
+**Step 6, rejected and saved** (scratch `RS2/alloc-cuts-wip.patch` with `alloc-cuts-wip.txt`; dumps identical; not measured for allocation; no Gate C run):
+- the non-null reporter as a flag instead of a delegate;
+- cached or closure-free mappers in `getApparentTypeOfContextualType` and `getTypeOfPropertyOfContextualType`;
+- the union case of `getWidenedTypeWithContext` and the inference part of `instantiateTypeWithSingleGenericCallSignature` in methods of their own;
+- recursion identities as a value struct instead of boxed objects;
+- labels with one antecedent without a list;
+- a pooled seen-names map in `checkGrammarObjectLiteralExpression`;
+- identifier names from the `NameTable` instead of new strings.
+
+At 4 checkers it measured 0.985 [0.964, 1.006] on bluesky and 0.997 [0.966, 1.005] on playwright, but the single-threaded medians were not lower.
+
+The other rejected patches are in scratch `RS2/`: `step2-union-pending-rejected.patch`, `step3-ismatchingref-rejected.patch` and `step4-filearrays-rejected.patch`.
+
+**Base against final** (0571bbe drivers against b956f67, 7 rounds after 1 warm-up):
+
+| configuration | base | final | ratio [95 %] |
+|---|---:|---:|---|
+| bluesky `--check --single` | 2.301 s | 2.121 s | 0.922 [0.914, 0.930] |
+| playwright `--check --single` | 3.578 s | 3.471 s | 0.970 [0.950, 0.977] |
+| bluesky `--check` (4 checkers) | 0.970 s | 0.934 s | 0.963 [0.936, 0.986] |
+| playwright `--check` (4 checkers) | 1.596 s | 1.581 s | 0.991 [0.974, 1.009] |
+
+**Skipped, by the orchestrator's wrap-up instruction:** the guard workloads (tldraw and sentry single, base against final), the emit guard, and the last profile.
+
+**Tests:**
+- **Gate C:** `--sample 200` after step 1, after step 5, and on the final state; all passed. Last summary: `{"track":"optimized","phase":"checker","modes":["types"],"sections":["diagnostics","types","symbols"],"sample":200,"pass":true}`.
+- **Gate D:** not run.
+- **Gate runs:** Gate C 3 of 12, Gate D 0 of 3.
+- **Files:** `src/NeverSharp.Optimized/Checker/Checker.Resolve.cs` (step 1); `Checker.FlowMemo.cs` (new), `Checker.Narrowing.cs`, `Checker.Flow.cs`, `Checker.Expressions.cs`, `Checker.Calls.cs`, `Checker.Contextual.cs`, `Checker.Members.cs`, `Checker.Instantiate.cs` (step 5); this file. C# was edited with the file tools only.
