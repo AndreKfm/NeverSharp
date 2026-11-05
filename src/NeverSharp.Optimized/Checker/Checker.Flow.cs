@@ -1862,8 +1862,16 @@ internal sealed partial class Checker
     }
 
     /// <summary>checker.ts getNarrowableTypeForReference.</summary>
-    internal Type GetNarrowableTypeForReference(Type type, NodeRef reference, CheckMode checkMode = CheckMode.Normal)
+    internal Type GetNarrowableTypeForReference(Type type, NodeRef reference, CheckMode checkMode = CheckMode.Normal) =>
+        GetNarrowableTypeForReference(type, reference, checkMode, out _);
+
+    /// <summary>
+    /// getNarrowableTypeForReference; <paramref name="positionRead"/>: the reference's position or contextual type was
+    /// read (module RS2, the flow memo; tsrs get_narrowable_type_for_flow_reference).
+    /// </summary>
+    internal Type GetNarrowableTypeForReference(Type type, NodeRef reference, CheckMode checkMode, out bool positionRead)
     {
+        positionRead = false;
         if (IsNoInferType(type))
         {
             type = Types.Data<SubstitutionData>(type).BaseType;
@@ -1877,7 +1885,7 @@ internal sealed partial class Checker
         // not initialize)
         var substituteConstraints = (checkMode & CheckMode.Inferential) == 0 && !IsSyntheticReference(reference) && !IsSyntheticElementAccess(reference) &&
             SomeType(type, isGenericTypeWithUnionConstraintFn ??= IsGenericTypeWithUnionConstraint) &&
-            (IsConstraintPosition(type, reference) || HasContextualTypeWithNoGenericTypes(reference, checkMode));
+            ((positionRead = true) && (IsConstraintPosition(type, reference) || HasContextualTypeWithNoGenericTypes(reference, checkMode)));
         return substituteConstraints ? MapType(type, GetBaseConstraintOrType) : type;
     }
 }

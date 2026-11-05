@@ -32,6 +32,15 @@ internal sealed partial class Checker
         public bool IsKeySet;
         public int FlowDepth;
         public int SharedFlowStart;
+
+        // module RS2, the flow memo (Checker.FlowMemo.cs; tsrs flow_types.rs FlowState), per walk:
+        public bool HasMemoKey;      // the reference has a memo key: every frame is tracked
+        public FlowMemoKey MemoKey;
+        public uint WalkFloor;       // taint source of what is read from the reference node beyond its key
+        public bool MemoUsed;        // the walk returned a memo answer instead of walking a sub-graph
+        public bool MemoAborted;     // the walk reached the depth limit after using the memo and unwinds
+        public bool MemoFaithful;    // the walk is the walk again without the memo: it fills the memo, does not consult it
+        public int ImpureShared;     // sharedFlows entries of this walk whose value is transient
     }
 
     private readonly Stack<FlowState> freeFlowStates = new();
@@ -68,7 +77,30 @@ internal sealed partial class Checker
         f.IsKeySet = false;
         f.FlowDepth = 0;
         f.SharedFlowStart = sharedFlowCount;
-        var evolvedType = GetTypeFromFlowType(GetTypeAtFlowNode(f, flowNode));
+        f.WalkFloor = FlowMemoNextSerial();
+        f.MemoUsed = false;
+        f.MemoAborted = false;
+        f.MemoFaithful = false;
+        f.ImpureShared = 0;
+        f.HasMemoKey = !flowMemoOff && TryGetFlowMemoKey(f, out f.MemoKey);
+        // a nested walk counts its depth from 0: its frames' heights are not the enclosing frame's (tsrs save_height)
+        var savedHeight = flowMemoHeight;
+        flowMemoHeight = 0;
+        var flowType = GetTypeAtFlowNode(f, flowNode);
+        if (f.MemoAborted)
+        {
+            // The walk used memo answers and then reached the depth limit. The walk without the memo computes those
+            // sub-walks and keeps their shared nodes in sharedFlows, so it may not be this deep here: walk again.
+            sharedFlowCount = f.SharedFlowStart;
+            f.MemoAborted = false;
+            f.MemoUsed = false;
+            f.MemoFaithful = true;
+            f.ImpureShared = 0;
+            f.FlowDepth = 0;
+            flowType = GetTypeAtFlowNode(f, flowNode);
+        }
+        flowMemoHeight = savedHeight;
+        var evolvedType = GetTypeFromFlowType(flowType);
         sharedFlowCount = f.SharedFlowStart;
         f.Reference = default;
         freeFlowStates.Push(f);
@@ -182,8 +214,16 @@ internal sealed partial class Checker
 
     private FlowType GetTypeAtFlowNode(FlowState f, FlowRef flow)
     {
-        if (f.FlowDepth == 2000)
+        if (f.FlowDepth == FlowDepthLimit)
         {
+            if (f.MemoUsed)
+            {
+                // (module RS2, the flow memo) the walk without the memo, which walked the sub-graphs this walk took
+                // from the memo, may not be this deep here: GetFlowTypeOfReference walks again without it
+                f.MemoAborted = true;
+                return new FlowType(errorType, false);
+            }
+            FlowMemoTaint(0);
             // We have made 2000 recursive invocations. To avoid overflowing the call stack we report an error
             // and disable further control flow analysis in the containing function or module body.
             flowAnalysisDisabled = true;
@@ -191,10 +231,25 @@ internal sealed partial class Checker
             ReportFlowControlError(IsSyntheticElementAccess(f.Reference) ? SyntheticElementAccessOf(f.Reference).Parent : f.Reference);
             return new FlowType(errorType, false);
         }
+        // Module RS2, the flow memo (Checker.FlowMemo.cs; tsrs flow.rs get_type_at_flow_node): in a walk with a memo key
+        // every call is a frame, which asks the memo at its first node, at the node that ends its iteration and at
+        // checkpoints, and stores its answer under them. The memo is used only outside inlined conditions, reduce labels
+        // and loop analysis, while flow analysis is on.
+        var entryFlow = flow;
+        var entryDepth = f.FlowDepth;
+        var tracked = f.HasMemoKey;
+        var frame = tracked ? FlowFrameBegin() : default;
+        var memoActive = tracked && inlineLevel == 0 && !flowAnalysisDisabled && labelAntecedentOverrides.Count == 0 && flowLoopCount == 0;
+        var checkpointStart = flowMemoCheckpoints.Count;
+        var steps = 0;
+        var hasHit = false;
+        var hit = default(FlowMemoHit);
         f.FlowDepth++;
         var sharedFlow = default(FlowRef);
+        FlowType result;
         while (true)
         {
+            steps++;
             var flags = FlowFlagsOf(flow);
             if ((flags & FlowFlags.Shared) != 0)
             {
@@ -205,11 +260,36 @@ internal sealed partial class Checker
                 {
                     if (sharedFlowNodes[i] == flow)
                     {
-                        f.FlowDepth--;
+                        f.FlowDepth = entryDepth;
+                        if (tracked)
+                        {
+                            // a later walk of this frame may compute the node instead: it consumes what that took
+                            var shared = sharedFlowMemo[i];
+                            FlowMemoConsume(shared.Transient, shared.Reference);
+                            flowMemoFlags |= shared.Flags;
+                            FlowFrameEndWith(frame, shared.Height);
+                            if (memoActive)
+                            {
+                                flowMemoCheckpoints.RemoveRange(checkpointStart, flowMemoCheckpoints.Count - checkpointStart);
+                            }
+                        }
                         return sharedFlowTypes[i];
                     }
                 }
                 sharedFlow = flow;
+            }
+            if (memoActive && FlowMemoAtNode(f, entryFlow, flow, flags, entryDepth, out var memoHit, out var endsIteration))
+            {
+                if (!endsIteration)
+                {
+                    // the walk without the memo walks on from here and records the last shared node of the whole
+                    // iteration, which this frame does not know: leave the record out
+                    sharedFlow = default;
+                }
+                hit = memoHit;
+                hasHit = true;
+                result = new FlowType(memoHit.Type, false);
+                break;
             }
             FlowType type;
             if ((flags & FlowFlags.Assignment) != 0)
@@ -287,22 +367,62 @@ internal sealed partial class Checker
                 // simply return the non-auto declared type to reduce follow-on errors.
                 type = new FlowType(ConvertAutoToAny(f.DeclaredType), false);
             }
+            result = type;
+            break;
+        }
+        f.FlowDepth = entryDepth;
+        if (!tracked)
+        {
             if (!sharedFlow.IsNone)
             {
                 // Record visited node and the associated type in the cache.
-                SetAt(sharedFlowNodes, sharedFlowCount, sharedFlow);
-                SetAt(sharedFlowTypes, sharedFlowCount, type);
-                sharedFlowCount++;
+                RecordSharedFlow(sharedFlow, result, new FlowSharedMemo(FlowMemoUntainted, FlowMemoUntainted, 0, 0));
             }
-            f.FlowDepth--;
-            return type;
+            return result;
         }
+        if (f.MemoAborted)
+        {
+            FlowFrameEnd(frame, out _);
+            if (memoActive)
+            {
+                flowMemoCheckpoints.RemoveRange(checkpointStart, flowMemoCheckpoints.Count - checkpointStart);
+            }
+            return result;
+        }
+        if (hasHit)
+        {
+            // this frame's answer came from the memo: its height is that sub-walk's (iteration adds no depth)
+            f.MemoUsed = true;
+            flowMemoHeight = Math.Max(flowMemoHeight, hit.Height);
+            flowMemoFlags |= hit.Flags;
+        }
+        var taint = FlowFrameEnd(frame, out var height);
+        if (!sharedFlow.IsNone)
+        {
+            // Record visited node and the associated type in the cache.
+            if (taint.Transient != FlowMemoUntainted)
+            {
+                f.ImpureShared++;
+            }
+            RecordSharedFlow(sharedFlow, result, new FlowSharedMemo(taint.Transient, taint.Reference, height, taint.Flags));
+        }
+        if (memoActive)
+        {
+            FlowMemoFill(f, checkpointStart, entryFlow, flow, result, taint, height, steps, hasHit);
+            flowMemoCheckpoints.RemoveRange(checkpointStart, flowMemoCheckpoints.Count - checkpointStart);
+        }
+        return result;
     }
 
     // (module CO5: the reduce label's callback in a method of its own, so that GetTypeAtFlowNode creates no closure on
     // its other paths)
-    private FlowType GetTypeAtFlowReduceLabel(FlowState f, FlowRef reduceLabel) =>
-        WithReducedLabel(reduceLabel, () => GetTypeAtFlowNode(f, FlowAntecedent(reduceLabel)));
+    private FlowType GetTypeAtFlowReduceLabel(FlowState f, FlowRef reduceLabel)
+    {
+        // (module RS2, the flow memo: the antecedents of the label below depend on the reduce label, which no memo key
+        // has, for every walk while it is installed; tsrs flow.rs taints here too)
+        FlowMemoTaint(0);
+        return WithReducedLabel(reduceLabel, () => GetTypeAtFlowNode(f, FlowAntecedent(reduceLabel)));
+    }
 
     private static void SetAt<T>(List<T> list, int index, T value)
     {
@@ -313,8 +433,18 @@ internal sealed partial class Checker
         list[index] = value;
     }
 
-    private Type GetInitialOrAssignedType(FlowState f, NodeRef node) =>
-        GetNarrowableTypeForReference(Kind(node) is SyntaxKind.VariableDeclaration or SyntaxKind.BindingElement ? GetInitialType(node) : GetAssignedType(node), f.Reference);
+    private Type GetInitialOrAssignedType(FlowState f, NodeRef node)
+    {
+        var type = Kind(node) is SyntaxKind.VariableDeclaration or SyntaxKind.BindingElement ? GetInitialType(node) : GetAssignedType(node);
+        var narrowable = GetNarrowableTypeForReference(type, f.Reference, CheckMode.Normal, out var positionRead);
+        if (positionRead)
+        {
+            // (module RS2, the flow memo; tsrs flow.rs get_initial_or_assigned_type: the answer depends on where the
+            // reference is, not only on its key)
+            FlowMemoTaintReference(f.WalkFloor);
+        }
+        return narrowable;
+    }
 
     private FlowType? GetTypeAtFlowAssignment(FlowState f, FlowRef flow)
     {
@@ -333,6 +463,10 @@ internal sealed partial class Checker
             if (GetAssignmentTargetKind(store, node.Node) == AssignmentKind.Compound)
             {
                 var flowType = GetTypeAtFlowNode(f, FlowAntecedent(flow));
+                if (f.MemoAborted)
+                {
+                    return flowType;
+                }
                 return CreateFlowType(GetBaseTypeOfLiteralType(GetTypeFromFlowType(flowType)), IsIncomplete(flowType));
             }
             if (declaredType == autoType || declaredType == autoArrayType)
@@ -381,7 +515,12 @@ internal sealed partial class Checker
             var expression = At(node, nodeStore.Expression(nodeStore.Parent(nodeStore.Parent(node.Node))));
             if (IsMatchingReference(reference, expression) || OptionalChainContainsReference(expression, reference))
             {
-                return new FlowType(GetNonNullableTypeIfNeeded(FinalizeEvolvingArrayType(GetTypeFromFlowType(GetTypeAtFlowNode(f, FlowAntecedent(flow))))), false);
+                var antecedent = GetTypeAtFlowNode(f, FlowAntecedent(flow));
+                if (f.MemoAborted)
+                {
+                    return antecedent;
+                }
+                return new FlowType(GetNonNullableTypeIfNeeded(FinalizeEvolvingArrayType(GetTypeFromFlowType(antecedent))), false);
             }
         }
         // Assignment doesn't affect reference
@@ -450,6 +589,10 @@ internal sealed partial class Checker
             if (predicate is not null && predicate.Kind is TypePredicateKind.AssertsThis or TypePredicateKind.AssertsIdentifier)
             {
                 var flowType = GetTypeAtFlowNode(f, FlowAntecedent(flow));
+                if (f.MemoAborted)
+                {
+                    return flowType;
+                }
                 var type = FinalizeEvolvingArrayType(GetTypeFromFlowType(flowType));
                 var store = StoreOf(call);
                 var arguments = store.Arguments(call.Node);
@@ -479,6 +622,10 @@ internal sealed partial class Checker
             if (IsMatchingReference(f.Reference, At(node, GetReferenceCandidate(store, expr))))
             {
                 var flowType = GetTypeAtFlowNode(f, FlowAntecedent(flow));
+                if (f.MemoAborted)
+                {
+                    return flowType;
+                }
                 var type = GetTypeFromFlowType(flowType);
                 if ((Types.ObjectFlagsOf(type) & ObjectFlags.EvolvingArray) != 0)
                 {
@@ -511,7 +658,7 @@ internal sealed partial class Checker
     {
         var flowType = GetTypeAtFlowNode(f, FlowAntecedent(flow));
         var type = GetTypeFromFlowType(flowType);
-        if ((Types.Flags(type) & TypeFlags.Never) != 0)
+        if (f.MemoAborted || (Types.Flags(type) & TypeFlags.Never) != 0)
         {
             return flowType;
         }
@@ -546,6 +693,10 @@ internal sealed partial class Checker
         var store = StoreOf(data.SwitchStatement);
         var expr = At(data.SwitchStatement, Utilities.SkipParentheses(store, store.Expression(data.SwitchStatement.Node)));
         var flowType = GetTypeAtFlowNode(f, FlowAntecedent(flow));
+        if (f.MemoAborted)
+        {
+            return flowType;
+        }
         var type = GetTypeFromFlowType(flowType);
         var reference = f.Reference;
         if (IsMatchingReference(reference, expr))
@@ -599,6 +750,10 @@ internal sealed partial class Checker
                 continue;
             }
             var flowType = GetTypeAtFlowNode(f, antecedent);
+            if (f.MemoAborted)
+            {
+                return flowType;
+            }
             var type = GetTypeFromFlowType(flowType);
             // If the type at a particular antecedent path is the declared type and the
             // reference is known to always be assigned (i.e. when declared and initial types
@@ -627,6 +782,10 @@ internal sealed partial class Checker
         if (!bypassFlow.IsNone)
         {
             var flowType = GetTypeAtFlowNode(f, bypassFlow);
+            if (f.MemoAborted)
+            {
+                return flowType;
+            }
             var type = GetTypeFromFlowType(flowType);
             // If the bypass flow contributes a type we haven't seen yet and the switch statement
             // isn't exhaustive, process the bypass flow type. Since exhaustiveness checks increase
@@ -682,6 +841,9 @@ internal sealed partial class Checker
         {
             if (flowLoopNodes[i] == flow && flowLoopKeys[i] == key && flowLoopTypes[i].Count > 0)
             {
+                // (module RS2, the flow memo: everything computed from these types, every frame younger than the
+                // loop's stack entry, is transient)
+                FlowMemoTaint(flowLoopSerials[i]);
                 return CreateFlowType(GetUnionOrEvolvingArrayType(f, flowLoopTypes[i], UnionReduction.Literal), incomplete: true);
             }
         }
@@ -698,6 +860,10 @@ internal sealed partial class Checker
                 // The first antecedent of a loop junction is always the non-looping control
                 // flow path that leads to the top.
                 flowType = GetTypeAtFlowNode(f, antecedent);
+                if (f.MemoAborted)
+                {
+                    return flowType;
+                }
                 firstAntecedentType = flowType;
             }
             else
@@ -707,12 +873,16 @@ internal sealed partial class Checker
                 SetAt(flowLoopNodes, flowLoopCount, flow);
                 SetAt(flowLoopKeys, flowLoopCount, key);
                 SetAt(flowLoopTypes, flowLoopCount, antecedentTypes);
+                SetAt(flowLoopSerials, flowLoopCount, FlowMemoNextSerial());
                 flowLoopCount++;
-                var saveFlowTypeCache = flowTypeCache;
-                flowTypeCache = null;
+                var saveFlowTypeCache = TakeFlowTypeCache();
                 flowType = GetTypeAtFlowNode(f, antecedent);
-                flowTypeCache = saveFlowTypeCache;
+                RestoreFlowTypeCache(saveFlowTypeCache);
                 flowLoopCount--;
+                if (f.MemoAborted)
+                {
+                    return flowType;
+                }
                 // If we see a value appear in the cache it is a sign that control flow analysis
                 // was restarted and completed by checkExpressionCached. We can simply pick up
                 // the resulting type and bail out.
@@ -1727,14 +1897,14 @@ internal sealed partial class Checker
             case SyntaxKind.Identifier:
                 // When narrowing a reference to a const variable, non-assigned parameter, or readonly property, we inline
                 // up to five levels of aliased conditional expressions that are themselves declared as const variables.
-                if (!IsMatchingReference(f.Reference, expr) && inlineLevel < 5)
+                if (!IsMatchingReference(f.Reference, expr) && (inlineLevel < 5 || FlowMemoInlineLimit()))
                 {
                     var symbol = GetResolvedSymbol(expr);
                     if (IsConstantVariable(symbol))
                     {
                         var declaration = ValueDeclarationOf(symbol);
                         if (!declaration.IsNone && Kind(declaration) == SyntaxKind.VariableDeclaration && StoreOf(declaration).Type(declaration.Node).IsNone &&
-                            !StoreOf(declaration).Initializer(declaration.Node).IsNone && IsConstantReference(f.Reference))
+                            !StoreOf(declaration).Initializer(declaration.Node).IsNone && IsConstantReferenceOfWalk(f))
                         {
                             inlineLevel++;
                             var result = NarrowType(f, type, At(declaration, StoreOf(declaration).Initializer(declaration.Node)), assumeTrue);

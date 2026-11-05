@@ -72,11 +72,10 @@ internal sealed partial class Checker
         // analysis because variables may have transient types in indeterminable states. Moving flowLoopStart
         // to the top of the stack ensures all transient types are computed from a known point.
         var saveFlowLoopStart = flowLoopStart;
-        var saveFlowTypeCache = flowTypeCache;
+        var saveFlowTypeCache = TakeFlowTypeCache();
         flowLoopStart = flowLoopCount;
-        flowTypeCache = null;
         var type = CheckExpression(node, checkMode);
-        flowTypeCache = saveFlowTypeCache;
+        RestoreFlowTypeCache(saveFlowTypeCache);
         flowLoopStart = saveFlowLoopStart;
         ref var links = ref ExpressionLinks.Get(node);
         if (links.ResolvedType.IsNone)
@@ -98,6 +97,8 @@ internal sealed partial class Checker
         // If a type has been cached for the node, return it.
         if (flowTypeCache is not null && flowTypeCache.TryGetValue(node, out var cachedType))
         {
+            // (module RS2, the flow memo: a later flow walk reads this answer only while the same cache is current)
+            flowMemoFlags |= FlowMemoTypeCache;
             return cachedType;
         }
         var startInvocationCount = flowInvocationCount;
@@ -105,7 +106,14 @@ internal sealed partial class Checker
         // If control flow analysis was required to determine the type, it is worth caching.
         if (flowInvocationCount != startInvocationCount)
         {
-            (flowTypeCache ??= [])[node] = type;
+            ref var entry = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(flowTypeCache ??= [], node, out var existed);
+            entry = type;
+            if (existed)
+            {
+                // (module RS2: a nested evaluation of this node cached it first, so a cached type changed: memo answers
+                // that read this cache no longer describe it; tsrs checker_04.rs get_type_of_expression)
+                flowMemoTypeCacheEpoch = FlowMemoNextSerial();
+            }
         }
         return type;
     }

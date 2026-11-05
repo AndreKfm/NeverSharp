@@ -552,7 +552,7 @@ internal sealed partial class Checker
         }
         // If we're already in the process of resolving the given signature, don't resolve again as
         // that could cause infinite recursion. Instead, return anySignature.
-        var signature = SignatureLinks.Has(callTarget) && SignatureLinks.Get(callTarget).ResolvedSignature == resolvingSignature ? resolvingSignature : GetResolvedSignature(callTarget);
+        var signature = SignatureLinks.Has(callTarget) && SignatureLinks.Get(callTarget).ResolvedSignature == resolvingSignature ? FlowMemoResolvingSignature() : GetResolvedSignature(callTarget);
         if (IsJsxOpeningLikeElement(store, callTarget.Node) && argIndex == 0)
         {
             return GetEffectiveFirstArgumentForJsxSignature(signature, callTarget);

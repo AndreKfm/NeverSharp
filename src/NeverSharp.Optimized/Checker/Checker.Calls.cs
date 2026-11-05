@@ -589,6 +589,12 @@ internal sealed partial class Checker
         {
             return cached;
         }
+        if (cached == resolvingSignature)
+        {
+            // (module RS2, the flow memo: re-entered while this call is resolved, the inner answer may not be the final
+            // one; tsrs checker_04.rs get_resolved_signature)
+            FlowMemoTaint(0);
+        }
         var saveResolutionStart = resolutionStart;
         if (cached.IsNone)
         {

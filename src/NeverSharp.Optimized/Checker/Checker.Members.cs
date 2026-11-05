@@ -59,6 +59,9 @@ internal sealed partial class Checker
         {
             if (resolutionTargets[i].Property == property && resolutionTargets[i].Target.Equals(target))
             {
+                // (module RS2, the flow memo: a circular or in-progress resolution; what the caller does next is not
+                // final until it is done; tsrs checker_09.rs find_resolution_cycle_start_index)
+                FlowMemoTaint(0);
                 return i;
             }
         }

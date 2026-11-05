@@ -412,6 +412,7 @@ internal sealed partial class Checker
             // or expression. There is a very high likelyhood we're dealing with a combination of infinite generic types
             // that perpetually generate new type identities, so we stop the recursion here by yielding the error type.
             Error(currentNode, Diagnostics.Type_instantiation_is_excessively_deep_and_possibly_infinite);
+            totalInstantiationCount++; // (module RS2: the flow memo keeps no frame that reached this)
             return errorType;
         }
         var index = FindActiveMapper(mapper);
@@ -430,6 +431,7 @@ internal sealed partial class Checker
             return cached;
         }
         instantiationCount++;
+        totalInstantiationCount++; // (module RS2, the flow memo)
         instantiationDepth++;
         var result = InstantiateTypeWorker(type, mapper, aliasSymbol, aliasTypeArguments);
         if (index == -1)
