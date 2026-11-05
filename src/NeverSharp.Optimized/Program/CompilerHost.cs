@@ -40,8 +40,21 @@ internal interface ICompilerHost
 
     bool FileExists(string fileName);
 
+    /// <summary>
+    /// <see cref="FileExists(string)"/> of a name given as characters (module FE1, Track O: the resolver probes names
+    /// built in a per-thread buffer): the name as a string when the file exists (the same characters), otherwise null.
+    /// </summary>
+    string? ExistingFileName(ReadOnlySpan<char> fileName)
+    {
+        var name = fileName.ToString();
+        return FileExists(name) ? name : null;
+    }
+
     /// <summary>ModuleResolutionHost.directoryExists (module resolution, C10).</summary>
     bool DirectoryExists(string directoryName);
+
+    /// <summary><see cref="DirectoryExists(string)"/> of a name given as characters (module FE1); the same answer.</summary>
+    bool DirectoryExists(ReadOnlySpan<char> directoryName) => DirectoryExists(directoryName.ToString());
 
     /// <summary>ModuleResolutionHost.readFile (module resolution reads package.json files, C10).</summary>
     string? ReadFile(string fileName);
@@ -170,6 +183,21 @@ internal sealed class DiskCompilerHost : ICompilerHost
     public bool FileExists(string fileName) => fileExists.GetOrAdd(fileName, static f => File.Exists(f));
 
     public bool DirectoryExists(string directoryName) => directoryExists.GetOrAdd(directoryName, static d => Directory.Exists(d));
+
+    // Module FE1 (Track O): a cached answer is found without making a string of the name (tsrs-only shape: the cached
+    // vfs probed by &str, notes/perf-frontend-64.md); otherwise the string overload asks the file system once.
+    public string? ExistingFileName(ReadOnlySpan<char> fileName)
+    {
+        if (fileExists.GetAlternateLookup<ReadOnlySpan<char>>().TryGetValue(fileName, out var name, out var exists))
+        {
+            return exists ? name : null;
+        }
+        name = fileName.ToString();
+        return FileExists(name) ? name : null;
+    }
+
+    public bool DirectoryExists(ReadOnlySpan<char> directoryName) =>
+        directoryExists.GetAlternateLookup<ReadOnlySpan<char>>().TryGetValue(directoryName, out var exists) ? exists : DirectoryExists(directoryName.ToString());
 
     public string? ReadFile(string fileName)
     {

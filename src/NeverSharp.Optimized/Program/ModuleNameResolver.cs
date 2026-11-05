@@ -61,7 +61,7 @@ internal sealed class ResolvedModuleFull
 internal sealed class ModuleResolutionCache
 {
     private readonly System.Collections.Concurrent.ConcurrentDictionary<(string Directory, string Name, ModuleKind? Mode), ResolvedModuleFull?> directoryCache = new();
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, PackageJsonInfoCacheEntry> packageJsonInfoCache = new(StringComparer.Ordinal);
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<PackageJsonInfoCacheEntry>> packageJsonInfoCache = new(StringComparer.Ordinal);
     private readonly string currentDirectory;
     private readonly Func<string, string> getCanonicalFileName;
 
@@ -73,16 +73,44 @@ internal sealed class ModuleResolutionCache
 
     private string ToPath(string fileName) => getCanonicalFileName(TsPath.GetNormalizedAbsolutePath(fileName, currentDirectory));
 
-    internal bool TryGetFromDirectoryCache(string name, ModuleKind? mode, string directoryName, out ResolvedModuleFull? result) =>
-        directoryCache.TryGetValue((ToPath(directoryName), name, mode), out result);
+    /// <summary>The key of a directory in the per-directory cache (its canonical absolute path).</summary>
+    internal string DirectoryKey(string directoryName) => ToPath(directoryName);
 
-    internal void SetInDirectoryCache(string name, ModuleKind? mode, string directoryName, ResolvedModuleFull? result) =>
-        directoryCache[(ToPath(directoryName), name, mode)] = result;
+    internal bool TryGetFromDirectoryCache(string name, ModuleKind? mode, string directoryKey, out ResolvedModuleFull? result) =>
+        directoryCache.TryGetValue((directoryKey, name, mode), out result);
 
-    internal PackageJsonInfoCacheEntry? GetPackageJsonInfo(string packageJsonPath) =>
-        packageJsonInfoCache.TryGetValue(ToPath(packageJsonPath), out var entry) ? entry : null;
+    internal void SetInDirectoryCache(string name, ModuleKind? mode, string directoryKey, ResolvedModuleFull? result) =>
+        directoryCache[(directoryKey, name, mode)] = result;
 
-    internal void SetPackageJsonInfo(string packageJsonPath, PackageJsonInfoCacheEntry entry) => packageJsonInfoCache[ToPath(packageJsonPath)] = entry;
+    /// <summary>
+    /// The cached entry of <paramref name="packageJsonPath"/>, computed by <paramref name="compute"/> if there is none.
+    /// Module FE1 (Track O): computed once even when several threads ask at the same time (before, each thread that
+    /// missed read and parsed the file: vscode's parallel resolution read package.json files 589 times instead of 66);
+    /// every computation gives the same entry, so the result is the same.
+    /// </summary>
+    internal PackageJsonInfoCacheEntry GetOrAddPackageJsonInfo(string packageJsonPath, Func<PackageJsonInfoCacheEntry> compute)
+    {
+        var key = ToPath(packageJsonPath);
+        if (packageJsonInfoCache.TryGetValue(key, out var lazy))
+        {
+            return lazy.Value;
+        }
+        return packageJsonInfoCache.GetOrAdd(key, _ => new Lazy<PackageJsonInfoCacheEntry>(compute, LazyThreadSafetyMode.ExecutionAndPublication)).Value;
+    }
+
+    // Module FE1 (Track O): the directories from which loadModuleFromNearestNodeModulesDirectory walked up and found
+    // no node_modules folder.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> nodeModulesWalked = new(StringComparer.Ordinal);
+
+    internal bool NodeModulesWalked(string directory) => nodeModulesWalked.ContainsKey(directory);
+
+    internal void SetNodeModulesWalked(string directory) => nodeModulesWalked.TryAdd(directory, true);
+
+    // Module FE1 (Track O): getPackageScopeForPath per directory.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, PackageJsonInfo?> packageScopes = new(StringComparer.Ordinal);
+
+    internal PackageJsonInfo? GetOrAddPackageScope(string directory, Func<string, PackageJsonInfo?> compute) =>
+        packageScopes.TryGetValue(directory, out var scope) ? scope : packageScopes.GetOrAdd(directory, compute);
 }
 
 /// <summary>moduleNameResolver.ts PackageJsonInfoCacheEntry: a package.json found (<see cref="PackageJsonInfo"/>) or missing.</summary>
@@ -187,25 +215,41 @@ internal static class ModuleNameResolver
     internal static ResolvedModuleFull? ResolveModuleName(string moduleName, string containingFile, CompilerOptions compilerOptions, ICompilerHost host, ModuleResolutionCache? cache, ModuleKind? resolutionMode)
     {
         var containingDirectory = GetDirectoryPath(containingFile);
-        if (cache is not null && cache.TryGetFromDirectoryCache(moduleName, resolutionMode, containingDirectory, out var cached))
+        return ResolveModuleName(moduleName, containingDirectory, cache?.DirectoryKey(containingDirectory), compilerOptions, host, cache, resolutionMode);
+    }
+
+    /// <summary>
+    /// resolveModuleName for a containing file in <paramref name="containingDirectory"/> (getDirectoryPath of the
+    /// containing file) whose cache key <paramref name="directoryKey"/> (<see cref="ModuleResolutionCache.DirectoryKey"/>,
+    /// null without a cache) the caller computed once for all names of the file (module FE1, Track O: the same lookups).
+    /// </summary>
+    internal static ResolvedModuleFull? ResolveModuleName(string moduleName, string containingDirectory, string? directoryKey, CompilerOptions compilerOptions, ICompilerHost host, ModuleResolutionCache? cache, ModuleKind? resolutionMode)
+    {
+        if (cache is not null && cache.TryGetFromDirectoryCache(moduleName, resolutionMode, directoryKey!, out var cached))
         {
             return cached;
         }
         var moduleResolution = compilerOptions.ModuleResolution ?? compilerOptions.GetEmitModuleResolutionKind();
         var result = moduleResolution switch
         {
-            ModuleResolutionKind.Bundler => BundlerModuleNameResolver(moduleName, containingFile, compilerOptions, host, cache, resolutionMode is { } mode ? GetConditions(compilerOptions, mode) : null),
+            ModuleResolutionKind.Bundler => BundlerModuleNameResolver(moduleName, containingDirectory, compilerOptions, host, cache, resolutionMode is { } mode ? GetConditions(compilerOptions, mode) : null),
             _ => throw new NotSupportedException($"ModuleNameResolver (module C10): moduleResolution {moduleResolution} is not ported"),
         };
         // (the per-module-name cache of non-relative names only serves node_modules lookups, which are not ported)
-        cache?.SetInDirectoryCache(moduleName, resolutionMode, containingDirectory, result);
+        cache?.SetInDirectoryCache(moduleName, resolutionMode, directoryKey!, result);
         return result;
     }
 
+    // Module FE1 (Track O): the lists of getConditions, made once per (moduleResolution, mode); nothing writes to a
+    // returned list.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<(ModuleResolutionKind, ModuleKind?), List<string>> ConditionLists = new();
+
     /// <summary>moduleNameResolver.ts getConditions.</summary>
-    private static List<string> GetConditions(CompilerOptions options, ModuleKind? resolutionMode)
+    private static List<string> GetConditions(CompilerOptions options, ModuleKind? resolutionMode) =>
+        ConditionLists.GetOrAdd((options.GetEmitModuleResolutionKind(), resolutionMode), key => GetConditions(key.Item1, key.Item2));
+
+    private static List<string> GetConditions(ModuleResolutionKind moduleResolution, ModuleKind? resolutionMode)
     {
-        var moduleResolution = options.GetEmitModuleResolutionKind();
         if (resolutionMode is null)
         {
             if (moduleResolution == ModuleResolutionKind.Bundler)
@@ -259,9 +303,9 @@ internal static class ModuleNameResolver
     }
 
     /// <summary>moduleNameResolver.ts bundlerModuleNameResolver.</summary>
-    private static ResolvedModuleFull? BundlerModuleNameResolver(string moduleName, string containingFile, CompilerOptions compilerOptions, ICompilerHost host, ModuleResolutionCache? cache, List<string>? conditions)
+    /// <param name="containingDirectory">getDirectoryPath(containingFile), computed by the caller (module FE1)</param>
+    private static ResolvedModuleFull? BundlerModuleNameResolver(string moduleName, string containingDirectory, CompilerOptions compilerOptions, ICompilerHost host, ModuleResolutionCache? cache, List<string>? conditions)
     {
-        var containingDirectory = GetDirectoryPath(containingFile);
         var extensions = Extensions.TypeScript | Extensions.JavaScript | Extensions.Declaration; // (noDtsResolution: not in Track O's options)
         if (compilerOptions.GetResolveJsonModule())
         {
@@ -327,10 +371,10 @@ internal static class ModuleNameResolver
             }
             else
             {
-                var (candidate, parts) = NormalizePathForCJSResolution(containingDirectory, moduleName);
+                var (candidate, hasNodeModulesPart) = NormalizePathForCJSResolution(containingDirectory, moduleName);
                 var resolved = NodeLoadModuleByRelativeName(extensions, candidate, onlyRecordFailures: false, state, considerPackageJson: true);
                 // Treat explicit "node_modules" import as an external library import.
-                return resolved is null ? null : new SearchResult<ResolvedAndKind>(new ResolvedAndKind(resolved, parts.Contains("node_modules")));
+                return resolved is null ? null : new SearchResult<ResolvedAndKind>(new ResolvedAndKind(resolved, hasNodeModulesPart));
             }
         }
     }
@@ -343,6 +387,20 @@ internal static class ModuleNameResolver
     /// are not installed, so none does; a lookup that would find one is not ported.
     /// </summary>
     private static void LoadModuleFromNearestNodeModulesDirectory(string moduleName, string directory, ModuleResolutionState state)
+    {
+        // Module FE1 (Track O): the walk's outcome depends only on the directory (every ancestor's existence check is
+        // answered from the host's cache), and a walk that returns found no node_modules folder; so a directory walked
+        // once is not walked again (sentry: about 600,000 existence checks for 2,500 directories).
+        var cache = state.PackageJsonInfoCache;
+        if (cache is not null && cache.NodeModulesWalked(directory))
+        {
+            return;
+        }
+        WalkAncestors(moduleName, directory, state);
+        cache?.SetNodeModulesWalked(directory);
+    }
+
+    private static void WalkAncestors(string moduleName, string directory, ModuleResolutionState state)
     {
         ForEachAncestorDirectory(TsPath.NormalizeSlashes(directory), ancestorDirectory =>
         {
@@ -363,13 +421,53 @@ internal static class ModuleNameResolver
     // to look inside of it. The Node CommonJS resolution algorithm doesn't call this out
     // (https://nodejs.org/api/modules.html#all-together), but it seems that module paths ending
     // in `.` are actually normalized to `./` before proceeding with the resolution algorithm.
-    private static (string Path, List<string> Parts) NormalizePathForCJSResolution(string containingDirectory, string moduleName)
+    // Module FE1 (Track O): the path components of getPathComponents are not built; only the two facts the callers read
+    // are computed from them (the last component is "." or "..", some component is "node_modules"), the same values
+    // (tsrs-only shape: tsrs's #146, normalizePathForCJSResolution tests the last component without the list,
+    // notes/perf-front-end-fixed-costs.md).
+    private static (string Path, bool HasNodeModulesPart) NormalizePathForCJSResolution(string containingDirectory, string moduleName)
     {
         var combined = TsPath.CombinePaths(containingDirectory, moduleName);
-        var parts = GetPathComponents(combined);
-        var lastPart = parts.Count > 0 ? parts[^1] : null;
-        var path = lastPart is "." or ".." ? TsPath.EnsureTrailingDirectorySeparator(TsPath.NormalizePath(combined)) : TsPath.NormalizePath(combined);
-        return (path, parts);
+        var (lastIsDot, hasNodeModules) = ScanPathComponents(combined);
+        var path = lastIsDot ? TsPath.EnsureTrailingDirectorySeparator(TsPath.NormalizePath(combined)) : TsPath.NormalizePath(combined);
+        return (path, hasNodeModules);
+    }
+
+    /// <summary>
+    /// Of <see cref="GetPathComponents"/>(path): whether its last element is "." or ".." and whether some element is
+    /// "node_modules" (the root element is neither: it is empty or ends in a separator or ':').
+    /// </summary>
+    private static (bool LastIsDot, bool HasNodeModules) ScanPathComponents(string path)
+    {
+        var rootLength = TsPath.GetRootLength(path);
+        var rest = path.AsSpan(rootLength);
+        // the elements of rest.Split('/'), without the last one when it is empty
+        var hasNodeModules = false;
+        var last = ReadOnlySpan<char>.Empty;
+        var count = 0;
+        while (true)
+        {
+            var slash = rest.IndexOf('/');
+            var element = slash < 0 ? rest : rest[..slash];
+            if (slash < 0 && element.Length == 0 && count > 0)
+            {
+                break; // the trailing empty element is dropped
+            }
+            if (slash < 0 && element.Length == 0)
+            {
+                // rest is empty: Split gives [""], which is dropped, so only the root remains
+                return (false, false);
+            }
+            count++;
+            last = element;
+            hasNodeModules |= element.SequenceEqual("node_modules");
+            if (slash < 0)
+            {
+                break;
+            }
+            rest = rest[(slash + 1)..];
+        }
+        return (last.SequenceEqual(".") || last.SequenceEqual(".."), hasNodeModules);
     }
 
     private static Resolved? NodeLoadModuleByRelativeName(Extensions extensions, string candidate, bool onlyRecordFailures, ModuleResolutionState state, bool considerPackageJson)
@@ -378,8 +476,8 @@ internal static class ModuleNameResolver
         {
             if (!onlyRecordFailures)
             {
-                var parentOfCandidate = GetDirectoryPath(candidate);
-                if (!DirectoryProbablyExists(parentOfCandidate, state.Host))
+                var parentOfCandidate = DirectoryPathSpan(candidate);
+                if (!state.Host.DirectoryExists(parentOfCandidate))
                 {
                     onlyRecordFailures = true;
                 }
@@ -520,10 +618,10 @@ internal static class ModuleNameResolver
         if (!onlyRecordFailures)
         {
             // check if containing folder exists - if it doesn't then just record failures for all supported extensions without disk probing
-            var directory = GetDirectoryPath(candidate);
+            var directory = DirectoryPathSpan(candidate);
             if (directory.Length > 0)
             {
-                onlyRecordFailures = !DirectoryProbablyExists(directory, state.Host);
+                onlyRecordFailures = !state.Host.DirectoryExists(directory);
             }
         }
         switch (originalExtension)
@@ -564,9 +662,34 @@ internal static class ModuleNameResolver
 
         PathAndExtension? TryExtension(string ext, bool resolvedUsingTsExtension = false)
         {
-            var path = TryFile(candidate + ext, onlyRecordFailures, state);
+            var path = TryFile(candidate, ext, onlyRecordFailures, state);
             return path is null ? null : new PathAndExtension(path, ext, !state.CandidateIsFromPackageJsonField && resolvedUsingTsExtension);
         }
+    }
+
+    [ThreadStatic]
+    private static char[]? pathBuffer;
+
+    /// <summary>
+    /// <see cref="TryFile(string, bool, ModuleResolutionState)"/> of <c>candidate + ext</c>. Module FE1 (Track O): the
+    /// name is built in a per-thread buffer and is not made a string when the file is known (tsrs-only shape:
+    /// tsrs_module/src/resolver.rs try_extension with scratch.rs with_path_buffer, notes/perf-resolver-allocations.md).
+    /// </summary>
+    private static string? TryFile(string candidate, string ext, bool onlyRecordFailures, ModuleResolutionState state)
+    {
+        if (onlyRecordFailures)
+        {
+            return null;
+        }
+        var length = candidate.Length + ext.Length;
+        var buffer = pathBuffer;
+        if (buffer is null || buffer.Length < length)
+        {
+            pathBuffer = buffer = new char[Math.Max(length, 512)];
+        }
+        candidate.CopyTo(buffer);
+        ext.CopyTo(buffer.AsSpan(candidate.Length));
+        return state.Host.ExistingFileName(buffer.AsSpan(0, length));
     }
 
     /// <summary>Return the file if it exists (moduleSuffixes is not in Track O's options: tryFileLookup).</summary>
@@ -590,6 +713,13 @@ internal static class ModuleNameResolver
     private static PackageJsonInfo? GetPackageScopeForPath(string directory, ModuleResolutionState state)
     {
         // (forEachAncestorDirectoryStoppingAtGlobalCache: the host has no global typings cache)
+        // Module FE1 (Track O): the scope of a directory is a function of the directory (every package.json lookup of
+        // the walk is answered from the cache, and the same directory names give the same objects), so it is computed
+        // once per directory (sentry: every non-relative name walked up to the repository's package.json).
+        if (state.PackageJsonInfoCache is { } cache)
+        {
+            return cache.GetOrAddPackageScope(directory, d => ForEachAncestorDirectory(d, dir => GetPackageJsonInfo(dir, onlyRecordFailures: false, state)));
+        }
         return ForEachAncestorDirectory(directory, dir => GetPackageJsonInfo(dir, onlyRecordFailures: false, state));
     }
 
@@ -601,25 +731,25 @@ internal static class ModuleNameResolver
         {
             return null;
         }
-        var existing = state.PackageJsonInfoCache?.GetPackageJsonInfo(packageJsonPath);
-        if (existing is not null)
+        // (module FE1: the cache's entry is computed once, ModuleResolutionCache.GetOrAddPackageJsonInfo; a computed
+        // PackageJsonInfo has this packageDirectory, so the first caller gets it as before)
+        var entry = state.PackageJsonInfoCache is { } cache ? cache.GetOrAddPackageJsonInfo(packageJsonPath, Compute) : Compute();
+        if (entry is PackageJsonInfo info)
         {
-            if (existing is PackageJsonInfo info)
-            {
-                return info.PackageDirectory == packageDirectory ? info : new PackageJsonInfo(packageDirectory, info.Content);
-            }
-            return null;
+            return info.PackageDirectory == packageDirectory ? info : new PackageJsonInfo(packageDirectory, info.Content);
         }
-        var directoryExists = DirectoryProbablyExists(packageDirectory, host);
-        if (directoryExists && host.FileExists(packageJsonPath))
-        {
-            var result = new PackageJsonInfo(packageDirectory, ReadJson(packageJsonPath, host));
-            state.PackageJsonInfoCache?.SetPackageJsonInfo(packageJsonPath, result);
-            return result;
-        }
-        state.PackageJsonInfoCache?.SetPackageJsonInfo(packageJsonPath, new MissingPackageJsonInfo(packageDirectory, directoryExists));
-        // record package json as one of failed lookup locations - in the future if this file will appear it will invalidate resolution results
         return null;
+
+        PackageJsonInfoCacheEntry Compute()
+        {
+            var directoryExists = DirectoryProbablyExists(packageDirectory, host);
+            if (directoryExists && host.FileExists(packageJsonPath))
+            {
+                return new PackageJsonInfo(packageDirectory, ReadJson(packageJsonPath, host));
+            }
+            // record package json as one of failed lookup locations - in the future if this file will appear it will invalidate resolution results
+            return new MissingPackageJsonInfo(packageDirectory, directoryExists);
+        }
     }
 
     private static PathAndExtension? LoadNodeModuleFromDirectoryWorker(Extensions extensions, string candidate, bool onlyRecordFailures, ModuleResolutionState state, PackageJsonInfo? packageJson)
@@ -1182,6 +1312,25 @@ internal static class ModuleNameResolver
         // but not including any trailing directory separator.
         path = TsPath.RemoveTrailingDirectorySeparator(path);
         return path[..Math.Max(rootLength, path.LastIndexOf('/'))];
+    }
+
+    /// <summary>
+    /// <see cref="GetDirectoryPath"/> as characters of <paramref name="path"/> (module FE1, Track O: no substring for
+    /// a directory whose existence is only asked); the same characters. A path with backslashes takes the string way.
+    /// </summary>
+    private static ReadOnlySpan<char> DirectoryPathSpan(string path)
+    {
+        if (path.Contains('\\', StringComparison.Ordinal))
+        {
+            return GetDirectoryPath(path);
+        }
+        var rootLength = TsPath.GetRootLength(path);
+        if (rootLength == path.Length)
+        {
+            return path;
+        }
+        var span = TsPath.HasTrailingDirectorySeparator(path) ? path.AsSpan(0, path.Length - 1) : path.AsSpan();
+        return span[..Math.Max(rootLength, span.LastIndexOf('/'))];
     }
 
     /// <summary>path.ts getPathComponents (no current directory) and pathComponents.</summary>

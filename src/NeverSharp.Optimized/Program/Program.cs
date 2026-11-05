@@ -708,6 +708,10 @@ internal sealed partial class Program
     // utilities.ts hasJSFileExtension (supportedJSExtensionsFlat: .js, .jsx, .mjs, .cjs).
     private static bool HasJSFileExtension(string fileName) => FileExtensionIsOneOf(fileName, ".js", ".jsx", ".mjs", ".cjs");
 
+    // (module FE1, Track O: two extensions without the params array; the same answer)
+    private static bool FileExtensionIsOneOf(string fileName, string extension1, string extension2) =>
+        TsPath.FileExtensionIs(fileName, extension1) || TsPath.FileExtensionIs(fileName, extension2);
+
     private static bool FileExtensionIsOneOf(string fileName, params string[] extensions)
     {
         foreach (var extension in extensions)

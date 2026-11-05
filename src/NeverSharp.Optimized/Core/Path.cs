@@ -372,6 +372,27 @@ internal static partial class TsPath
     /// combinePaths("file:///path", "file:///to", "file.ext") === "file:///to/file.ext"
     /// </code>
     /// </summary>
+    internal static string CombinePaths(string path, string? relativePath)
+    {
+        // Module FE1 (Track O): the one-path case of combinePaths without the params array and with one concatenation
+        // (tsrs-only shape: notes/perf-resolver-allocations.md, fewer allocations per resolution); the same result.
+        if (!string.IsNullOrEmpty(path))
+        {
+            path = NormalizeSlashes(path);
+        }
+        if (string.IsNullOrEmpty(relativePath))
+        {
+            return path;
+        }
+        relativePath = NormalizeSlashes(relativePath);
+        if (string.IsNullOrEmpty(path) || GetRootLength(relativePath) != 0)
+        {
+            return relativePath;
+        }
+        return HasTrailingDirectorySeparator(path) ? path + relativePath : string.Concat(path, DirectorySeparator, relativePath);
+    }
+
+    /// <inheritdoc cref="CombinePaths(string, string?)"/>
     internal static string CombinePaths(string path, params string?[] paths)
     {
         if (!string.IsNullOrEmpty(path))
@@ -419,9 +440,13 @@ internal static partial class TsPath
         }
 
         var length = path.Length;
-        var root = path[..rootLength];
-        // `normalized` is only initialized once `path` is determined to be non-normalized
-        string? normalized = null;
+        // `normalized` is only initialized once `path` is determined to be non-normalized. Module FE1 (Track O): it is
+        // built in a per-thread buffer and made a string once at the end, instead of a new string per step (tsrs-only
+        // shape, tsrs_module/src/scratch.rs with_path_buffer, notes/perf-resolver-allocations.md); every step below
+        // is the string operation of path.ts on the buffer (a prefix of `path`, an append, a truncation), so the
+        // result is the same.
+        var normalized = normalizeBuffer ??= new NormalizeBuffer();
+        normalized.Reset();
         var index = rootLength;
         var segmentStart = index;
         var normalizedUpTo = index;
@@ -439,7 +464,12 @@ internal static partial class TsPath
             if (index > segmentStart)
             {
                 // Seen superfluous separator
-                normalized ??= Substring(path, 0, segmentStart - 1);
+                // (normalized ??= substring(path, 0, segmentStart - 1): String.prototype.substring clamps the end to
+                // [0, length], and the start 0 is never after it)
+                if (!normalized.IsSet)
+                {
+                    normalized.SetPrefix(path, Math.Min(Math.Max(segmentStart - 1, 0), length));
+                }
                 segmentStart = index;
             }
             // Past any superfluous separators
@@ -452,43 +482,47 @@ internal static partial class TsPath
             if (segmentLength == 1 && path[index] == (int)CharacterCodes.dot)
             {
                 // "." segment (skip)
-                normalized ??= path[..normalizedUpTo];
+                if (!normalized.IsSet)
+                {
+                    normalized.SetPrefix(path, normalizedUpTo);
+                }
             }
             else if (segmentLength == 2 && path[index] == (int)CharacterCodes.dot && CharCodeAt(path, index + 1) == (int)CharacterCodes.dot)
             {
                 // ".." segment
                 if (!seenNonDotDotSegment)
                 {
-                    if (normalized != null)
+                    if (normalized.IsSet)
                     {
-                        normalized += normalized.Length == rootLength ? ".." : "/..";
+                        normalized.Append(normalized.Length == rootLength ? ".." : "/..");
                     }
                     else
                     {
                         normalizedUpTo = index + 2;
                     }
                 }
-                else if (normalized == null)
+                else if (!normalized.IsSet)
                 {
                     if (normalizedUpTo - 2 >= 0)
                     {
-                        normalized = path[..Math.Max(rootLength, path.LastIndexOf('/', normalizedUpTo - 2))];
+                        normalized.SetPrefix(path, Math.Max(rootLength, path.LastIndexOf('/', normalizedUpTo - 2)));
                     }
                     else
                     {
-                        normalized = path[..normalizedUpTo];
+                        normalized.SetPrefix(path, normalizedUpTo);
                     }
                 }
                 else
                 {
-                    var lastSlash = normalized.LastIndexOf('/');
+                    var lastSlash = normalized.LastIndexOfSlash();
                     if (lastSlash != -1)
                     {
-                        normalized = normalized[..Math.Max(rootLength, lastSlash)];
+                        normalized.Truncate(Math.Max(rootLength, lastSlash));
                     }
                     else
                     {
-                        normalized = root;
+                        // (normalized = root)
+                        normalized.SetPrefix(path, rootLength);
                     }
                     if (normalized.Length == rootLength)
                     {
@@ -496,14 +530,14 @@ internal static partial class TsPath
                     }
                 }
             }
-            else if (normalized != null)
+            else if (normalized.IsSet)
             {
                 if (normalized.Length != rootLength)
                 {
-                    normalized += DirectorySeparator;
+                    normalized.Append(DirectorySeparator);
                 }
                 seenNonDotDotSegment = true;
-                normalized += path[segmentStart..segmentEnd];
+                normalized.Append(path.AsSpan(segmentStart, segmentEnd - segmentStart));
             }
             else
             {
@@ -512,7 +546,56 @@ internal static partial class TsPath
             }
             index = segmentEnd + 1;
         }
-        return normalized ?? (length > rootLength ? RemoveTrailingDirectorySeparator(path) : path);
+        return normalized.IsSet ? normalized.ToString() : (length > rootLength ? RemoveTrailingDirectorySeparator(path) : path);
+    }
+
+    [ThreadStatic]
+    private static NormalizeBuffer? normalizeBuffer;
+
+    /// <summary>
+    /// The `normalized` string of getNormalizedAbsolutePath as a growable character buffer (module FE1): unset until
+    /// the first step that initializes it.
+    /// </summary>
+    private sealed class NormalizeBuffer
+    {
+        private char[] chars = new char[256];
+
+        internal int Length { get; private set; }
+
+        internal bool IsSet { get; private set; }
+
+        internal void Reset()
+        {
+            Length = 0;
+            IsSet = false;
+        }
+
+        /// <summary>normalized = path[..end]</summary>
+        internal void SetPrefix(string path, int end)
+        {
+            Length = 0;
+            IsSet = true;
+            Append(path.AsSpan(0, end));
+        }
+
+        /// <summary>normalized += text</summary>
+        internal void Append(ReadOnlySpan<char> text)
+        {
+            if (Length + text.Length > chars.Length)
+            {
+                Array.Resize(ref chars, Math.Max(chars.Length * 2, Length + text.Length));
+            }
+            text.CopyTo(chars.AsSpan(Length));
+            Length += text.Length;
+        }
+
+        /// <summary>normalized = normalized[..length]</summary>
+        internal void Truncate(int length) => Length = length;
+
+        /// <summary>normalized.LastIndexOf('/')</summary>
+        internal int LastIndexOfSlash() => chars.AsSpan(0, Length).LastIndexOf('/');
+
+        public override string ToString() => new(chars, 0, Length);
     }
 
     internal static string NormalizePath(string path)
@@ -640,13 +723,5 @@ internal static partial class TsPath
     private static int CharCodeAt(string text, int index)
     {
         return (uint)index < (uint)text.Length ? text[index] : -1;
-    }
-
-    /// <summary>String.prototype.substring(start, end): negative arguments count as 0, and the arguments are swapped if start > end.</summary>
-    private static string Substring(string text, int start, int end)
-    {
-        start = Math.Min(Math.Max(start, 0), text.Length);
-        end = Math.Min(Math.Max(end, 0), text.Length);
-        return start <= end ? text[start..end] : text[end..start];
     }
 }

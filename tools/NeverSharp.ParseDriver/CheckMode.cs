@@ -32,6 +32,7 @@ internal sealed class PoolSettings
 internal static class Phases
 {
     internal static readonly bool On = Environment.GetEnvironmentVariable("NEVERSHARP_PHASES") == "1";
+    private static readonly string? Stop = Environment.GetEnvironmentVariable("NEVERSHARP_PHASES_STOP");
     private static readonly List<(string Name, long Ticks, double PauseMs, long Allocated, int Gen0, int Gen1, int Gen2)> Marks = [];
     private static double mainUnixMs;
 
@@ -52,6 +53,12 @@ internal static class Phases
         {
             Marks.Add((name, System.Diagnostics.Stopwatch.GetTimestamp(), GC.GetTotalPauseDuration().TotalMilliseconds, GC.GetTotalAllocatedBytes(false),
                 GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2)));
+            if (name == Stop)
+            {
+                // NEVERSHARP_PHASES_STOP=<mark>: end the process after that mark (profiling one part of the front end)
+                Write("");
+                Environment.Exit(0);
+            }
         }
     }
 

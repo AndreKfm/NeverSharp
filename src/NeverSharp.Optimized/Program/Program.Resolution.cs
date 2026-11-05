@@ -121,7 +121,11 @@ internal sealed partial class Program
         var store = file.Store;
         // resolveModuleNamesWorker: the containing file's name made absolute
         var containingFileName = TsPath.GetNormalizedAbsolutePath(store.FileName(file.Root), currentDirectory);
-        var resolutionsInFile = new Dictionary<(string Name, ModuleKind? Mode), ResolvedModuleFull?>();
+        // (module FE1: the containing directory and its cache key once per file, not once per name)
+        var containingDirectory = ModuleNameResolver.GetDirectoryPath(containingFileName);
+        var directoryKey = moduleResolutionCache.DirectoryKey(containingDirectory);
+        // (sized for every name: no growth; a dictionary without removals enumerates in insertion order at any size)
+        var resolutionsInFile = new Dictionary<(string Name, ModuleKind? Mode), ResolvedModuleFull?>(moduleNames.Count + 1);
         (string Text, ModuleKind? Mode)? synthetic = null;
         if (syntheticJsxImport is not null)
         {
@@ -129,7 +133,7 @@ internal sealed partial class Program
             // is getModeForUsageLocation of a string literal whose parent is an import declaration of the file
             var mode = ImportSyntaxAffectsModuleResolution(options) ? GetEmitSyntaxOfFile(file, options) : null;
             synthetic = (syntheticJsxImport, mode);
-            resolutionsInFile[(syntheticJsxImport, mode)] = ModuleNameResolver.ResolveModuleName(syntheticJsxImport, containingFileName, options, host, moduleResolutionCache, mode);
+            resolutionsInFile[(syntheticJsxImport, mode)] = ModuleNameResolver.ResolveModuleName(syntheticJsxImport, containingDirectory, directoryKey, options, host, moduleResolutionCache, mode);
         }
         foreach (var moduleNameNode in moduleNames)
         {
@@ -137,7 +141,7 @@ internal sealed partial class Program
             var mode = GetModeForUsageLocationWorker(file, moduleNameNode, options);
             // resolveModuleNamesReusingOldState (no old program) -> actualResolveModuleNamesWorker: resolveModuleName
             // with the program's cache, for each name (a name repeated in the file is resolved again from the cache)
-            var resolution = ModuleNameResolver.ResolveModuleName(moduleName, containingFileName, options, host, moduleResolutionCache, mode);
+            var resolution = ModuleNameResolver.ResolveModuleName(moduleName, containingDirectory, directoryKey, options, host, moduleResolutionCache, mode);
             resolutionsInFile[(moduleName, mode)] = resolution;
             // (addResolutionDiagnosticsFromResolutionOrCache: the ported resolution produces no resolution diagnostics.)
             // (noResolve: no resolved file is added to the program.)
@@ -262,8 +266,9 @@ internal sealed partial class Program
                 // only through top - level external module names. Relative external module names are not permitted.
                 if (!moduleNameExpr.IsNone && store.Kind(moduleNameExpr) == SyntaxKind.StringLiteral)
                 {
-                    var text = store.Texts.GetString(store.Text(moduleNameExpr))!;
-                    if (text.Length > 0 && (!inAmbientModule || !Utilities.IsExternalModuleNameRelative(text)))
+                    // (module FE1: the text's length read in place; a string only for the ambient-module test)
+                    var text = store.Text(moduleNameExpr);
+                    if (store.Texts.Span(text).Length > 0 && (!inAmbientModule || !Utilities.IsExternalModuleNameRelative(store.Texts.GetString(text)!)))
                     {
                         if (setParents)
                         {
@@ -365,7 +370,7 @@ internal sealed partial class Program
             else if (kind == SyntaxKind.JSDocImportTag)
             {
                 var moduleNameExpr = Utilities.GetExternalModuleName(store, node);
-                if (!moduleNameExpr.IsNone && store.Kind(moduleNameExpr) == SyntaxKind.StringLiteral && store.Texts.GetString(store.Text(moduleNameExpr))!.Length > 0)
+                if (!moduleNameExpr.IsNone && store.Kind(moduleNameExpr) == SyntaxKind.StringLiteral && store.Texts.Span(store.Text(moduleNameExpr)).Length > 0)
                 {
                     cb(node, moduleNameExpr);
                 }
