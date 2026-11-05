@@ -1187,3 +1187,103 @@ The other rejected patches are in scratch `RS2/`: `step2-union-pending-rejected.
 - **Gate D:** not run.
 - **Gate runs:** Gate C 3 of 12, Gate D 0 of 3.
 - **Files:** `src/NeverSharp.Optimized/Checker/Checker.Resolve.cs` (step 1); `Checker.FlowMemo.cs` (new), `Checker.Narrowing.cs`, `Checker.Flow.cs`, `Checker.Expressions.cs`, `Checker.Calls.cs`, `Checker.Contextual.cs`, `Checker.Members.cs`, `Checker.Instantiate.cs` (step 5); this file. C# was edited with the file tools only.
+
+## SC1: tsrs's work distribution over the checkers (2026-11-05)
+
+Brief: [modules/SC1.md](modules/SC1.md) (author's decision of 2026-11-05). One attempt (Opus 5.5, medium effort, alone, directly on main); commits c996767 (step 1), 18495f7 (step 2) and this entry. Base drivers built from 30dff92 before the first change (scratch `SC1/base/`: aot-ws, aot-srv). **Every number is exploratory:** interleaved rounds with a variant of `results/phase4/EO1/run1/follow-up/interleave.mjs` that gives each variant its own flags (scratch `SC1/inter.mjs`), 5 rounds after 1 warm-up (the final table: 7), median wall seconds, ratios with `bootstrapMedianRatio`; `--check` on vscode, sentry and tuning-check with `tsrs-check` (`parse-rs.exe --check`, tsrs's default: 16 checkers, locality, stealing) and `tsgo7-check` in the same rounds. Every build ran with `WarningsNotAsErrors=NU1903` (not committed). **No full gate was run**, by the author's decision.
+
+**What was ported** (Track O / tsrs-only pool options, all off by default; tsrs v0.18.0 `crates/tsrs_compiler/src/checkerpool.rs` and `affinity.rs`):
+- `--assignment locality` (`CheckerAssignment.cs`): `locality_associations` — directory subtrees of at most 1/4 of an average checker load as groups, placed heaviest first with weighted FENNEL (`get_checker_associations_in_order`, 101 % cap) over the import edges between groups, with `checked_file_weights` (node count + text/100, ×4, plus the normalized import fanout); from 16 checkers on (8 with 24,000 checked files) the module affinity and its refinement passes (`ModuleAffinity`). Deterministic. Not ported: the measured-cost cache and the debug assignments.
+- `--steal`: the tail stealing of `for_each_checker_group_do_inner` — each checker takes its own files from the front of its queue, its heavy files (above 1/200 of an average share) first; an idle checker takes not yet started files from the back of the queue with the most estimated work left (`FileQueue`: front and back in one 64-bit word, a compare-exchange claims a position; `queues_next` with tsrs's thief limit of N/4 per queue from 8 to 15 checkers and sticky thieves from 16). A stolen file's emit runs on the checker that checked it. With stealing every checker keeps every file's diagnostics (`KeptFiles` null), since it may take any other checker's file.
+- `--pool tsrs`: locality + stealing with 16 checkers under Server GC (tsrs's default on this machine) and 12 under Workstation GC (the curve below), unless `--checkers N`.
+- Probes (driver): `NEVERSHARP_POOL_STATS=1` (per checker: creation and check seconds, files, stolen files, types, transient symbols) and `NEVERSHARP_POOL_SLOW=<s>` (files slower than s).
+- Nothing is shared between checkers that was not shared before.
+
+**Correctness:**
+- Default settings: parallel `--dump-diagnostics` identical with the base driver on sentry and tuning-check after each step.
+- Gate C `--sample 200`: after step 1 the dump and compare passed (the header check failed on the new file's header and was fixed, comments only); after step 2 the whole gate passed. Gate runs: 2 of 10.
+- Locality (4 checkers) is deterministic: two runs identical on all three lists.
+
+**Step 1, locality at 4 checkers** (ws, against the base driver's *i* mod 4): vscode 12.36 against 13.56 s, 0.911 [0.903, 0.930]; sentry 1.013 [1.003, 1.036]; tuning-check 8.82 against 11.73 s, 0.752 [0.742, 0.766]. In the same rounds tsrs ran 2.26 / 0.99 / 8.93 s and tsgo 14.43 / 4.85 / 18.47 s.
+
+**Step 2, checker count with locality** (median wall s; pause = GC pause; types = summed over checkers; imbalance = slowest checker's creation + check time over the mean):
+
+| list | N | ws wall | ws pause | srv wall | srv pause | types | imbalance (srv) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| vscode | 4 | 12.36 | 2.75 | 9.98 | 0.55 | 2.573M | 1.069 |
+| | 8 | 9.37 | 3.55 | 6.53 | 0.68 | 2.865M | 1.074 |
+| | 12 | 8.82 | 4.09 | 5.53 | 0.69 | 3.075M | 1.084 |
+| | 16 | 9.26 | 4.65 | 5.35 | 0.78 | 3.279M | 1.089 |
+| | 16, *i* mod N | 11.30 | 5.54 | 6.67 | 0.86 | 4.205M | 1.245 |
+| sentry | 4 | 3.52 | 0.84 | 2.88 | 0.25 | 0.744M | 1.107 |
+| | 8 | 2.77 | 1.05 | 1.99 | 0.26 | 0.807M | 1.101 |
+| | 12 | 2.65 | 1.25 | 1.75 | 0.29 | 0.842M | 1.104 |
+| | 16 | 2.72 | 1.35 | 1.65 | 0.29 | 0.868M | 1.105 |
+| | 16, *i* mod N | 2.90 | 1.44 | 1.77 | 0.29 | 0.956M | 1.181 |
+| tuning-check | 4 | 8.77 | 1.40 | 7.77 | 0.35 | 2.064M | 1.606 |
+| | 8 | 14.81 | 1.86 | 13.40 | 0.40 | 4.400M | 2.749 |
+| | 12 | 14.12 | 2.41 | 12.27 | 0.43 | 4.462M | 3.331 |
+| | 16 | 14.83 | 2.76 | 12.85 | 0.50 | 4.492M | 3.881 |
+| | 16, *i* mod N | 10.50 | 2.91 | 8.43 | 0.50 | 3.619M | 2.764 |
+
+tsrs in the same rounds: vscode 2.23, sentry 0.93, tuning-check 8.93 s; tsgo 14.45, 4.84, 18.37 s.
+
+Where the curve flattens and why:
+- **Workstation GC flattens at 12:** the pause grows with the checker count (vscode 2.75 → 4.65 s from 4 to 16, about half the wall time at 12–16), while the check time without pause keeps falling. 16 is slower than 12 on vscode and sentry.
+- **Server GC gains up to 16** (vscode 5.53 → 5.35 s, sentry 1.75 → 1.65 s); the pause stays below 0.8 s.
+- **Duplication:** locality creates 22 % fewer types than *i* mod N at 16 checkers on vscode (3.28M against 4.21M; tsrs-gap.md: tsrs 3.10M against 3.95M) and 9 % fewer on sentry. From 4 to 16 checkers the types still grow by 27 % (vscode).
+- **Imbalance** with the static locality assignment: 6–11 % on vscode and sentry.
+- **tuning-check's tail** (found with `NEVERSHARP_POOL_SLOW`): the two adjacent units `004644.ts` and `004645.ts` (`keyof ElementTagNameMap` with a `declare global` index signature on `HTMLElement`, expensive only together with `000995.ts`'s global `interface Node`, found by bisecting the list). In the single-threaded order they take 1.9 + 1.6 s; on a checker that has checked fewer files before them each takes 6–10 s and creates about 1–1.5M types. From 8 checkers on they land on two checkers that check little else first, and the slowest checker takes 11–14 s whatever the count. Neither locality nor stealing can split a file. At 4 checkers locality (and stealing) happen to keep the cost low.
+
+**Step 3, stealing** (locality + stealing against locality alone; same rounds as tsrs and tsgo):
+
+| list | ws loc 12 | ws steal 12 | ws steal 16 | srv loc 16 | srv steal 12 | srv steal 16 | stolen files (srv 16) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| vscode | 8.78 | 8.74 (0.995 [0.980, 1.006]) | 9.26 | 5.40 | 5.26 | 5.11 (0.948 against srv loc 16) | 650 |
+| sentry | 2.65 | 2.61 (0.986 [0.951, 1.018]) | 2.65 | 1.65 | 1.69 | 1.61 (0.977) | 379 |
+| tuning-check | 14.07 | 15.97 | 17.24 | 12.83 | 12.53 | 12.36 (0.963) | 7,233 |
+
+- Stealing removes the imbalance on vscode and sentry (slowest/mean 1.002–1.006), which gains 2–5 % with Server GC and nothing with Workstation GC; it costs 1–2 % more types (vscode srv 16: 3.353M against 3.279M).
+- At 4 checkers (ws, against locality alone at 4 from the curve run, so not interleaved): vscode 11.94 against 12.36 s, sentry 3.31 against 3.52 s, tuning-check 7.44 against 8.77 s. On tuning-check locality + stealing at 4 checkers is the best configuration measured: **ws 7.44 s, srv 5.90 s** (tsrs 8.95 s in the same rounds).
+- At 8 or more checkers tuning-check's tail stays (above); stealing makes it worse with Workstation GC (more pause).
+
+**Run-to-run variation of the parallel diagnostics with `--pool tsrs`** (5 runs each; differing lines as a multiset):
+
+| list | build (checkers) | distinct dumps of 5 | lines differing between runs | against single: extra / missing lines |
+|---|---|---:|---:|---|
+| vscode | srv (16) | 3 | 1–2 (codes 2345, 2717) | 75–76 / 83–84 |
+| sentry | srv (16) | 2 | 1 | 86–87 / 86–87 |
+| tuning-check | srv (16) | 5 | 214–297 | 183–334 / 7,449–7,621 |
+| vscode | ws (12) | 1 | 0 | 73 / 77 |
+| sentry | ws (12) | 1 | 0 | 90 / 90 |
+| tuning-check | ws (12) | 5 | 237–328 | 153–176 / 7,107–7,221 |
+
+For comparison, the deterministic assignments against single: *i* mod 4 vscode 67 / 86, sentry 62 / 62, tuning-check 247 / 5,582; locality at 4 vscode 47 / 55, sentry 84 / 84, tuning-check 584 / 6,031. How the sets differ (code histograms):
+- Paired extra and missing lines with the same codes (2345, 2339, 2322, 2769, 7053, ...) are the same diagnostics with other message texts (type printing that depends on the checker's history), as with *i* mod N.
+- The missing lines on tuning-check are mostly duplicate-declaration errors in other files (2393 about 5,300, 2814, 2411, 2374, 2512): reported by the checker that checks the first declaration's file at every declaration, and kept only by the checker of the file they are in. More checkers miss more of them (*i* mod 4: 2393 3,921). With stealing every checker keeps them, but whether the right checker reports them still depends on the run.
+- No diagnostic was found that is not a diagnostic of the program in some checker order; this was not checked line by line.
+
+**The tsrs-like configuration, `--pool tsrs`** (final table, 7 rounds after 1 warm-up; ws = 12 checkers, srv = 16; base = the base driver's default 4 checkers *i* mod 4):
+
+| list | base ws | base srv | `--pool tsrs` ws | `--pool tsrs` srv | tsrs | tsgo |
+|---|---:|---:|---:|---:|---:|---:|
+| vscode | 13.50 | 10.95 | 8.77 | 5.23 | 2.24 | 14.44 |
+| sentry | 3.59 | 2.90 | 2.71 | 1.69 | 0.99 | 4.94 |
+| tuning-check | 11.70 | 10.65 | 15.93 | 13.00 | 8.87 | 18.39 |
+
+| list | ws / tsrs | srv / tsrs | ws / tsgo | srv / tsgo | ws / base ws |
+|---|---|---|---|---|---|
+| vscode | 3.92 [3.57, 4.13] | 2.33 [2.07, 2.43] | 0.607 [0.605, 0.624] | 0.362 [0.350, 0.365] | 0.650 [0.637, 0.667] |
+| sentry | 2.75 [2.70, 2.82] | 1.72 [1.66, 1.75] | 0.548 [0.543, 0.559] | 0.342 [0.334, 0.349] | 0.754 [0.691, 0.769] |
+| tuning-check | 1.80 [1.76, 1.81] | 1.47 [1.38, 1.48] | 0.866 [0.854, 0.873] | 0.707 [0.666, 0.712] | 1.362 [1.350, 1.378] |
+
+GC pause with `--pool tsrs`: vscode ws 4.23 s, srv 0.72 s; sentry 1.30 / 0.30 s; tuning-check 4.43 / 0.76 s.
+
+**What limits it now:**
+- **Workstation GC pause** (goal 4, not reduced): at 12 checkers about half of vscode's wall time (4.2 of 8.8 s). Locality lowered it (vscode at 16: 5.54 → 4.65 s) through fewer types; no other local change was tried. What still grows with the checker count is the duplicated per-checker type graph (+27 % types from 4 to 16) and the pause per collection with more threads. GC configuration knobs were not tried (they change the registered build, and the AOT drivers ignore the GC environment variables).
+- **Per-checker speed:** with Server GC and stealing on vscode every checker spends 3.8 s in its check (tsrs's whole run: 2.24 s), the factor of tsrs-gap.md §2.
+- **The front end and the serial parts:** with `--pool tsrs` srv on vscode the wall time is 5.23 s against 3.89 s for the slowest checker, so about 1.3 s are parse, resolution, binding, the assignment and the global diagnostics before and after the check (tsrs-gap.md §3: tsrs's front end 0.41–0.50 s).
+- **tuning-check's tail** of two files (above), which neither assignment nor stealing splits. tsrs is bound by it too (8.9 s); the best Track O configuration on it is locality + stealing at 4 checkers (srv 5.90 s, ws 7.44 s).
+- tsrs's per-checker statistics: `TSRS_ASSIGNMENT_STATS` does not exist in tsrs v0.18.0, and its `TSRS_FILE_TIMES` file is written only by tsrs's own command line, not by the bench driver, so tsrs's per-checker times were not measured; tsrs's type counts are those of tsrs-gap.md §3.
+
+**Files:** `src/NeverSharp.Optimized/Program/CheckerAssignment.cs` (new), `CheckerPool.cs`, `Program.cs` (`PathOf`), `Program.Resolution.cs` (`ResolvedModulesOf`), `Checker/Checker.cs` (constructor with the kept-file set); `tools/NeverSharp.ParseDriver/Program.cs`, `CheckMode.cs`; this file. **One rule broken:** a comment line of `tools/NeverSharp.ParseDriver/Program.cs` was edited once with `sed` instead of the file tools (step 2; the line was checked in the diff and then rewrapped with the file tools). Scratch: `SC1/runs/` (measurement JSON), `SC1/dumps/` (dumps), `SC1/*.mjs` (scripts).
