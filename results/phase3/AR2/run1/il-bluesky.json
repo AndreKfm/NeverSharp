@@ -1,0 +1,167 @@
+{
+ "list": "D:/Private/Source/Andre/projects/NeverSharp/artifacts/bench/filelists/bluesky.txt",
+ "results": [
+  {
+   "command": "base-srv-tsrs",
+   "flags": [
+    "--check",
+    "--pool",
+    "tsrs"
+   ],
+   "env": {},
+   "times": [
+    0.5154844,
+    0.4613557,
+    0.4881219,
+    0.4780627,
+    0.4321534
+   ],
+   "pause": [
+    76.162,
+    57.836,
+    67.095,
+    68.869,
+    63.447
+   ],
+   "stats": []
+  },
+  {
+   "command": "final-srv-tsrs",
+   "flags": [
+    "--check",
+    "--pool",
+    "tsrs"
+   ],
+   "env": {},
+   "times": [
+    0.4840743,
+    0.459241,
+    0.5422317,
+    0.4807241,
+    0.4763162
+   ],
+   "pause": [
+    54.839,
+    57.31,
+    101.483,
+    55.798,
+    84.188
+   ],
+   "stats": []
+  },
+  {
+   "command": "base-ws-tsrs",
+   "flags": [
+    "--check",
+    "--pool",
+    "tsrs"
+   ],
+   "env": {},
+   "times": [
+    0.5176753,
+    0.5823501,
+    0.5217132,
+    0.5475663,
+    0.5589689
+   ],
+   "pause": [
+    173.196,
+    181.825,
+    169.987,
+    175.892,
+    173.592
+   ],
+   "stats": []
+  },
+  {
+   "command": "final-ws-tsrs",
+   "flags": [
+    "--check",
+    "--pool",
+    "tsrs"
+   ],
+   "env": {},
+   "times": [
+    0.4963855,
+    0.5137266,
+    0.4783219,
+    0.569297,
+    0.4869501
+   ],
+   "pause": [
+    143.313,
+    144.576,
+    137.751,
+    158.734,
+    135.093
+   ],
+   "stats": []
+  },
+  {
+   "command": "final-ws-default",
+   "flags": [
+    "--check"
+   ],
+   "env": {},
+   "times": [
+    0.801317,
+    0.7761158,
+    0.7745052,
+    0.7977653,
+    0.780585
+   ],
+   "pause": [
+    98.459,
+    106.948,
+    101.405,
+    104.323,
+    98.599
+   ],
+   "stats": []
+  },
+  {
+   "command": "tsrs",
+   "flags": [
+    "--check"
+   ],
+   "env": {},
+   "times": [
+    0.2082709,
+    0.2187635,
+    0.2057966,
+    0.2122248,
+    0.2020359
+   ],
+   "pause": [
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "stats": []
+  },
+  {
+   "command": "tsgo",
+   "flags": [
+    "--check"
+   ],
+   "env": {},
+   "times": [
+    0.8108507,
+    0.8495232,
+    0.8109909,
+    0.8514992,
+    0.8307345
+   ],
+   "pause": [
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "stats": []
+  }
+ ]
+}
