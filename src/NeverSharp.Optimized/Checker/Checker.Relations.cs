@@ -86,9 +86,131 @@ internal enum SignatureCheckMode
 internal sealed class Relation(string name)
 {
     internal readonly string Name = name;
-    internal readonly Dictionary<RelationKey, RelationComparisonResult> Results = [];
+    internal readonly RelationResults Results = new();
 
     public override string ToString() => Name;
+}
+
+/// <summary>
+/// A relation's cache (the Map from relation key to RelationComparisonResult). Module MM1 (Track O / tsrs-only; tsrs
+/// crates/tsrs_checker/src/relater_types.rs Relation: the pair keys packed into a table of 8-byte slots, the other keys in
+/// a map of their own): the keys of a type pair (source id, target id, intersection state) packed into one integer in a
+/// reference-free open-addressing table (linear probing, load at most 1/2, never deleted, never iterated), the keys of
+/// generic type references (strings) in a dictionary. Two keys are equal exactly when they were before (the packing is
+/// injective, and a plain key never equals a text key), so every lookup gives what the dictionary gave.
+/// </summary>
+internal sealed class RelationResults
+{
+    private struct Slot
+    {
+        public ulong Key; // 0: free
+        public RelationComparisonResult Result;
+    }
+
+    private Slot[] slots = new Slot[64];
+    private int pairCount;
+    private Dictionary<RelationKey, RelationComparisonResult>? others; // text keys and pairs that do not pack
+
+    /// <summary>Map.size.</summary>
+    internal int Count => pairCount + (others?.Count ?? 0);
+
+    /// <summary>Map.get: whether the key is present, and its value.</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal bool TryGetValue(RelationKey key, out RelationComparisonResult value)
+    {
+        var packed = key.Packed;
+        if (packed == 0)
+        {
+            if (others is not null && others.TryGetValue(key, out value))
+            {
+                return true;
+            }
+            value = default;
+            return false;
+        }
+        var s = slots;
+        var mask = s.Length - 1;
+        for (var i = Hash(packed) & mask; ; i = (i + 1) & mask)
+        {
+            ref var slot = ref s[i];
+            if (slot.Key == packed)
+            {
+                value = slot.Result;
+                return true;
+            }
+            if (slot.Key == 0)
+            {
+                value = default;
+                return false;
+            }
+        }
+    }
+
+    /// <summary>Map.set.</summary>
+    internal RelationComparisonResult this[RelationKey key]
+    {
+        set
+        {
+            var packed = key.Packed;
+            if (packed == 0)
+            {
+                (others ??= [])[key] = value;
+                return;
+            }
+            if ((pairCount + 1) * 2 > slots.Length)
+            {
+                Grow();
+            }
+            var s = slots;
+            var mask = s.Length - 1;
+            for (var i = Hash(packed) & mask; ; i = (i + 1) & mask)
+            {
+                ref var slot = ref s[i];
+                if (slot.Key == packed)
+                {
+                    slot.Result = value;
+                    return;
+                }
+                if (slot.Key == 0)
+                {
+                    slot.Key = packed;
+                    slot.Result = value;
+                    pairCount++;
+                    return;
+                }
+            }
+        }
+    }
+
+    private void Grow()
+    {
+        var old = slots;
+        var grown = new Slot[old.Length * 2];
+        var mask = grown.Length - 1;
+        foreach (var slot in old)
+        {
+            if (slot.Key == 0)
+            {
+                continue;
+            }
+            var i = Hash(slot.Key) & mask;
+            while (grown[i].Key != 0)
+            {
+                i = (i + 1) & mask;
+            }
+            grown[i] = slot;
+        }
+        slots = grown;
+    }
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private static int Hash(ulong key)
+    {
+        key ^= key >> 33;
+        key *= 0xFF51AFD7ED558CCDUL;
+        key ^= key >> 33;
+        return (int)(key & 0x7FFFFFFF);
+    }
 }
 
 /// <summary>
@@ -116,6 +238,19 @@ internal readonly struct RelationKey : IEquatable<RelationKey>
     internal RelationKey(string text)
     {
         this.text = text;
+    }
+
+    /// <summary>
+    /// Module MM1 (Track O / tsrs-only, as tsrs relater_types.rs RelationKey::Pair): a type pair's key packed into one
+    /// integer, source id (30 bits), target id (32 bits), intersection state (2 bits), injective and never 0; 0 for a
+    /// text key and for a pair that does not fit.
+    /// </summary>
+    internal ulong Packed
+    {
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+        get => text is null && source > 0 && source < 1 << 30 && target >= 0 && (uint)intersectionState < 4
+            ? (ulong)source << 34 | (ulong)(uint)target << 2 | (uint)intersectionState
+            : 0;
     }
 
     /// <summary>`id.startsWith("*")`: a generic key of type references with constrained type parameters.</summary>
