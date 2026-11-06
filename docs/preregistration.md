@@ -442,3 +442,57 @@ In CN1, at equal N:
 - Windows only.
 
 **Status.** Accepted by the author on 2026-11-03 and tagged `prereg/v11` (OpenTimestamps) after Gate D passed (50,177 of 50,177 units) and the emit equivalence of the five repository programs with tsc 6.0.3 was identical (modules D0–D8), before any emit measurement.
+
+## 20. tsrs's scheduling and the gen0 budget (DRAFT amendment `prereg/v12`, not accepted)
+
+**Purpose (decided by the author, 2026-11-05).**
+- After Phase 4 the author's question is the gap to tsrs. It is answered by a secondary comparison of the program check with tsrs's kind of checker pool on the C# side against `tsrs-check`.
+- The endpoints are unchanged:
+  - check G = 1.680 (§17);
+  - emit G = 1.030 (§19);
+  - check12 G = 1.305 (§18).
+
+  Later runs of profiles `check`, `check12` and `emit` are additional runs.
+
+**Configurations** (new profile `checkpool`):
+- `cs-o-aot-ws-checkpool` and `cs-o-aot-srv-checkpool`: Track O as `cs-o-aot-ws-check` / `cs-o-aot-srv-check`, with the driver option `--pool tsrs`:
+  - 12 checkers under Workstation GC, 16 under Server GC;
+  - files assigned by directory locality (FENNEL placement of directory subtrees over the import edges, ported from tsrs's `checkerpool.rs` and `notes/mem-assignment.md`);
+  - tail work stealing (`notes/perf-checker-stealing.md`).
+  - The checker is the same as in the other check configurations.
+- `tsrs-check`: tsrs 0.18.0 with its default pool, as in §17.
+- `tsgo7-check` and `tsgo7-check12`: reported next to them.
+- `cs-o-aot-ws-check-single` and `tsgo7-check-single`: the binding rows of the variance gate, as in profile `check`.
+
+**Comparisons.** All secondary. Each is reported as the factor C# median / tsrs median per repository, with the bootstrap 95 % interval and the geometric mean over the five repositories:
+- `cs-o-aot-ws-checkpool` against `tsrs-check`;
+- `cs-o-aot-srv-checkpool` against `tsrs-check`, at 98.75 % (Bonferroni);
+- both against `tsgo7-check` and `tsgo7-check12`, with the wording of §8.
+
+The comparison is taken from the first protocol-compliant run of profile `checkpool` after the tag. Later runs are additional runs.
+
+**Amendment of §6.4 A7: the gen0 budget.**
+- **aot-ws:** the configurations `-aot-ws` get a gen0 budget of 32 MB.
+  - Mechanism: `GCgen0size=0x2000000`, embedded by ILC as a runtime option (`eng/RuntimeConfiguration.props`, `--runtimeopt:GCgen0size=2000000`).
+  - Chosen against 48, 64, 128 and 256 MB in module AR2: 64 MB and more made single-threaded runs slower.
+- **Server GC** keeps its defaults: every measured value made it slower.
+- **jit-ws:** CoreCLR reads this knob only from the environment, so the harness sets `DOTNET_GCgen0size=2000000` for `-jit-ws` configurations.
+- **Track F:** the property file is shared, so Track F's `-aot-ws` builds carry the setting too. Track F's results were measured before it and stay as they are.
+- **Effect** (AR2, vscode `--pool tsrs` ws): gen0 collections 775 → 199, pause 2.96 → 2.06 s, peak working set +4 %.
+
+**Disclosed:**
+- **The benchmark corpus was used for tuning,** contrary to §5.4 rule 6. The Track O optimization modules after `prereg/v11` (EO1, EO2, RS1, RS2, SC1, FE1, AR1, AR2, PC1, MM1; phase1-progress.md) made their keep decisions on runs of the benchmark repositories (bluesky, playwright, tldraw, sentry, vscode), by the author's decision of 2026-11-05 to optimize in short loops against tsrs. So the C# results of every run after them are fitted to the corpus they are measured on. The endpoints above were taken before these modules.
+- **§5.4 rule 5 (≤ 3 variants per step, micro and module level) was not followed** in these modules. Each was one attempt, with steps kept by interleaved runs against the previous step (5–12 rounds, `bootstrapMedianRatio`) and only a Gate C sample of 200 units between steps. The full Gate C and Gate D are run on the commit that is tagged.
+- **Work stealing makes the parallel diagnostics depend on timing:**
+  - under Server GC they vary from run to run;
+  - under Workstation GC they were the same in almost every run on vscode and sentry (one differing file in one run seen in AR2).
+
+  Every report of profile `checkpool` gives the diagnostic counts per run and the number of distinct diagnostic outputs. Single-threaded output stays identical with tsc 6.0.3 (Gate C).
+- **tsrs's pool is not identical:** tsrs's default checker count and its assignment heuristics are its own; the C# pool ports its locality assignment and stealing, not its canonical caches (`notes/perf-order-independence.md`).
+- **Code-generation settings were tried and not adopted** (CG1, `results/phase3/CG1/run1/`): x86-64-v3 and `IlcOptimizationPreference=Speed`, 0–4 %. §5.4 rule 2 is unchanged.
+- Windows only.
+
+**Status.** DRAFT, written 2026-11-06. To be accepted by the author and tagged `prereg/v12` (OpenTimestamps) after:
+- the full Gate C and Gate D pass on the final commit;
+- the harness changes (profile `checkpool`, the `DOTNET_GCgen0size` environment for `-jit-ws`, the report table) are committed;
+- and before any profile-`checkpool` measurement.
