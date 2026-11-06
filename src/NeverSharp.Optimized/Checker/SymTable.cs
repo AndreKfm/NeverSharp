@@ -18,21 +18,31 @@ namespace NeverSharp.Optimized;
 /// </summary>
 internal readonly struct SymTable : IEquatable<SymTable>
 {
-    private readonly SymTableStore store;
+    // Module MM1 (Track O / tsrs-only; tsrs refers to a checker's tables by 32-bit handles, docs/RUST.md and
+    // notes/mem-pointer-compression.md): the store as its slot in SymTableStore's registry, not a reference, so that the
+    // records that hold tables (transient symbols, object types, unions) hold no references (0: no table).
+    private readonly int storeSlot;
     private readonly int id;
+
+    private SymTableStore store
+    {
+        [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+        get => SymTableStore.At(storeSlot);
+    }
 
     /// <summary>new Map(): a new table of the checker the name table belongs to.</summary>
     internal SymTable(NameTable names, int capacity = 0)
     {
-        store = names.Tables;
-        id = store.Create(capacity);
+        var tables = names.Tables;
+        storeSlot = tables.Slot;
+        id = tables.Create(capacity);
     }
 
     /// <summary>new Map(other): a copy in the same order.</summary>
     internal SymTable(SymTable other)
     {
-        store = other.store;
-        id = store.Copy(other.id);
+        storeSlot = other.storeSlot;
+        id = other.store.Copy(other.id);
     }
 
     /// <summary>new Map(other) of a table checked for undefined.</summary>
@@ -57,14 +67,14 @@ internal readonly struct SymTable : IEquatable<SymTable>
     internal SymTable? OrNull
     {
         [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-        get => store is null ? null : this;
+        get => storeSlot == 0 ? null : this;
     }
 
     /// <summary>Whether this is no table (<c>default</c>: undefined in a record, or an object type's members before they are resolved).</summary>
     internal bool IsNone
     {
         [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-        get => store is null;
+        get => storeSlot == 0;
     }
 
     internal int Count
@@ -140,7 +150,7 @@ internal readonly struct SymTable : IEquatable<SymTable>
     internal SymbolRef ValueAt(int i) => store.ValueAt(id, i);
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
-    public static bool operator ==(SymTable left, SymTable right) => left.id == right.id && ReferenceEquals(left.store, right.store);
+    public static bool operator ==(SymTable left, SymTable right) => left.id == right.id && left.storeSlot == right.storeSlot;
 
     [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
     public static bool operator !=(SymTable left, SymTable right) => !(left == right);
@@ -244,9 +254,65 @@ internal sealed class SymTableStore
     internal SymTableStore(NameTable names)
     {
         Names = names;
+        Slot = Register(this);
     }
 
     internal NameTable Names { get; }
+
+    // ---- the registry of the live stores (module MM1, Track O / tsrs-only) ----
+    // A SymTable names its store by a slot of this registry, so that records holding tables hold no references. A store
+    // takes a slot when it is created; the slot is freed by the finalizer of the SlotOwner its checker holds (not
+    // reachable from the store, so the registry's reference does not keep the checker alive). One store per checker.
+
+    private static readonly SymTableStore?[] registry = new SymTableStore?[1 << 16];
+    private static readonly Stack<int> freeSlots = new();
+    private static readonly Lock registryLock = new();
+    private static int nextSlot = 1; // slot 0: no table
+
+    /// <summary>This store's slot in the registry.</summary>
+    internal int Slot { get; }
+
+    /// <summary>The store in a slot (the slot of a live table's store).</summary>
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal static SymTableStore At(int slot) => registry[slot]!;
+
+    private static int Register(SymTableStore store)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            lock (registryLock)
+            {
+                if (freeSlots.TryPop(out var slot) || (nextSlot < registry.Length && (slot = nextSlot++) > 0))
+                {
+                    registry[slot] = store;
+                    return slot;
+                }
+            }
+            if (attempt > 0)
+            {
+                throw new InvalidOperationException("too many live checkers (symbol table store registry full)");
+            }
+            // (every slot taken: let the finalizers of unreachable checkers free theirs, then try once more)
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+        }
+    }
+
+    /// <summary>
+    /// The owner of a store's registry slot (module MM1): held by the store's checker; when the checker is unreachable,
+    /// the finalizer frees the slot, and the store becomes unreachable too.
+    /// </summary>
+    internal sealed class SlotOwner(int slot)
+    {
+        ~SlotOwner()
+        {
+            lock (registryLock)
+            {
+                registry[slot] = null;
+                freeSlots.Push(slot);
+            }
+        }
+    }
 
     internal int Create(int capacity)
     {

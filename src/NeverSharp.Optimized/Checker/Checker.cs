@@ -83,6 +83,7 @@ internal sealed partial class Checker
         Types = new TypeStore();
         Signatures = new SignatureStore();
         TransientSymbols = new TransientSymbolStore(Names);
+        symTableSlotOwner = new SymTableStore.SlotOwner(Names.Tables.Slot);
         emptySymbols = new SymTable(Names);
         ValueSymbolLinks = new SymbolLinkStore<ValueSymbolLinks>(symbolSlotBases, Arena);
         AliasSymbolLinks = new SymbolLinkStore<AliasSymbolLinks>(symbolSlotBases, Arena);
@@ -124,6 +125,12 @@ internal sealed partial class Checker
 
     /// <summary>The escaped names of this checker's symbols and symbol tables as ids (module CO2).</summary>
     internal NameTable Names { get; } = new();
+
+    // Module MM1: frees the registry slot of this checker's symbol table store when the checker is unreachable
+    // (SymTableStore.SlotOwner; never read)
+#pragma warning disable IDE0052
+    private readonly SymTableStore.SlotOwner symTableSlotOwner;
+#pragma warning restore IDE0052
 
     // The layout of the per-symbol tables (SymbolSlots.Bases), shared by the symbol link stores.
     private readonly int[] symbolSlotBases;
