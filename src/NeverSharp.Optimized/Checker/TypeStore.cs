@@ -1228,10 +1228,82 @@ internal sealed class KeyScratch
 /// </summary>
 internal sealed class NameTable
 {
-    private readonly Dictionary<string, int> ids = new(StringComparer.Ordinal);
+    // Module MM1 (Track O / tsrs-only; tsrs keeps its name tables as handle-keyed tables, notes/mem-flat-symbol-tables.md
+    // and notes/mem-checker-heap.md): the index from name to id is an open-addressing table of (hash, id + 1) slots
+    // without references (linear probing, load at most 1/2, never deleted) instead of a Dictionary whose entries hold
+    // the strings; the strings are only in the id-ordered array. Ids are given in the same order as before.
+    private struct Slot
+    {
+        public int Hash;
+        public int Id; // id + 1 (0: free)
+    }
+
+    private Slot[] index = new Slot[2048];
     private string[] names = new string[1024];
     private int count;
     private SymTableStore? tables;
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private static int HashOf(ReadOnlySpan<char> name)
+    {
+        var h = (uint)name.Length * 0x9E3779B1u;
+        foreach (var ch in name)
+        {
+            h = (System.Numerics.BitOperations.RotateLeft(h, 5) ^ ch) * 0x27D4EB2Fu;
+        }
+        h ^= h >> 15;
+        h *= 0x85EBCA6Bu;
+        h ^= h >> 13;
+        return (int)(h & 0x7FFFFFFF);
+    }
+
+    // the slot of the name: its id + 1 when present, else 0 with the free slot it would take
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    private int Lookup(ReadOnlySpan<char> name, int hash, out int free)
+    {
+        var s = index;
+        var mask = s.Length - 1;
+        for (var i = hash & mask; ; i = (i + 1) & mask)
+        {
+            ref var slot = ref s[i];
+            if (slot.Id == 0)
+            {
+                free = i;
+                return 0;
+            }
+            if (slot.Hash == hash && name.SequenceEqual(names[slot.Id - 1]))
+            {
+                free = -1;
+                return slot.Id;
+            }
+        }
+    }
+
+    private int Insert(string name, int hash, int free)
+    {
+        var id = Add(name);
+        index[free] = new Slot { Hash = hash, Id = id + 1 };
+        if (count * 2 > index.Length)
+        {
+            var grown = new Slot[index.Length * 2];
+            var mask = grown.Length - 1;
+            foreach (var slot in index)
+            {
+                if (slot.Id == 0)
+                {
+                    continue;
+                }
+                var i = slot.Hash & mask;
+                while (grown[i].Id != 0)
+                {
+                    i = (i + 1) & mask;
+                }
+                grown[i] = slot;
+            }
+            index = grown;
+        }
+        return id;
+    }
 
     internal int Count => count;
 
@@ -1248,33 +1320,24 @@ internal sealed class NameTable
     /// <summary>The id of a name, added if new.</summary>
     internal int Intern(string name)
     {
-        ref var id = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(ids, name, out var exists);
-        if (!exists)
-        {
-            id = Add(name);
-        }
-        return id;
+        var hash = HashOf(name);
+        var found = Lookup(name, hash, out var free);
+        return found != 0 ? found - 1 : Insert(name, hash, free);
     }
 
     /// <summary>The id of a name given by its characters, added if new.</summary>
     internal int Intern(ReadOnlySpan<char> name)
     {
-        var lookup = ids.GetAlternateLookup<ReadOnlySpan<char>>();
-        if (lookup.TryGetValue(name, out var id))
-        {
-            return id;
-        }
-        var text = name.ToString();
-        id = Add(text);
-        ids.Add(text, id);
-        return id;
+        var hash = HashOf(name);
+        var found = Lookup(name, hash, out var free);
+        return found != 0 ? found - 1 : Insert(name.ToString(), hash, free);
     }
 
     /// <summary>The id of a name, -1 when no table of this checker has it.</summary>
-    internal int Find(string name) => ids.TryGetValue(name, out var id) ? id : -1;
+    internal int Find(string name) => Find(name.AsSpan());
 
     /// <summary>The id of a name given by its characters, -1 when no table of this checker has it (nothing is added; module AR2).</summary>
-    internal int Find(ReadOnlySpan<char> name) => ids.GetAlternateLookup<ReadOnlySpan<char>>().TryGetValue(name, out var id) ? id : -1;
+    internal int Find(ReadOnlySpan<char> name) => Lookup(name, HashOf(name), out _) - 1;
 
     private int Add(string name)
     {
