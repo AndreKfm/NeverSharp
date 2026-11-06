@@ -418,13 +418,23 @@ internal sealed partial class Checker
         var index = FindActiveMapper(mapper);
         if (index == -1)
         {
+            // (module PC1, Track O / tsrs-only shape: a mapper that was not active gets an empty cache, and nothing is
+            // stored in it for this call, so its lookup can only miss: no key is built for it. tsrs checker_11.rs
+            // instantiate_type_with_alias, notes/perf-checker-cpu3.md change 2. Same calls, counts and result.)
             PushActiveMapper(mapper);
+            instantiationCount++;
+            totalInstantiationCount++; // (module RS2, the flow memo)
+            instantiationDepth++;
+            var fresh = InstantiateTypeWorker(type, mapper, aliasSymbol, aliasTypeArguments);
+            PopActiveMapper();
+            instantiationDepth--;
+            return fresh;
         }
         var mark = keyScratch.Mark();
         keyScratch.Add(type.Id);
         AddAliasKey(aliasSymbol, aliasTypeArguments);
         var key = keyScratch.Since(mark);
-        var mapperCache = activeTypeMappersCaches[index != -1 ? index : activeTypeMappersCount - 1];
+        var mapperCache = activeTypeMappersCaches[index];
         if (mapperCache.TryGetValue(key, out var cached))
         {
             keyScratch.Release(mark);
@@ -434,14 +444,7 @@ internal sealed partial class Checker
         totalInstantiationCount++; // (module RS2, the flow memo)
         instantiationDepth++;
         var result = InstantiateTypeWorker(type, mapper, aliasSymbol, aliasTypeArguments);
-        if (index == -1)
-        {
-            PopActiveMapper();
-        }
-        else
-        {
-            mapperCache.Set(key, result);
-        }
+        mapperCache.Set(key, result);
         keyScratch.Release(mark);
         instantiationDepth--;
         return result;
