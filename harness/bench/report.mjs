@@ -69,8 +69,8 @@ const isBind = id => /-bind(-single)?$/.test(id);
 const bindConfigs = configs.filter(c => isBind(c.id));
 // Phase 3 (draft pre-registration §17): check configurations (`*-check`, `*-check-single`) report the diagnostics of
 // the checked program, and are compared with typescript-go's program check (Table 2e), never with parse-only or bind rows.
-// (`*-check12`: 12 checkers, pre-registration §18)
-const isCheck = id => /-check(-single|12)?$/.test(id);
+// (`*-check12`: 12 checkers, pre-registration §18; `*-checkpool`: tsrs's kind of pool, draft pre-registration §20)
+const isCheck = id => /-check(-single|12|pool)?$/.test(id);
 const checkConfigs = configs.filter(c => isCheck(c.id));
 // Phase 4 (draft pre-registration §19, module D7): emit configurations (`*-emit`, `*-emit-single`) check the program as
 // the check configurations do, with Gate D's options, then emit it to memory; they report their output files, output
@@ -160,6 +160,53 @@ for (const [table, reference, note] of [
     push("");
 }
 
+// Draft pre-registration §20 (prereg/v12): the program check with tsrs's kind of pool on the C# side, as factors against
+// tsrs-check (Table 2j, comparisons with intervals at the stated level), and the diagnostics of the determinism pass (Table 1e).
+const poolConfigs = checkConfigs.filter(c => c.id.endsWith("-checkpool"));
+if (poolConfigs.length > 0) {
+    push("## Table 1e. Program check with work stealing: diagnostics per run (determinism pass)", "",
+        "Untimed runs with --dump-diagnostics after the memory pass (draft pre-registration §20). With work stealing a file's checker depends on timing, and with it the diagnostics that depend on earlier types in that checker. Cells: diagnostic counts of the runs, then the number of distinct diagnostic dumps (SHA-256) out of the runs.", "",
+        row(["Configuration", ...repos]), row(["---", ...repos.map(() => "---")]));
+    for (const c of poolConfigs) push(row([c.id, ...repos.map(r => {
+        const d = result(r, c.id)?.diagnosticsRuns;
+        return d ? `${[...new Set(d.counts)].join(" / ")}; ${d.distinctDumps} of ${d.runs} distinct` : "n/a";
+    })]));
+    push("");
+}
+const POOL_REF = "tsrs-check";
+if (poolConfigs.length > 0 && configs.some(c => c.id === POOL_REF)) {
+    push(`## Table 2j. Program check: factor against \`${POOL_REF}\` (draft pre-registration §20, secondary), with 95 % confidence interval`, "",
+        "C# median / tsrs median per repository (lower is better); same method as Table 2. tsrs 0.18.0 with its default checker pool (16 checkers on the reference machine, directory locality, work stealing); the C# `*-checkpool` configurations port that kind of pool (`--pool tsrs`: 12 checkers under Workstation GC, 16 under Server GC). The Track O optimization modules after prereg/v11 were tuned on these repositories (§20, disclosed).", "",
+        row(["Configuration", ...repos, "Geometric mean"]), row(["---", ...repos.map(() => "---:"), "---:"]));
+    for (const c of checkConfigs) {
+        if (c.id === POOL_REF) continue;
+        const pairs = repos.map(r => result(r, c.id) && result(r, POOL_REF) ? [result(r, c.id).timing.times, result(r, POOL_REF).timing.times] : undefined);
+        const cells = pairs.map(p => p === undefined ? "n/a" : ci(bootstrapMedianRatio(p[0], p[1])));
+        const valid = pairs.filter(p => p !== undefined);
+        push(row([c.id, ...cells, valid.length === 0 ? "n/a" : ci(bootstrapGeometricMeanRatio(valid))]));
+    }
+    push("");
+    const comparisons = [
+        ["cs-o-aot-ws-checkpool", POOL_REF, 0.95],
+        ["cs-o-aot-srv-checkpool", POOL_REF, 0.9875],
+        ["cs-o-aot-ws-checkpool", "tsgo7-check", 0.95],
+        ["cs-o-aot-srv-checkpool", "tsgo7-check", 0.9875],
+        ["cs-o-aot-ws-checkpool", "tsgo7-check12", 0.95],
+        ["cs-o-aot-srv-checkpool", "tsgo7-check12", 0.9875],
+    ].filter(([a, b]) => configs.some(c => c.id === a) && configs.some(c => c.id === b));
+    if (comparisons.length > 0) {
+        push("## Table 2k. Program check with tsrs's kind of pool: comparisons of draft pre-registration §20", "",
+            "Geometric mean over the repositories of the ratio of medians, percentile bootstrap (10,000 resamples, seed 20261021) at the stated level (Server GC rows Bonferroni). All secondary; the endpoints of §17 and §19 are unchanged. The wording of §8 applies to the typescript-go rows.", "",
+            row(["Comparison", "Level", "G [interval]"]), row(["---", "---:", "---:"]));
+        for (const [a, b, confidence] of comparisons) {
+            const valid = repos.map(r => result(r, a) && result(r, b) ? [result(r, a).timing.times, result(r, b).timing.times] : undefined).filter(p => p !== undefined);
+            if (valid.length === 0) continue;
+            push(row([`\`${a}\` vs \`${b}\``, `${(confidence * 100).toFixed(2).replace(/\.?0+$/, "")} %`, ci(bootstrapGeometricMeanRatio(valid, { confidence }))]));
+        }
+        push("");
+    }
+}
+
 // Program emit (draft pre-registration §19, module D7): the emit configurations against typescript-go's program emit
 // (endpoint cs-o-aot-ws-emit / tsgo7-emit) and against tsrs's (secondary), then the comparisons of §19 with their
 // verdicts under the decision rule of §8.
@@ -221,6 +268,8 @@ const PROFILE_RIG_CHECK = {
     check12: ["tsgo7-check-single", "cs-o-aot-ws-check-single"],
     // draft pre-registration §19 (module D7)
     emit: ["tsgo7-emit-single", "cs-o-aot-ws-emit-single"],
+    // draft pre-registration §20
+    checkpool: ["tsgo7-check-single", "cs-o-aot-ws-check-single"],
 };
 const runProfile = run.profile ?? "full";
 const RIG_CHECK = new Set(PROFILE_RIG_CHECK[runProfile] ?? PROFILE_RIG_CHECK.full);

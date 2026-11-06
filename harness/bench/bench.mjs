@@ -14,7 +14,9 @@
 //                       [--mem-runs 5] [--priority high|normal] [--corpus benchmark|tuning|tuning-check] [--label text]
 //        node bench.mjs --check [--repos a,b] [--configs x,y] [--corpus benchmark|tuning|tuning-check]
 //        node bench.mjs --dry-run [the options of a run]   (module D7: lists the selected configurations and exits)
-// Profiles also: check12 (pre-registration §18), emit (draft §19, module D7). Emit configurations (`*-emit`,
+// --determinism-runs N (default 5): untimed runs with --dump-diagnostics for the configurations whose parallel
+// diagnostics depend on timing (`*-checkpool`, draft pre-registration §20).
+// Profiles also: check12 (pre-registration §18), emit (§19, module D7), checkpool (draft §20). Emit configurations (`*-emit`,
 // `*-emit-single`) run the drivers with --check --emit and additionally require output counts above zero; they are not
 // part of profile full.
 //
@@ -35,7 +37,8 @@
 // the runner rejects a driver whose reported class differs.
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { benchDir, exe, pins, repoRoot } from "./common.mjs";
 import { captureEnvironment } from "./env.mjs";
@@ -110,6 +113,10 @@ for (const [track, prefix] of [["faithful", "cs"], ["optimized", "cs-o"]]) {
     for (const [runtime, description] of Object.entries(csRuntimes)) {
         const driver = join(bin, "cs", `${track}-${runtime}`, `parse-cs-${track}-${runtime}${exe}`);
         const primary = runtime === "aot-ws" ? (track === "faithful" ? " (primary C# configuration)" : " (primary Track O configuration)") : "";
+        // draft pre-registration §20 (prereg/v12), amendment of §6.4 A7: the -aot-ws builds embed a gen0 budget of 32 MB
+        // (eng/RuntimeConfiguration.props); CoreCLR reads that knob only from the environment, so -jit-ws runs set it.
+        const env = runtime === "jit-ws" ? { DOTNET_GCgen0size: "2000000" } : undefined;
+        const first = configurations.length;
         configurations.push(
             { id: `${prefix}-${runtime}`, label: `C# Track ${track === "faithful" ? "F" : "O"}, ${description}, parallel${primary}`, threads: "parallel",
                 expectDriver: `cs-${track}-${runtime}-parallel`, command: list => [driver, list] },
@@ -134,7 +141,13 @@ for (const [track, prefix] of [["faithful", "cs"], ["optimized", "cs-o"]]) {
                     expectDriver: `cs-${track}-${runtime}-check-single`, command: list => [driver, "--check", "--single", list] },
                 // pre-registration §18 (prereg/v10): 12 checkers, file i to checker i % 12, as tsgo7-check12
                 { id: `${prefix}-${runtime}-check12`, label: `C# Track O, ${description}, program parse+bind+check, parallel (12 checkers)`, threads: "parallel", check: true,
-                    expectDriver: `cs-${track}-${runtime}-check-parallel-n12`, command: list => [driver, "--check", "--checkers", "12", list] });
+                    expectDriver: `cs-${track}-${runtime}-check-parallel-n12`, command: list => [driver, "--check", "--checkers", "12", list] },
+                // draft pre-registration §20 (prereg/v12): tsrs's kind of checker pool (--pool tsrs: 12 checkers under
+                // Workstation GC, 16 under Server GC, locality assignment, tail work stealing), compared with tsrs-check.
+                // With stealing the parallel diagnostics depend on timing: a determinism pass dumps them per run.
+                { id: `${prefix}-${runtime}-checkpool`, label: `C# Track O, ${description}, program parse+bind+check, parallel (--pool tsrs: ${runtime === "aot-ws" ? 12 : 16} checkers, locality, stealing)`, threads: "parallel", check: true,
+                    expectDriver: `cs-${track}-${runtime}-check-parallel-n${runtime === "aot-ws" ? 12 : 16}-loc-steal`, command: list => [driver, "--check", "--pool", "tsrs", list],
+                    dumpCommand: (list, file) => [driver, "--check", "--pool", "tsrs", "--dump-diagnostics", file, list] });
         }
         // Parse+bind+check+emit of the program (draft pre-registration §19): Track O, NativeAOT runtimes only.
         if (track === "optimized" && runtime.startsWith("aot-")) {
@@ -145,12 +158,15 @@ for (const [track, prefix] of [["faithful", "cs"], ["optimized", "cs-o"]]) {
                 { id: `${prefix}-${runtime}-emit-single`, label: `C# Track O, ${description}, program parse+bind+check+emit, single-threaded`, threads: "single", check: true, emit: true,
                     expectDriver: `cs-${track}-${runtime}-emit-single`, command: list => [driver, "--check", "--emit", "--single", list] });
         }
+        if (env) for (const c of configurations.slice(first)) c.env = env;
     }
 }
+const envOf = config => config.env ? { ...driverEnv, ...config.env } : driverEnv;
 
 const runs = Number(arg("--runs", "20"));
 const warmup = Number(arg("--warmup", "3"));
 const memRuns = Number(arg("--mem-runs", "5"));
+const determinismRuns = Number(arg("--determinism-runs", "5"));
 const repoFilter = arg("--repos", undefined)?.split(",");
 const configFilter = arg("--configs", undefined)?.split(",");
 const label = arg("--label", "");
@@ -179,6 +195,9 @@ const PROFILES = {
     // Phase 4 emitter endpoint (draft §19): program check plus emit; binding rows tsgo7-emit-single and
     // cs-o-aot-ws-emit-single (report.mjs)
     emit: ["tsgo7-emit", "tsgo7-emit-single", "tsrs-emit", "tsrs-emit-single", "cs-o-aot-ws-emit", "cs-o-aot-ws-emit-single", "cs-o-aot-srv-emit", "cs-o-aot-srv-emit-single"],
+    // draft pre-registration §20 (prereg/v12): tsrs's kind of pool on the C# side against tsrs-check (secondary);
+    // typescript-go at 4 and 12 checkers reported next to it; binding rows as in profile check
+    checkpool: ["tsrs-check", "tsgo7-check", "tsgo7-check12", "tsgo7-check-single", "cs-o-aot-ws-checkpool", "cs-o-aot-srv-checkpool", "cs-o-aot-ws-check-single"],
 };
 const profile = arg("--profile", configFilter ? undefined : "full");
 if (profile && configFilter) throw new Error("--profile and --configs exclude each other");
@@ -193,9 +212,9 @@ const configs = configurations.filter(c => selected ? selected.includes(c.id) : 
 // driver, command with the file list as <list>) as JSON and exit; nothing runs, nothing is written.
 if (process.argv.includes("--dry-run")) {
     console.log(JSON.stringify({
-        profile: profile ?? "custom", corpus: corpusName, repos, settings: { runs, warmup, memRuns, priority },
+        profile: profile ?? "custom", corpus: corpusName, repos, settings: { runs, warmup, memRuns, determinismRuns, priority },
         configurations: configs.map(c => ({ id: c.id, label: c.label, threads: c.threads, bind: c.bind ?? false, check: c.check ?? false, emit: c.emit ?? false,
-            expectDriver: c.expectDriver ?? null, command: c.command("<list>").map(p => p.startsWith(repoRoot) ? relative(repoRoot, p).split("\\").join("/") : p) })),
+            env: c.env ?? null, determinism: Boolean(c.dumpCommand), expectDriver: c.expectDriver ?? null, command: c.command("<list>").map(p => p.startsWith(repoRoot) ? relative(repoRoot, p).split("\\").join("/") : p) })),
     }, null, 1));
     process.exit(0);
 }
@@ -207,8 +226,8 @@ if (process.argv.includes("--dry-run")) {
 function validate(name, list, expectedFiles, config, withPeak = false) {
     const command = config.command(list);
     const check = withPeak
-        ? spawnSync(peakmem, command, { encoding: "utf8", env: driverEnv, maxBuffer: 1 << 26 })
-        : spawnSync(command[0], command.slice(1), { encoding: "utf8", env: driverEnv, maxBuffer: 1 << 26 });
+        ? spawnSync(peakmem, command, { encoding: "utf8", env: envOf(config), maxBuffer: 1 << 26 })
+        : spawnSync(command[0], command.slice(1), { encoding: "utf8", env: envOf(config), maxBuffer: 1 << 26 });
     if (check.status !== 0) throw new Error(`${config.id} on ${name} failed (${check.status}): ${check.stderr}`);
     const output = JSON.parse(check.stdout.trim().split("\n").pop());
     if (withPeak) {
@@ -288,7 +307,7 @@ function measure(name, list, expectedFiles, config) {
     const exportFile = join(outDir, `hyperfine-${name}-${config.id}.json`);
     console.log(`\n== ${name} / ${config.id}`);
     execFileSync(hyperfine, ["--shell=none", "--warmup", String(warmup), "--runs", String(runs), "--export-json", exportFile,
-        "--command-name", `${name}/${config.id}`, command.map(quote).join(" ")], { stdio: "inherit", env: driverEnv });
+        "--command-name", `${name}/${config.id}`, command.map(quote).join(" ")], { stdio: "inherit", env: envOf(config) });
     const hf = JSON.parse(readFileSync(exportFile, "utf8")).results[0];
     const times = hf.times;
     const med = median(times);
@@ -296,12 +315,31 @@ function measure(name, list, expectedFiles, config) {
     // 3. memory
     const peaks = [];
     for (let i = 0; i < memRuns; i++) {
-        const r = spawnSync(peakmem, command, { encoding: "utf8", env: driverEnv });
+        const r = spawnSync(peakmem, command, { encoding: "utf8", env: envOf(config) });
         if (r.status !== 0) throw new Error(`peakmem ${config.id} on ${name} failed: ${r.stderr}`);
         peaks.push(JSON.parse(r.stderr.trim().split("\n").pop()));
     }
 
+    // 4. determinism (draft pre-registration §20): configurations whose parallel diagnostics depend on timing (work
+    // stealing) dump their diagnostics in separate untimed runs; reported are the diagnostic count of each run and the
+    // number of distinct dumps (SHA-256). The dump file is deleted after hashing.
+    let diagnosticsRuns = null;
+    if (config.dumpCommand && expectedFiles > 0) {
+        const dumpFile = join(outDir, `diagnostics-${name}-${config.id}.tmp`);
+        const counts = [], hashes = new Set();
+        for (let i = 0; i < determinismRuns; i++) {
+            const dumpCmd = config.dumpCommand(list, dumpFile);
+            const r = spawnSync(dumpCmd[0], dumpCmd.slice(1), { encoding: "utf8", env: envOf(config), maxBuffer: 1 << 26 });
+            if (r.status !== 0) throw new Error(`determinism run ${config.id} on ${name} failed: ${r.stderr}`);
+            counts.push(JSON.parse(r.stdout.trim().split("\n").pop()).diagnostics);
+            hashes.add(createHash("sha256").update(readFileSync(dumpFile)).digest("hex"));
+        }
+        rmSync(dumpFile, { force: true });
+        diagnosticsRuns = { runs: determinismRuns, counts, distinctDumps: hashes.size };
+    }
+
     return {
+        diagnosticsRuns,
         config: config.id,
         configLabel: config.label,
         command: command.map(c => c.startsWith(repoRoot) ? relative(repoRoot, c).split("\\").join("/") : c),
@@ -365,7 +403,7 @@ const run = {
     finishedAt: new Date().toISOString(),
     protocolCompliant: environment.protocolCompliant,
     suite: corpusName === "benchmark" ? "parse" : `parse-${corpusName}`,
-    settings: { runs, warmup, memRuns, hyperfineShell: "none", processPriority: priority },
+    settings: { runs, warmup, memRuns, determinismRuns, hyperfineShell: "none", processPriority: priority },
     environment,
     corpus: Object.fromEntries(repos.map(r => [r, { commit: fileManifest.repos[r].commit, files: fileManifest.repos[r].files, bytes: fileManifest.repos[r].bytes, contentSha256: fileManifest.repos[r].contentSha256 }])),
     configurations: configs.map(c => ({ id: c.id, label: c.label, threads: c.threads })),
