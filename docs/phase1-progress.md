@@ -1809,3 +1809,22 @@ AR probe drivers built from 2fe9c1d with the probe added and removed again (scra
 **Files:** `src/NeverSharp.Optimized/Checker/Checker.Inference.cs`, `Checker.Calls.cs`, `Checker.Contextual.cs`, `Checker.Expressions.cs`, `Checker.Functions.cs`, `Checker.Instantiate.cs`, `Checker.Jsx.cs`, `Checker.Literals.cs` (step 2); `TypeStore.cs`, `Checker.Members.cs`, `Checker.Classes.cs`, `Checker.NodeBuilder.Declarations.cs` (step 3); `SymTable.cs`, `Checker.cs` (step 5); `Checker.Relations.cs` (step 8); `TypeStore.cs` (step 9); this file. Scratch `MM1/`: `base/`, `s1`–`s10/` (drivers; `s9` is the final code), `probe/` (no-GC driver), `census*/` (AR probe drivers), `p0/` (step 0 runs), `tr/` (traces and accounts), `dump/` (heap statistics), `runs/`, `dumps/`, `probe.mjs`, `psum.mjs`, `ph.mjs`, `runs.mjs`, `run.sh`, `step.sh`, `final.sh`, `build.sh`, `trace.sh`, `heapstat.sh`, `dumpcheck.sh`, `nogc-probe.patch`, the rejected patches, `runs-*.txt`, `gatec-*.log`.
 
 **Rules:** C# edited with the file tools only. Bent or to note: (1) the step 0 probes (the no-GC region in `CheckMode.cs`; counters of names and string literal values read, with a `NoAlloc` attribute removed for the time of the probe) were written with the file tools and removed with `git checkout`; AR1's probe hooks were applied with `git apply` and its `ArProbe.cs.txt` copied into the tree with `cp` for each census, then removed with `git checkout` and `rm`; step 1 applied AR2's saved patch with `git apply`; rejected steps were undone with `git checkout` after saving their diff; to build step 2's jit-ws driver, step 3's files were set aside with `git stash push -- src` and restored with `git stash pop` (version-control operations and copies, no text edits by script); (2) the no-GC probe used `GC.TryStartNoGCRegion` in a scratch driver and `DOTNET_gcConcurrent=0` for the parallel no-GC runs (with a control variant), and its upper bound replaces the check phase in the normal run instead of comparing whole runs (the region start and the non-concurrent front end would otherwise be counted); (3) the per-collection census gives means per generation, and the cards are reported as the card-marking stage's time and reached bytes (the trace has no card counts); the vscode survivor census failed (`dotnet-dump`), only sentry's was taken; `dotnet-dump` attached to the census driver this module started; (4) step 3 was kept under the code-placement exception (playwright single AOT 1.016, JIT 0.999); steps 5, 8 and 9 on 10/12-round repeats of Server GC rows whose 6-round medians were 1.003–1.015; step 9 within noise; (5) `sed` was used on scratch scripts only (copies of AR2's trace and heap scripts, one probe parameter), never on a source file.
+
+## Conformity and protocol runs under prereg/v12 (2026-11-06)
+
+- **Full gates on 1eabf90**, the last commit that changes C# code: Gate C passed (50,177 units, oracle dumps reused) and Gate D passed (50,177 units).
+- **Harness f4f8214:** profile `checkpool`, determinism pass, report Tables 1e/2j/2k, `DOTNET_GCgen0size` for `-jit-ws`.
+- **§20** was accepted by the author and tagged `prereg/v12` (6d8a75e), with an OpenTimestamps stamp (6920a1c). The §12.2 row for v11 was missing and was added with v12's.
+- **Protocol runs**, drivers from 1eabf90, harness 6920a1c, all with rig checks ok and the variance gate passing. All C# results are fitted to the corpus (§20, disclosed).
+  - **`checkpool`** (`results/phase3/checkpool/2026-11-06T16-46-12-267Z/`), factor vs tsrs-check:
+    - ws 2.149 [2.122, 2.182]: vscode 2.42, sentry 1.91, bluesky 2.22, playwright 2.24, tldraw 2.01;
+    - srv 1.832 [1.796, 1.866] (98.75 %): vscode 1.97, sentry 1.45, bluesky 2.12, playwright 1.98, tldraw 1.73;
+    - tsgo7-check 5.10.
+    - Stealing makes the parallel diagnostics vary between runs. Playwright gave 5 of 5 distinct outputs under both GCs (Table 1e).
+  - **`check`, additional run 4** (`results/phase3/additional/2026-11-06T18-16-31-540Z/`):
+    - ws vs tsgo7-check 0.756 [0.753, 0.759]; single 0.696; srv 0.710;
+    - vs tsrs-check 3.794; single vs tsrs-check-single 1.466.
+  - **`emit`, additional run 1** (`results/phase4/emit-additional/2026-11-06T20-28-04-213Z/`):
+    - ws vs tsgo7-emit 0.782 [0.779, 0.786]; single 0.68; srv 0.73;
+    - vs tsrs-emit 3.848; single vs tsrs-emit-single 1.350.
+- The endpoints are unchanged: check 1.680, emit 1.030, check12 1.305.
