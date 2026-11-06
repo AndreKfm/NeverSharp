@@ -130,6 +130,15 @@ internal sealed class TypeStore
 
     internal Items<IndexInfo> Keep(List<IndexInfo> list) => indexInfoLists.Copy(list);
 
+    // Module MM1 (Track O / tsrs-only; tsrs types.rs InterfaceType.resolved_base_types, an arena slice): the base type
+    // lists of class and interface types, stored lists instead of a List per type.
+    private readonly ItemArena<Type> baseTypeLists = new();
+
+    [NoAlloc(Constraints.NoLock | Constraints.NoBlock)]
+    internal Items<Type> ViewBaseTypes(ItemRange<Type> list) => baseTypeLists.View(list);
+
+    internal ItemRange<Type> StoreBaseTypes(ReadOnlySpan<Type> list) => baseTypeLists.Store(list);
+
     /// <summary>A new union or intersection type (or an origin type) with its member list.</summary>
     internal Type CreateUnionOrIntersection(TypeFlags flags, ObjectFlags objectFlags, TypeList members, Type origin)
     {
@@ -305,7 +314,8 @@ internal readonly struct ObjectTypeData
     public ref ItemRange<Signature> DeclaredCallSignatures => ref Record.DeclaredCallSignatures;
     public ref ItemRange<Signature> DeclaredConstructSignatures => ref Record.DeclaredConstructSignatures;
     public ref ItemRange<IndexInfo> DeclaredIndexInfos => ref Record.DeclaredIndexInfos;
-    public ref List<Type>? ResolvedBaseTypes => ref Record.ResolvedBaseTypes;
+    public ref ItemRange<Type> ResolvedBaseTypes => ref Record.ResolvedBaseTypes;
+    public ref bool ResolvedBaseTypesIsResolvingEmpty => ref Record.ResolvedBaseTypesIsResolvingEmpty;
     public ref bool BaseTypesResolved => ref Record.BaseTypesResolved;
     public ref Type ResolvedBaseConstructorType => ref Record.ResolvedBaseConstructorType;
     public ref Type Target => ref Record.Target;
@@ -357,7 +367,12 @@ internal struct ObjectTypeRecord
     public ItemRange<Signature> DeclaredCallSignatures;
     public ItemRange<Signature> DeclaredConstructSignatures;
     public ItemRange<IndexInfo> DeclaredIndexInfos;
-    public List<Type>? ResolvedBaseTypes;
+    // resolvedBaseTypes (module MM1, Track O / tsrs-only: a stored list of the store's base type arena instead of a List,
+    // as tsrs keeps type lists as arena slices, crates/tsrs_checker/src/types.rs InterfaceType.resolved_base_types;
+    // default: undefined or empty, which getBaseTypes treats alike; ResolvedBaseTypesIsResolvingEmpty: the list is
+    // checker.ts resolvingEmptyArray)
+    public ItemRange<Type> ResolvedBaseTypes;
+    public bool ResolvedBaseTypesIsResolvingEmpty;
     public bool BaseTypesResolved; // baseTypesResolved
     public Type ResolvedBaseConstructorType;
 

@@ -612,23 +612,23 @@ internal sealed partial class Checker
     // ---- base types ----
 
     /// <summary>checker.ts getBaseTypes.</summary>
-    internal List<Type> GetBaseTypes(Type type)
+    internal Items<Type> GetBaseTypes(Type type)
     {
         if ((Types.ObjectFlagsOf(type) & (ObjectFlags.ClassOrInterface | ObjectFlags.Reference)) == 0)
         {
-            return [];
+            return default;
         }
         var data = Types.Object(type);
         if (!data.BaseTypesResolved)
         {
             if (PushTypeResolution(type, ResolvedBaseTypesProperty))
             {
-                data.ResolvedBaseTypes ??= [];
+                // (type.resolvedBaseTypes ||= []: module MM1, an undefined list and an empty one are both default)
                 var symbol = Types.Symbol(type);
                 var flags = symbol.IsNone ? SymbolFlags.None : SymbolFlagsOf(symbol);
                 if ((Types.ObjectFlagsOf(type) & ObjectFlags.Tuple) != 0)
                 {
-                    data.ResolvedBaseTypes = [GetTupleBaseType(type)];
+                    SetBaseTypes(data, [GetTupleBaseType(type)]);
                 }
                 else
                 {
@@ -655,20 +655,37 @@ internal sealed partial class Checker
             }
             data.BaseTypesResolved = true;
         }
-        return data.ResolvedBaseTypes ?? [];
+        return Types.ViewBaseTypes(data.ResolvedBaseTypes);
     }
 
-    // checker.ts resolvingEmptyArray (the base types of a class while they are resolved; never written to)
-    private static readonly List<Type> resolvingEmptyBaseTypes = [];
+    // type.resolvedBaseTypes = list (module MM1: stored in the type store's base type arena)
+    private void SetBaseTypes(ObjectTypeData data, ReadOnlySpan<Type> list)
+    {
+        data.ResolvedBaseTypes = Types.StoreBaseTypes(list);
+        data.ResolvedBaseTypesIsResolvingEmpty = false;
+    }
+
+    // type.resolvedBaseTypes.push(baseType) (module MM1: the list stored again with the new element; nothing holds the
+    // old list across this, since the type's base types are still being resolved)
+    private void AddBaseType(ObjectTypeData data, Type baseType)
+    {
+        var current = Types.ViewBaseTypes(data.ResolvedBaseTypes);
+        Span<Type> grown = current.Count < 16 ? stackalloc Type[current.Count + 1] : new Type[current.Count + 1];
+        current.AsSpan().CopyTo(grown);
+        grown[^1] = baseType;
+        SetBaseTypes(data, grown);
+    }
 
     // checker.ts resolveBaseTypesOfClass (module C3: with the instantiated constructors of the base expression)
     private void ResolveBaseTypesOfClass(Type type, ObjectTypeData data)
     {
-        data.ResolvedBaseTypes = resolvingEmptyBaseTypes;
+        // type.resolvedBaseTypes = resolvingEmptyArray (the base types of a class while they are resolved)
+        data.ResolvedBaseTypes = default;
+        data.ResolvedBaseTypesIsResolvingEmpty = true;
         var baseConstructorType = GetApparentType(GetBaseConstructorTypeOfClass(type));
         if ((Types.Flags(baseConstructorType) & (TypeFlags.Object | TypeFlags.Intersection | TypeFlags.Any)) == 0)
         {
-            data.ResolvedBaseTypes = [];
+            SetBaseTypes(data, []);
             return;
         }
         var declaration = GetClassLikeDeclarationOfSymbol(Types.Symbol(type)); // getBaseTypeNodeOfClass
@@ -696,14 +713,14 @@ internal sealed partial class Checker
             if (constructors.Count == 0)
             {
                 Error(At(baseTypeNode, StoreOf(baseTypeNode).Expression(baseTypeNode.Node)), Diagnostics.No_base_constructor_has_the_specified_number_of_type_arguments);
-                data.ResolvedBaseTypes = [];
+                SetBaseTypes(data, []);
                 return;
             }
             baseType = GetReturnTypeOfSignature(constructors[0]);
         }
         if (IsErrorType(baseType))
         {
-            data.ResolvedBaseTypes = [];
+            SetBaseTypes(data, []);
             return;
         }
         var reducedBaseType = GetReducedType(baseType);
@@ -712,16 +729,16 @@ internal sealed partial class Checker
             var elaboration = ElaborateNeverIntersection(null, baseType); // module C4
             var diagnostic = ChainDiagnosticMessages(elaboration, Diagnostics.Base_constructor_return_type_0_is_not_an_object_type_or_intersection_of_object_types_with_statically_known_members, TypeToString(reducedBaseType));
             diagnostics.Add(CreateDiagnosticForNodeFromMessageChain(At(baseTypeNode, StoreOf(baseTypeNode).Expression(baseTypeNode.Node)), diagnostic, null));
-            data.ResolvedBaseTypes = [];
+            SetBaseTypes(data, []);
             return;
         }
         if (type == reducedBaseType || HasBaseType(reducedBaseType, type))
         {
             Error(ValueDeclarationOf(Types.Symbol(type)), Diagnostics.Type_0_recursively_references_itself_as_a_base_type, TypeToString(type, NodeRef.None, TypeFormatFlags.WriteArrayAsGenericType));
-            data.ResolvedBaseTypes = [];
+            SetBaseTypes(data, []);
             return;
         }
-        if (ReferenceEquals(data.ResolvedBaseTypes, resolvingEmptyBaseTypes))
+        if (data.ResolvedBaseTypesIsResolvingEmpty)
         {
             // Circular reference, likely through instantiation of default parameters
             // (otherwise there'd be an error from hasBaseType) - this is fine, but `.members` should be reset
@@ -729,7 +746,7 @@ internal sealed partial class Checker
             // partial instantiation of the members without the base types fully resolved
             data.MembersResolved = false;
         }
-        data.ResolvedBaseTypes = [reducedBaseType];
+        SetBaseTypes(data, [reducedBaseType]);
     }
 
     // checker.ts areAllOuterTypeParametersApplied
@@ -791,7 +808,7 @@ internal sealed partial class Checker
                 {
                     if (type != baseType && !HasBaseType(baseType, type))
                     {
-                        data.ResolvedBaseTypes!.Add(baseType);
+                        AddBaseType(data, baseType);
                     }
                     else
                     {

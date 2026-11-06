@@ -922,7 +922,7 @@ internal sealed partial class Checker
             var localParams = c.GetLocalTypeParametersOfClassOrInterfaceOrTypeAlias(symbol);
             var typeParamDecls = TypeParamDecls(localParams);
             var baseTypes = c.GetBaseTypes(interfaceType);
-            var baseType = baseTypes.Count > 0 ? c.GetIntersectionType(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(baseTypes)) : Type.None;
+            var baseType = baseTypes.Count > 0 ? c.GetIntersectionType(baseTypes.AsSpan()) : Type.None;
             var members = SerializePropertySymbolsForClassOrInterface([.. c.GetPropertiesOfType(interfaceType)], isClass: false, baseType, isStatic: false);
             var callSignatures = SerializeSignatures(SignatureKind.Call, interfaceType, baseType, SyntaxKind.CallSignature);
             var constructSignatures = SerializeSignatures(SignatureKind.Construct, interfaceType, baseType, SyntaxKind.ConstructSignature);
@@ -1390,7 +1390,7 @@ internal sealed partial class Checker
         }
 
         // checker.ts getNonInheritedProperties
-        private List<SymbolRef> GetNonInheritedProperties(Type type, List<Type> baseTypes, List<SymbolRef> properties)
+        private List<SymbolRef> GetNonInheritedProperties(Type type, Items<Type> baseTypes, List<SymbolRef> properties)
         {
             if (baseTypes.Count == 0)
             {

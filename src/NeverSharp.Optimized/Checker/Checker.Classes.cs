@@ -622,8 +622,8 @@ internal sealed partial class Checker
     {
         var store = StoreOf(node);
         var baseTypeNode = GetClassExtendsHeritageElement(store, node.Node);
-        var baseTypes = baseTypeNode.IsNone ? null : GetBaseTypes(type);
-        var baseWithThis = baseTypes is { Count: > 0 } ? GetTypeWithThisArgument(baseTypes[0], Types.Object(type).ThisType) : Type.None;
+        var baseTypes = baseTypeNode.IsNone ? default : GetBaseTypes(type);
+        var baseWithThis = baseTypes.Count > 0 ?GetTypeWithThisArgument(baseTypes[0], Types.Object(type).ThisType) : Type.None;
         var baseStaticType = GetBaseConstructorTypeOfClass(type);
         foreach (var member in store.Nodes(store.Members(node.Node)))
         {
