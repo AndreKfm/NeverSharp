@@ -1577,3 +1577,127 @@ tsrs in these rounds: vscode 2.50 s (ws rounds) / 2.37 s (srv rounds), sentry 0.
 **Files:** `eng/RuntimeConfiguration.props` (step 0); `src/NeverSharp.Optimized/Checker/Checker.Access.cs`, `Checker.Calls.cs`, `Checker.Contextual.cs`, `Checker.Expressions.cs`, `Checker.Instantiate.cs`, `Checker.Literals.cs`, `Checker.MappedConditional.cs`, `Checker.Relater.cs`, `Checker.Resolve.cs`, `Checker.Types.cs`, `Scanner/Scanner.cs` (step 1); `Checker.Access.cs`, `Checker.Calls.cs`, `Checker.Expressions.cs`, `Checker.Flow.cs`, `Checker.Generics.cs`, `Checker.Resolve.cs`, `Checker.Types.cs`, `TypeStore.cs` (step 3); `Checker.Access.cs`, `Checker.Declarations.cs`, `Checker.Generics.cs`, `Checker.Narrowing.cs`, `Checker.Relations.cs`, `Checker.Resolve.cs`, `Checker.TypeFacts.cs` (step 5); this file. Scratch `AR2/`: `base/`, `b0`–`b7/` (drivers), `probeF/` (probe drivers), `census/` (AOT probe logs), `tr/` (traces and accounts), `runs/` (interleaved rounds), `dumps/`, `inter2.mjs`, `cmp2.mjs`, `mkv2.mjs`, `run.sh`, `buildx.sh`, `gen0.targets` (the step-0 experiment builds), `dumpcheck.sh`, `trace.sh`, the rejected patches, `gatec-*.log`.
 
 **Rules:** C# edited with the file tools only. Bent or to note: (1) to build and measure the steps separately, files of a later step were set aside with `git stash push -- <files>` and restored with `git stash pop`, rejected steps were undone with `git checkout -- <file>` after saving their diff (version-control operations, no text edits by script); the temporary AR probe was written with the file tools and removed with `rm` and `git checkout`; (2) step 0 measured 32 and 48 MB besides the brief's 64, 128 and 256 MB, because 64 MB made playwright `--single` slower; (3) step 5 was kept under the within-noise clause (main medians 0.996 and 0.998, fewer collections); (4) the sentry ws result of steps 1, 3 and 5 is the 10-round repeat, the 6-round runs had medians 1.007, 1.020 and 1.010 (all within noise); (5) steps 6 and 7 were rejected on screens (8 and 4 rounds), not full measurements; (6) the final census did not re-take the survivors (`dotnet-dump` failed); (7) jit-ws could not take the knob from the build (above).
+
+## PC1: per-checker speed, with tsrs's instruction cuts as the model (2026-11-06)
+
+Brief: [modules/PC1.md](modules/PC1.md) (author's decision of 2026-11-06). One attempt (Opus 5.5, medium effort, alone, directly on main); commits 4a13dbb (step 1), cf44185 (step 3) and this entry. Starting drivers built from 5426b54 into scratch `PC1/base/` (aot-ws, aot-srv, jit-ws). **Every number is exploratory:** interleaved rounds with AR2's `inter2.mjs` and `cmp2.mjs` (scratch `PC1/run.sh`; `PC1/mkv.mjs` is AR2's `mkv2.mjs` plus Server GC `--single` and a JIT kind), the previous kept step against the new one, 6 rounds after 1 warm-up (10–12 for repeats, 7 for the final table), `bootstrapMedianRatio`. Main workloads: bluesky and playwright `--check --single` (aot-ws and aot-srv), sentry and vscode `--check --pool tsrs` (aot-srv, 16 checkers); guards: sentry and vscode `--pool tsrs` (aot-ws, 12 checkers), tldraw `--pool tsrs` (aot-srv), vscode `--check` with the default pool (aot-ws), playwright `--check --emit --single` (final table). Builds with `WarningsNotAsErrors=NU1903` (not committed). **No full gate**, by the author's decision.
+
+### Survey
+
+**Counters on the tsrs side.** The driver `parse-rs.exe` has none (it prints diagnostic counts only). tsrs itself has the runtime switches `TSRS_UNION_CACHE_STATS` and `TSRS_INFER_MEMO_STATS` (printed only by `tsrs_cli`'s exit path) and the cargo feature `site-counts` of `tsrs_checker` (`sitecount.rs`: creation counts of types, symbols, signatures, instantiations and mappers by kind, links, the active-mapper cache and the relation caches). The per-function entry counters of `notes/cpu-checker.md` ("Port divergences found") were never committed. So the comparison used:
+- a scratch copy of the driver (`PC1/rscount`: the same `main.rs` plus the feature, calls of `dump_site_counts`, `union_cache_finish`, `infer_memo_finish` and the program's type, symbol and instantiation counts; built offline with the pinned toolchain into the scratch folder, without LTO; counts only);
+- on the Track O side a temporary probe at the same code paths: types by tsrs's kind labels at `TypeStore.Create`, transient symbols, signatures, the active-mapper cache in `instantiateTypeWithAlias`, mappers by kind, the relation caches of `isTypeRelatedTo` and `recursiveTypeRelatedTo`, and entry counts of twelve functions that tsrs does not count (scratch `PC1/probe.patch`, never committed).
+
+**Call-count comparison** (`--check --single` with the starting driver; Track O / tsrs; the rows with the largest ratio among the counts both sides have; every other shared count is within 0.9–1.1):
+
+| count | bluesky | playwright | sentry |
+|---|---|---|---|
+| index (`keyof`) types created | 1,087 / 164 = **6.63** | 1,712 / 510 = **3.36** | 1,771 / 652 = **2.72** |
+| checker (transient) symbols | 120,706 / 93,639 = 1.29 | 351,911 / 225,336 = 1.56 | 734,285 / 543,389 = 1.35 |
+| relation cache hits, `isTypeRelatedTo` | 1,794 / 1,633 = 1.10 | 11,888 / 11,217 = 1.06 | 15,901 / 13,116 = 1.21 |
+| relation cache hits, `recursiveTypeRelatedTo` | 6,820 / 6,120 = 1.11 | 59,325 / 75,204 = 0.79 | 47,279 / 40,905 = 1.16 |
+| type parameters created | 4,909 / 4,751 = 1.03 | 10,370 / 10,595 = 0.98 | 12,404 / 11,328 = 1.09 |
+| maybe-stack hits | 903 / 905 = 1.00 | 7,926 / 7,516 = 1.05 | 1,030 / 1,032 = 1.00 |
+| active-mapper cache hits | 1,395 / 1,383 = 1.01 | 10,953 / 11,184 = 0.98 | 6,995 / 6,861 = 1.02 |
+| literal types | 33,730 / 33,277 = 1.01 | 75,128 / 73,995 = 1.02 | 174,968 / 173,980 = 1.01 |
+| union types | 8,232 / 8,209 = 1.00 | 24,035 / 24,183 = 0.99 | 28,579 / 28,443 = 1.00 |
+| signatures | 31,175 / 31,188 = 1.00 | 73,817 / 76,357 = 0.97 | 132,642 / 132,669 = 1.00 |
+| relation cache misses, `recursiveTypeRelatedTo` | 27,031 / 27,070 = 1.00 | 109,148 / 116,600 = 0.94 | 123,163 / 123,746 = 1.00 |
+| anonymous object types | 58,228 / 58,233 = 1.00 | 94,239 / 94,249 = 1.00 | 338,461 / 338,538 = 1.00 |
+| instantiations through a new mapper | 45,657 / 46,082 = 0.99 | 143,422 / 170,367 = 0.84 | 168,554 / 177,019 = 0.95 |
+| instantiated anonymous types | 13,779 / 14,208 = 0.97 | 37,179 / 57,753 = 0.64 | 59,958 / 68,171 = 0.88 |
+| `getUnionType` calls with 2+ inputs / union front cache lookups | 63,713 / 63,609 | 122,348 / 125,438 | 272,668 / 271,465 |
+
+- **No port divergence of note.** Every count of shared work is within a few percent, and where Track O differs it mostly does less (playwright's instantiations are a TypeScript 7 difference on tsrs's side).
+- The ratios above 1: `keyof` types 2.7–6.6×, but at most 1,771 types; checker symbols 1.29–1.56× (tsrs's lazy members, known from TG1); relation-cache hits 1.06–1.21× (more lookups that hit, not more relations).
+- Track O-only entry counts (playwright single): `getReducedType` 6.67 M, `getApparentType` 4.26 M, `getPropertyOfType` 1.62 M, `getTypeOfSymbol` 1.39 M, `checkExpression` 0.93 M, `isRelatedTo` 0.39 M, `getFlowTypeOfReference` 0.31 M, `structuredTypeRelatedTo` 0.11 M, `inferFromTypes` 87 K, `resolveCall` 44 K.
+- tsrs's memo statistics on the same runs: union front cache hit rate 38 % (bluesky), 69 % (playwright), 43 % (sentry); inference memo 57 / 246 / 1,063 hits (1.4 K / 8.8 K / 26.8 K `inferFromTypes` steps skipped), negligible here.
+- So the single-threaded gap is cost per operation, not more operations.
+
+**Applicable list** (tsrs's change, its gain on tsrs's corpus, status in Track O, estimate and effort here):
+
+| tsrs change (note) | tsrs gain | Track O | here |
+|---|---|---|---|
+| named-union membership through one set (hillclimb r1) | −11.3 % | the cost it removed is `compareTypes` binary searches under TypeScript 7's structural order; TypeScript 6.0.3 sorts unions by type id, `containsType` is an int binary search | no counterpart worth porting |
+| union front cache, long keys (hillclimb r1, `perf-union-inference.md`) | −7 % / −0.5…−1.1 % | not present | ported as step 2, no gain, rejected |
+| `compareTypes` searches, galloping merge (r1) | −3.2 % | N/A (id order) | — |
+| memo bits in `ObjectFlags`: `shouldNormalizeIntersection`, `isWeakType` (r1) | −1.9 %, −1.4 % | not present | intersections are rare here (1.6–18.7 K `getIntersectionType` calls single); `isWeakType` is a short loop over resolved members; < 0.3 % est., small effort; not done |
+| IA memo (r1) | −1.3 % | not present | 11–41 K `getIndexedAccessType` calls single; < 0.3 % est., medium effort; not done |
+| a name's literal type only when the type has index infos (r1) | −1.0 %, −0.6 % | — | **not exact for TypeScript 6.0.3**: it skips `getStringLiteralType`'s creation; a literal created later gets a later id, which changes union member order |
+| relater: one test for two structured types, unrelated regular literals, keys without the key builder (r1) | −0.4 %, −1.5 %, −0.35 % | keys are ints for non-generic pairs already (CO1) | `isRelatedTo` 86–472 K calls single; < 0.2 % est. |
+| inline fast paths: `getApparentType`, `getReducedApparentType` for a plain object type, `getNormalizedType` (r1) | part of −38.7 % | not present | `getReducedType` and `getApparentType` are the most called functions → step 3 |
+| borrowed lists, presized tables, pooled lists (r1, r4, round 4) | 0.1–0.8 % each | mostly done in RS1, AR1, AR2 | — |
+| contextual union constituents skipped per (union, name) (r2) | −1.6 % | not present | built for contextual unions of 8+ members; medium-high effort; not done |
+| `checkExpressionForMutableLocation` takes `isConstContext`'s contextual type (r2) | −1.3 % | — | **not exact for TypeScript 6.0.3**: the second `getContextualType` can create types (non-fixing mapper inferences, widened literals), so skipping it moves type ids and union order |
+| maybe-stack scan up to 32 keys (r2) | −0.8 % | done (RS1 be7fdc9) | — |
+| discriminant property types, `propertiesRelatedTo` reuse, property lookups without a call, `maybeTypeOfKind` OR, recursion identities, `removeSubtypes` key property (r2, r3) | 0.1–1.0 % each | not present | lower relation volume here; each < 0.3 % est. |
+| `resolveName` pass-through ancestors (r4) | −0.36 % | done (RS2 bda23e7) | — |
+| symbol tables, symbol name hashes, `repr(C)`, `object_target` (r4, round 4, cpu3) | various | N/A (name ids, records) | — |
+| packed instantiation keys (round 4), instantiation key without the key builder (cpu3 change 2) | −1.0 %, −1.2 % | keys are int spans (CO2); a key was still built for a mapper that was not active | step 1 |
+| active-mapper caches pooled, visited map cleared to size (cpu-checker 1, 4) | −1.5 %, −1 % | done (`KeyMap.ClearScratch`) | — |
+| stored lists instead of copies (cpu-checker 7, 8) | −1.9 % | done (RS1 stored type lists) | — |
+| infer memo (`perf-heavy-files-infer-memo.md`) | heavy files | not present | inference walks repeat little here (statistics above); the vscode heavy file is not a tail at 16 checkers (all checkers end within 0.05 s of each other with stealing); not done |
+| flow memo (`flowmemo.rs`) | | done (RS2 b956f67) | — |
+
+**Parallel loss** (aot-srv `--pool tsrs`, 16 checkers, against `--single`; tsrs `--check` (16 checkers) against `--single`; 3 runs each, medians; process CPU from the OS, Track O's per-checker times from `NEVERSHARP_POOL_STATS=1`; scratch `PC1/ploss/`; starting driver → final driver):
+
+| | sentry | vscode |
+|---|---|---|
+| Track O single check | 7.37 → 7.38 s | 29.54 → 29.20 s |
+| Track O summed checker time at 16 / single | 1.92× → 1.95× | 1.98× → 1.92× |
+| of it the GC pause (stops all 16 checkers) | 0.17 → 0.18 s × 16 | 0.43 → 0.42 s × 16 |
+| summed checker time without the pause / single | 1.55× → 1.55× | 1.75× → 1.69× |
+| types created at 16 / single: Track O | 1.28× | 1.49× |
+| types created at 16 / single: tsrs (counts build) | 1.27× (866,543 / 682,758) | 1.49× (3,210,734 / 2,154,962) |
+| Track O per type created, without the pause | 1.21× | 1.17× → 1.13× |
+| process CPU at 16 / single: Track O (user) | 1.79× (1.66×) → 1.87× (1.66×) | 1.94× (1.81×) → 1.84× (1.79×) |
+| process CPU at 16 / single: tsrs (user), two sets | 1.55× (1.33×), 1.53× (1.34×) | 1.61× (1.47×), 1.71× (1.57×) |
+
+- Both sides duplicate the same work at 16 checkers (1.27–1.28× and 1.49× the types).
+- **Track O loses more per unit of work:** without the pause each checker is still 13–21 % slower per type created than the single checker; the GC pause adds 0.17–0.43 s to each of the 16 checkers (12–20 % of the summed time). tsrs's user CPU grows about as much as its duplicated work, so its per-unit cost stays nearly flat (as `notes/perf-memory-traffic-32.md` found at 32 checkers).
+- Likely causes: the Server GC pause, which stops every checker; and memory traffic of the larger, reference-rich heap shared by 16 checkers (type records plus side arrays, link stores, dictionaries, against tsrs's compact arenas), with card marking and write barriers on stores into the heap. Not separated further (no hardware counters here).
+
+**Order of the steps** (expected gain per effort): step 1 (the new-mapper key: trivial, 73–84 % of instantiations); step 2 (the union front cache: tsrs's largest memo that maps, 38–69 % hit rate); step 3 (inline `getReducedApparentType`: the most called functions); step 4 (the closure per constituent in the named-union test).
+
+### Steps
+
+After each code step the dumps of the hard constraints were identical with the starting driver's: default pool `--dump-diagnostics` on sentry, bluesky and tuning-check; `--pool tsrs` aot-ws on vscode and sentry (identical at the first run every time); default pool `--dump-emit` on playwright and tldraw. A kept step passed Gate C `--sample 200`. Ratios are new against the previous kept step (6 rounds; repeats in brackets).
+
+| step | change | tsrs source | exactness | counted work removed (single) | srv-tsrs sentry, vscode | single ws bluesky, playwright | single srv bluesky, playwright | guards (ws-tsrs sentry, vscode; srv-tsrs tldraw; ws default vscode) | result |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | `instantiateTypeWithAlias`: no cache key and lookup for a mapper that was not active | `checker_11.rs` `instantiate_type_with_alias`, `notes/perf-checker-cpu3.md` change 2 | a mapper pushed now gets an empty cache (a new or cleared `KeyMap`) and nothing is stored in it for this call, so the lookup can only miss; same calls, counts, order and result | key build and lookup for 45,657 / 143,422 / 168,554 instantiations (bluesky / playwright / sentry; 73–84 %) | 0.984 [0.957, 1.024], 1.015 [0.973, 1.086] (10 rounds: 0.995 [0.968, 1.023]) | 0.984 [0.978, 0.989], 0.993 [0.988, 0.998] | 0.997 [0.984, 1.011], 1.003 [0.998, 1.008] | 1.015, 0.980, 1.055 [0.968, 1.112] (10 rounds: 1.017 [0.994, 1.058]), **0.993 [0.990, 0.999]** | kept, 4a13dbb |
+| 2 | union front cache: a direct-mapped table (2^10 slots per checker) in front of `getUnionType` for 2–8 inputs without alias or origin, tsrs's store rule plus unchanged symbol and signature counts, a shadow mode (`NEVERSHARP_UNION_CACHE=shadow`: no difference on bluesky, playwright and sentry single, vscode and tldraw `--pool tsrs`) | `unioncache.rs`, `notes/perf-union-inference.md` | stored only from calls that created nothing but the union they return, instantiated nothing, took no impure reduction and did not return `errorType`; such a call is a function of its inputs and of grow-only caches | 38–69 % of the union calls (tsrs's hit rates) | 1.016 [0.970, 1.069], 0.996 [0.959, 1.037] | **1.008 [1.005, 1.022]**, 1.014 [0.868, 1.053] | 1.003, 0.995 | 1.013, 0.989, 1.003, 0.999 | rejected (`PC1/step2-union-front-cache-rejected.patch`) |
+| 3 | `getReducedApparentType` returns a plain object type (flags Object only, not mapped) at once | the inline fast path of `getReducedApparentType` for a plain object type, `notes/perf-icount-hillclimb.md` | such a type is its own reduced type and its own apparent type, so `getReducedType(getApparentType(getReducedType(t)))` returns it unchanged; nothing is created | `getReducedType` 1.90 M → 0.47 M, 6.67 M → 1.05 M, 7.10 M → 2.36 M; `getApparentType` 1.28 M → 0.57 M, 4.26 M → 1.45 M, 5.51 M → 3.14 M (bluesky / playwright / sentry) | 1.008 [0.963, 1.059], 1.017 [0.930, 1.075] (10 rounds: 0.997 [0.958, 1.056], 0.993 [0.963, 1.023]) | 1.006 [0.998, 1.015] (10 rounds: 1.002 [1.000, 1.009]), **0.992 [0.985, 1.000]** | 1.003, **0.985 [0.981, 0.995]** | 0.977, 1.000, 1.006, 0.994 | kept, cf44185 (bluesky ws within noise above 1; jit-ws at full optimization, 8 rounds: 0.998 [0.994, 1.001], so code placement) |
+| 4 | `getUnionType`'s named-union test as a loop (no closure per constituent), `addNamedUnions` over the stored list (no copy) | `checker_13.rs` `get_union_type_worker_inner` (iteration in place) | the same `containsType` calls in the same order | one closure per constituent of unions built from named unions | 0.977 [0.955, 1.061], 1.014 [0.990, 1.035] | 0.994, 0.999 | 1.001, 0.996 | not run | rejected on the main workloads (`PC1/step4-named-unions-loop-rejected.patch`) |
+
+Notes:
+- **Step 2:** the cache costs as much as it saves here. TypeScript 6.0.3's uncached path is cheap (insertion by type id, int-span keys in a `KeyMap`), where tsrs's saved a structural sort; and many repeats return `errorType` on these error-rich repositories (tsrs: 29,385 of 63,609 lookups on bluesky), which are never stored.
+- Three candidates in a row did not fail (steps 2 and 4 failed, 3 was kept), but nothing left on the list is estimated above 1 % and exact for TypeScript 6.0.3, so the module stopped after step 4.
+
+### Base against final
+
+Starting drivers (5426b54) against final (cf44185; scratch `PC1/s3/`), 7 interleaved rounds after 1 warm-up, `tsrs-check` (`parse-rs.exe --check`, 16 checkers) and `tsgo7-check` in the same rounds; factor = median against tsrs or typescript-go of the same rounds (lower is better). Scratch `PC1/runs/final-*.json`.
+
+| workload | base | final | final / base | factor vs tsrs base → final | factor vs tsgo base → final |
+|---|---:|---:|---|---|---|
+| sentry `--pool tsrs` srv (main) | 1.371 s | 1.398 s | **1.020 [1.005, 1.040]**; 12-round repeat 0.976 [0.940, 1.016] | 1.40 → 1.43 | 0.281 → 0.287 |
+| vscode `--pool tsrs` srv (main) | 4.687 s | 4.658 s | 0.994 [0.974, 1.025] | 2.09 → 2.08 | 0.324 → 0.322 |
+| bluesky `--single` ws (main) | 1.986 s | 1.981 s | 0.998 [0.991, 1.012] | 9.50 → 9.48 (single against tsrs's parallel run) | 2.41 → 2.40 |
+| playwright `--single` ws (main) | 3.363 s | 3.337 s | 0.992 [0.987, 0.999] | 10.74 → 10.65 | 2.24 → 2.22 |
+| bluesky `--single` srv (main) | 2.019 s | 2.012 s | 0.997 [0.946, 1.010] | 9.72 → 9.69 | 2.47 → 2.46 |
+| playwright `--single` srv (main) | 3.367 s | 3.355 s | 0.996 [0.987, 0.999] | 11.08 → 11.04 | 2.24 → 2.23 |
+| sentry `--pool tsrs` ws | 1.913 s | 1.920 s | 1.004 [0.973, 1.039] | 2.03 → 2.04 | 0.395 → 0.397 |
+| vscode `--pool tsrs` ws | 6.177 s | 6.165 s | 0.998 [0.965, 1.008] | 2.76 → 2.75 | 0.428 → 0.427 |
+| tldraw `--pool tsrs` srv | 0.683 s | 0.683 s | 1.000 [0.940, 1.054] | 1.76 → 1.76 | 0.345 → 0.345 |
+| vscode default pool ws | 11.837 s | 11.738 s | 0.992 [0.987, 1.001] | 5.25 → 5.21 | 0.823 → 0.816 |
+| playwright `--check --emit --single` ws | 4.606 s | 4.567 s | 0.991 [0.985, 0.998] | | |
+
+tsrs in these rounds: sentry 0.94–0.98 s, vscode 2.24–2.25 s, tldraw 0.39 s, bluesky 0.21 s, playwright 0.30–0.31 s; typescript-go 4.84–4.88, 14.38–14.45, 1.98, 0.82, 1.50 s. Geometric mean of the `--pool tsrs` srv factor over sentry, vscode and tldraw: 1.73 → 1.74 (the sentry median of these 7 rounds is above 1; its 12-round repeat is 0.976). The steps take 0.8–0.9 % off playwright single and emit and the vscode default pool; Server GC with 16 checkers is unchanged within noise.
+
+**What is left, by the survey.** No call-count divergence; no tsrs memo or shortcut left that is above 1 % here and exact for TypeScript 6.0.3's id-ordered unions (the two that map best, the contextual-type reuse and the index-literal shortcut, skip type creations and would move type ids). The gap is per-operation cost, spread evenly (flat profiles in TG1, RS1, RS2 and here), and the parallel loss above: the GC pause that stops all 16 checkers and the memory traffic of the heap. Those point at the memory-model rework (arenas for the type, symbol and signature records), not at further instruction cuts.
+
+**Gate C:** `--sample 200`, 2 runs of 15: after steps 1 and 3 (both pass, `{"track":"optimized","phase":"checker","modes":["types"],"sections":["diagnostics","types","symbols"],"sample":200,"pass":true}`). Gate D and the full Gate C were not run (author's decision).
+
+**Files:** `src/NeverSharp.Optimized/Checker/Checker.Instantiate.cs` (step 1), `Checker.Generics.cs` (step 3); this file. Scratch `PC1/`: `base/`, `s1`–`s4/` (drivers; `s3` is the final code), `probe/`, `probe-final/`, `probe.patch` (the counters), `rscount/` (the tsrs counts driver), `counts/`, `ploss/` (with `cpu.ps1`, `ploss.sh`, `ploss.mjs`), `tr/` (a jit-ws thread-time profile of playwright single: flat, as before), `runs/`, `dumps/`, `run.sh`, `step.sh`, `final.sh`, `mkv.mjs`, `dumpcheck.sh`, `cmpcounts.mjs`, `survey.md`, the rejected patches, `gatec-*.log`.
+
+**Rules:** C# edited with the file tools only. Bent or to note: (1) the tsrs counts driver is a scratch copy of `harness/bench/rust/parse-rs` built with the pinned toolchain from the cargo cache (offline, no download) into the scratch folder; `external/` unchanged; (2) the Track O probe was written with the file tools, saved with `git diff`, removed with `rm` and `git checkout`, and applied again for the final counts with `git apply` (version-control operations, no text edits by script); (3) to build and run Gate C for a step alone, files of the next step were set aside with `git stash push -- <files>` and restored with `git stash pop`; rejected steps were undone with `git checkout` after saving their diff; (4) step 1 was kept under the within-noise clause (it removes counted work; vscode srv median 1.015 at 6 rounds, 0.995 at 10); step 3 under the code-placement exception (bluesky single ws 1.006 / 1.002 at 6 / 10 rounds, jit-ws 0.998); (5) step 4 was rejected on the main workloads, its guards not run; (6) the final table's sentry srv row is slower by the interval (1.020) while its 12-round repeat is 0.976; both are reported; (7) the parallel-loss table compares process CPU for tsrs (it has no per-checker times in this version) with per-checker times for Track O.
