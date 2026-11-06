@@ -104,7 +104,7 @@ internal sealed partial class Checker
                 var instantiatedContextualSignature = Signature.None;
                 if ((checkMode & CheckMode.Inferential) != 0)
                 {
-                    InferFromAnnotatedParametersAndReturn(signature, contextualSignature, inferenceContext!);
+                    InferFromAnnotatedParametersAndReturn(signature, contextualSignature, inferenceContext!.Value);
                     var restType = GetEffectiveRestType(contextualSignature);
                     if (!restType.IsNone && (Types.Flags(restType) & TypeFlags.TypeParameter) != 0)
                     {
@@ -128,7 +128,7 @@ internal sealed partial class Checker
             var inferenceContext = GetInferenceContext(node);
             if ((checkMode & CheckMode.Inferential) != 0)
             {
-                InferFromAnnotatedParametersAndReturn(signature, contextualSignature, inferenceContext!);
+                InferFromAnnotatedParametersAndReturn(signature, contextualSignature, inferenceContext!.Value);
             }
         }
         if (!contextualSignature.IsNone && GetReturnTypeFromAnnotation(node).IsNone && Signatures.Record(signature).ResolvedReturnType.IsNone)

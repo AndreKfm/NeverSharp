@@ -349,9 +349,9 @@ internal sealed partial class Checker
         var type = CheckExpression(node, checkMode | CheckMode.Contextual | (inferenceContext is not null ? CheckMode.Inferential : CheckMode.Normal));
         // In CheckMode.Inferential we collect intra-expression inference sites to process before fixing any type
         // parameters. This information is no longer needed after the call to checkExpression.
-        if (inferenceContext is not null && inferenceContext.IntraExpressionInferenceSites is not null)
+        if (inferenceContext is { } context)
         {
-            inferenceContext.IntraExpressionInferenceSites = null;
+            ClearIntraExpressionInferenceSites(context);
         }
         // We strip literal freshness when an appropriate contextual type is present such that contextually typed
         // literals always preserve their literal types (otherwise they might widen during type inference). An alternative
@@ -715,7 +715,7 @@ internal sealed partial class Checker
     // instantiate_type_with_single_generic_call_signature makes no closure object)
     private Type InstantiateSingleGenericCallSignatureInContext(NodeRef node, Signature signature, Signature contextualSignature)
     {
-        var context = GetInferenceContext(node)!;
+        var context = GetInferenceContext(node)!.Value;
         // We have an expression that is an argument of a generic function for which we are performing
         // type argument inference. The expression is of a function type with a single generic call
         // signature and a contextual function type with a single non-generic call signature. Now check
@@ -724,7 +724,7 @@ internal sealed partial class Checker
         // potentially add inferred type parameters to the outer function return type.
         var returnType = !context.Signature.IsNone ? GetReturnTypeOfSignature(context.Signature) : Type.None;
         var returnSignature = !returnType.IsNone ? GetSingleCallOrConstructSignature(returnType) : Signature.None;
-        if (!returnSignature.IsNone && Signatures.Record(returnSignature).TypeParameters.Count == 0 && !Array.TrueForAll(context.Inferences, HasInferenceCandidates))
+        if (!returnSignature.IsNone && Signatures.Record(returnSignature).TypeParameters.Count == 0 && !context.Inferences.TrueForAll(HasInferenceCandidates))
         {
             // Instantiate the signature with its own type parameters as type arguments, possibly
             // renaming the type parameters to ensure they have unique names.
@@ -732,9 +732,9 @@ internal sealed partial class Checker
             var instantiatedSignature = GetSignatureInstantiationWithoutFillingInTypeArguments(signature, uniqueTypeParameters);
             // Infer from the parameters of the instantiated signature to the parameters of the
             // contextual signature starting with an empty set of inference candidates.
-            var inferences = Array.ConvertAll(context.Inferences, info => CreateInferenceInfo(info.TypeParameter));
+            var inferences = context.Inferences.ConvertAll(Arena, info => CreateInferenceInfo(info.TypeParameter));
             ApplyToParameterTypes(instantiatedSignature, contextualSignature, (source, target) => InferTypes(inferences, source, target, InferencePriority.None, contravariant: true));
-            if (Array.Exists(inferences, HasInferenceCandidates))
+            if (inferences.Exists(HasInferenceCandidates))
             {
                 // We have inference candidates, indicating that one or more type parameters are referenced
                 // in the parameter types of the contextual signature. Now also infer from the return type.
@@ -745,7 +745,7 @@ internal sealed partial class Checker
                 if (!HasOverlappingInferences(context.Inferences, inferences))
                 {
                     MergeInferences(context.Inferences, inferences);
-                    (context.InferredTypeParameters ??= []).AddRange(uniqueTypeParameters);
+                    InferredTypeParametersOrNew(context).AddRange(uniqueTypeParameters);
                     return GetOrCreateTypeFromSignature(instantiatedSignature);
                 }
             }
@@ -760,7 +760,7 @@ internal sealed partial class Checker
         {
             // We have skipped a generic function during inferential typing. Obtain the inference context and
             // indicate this has occurred such that we know a second pass of inference is be needed.
-            var context = GetInferenceContext(node)!;
+            var context = GetInferenceContext(node)!.Value;
             context.Flags |= InferenceFlags.SkippedGenericFunction;
         }
     }

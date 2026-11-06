@@ -391,7 +391,7 @@ internal sealed partial class Checker
                         if (inferenceContext is not null)
                         {
                             var inferenceNode = At(attributes, store.Expression(store.Initializer(attributeNode)));
-                            AddIntraExpressionInferenceSite(inferenceContext, inferenceNode, exprType);
+                            AddIntraExpressionInferenceSite(inferenceContext.Value, inferenceNode, exprType);
                         }
                     }
                 }

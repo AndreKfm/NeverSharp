@@ -1793,9 +1793,9 @@ internal sealed partial class Checker
                     // the source type uses the outer context's return mapper (which excludes inferences made from
                     // outer arguments), and (b) we don't want any further inferences going into this context.
                     var returnContext = CreateInferenceContext(typeParameters, signature, context.Flags);
-                    var returnSourceType = InstantiateType(contextualType, outerContext is null ? TypeMapper.None : CreateOuterReturnMapper(outerContext));
+                    var returnSourceType = InstantiateType(contextualType, outerContext is not { } outer ? TypeMapper.None : CreateOuterReturnMapper(outer));
                     InferTypes(returnContext.Inferences, returnSourceType, inferenceTargetType);
-                    context.ReturnMapper = Array.Exists(returnContext.Inferences, HasInferenceCandidates) ? GetMapperFromContext(CloneInferredPartOfContext(returnContext)) : TypeMapper.None;
+                    context.ReturnMapper = returnContext.Inferences.Exists(HasInferenceCandidates) ? GetMapperFromContext(CloneInferredPartOfContext(returnContext)) : TypeMapper.None;
                 }
             }
         }
@@ -1803,7 +1803,7 @@ internal sealed partial class Checker
         var argCount = !restType.IsNone ? Math.Min(GetParameterCount(signature) - 1, args.Count) : args.Count;
         if (!restType.IsNone && (Types.Flags(restType) & TypeFlags.TypeParameter) != 0)
         {
-            var info = Array.Find(context.Inferences, i => i.TypeParameter == restType);
+            var info = context.Inferences.Find(i => i.TypeParameter == restType);
             if (!info.IsNone)
             {
                 info.ImpliedArity = GetSpreadArgumentIndex(args, argCount) < 0 ? args.Count - argCount : null;
@@ -2272,11 +2272,12 @@ internal sealed partial class Checker
                     }
                     else
                     {
-                        inferenceContext = CreateInferenceContext(Types.Elements(candidateTypeParameters), candidate, Utilities.IsInJSFile(store, n) ? InferenceFlags.AnyDefault : InferenceFlags.None);
-                        typeArgumentTypes = InferTypeArguments(node, candidate, args, argCheckMode | CheckMode.SkipGenericFunctions, inferenceContext);
-                        argCheckMode |= (inferenceContext.Flags & InferenceFlags.SkippedGenericFunction) != 0 ? CheckMode.SkipGenericFunctions : CheckMode.Normal;
+                        var created = CreateInferenceContext(Types.Elements(candidateTypeParameters), candidate, Utilities.IsInJSFile(store, n) ? InferenceFlags.AnyDefault : InferenceFlags.None);
+                        inferenceContext = created;
+                        typeArgumentTypes = InferTypeArguments(node, candidate, args, argCheckMode | CheckMode.SkipGenericFunctions, created);
+                        argCheckMode |= (created.Flags & InferenceFlags.SkippedGenericFunction) != 0 ? CheckMode.SkipGenericFunctions : CheckMode.Normal;
                     }
-                    checkCandidate = GetSignatureInstantiation(candidate, typeArgumentTypes, isJavascript, inferenceContext?.InferredTypeParameters);
+                    checkCandidate = GetSignatureInstantiation(candidate, typeArgumentTypes, isJavascript, InferredTypeParametersOf(inferenceContext));
                     // If the original signature has a generic rest type, instantiation may produce a
                     // signature with different arity and we need to perform another arity check.
                     if (!GetNonArrayRestType(candidate).IsNone && !HasCorrectArity(node, args, checkCandidate, trailingComma))
@@ -2301,10 +2302,10 @@ internal sealed partial class Checker
                     // them now (and keeping do so for any subsequent candidates) and perform a second
                     // round of type inference and applicability checking for this particular candidate.
                     argCheckMode = CheckMode.Normal;
-                    if (inferenceContext is not null)
+                    if (inferenceContext is { } context)
                     {
-                        var typeArgumentTypes = InferTypeArguments(node, candidate, args, argCheckMode, inferenceContext);
-                        checkCandidate = GetSignatureInstantiation(candidate, typeArgumentTypes, isJavascript, inferenceContext.InferredTypeParameters);
+                        var typeArgumentTypes = InferTypeArguments(node, candidate, args, argCheckMode, context);
+                        checkCandidate = GetSignatureInstantiation(candidate, typeArgumentTypes, isJavascript, InferredTypeParametersOf(context));
                         // If the original signature has a generic rest type, instantiation may produce a
                         // signature with different arity and we need to perform another arity check.
                         if (!GetNonArrayRestType(candidate).IsNone && !HasCorrectArity(node, args, checkCandidate, trailingComma))

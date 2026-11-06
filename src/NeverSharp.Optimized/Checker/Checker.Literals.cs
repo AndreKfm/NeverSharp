@@ -110,7 +110,7 @@ internal sealed partial class Checker
                     var inferenceContext = GetInferenceContext(node);
                     if (inferenceContext is not null)
                     {
-                        AddIntraExpressionInferenceSite(inferenceContext, e, type);
+                        AddIntraExpressionInferenceSite(inferenceContext.Value, e, type);
                     }
                 }
             }
@@ -432,7 +432,7 @@ internal sealed partial class Checker
                     if (inferenceContext is not null)
                     {
                         var inferenceNode = memberKind == SyntaxKind.PropertyAssignment ? At(node, store.Initializer(memberNode)) : memberDecl;
-                        AddIntraExpressionInferenceSite(inferenceContext, inferenceNode, type);
+                        AddIntraExpressionInferenceSite(inferenceContext.Value, inferenceNode, type);
                     }
                 }
             }

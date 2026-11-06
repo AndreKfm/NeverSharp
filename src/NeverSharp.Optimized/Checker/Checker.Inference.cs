@@ -165,21 +165,209 @@ internal readonly unsafe struct InferenceInfo : IEquatable<InferenceInfo>
     public override int GetHashCode() => ((nint)record).GetHashCode();
 }
 
-/// <summary>types.ts InferenceContext.</summary>
-internal sealed class InferenceContext
+/// <summary>
+/// An inference context's inferences (module MM1, Track O / tsrs-only: tsrs keeps them as one arena slice,
+/// crates/tsrs_checker/src/checker.rs InferenceContext.inferences): a block of <see cref="InferenceInfo"/> handles in the
+/// checker's <see cref="CheckerArena"/> instead of an array object. Read and written like the array it replaces (the
+/// elements are replaced in place by mergeInferences); the length never changes. The block lives as long as the arena.
+/// </summary>
+internal readonly unsafe struct InferenceInfos
 {
-    // (module AR1, Track O / tsrs-only: an array, not a List, as tsrs keeps them as one slice, crates/tsrs_checker/src/
-    // checker.rs InferenceContext.inferences; the inferences of a context are never added to or removed after it is created)
-    public InferenceInfo[] Inferences = [];
+    private readonly InferenceInfo* items;
+    private readonly int length;
+
+    /// <summary>A block of <paramref name="length"/> undefined infos.</summary>
+    internal InferenceInfos(CheckerArena arena, int length)
+    {
+        items = length == 0 ? null : (InferenceInfo*)arena.Allocate((nint)length * sizeof(InferenceInfo));
+        this.length = length;
+    }
+
+    internal int Length => length;
+
+    internal ref InferenceInfo this[int index]
+    {
+        get
+        {
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual((uint)index, (uint)length, nameof(index));
+            return ref items[index];
+        }
+    }
+
+    internal Span<InferenceInfo> AsSpan() => new(items, length);
+
+    public Span<InferenceInfo>.Enumerator GetEnumerator() => AsSpan().GetEnumerator();
+
+    /// <summary>Array.Exists.</summary>
+    internal bool Exists(Func<InferenceInfo, bool> match)
+    {
+        foreach (var info in AsSpan())
+        {
+            if (match(info))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>Array.Find (default, the undefined info, when none matches).</summary>
+    internal InferenceInfo Find(Func<InferenceInfo, bool> match)
+    {
+        foreach (var info in AsSpan())
+        {
+            if (match(info))
+            {
+                return info;
+            }
+        }
+        return default;
+    }
+
+    /// <summary>Array.TrueForAll.</summary>
+    internal bool TrueForAll(Func<InferenceInfo, bool> match)
+    {
+        foreach (var info in AsSpan())
+        {
+            if (!match(info))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /// <summary>Array.ConvertAll into a new block (the elements in order).</summary>
+    internal InferenceInfos ConvertAll(CheckerArena arena, Func<InferenceInfo, InferenceInfo> convert)
+    {
+        var result = new InferenceInfos(arena, length);
+        for (var i = 0; i < length; i++)
+        {
+            result.items[i] = convert(items[i]);
+        }
+        return result;
+    }
+
+    /// <summary>Array.FindAll into a new block (the matching elements in order).</summary>
+    internal InferenceInfos FindAll(CheckerArena arena, Func<InferenceInfo, bool> match)
+    {
+        var count = 0;
+        foreach (var info in AsSpan())
+        {
+            if (match(info))
+            {
+                count++;
+            }
+        }
+        var result = new InferenceInfos(arena, count);
+        var k = 0;
+        foreach (var info in AsSpan())
+        {
+            if (match(info))
+            {
+                result.items[k++] = info;
+            }
+        }
+        return result;
+    }
+}
+
+/// <summary>types.ts InferenceContext: the record (module MM1: in the checker's <see cref="CheckerArena"/>).</summary>
+internal struct InferenceContextRecord
+{
+    public InferenceInfos Inferences;
     public Signature Signature;          // None: undefined
     public InferenceFlags Flags;
-    public Func<Type, Type, bool> CompareTypes = null!;
+    public int CompareTypes;             // the comparer: an index of Checker.inferenceComparers
     public TypeMapper Mapper;
     public TypeMapper NonFixingMapper;
     public TypeMapper ReturnMapper;
     public TypeMapper OuterReturnMapper;
-    public List<Type>? InferredTypeParameters;
-    public List<(NodeRef Node, Type Type)>? IntraExpressionInferenceSites;
+    public int InferredTypeParameters;        // a slot of Checker.inferredTypeParameterLists (0: undefined)
+    public int IntraExpressionInferenceSites; // a slot of Checker.intraExpressionSiteLists (0: undefined)
+}
+
+/// <summary>
+/// types.ts InferenceContext (module MM1, Track O / tsrs-only: tsrs keeps inference contexts in its checker arena,
+/// crates/tsrs_checker/src/checker.rs InferenceContext behind a P pointer; notes/mem-checker-scratch.md): a handle to an
+/// <see cref="InferenceContextRecord"/> in a native block of the checker's <see cref="CheckerArena"/>, read and written
+/// through the members below like the class it replaces; <c>==</c> is the identity of the context object. The record
+/// holds no references: the comparer is an index of the checker's comparer table, the rarely set lists are slots of the
+/// checker's side tables. The arena frees the record with the checker, so a handle never outlives its block. TypeScript's
+/// <c>InferenceContext | undefined</c> is <c>InferenceContext?</c>.
+/// </summary>
+internal readonly unsafe struct InferenceContext : IEquatable<InferenceContext>
+{
+    private readonly InferenceContextRecord* record;
+
+    internal InferenceContext(CheckerArena arena)
+    {
+        record = (InferenceContextRecord*)arena.Allocate(sizeof(InferenceContextRecord));
+    }
+
+    private InferenceContext(InferenceContextRecord* record)
+    {
+        this.record = record;
+    }
+
+    /// <summary>The context a fixing or non-fixing mapper record refers to (its address in two ints).</summary>
+    internal static InferenceContext FromParts(int low, int high) => new((InferenceContextRecord*)(nint)((long)high << 32 | (uint)low));
+
+    internal int AddressLow => (int)(long)(nint)record;
+
+    internal int AddressHigh => (int)((long)(nint)record >> 32);
+
+    public ref InferenceInfos Inferences => ref record->Inferences;
+
+    public ref Signature Signature => ref record->Signature;
+
+    public ref InferenceFlags Flags => ref record->Flags;
+
+    public ref int CompareTypes => ref record->CompareTypes;
+
+    public ref TypeMapper Mapper => ref record->Mapper;
+
+    public ref TypeMapper NonFixingMapper => ref record->NonFixingMapper;
+
+    public ref TypeMapper ReturnMapper => ref record->ReturnMapper;
+
+    public ref TypeMapper OuterReturnMapper => ref record->OuterReturnMapper;
+
+    public ref int InferredTypeParametersSlot => ref record->InferredTypeParameters;
+
+    public ref int IntraExpressionInferenceSitesSlot => ref record->IntraExpressionInferenceSites;
+
+    public static bool operator ==(InferenceContext left, InferenceContext right) => left.record == right.record;
+
+    public static bool operator !=(InferenceContext left, InferenceContext right) => left.record != right.record;
+
+    public bool Equals(InferenceContext other) => record == other.record;
+
+    public override bool Equals(object? obj) => obj is InferenceContext other && record == other.record;
+
+    public override int GetHashCode() => ((nint)record).GetHashCode();
+}
+
+/// <summary>
+/// The InferenceContext members the checker reads on a context it has checked for undefined (module MM1: the context is a
+/// nullable struct, which flow analysis does not unwrap; on undefined they throw, as the class members did).
+/// </summary>
+internal static class InferenceContextExtensions
+{
+    extension(InferenceContext? context)
+    {
+        internal ref InferenceInfos Inferences => ref context!.Value.Inferences;
+
+        internal ref Signature Signature => ref context!.Value.Signature;
+
+        internal ref InferenceFlags Flags => ref context!.Value.Flags;
+
+        internal ref TypeMapper Mapper => ref context!.Value.Mapper;
+
+        internal ref TypeMapper NonFixingMapper => ref context!.Value.NonFixingMapper;
+
+        internal ref TypeMapper ReturnMapper => ref context!.Value.ReturnMapper;
+    }
 }
 
 internal sealed partial class Checker
@@ -189,35 +377,95 @@ internal sealed partial class Checker
     // checker.ts compareTypesAssignable as a TypeComparer
     private Func<Type, Type, bool> CompareTypesAssignableFunc => compareTypesAssignableFunc ??= (s, t) => CompareTypesAssignable(s, t) != Ternary.False;
 
+    // Module MM1 (Track O / tsrs-only): the comparers of the inference contexts ([0]: compareTypesAssignable; a context
+    // created with another comparer adds it, as the context object held it before), and the side tables of the two lists
+    // a context rarely has ([0] unused; a cleared intra-expression list frees its slot for reuse).
+    private readonly List<Func<Type, Type, bool>> inferenceComparers = [];
+    private readonly List<List<Type>> inferredTypeParameterLists = [null!];
+    private readonly List<List<(NodeRef Node, Type Type)>?> intraExpressionSiteLists = [null];
+    private readonly Stack<int> freeIntraExpressionSiteSlots = new();
+
+    // the comparer index of a comparer (an index of inferenceComparers)
+    private int InferenceComparerIndex(Func<Type, Type, bool>? compareTypes)
+    {
+        if (inferenceComparers.Count == 0)
+        {
+            inferenceComparers.Add(CompareTypesAssignableFunc);
+        }
+        if (compareTypes is null || compareTypes == inferenceComparers[0])
+        {
+            return 0;
+        }
+        inferenceComparers.Add(compareTypes);
+        return inferenceComparers.Count - 1;
+    }
+
+    /// <summary>context.compareTypes(source, target).</summary>
+    internal bool CompareTypesOfContext(InferenceContext context, Type source, Type target) => inferenceComparers[context.CompareTypes](source, target);
+
+    /// <summary>context.inferredTypeParameters (null: undefined).</summary>
+    internal List<Type>? InferredTypeParametersOf(InferenceContext? context) =>
+        context is { } c && c.InferredTypeParametersSlot != 0 ? inferredTypeParameterLists[c.InferredTypeParametersSlot] : null;
+
+    /// <summary><c>context.inferredTypeParameters ??= []</c>.</summary>
+    internal List<Type> InferredTypeParametersOrNew(InferenceContext context)
+    {
+        if (context.InferredTypeParametersSlot == 0)
+        {
+            inferredTypeParameterLists.Add([]);
+            context.InferredTypeParametersSlot = inferredTypeParameterLists.Count - 1;
+        }
+        return inferredTypeParameterLists[context.InferredTypeParametersSlot];
+    }
+
+    /// <summary>context.intraExpressionInferenceSites (null: undefined).</summary>
+    internal List<(NodeRef Node, Type Type)>? IntraExpressionInferenceSitesOf(InferenceContext context) =>
+        context.IntraExpressionInferenceSitesSlot != 0 ? intraExpressionSiteLists[context.IntraExpressionInferenceSitesSlot] : null;
+
+    /// <summary><c>context.intraExpressionInferenceSites = undefined</c>.</summary>
+    internal void ClearIntraExpressionInferenceSites(InferenceContext context)
+    {
+        var slot = context.IntraExpressionInferenceSitesSlot;
+        if (slot != 0)
+        {
+            intraExpressionSiteLists[slot] = null;
+            freeIntraExpressionSiteSlots.Push(slot);
+            context.IntraExpressionInferenceSitesSlot = 0;
+        }
+    }
+
     /// <summary>checker.ts createInferenceContext.</summary>
     internal InferenceContext CreateInferenceContext(ReadOnlySpan<Type> typeParameters, Signature signature, InferenceFlags flags, Func<Type, Type, bool>? compareTypes = null)
     {
-        var inferences = new InferenceInfo[typeParameters.Length];
+        var inferences = new InferenceInfos(Arena, typeParameters.Length);
         for (var i = 0; i < inferences.Length; i++)
         {
             inferences[i] = CreateInferenceInfo(typeParameters[i]);
         }
-        return CreateInferenceContextWorker(inferences, signature, flags, compareTypes ?? CompareTypesAssignableFunc);
+        return CreateInferenceContextWorker(inferences, signature, flags, InferenceComparerIndex(compareTypes));
     }
 
     /// <summary>checker.ts cloneInferenceContext.</summary>
     internal InferenceContext? CloneInferenceContext(InferenceContext? context, InferenceFlags extraFlags = InferenceFlags.None) =>
-        context is null ? null : CreateInferenceContextWorker(Array.ConvertAll(context.Inferences, CloneInferenceInfo), context.Signature, context.Flags | extraFlags, context.CompareTypes);
+        context is not { } c ? null : CreateInferenceContextWorker(c.Inferences.ConvertAll(Arena, CloneInferenceInfo), c.Signature, c.Flags | extraFlags, c.CompareTypes);
 
     // checker.ts createInferenceContextWorker
-    private InferenceContext CreateInferenceContextWorker(InferenceInfo[] inferences, Signature signature, InferenceFlags flags, Func<Type, Type, bool> compareTypes)
+    private InferenceContext CreateInferenceContextWorker(InferenceInfos inferences, Signature signature, InferenceFlags flags, int compareTypes)
     {
-        var context = new InferenceContext { Inferences = inferences, Signature = signature, Flags = flags, CompareTypes = compareTypes };
-        // (module CO6: both mappers refer to the context by one slot of the mapper store's object table)
-        var slot = Mappers.AddObject(context);
-        context.Mapper = MakeFixingMapperForContext(slot);
-        context.NonFixingMapper = MakeNonFixingMapperForContext(slot);
+        var context = new InferenceContext(Arena);
+        context.Inferences = inferences;
+        context.Signature = signature;
+        context.Flags = flags;
+        context.CompareTypes = compareTypes;
+        // (module CO6: both mappers refer to the context; module MM1: by the record's address, no object table)
+        context.Mapper = MakeFixingMapperForContext(context);
+        context.NonFixingMapper = MakeNonFixingMapperForContext(context);
         return context;
     }
 
     // checker.ts makeFixingMapperForContext (module CO6: a mapper kind of its own; the sources are the inferences' type
     // parameters, which never change, and the target of source i is GetFixedInferredType(context, i))
-    private TypeMapper MakeFixingMapperForContext(int contextSlot) => Mappers.Add(TypeMapKind.Fixing, contextSlot, 0);
+    private TypeMapper MakeFixingMapperForContext(InferenceContext context) => Mappers.Add(TypeMapKind.Fixing, context.AddressLow, context.AddressHigh);
 
     // makeFixingMapperForContext's target function of inference index
     private Type GetFixedInferredType(InferenceContext context, int index)
@@ -235,10 +483,10 @@ internal sealed partial class Checker
     }
 
     // checker.ts makeNonFixingMapperForContext (module CO6: a mapper kind of its own, target GetInferredType(context, i))
-    private TypeMapper MakeNonFixingMapperForContext(int contextSlot) => Mappers.Add(TypeMapKind.NonFixing, contextSlot, 0);
+    private TypeMapper MakeNonFixingMapperForContext(InferenceContext context) => Mappers.Add(TypeMapKind.NonFixing, context.AddressLow, context.AddressHigh);
 
     // checker.ts clearCachedInferences
-    private static void ClearCachedInferences(InferenceInfo[] inferences)
+    private static void ClearCachedInferences(InferenceInfos inferences)
     {
         foreach (var inference in inferences)
         {
@@ -250,13 +498,28 @@ internal sealed partial class Checker
     }
 
     /// <summary>checker.ts addIntraExpressionInferenceSite.</summary>
-    internal static void AddIntraExpressionInferenceSite(InferenceContext context, NodeRef node, Type type) =>
-        (context.IntraExpressionInferenceSites ??= []).Add((node, type));
+    internal void AddIntraExpressionInferenceSite(InferenceContext context, NodeRef node, Type type)
+    {
+        if (context.IntraExpressionInferenceSitesSlot == 0)
+        {
+            if (freeIntraExpressionSiteSlots.TryPop(out var slot))
+            {
+                intraExpressionSiteLists[slot] = [];
+            }
+            else
+            {
+                intraExpressionSiteLists.Add([]);
+                slot = intraExpressionSiteLists.Count - 1;
+            }
+            context.IntraExpressionInferenceSitesSlot = slot;
+        }
+        intraExpressionSiteLists[context.IntraExpressionInferenceSitesSlot]!.Add((node, type));
+    }
 
     // checker.ts inferFromIntraExpressionSites
     private void InferFromIntraExpressionSites(InferenceContext context)
     {
-        if (context.IntraExpressionInferenceSites is { } sites)
+        if (IntraExpressionInferenceSitesOf(context) is { } sites)
         {
             foreach (var (node, type) in sites)
             {
@@ -268,7 +531,7 @@ internal sealed partial class Checker
                     InferTypes(context.Inferences, type, contextualType);
                 }
             }
-            context.IntraExpressionInferenceSites = null;
+            ClearIntraExpressionInferenceSites(context);
         }
     }
 
@@ -297,12 +560,12 @@ internal sealed partial class Checker
     /// <summary>checker.ts cloneInferredPartOfContext.</summary>
     internal InferenceContext? CloneInferredPartOfContext(InferenceContext context)
     {
-        var inferences = Array.FindAll(context.Inferences, HasInferenceCandidates);
-        return inferences.Length > 0 ? CreateInferenceContextWorker(Array.ConvertAll(inferences, CloneInferenceInfo), context.Signature, context.Flags, context.CompareTypes) : null;
+        var inferences = context.Inferences.FindAll(Arena, HasInferenceCandidates);
+        return inferences.Length > 0 ? CreateInferenceContextWorker(inferences.ConvertAll(Arena, CloneInferenceInfo), context.Signature, context.Flags, context.CompareTypes) : null;
     }
 
     /// <summary>checker.ts getMapperFromContext.</summary>
-    internal static TypeMapper GetMapperFromContext(InferenceContext? context) => context is null ? TypeMapper.None : context.Mapper;
+    internal static TypeMapper GetMapperFromContext(InferenceContext? context) => context is { } c ? c.Mapper : TypeMapper.None;
 
     // checker.ts createBackreferenceMapper
     private TypeMapper CreateBackreferenceMapper(InferenceContext context, int index)
@@ -321,7 +584,7 @@ internal sealed partial class Checker
     /// <summary>checker.ts createOuterReturnMapper.</summary>
     internal TypeMapper CreateOuterReturnMapper(InferenceContext context) =>
         !context.OuterReturnMapper.IsNone ? context.OuterReturnMapper
-            : context.OuterReturnMapper = MergeTypeMappers(context.ReturnMapper, CloneInferenceContext(context)!.Mapper);
+            : context.OuterReturnMapper = MergeTypeMappers(context.ReturnMapper, CloneInferenceContext(context)!.Value.Mapper);
 
     /// <summary>checker.ts isTypeParameterAtTopLevel.</summary>
     internal bool IsTypeParameterAtTopLevel(Type type, Type tp, int depth = 0)
@@ -503,7 +766,9 @@ internal sealed partial class Checker
         var typeParameter = GetIndexedAccessType(Types.Data<IndexData>(constraint).Type, GetTypeParameterFromMappedType(target));
         var templateType = GetTemplateTypeFromMappedType(target);
         var inference = CreateInferenceInfo(typeParameter);
-        InferTypes([inference], sourceType, templateType);
+        var inferences = new InferenceInfos(Arena, 1);
+        inferences[0] = inference;
+        InferTypes(inferences, sourceType, templateType);
         var inferred = GetTypeFromInference(inference);
         return GetWidenedType(inferred.IsNone ? unknownType : inferred);
     }
@@ -664,11 +929,11 @@ internal sealed partial class Checker
         : Type.None;
 
     /// <summary>checker.ts inferTypes.</summary>
-    internal void InferTypes(InferenceInfo[] inferences, Type originalSource, Type originalTarget, InferencePriority priority = InferencePriority.None, bool contravariant = false) =>
+    internal void InferTypes(InferenceInfos inferences, Type originalSource, Type originalTarget, InferencePriority priority = InferencePriority.None, bool contravariant = false) =>
         new InferenceState(this, inferences, originalTarget, priority, contravariant).InferFromTypes(originalSource, originalTarget);
 
     // checker.ts inferTypes: the state its nested functions share
-    private sealed class InferenceState(Checker c, InferenceInfo[] inferences, Type originalTarget, InferencePriority priority, bool contravariant)
+    private sealed class InferenceState(Checker c, InferenceInfos inferences, Type originalTarget, InferencePriority priority, bool contravariant)
     {
         private bool bivariant;
         private Type propagationType;
@@ -1784,7 +2049,7 @@ internal sealed partial class Checker
                     var preferCovariantType = !inferredCovariantType.IsNone && (inferredContravariantType.IsNone ||
                         ((Types.Flags(inferredCovariantType) & (TypeFlags.Never | TypeFlags.Any)) == 0 &&
                             IsAssignableToSomeContraCandidate(inferredCovariantType, inference) &&
-                            Array.TrueForAll(context.Inferences, other =>
+                            context.Inferences.TrueForAll(other =>
                                 (other != inference && GetConstraintOfTypeParameter(other.TypeParameter) != inference.TypeParameter) ||
                                 other.Candidates.IsNone || AreCandidatesAssignableTo(other, inferredCovariantType))));
                     inferredType = preferCovariantType ? inferredCovariantType : inferredContravariantType;
@@ -1823,18 +2088,18 @@ internal sealed partial class Checker
                 if (!inferredType.IsNone)
                 {
                     var constraintWithThis = GetTypeWithThisArgument(instantiatedConstraint, inferredType);
-                    if (!context.CompareTypes(inferredType, constraintWithThis))
+                    if (!CompareTypesOfContext(context, inferredType, constraintWithThis))
                     {
                         // If we have a pure return type inference, we may succeed by removing constituents of the inferred type
                         // that aren't assignable to the constraint type (pure return type inferences are speculation anyway).
-                        var filteredByConstraint = inference.Priority == InferencePriority.ReturnType ? FilterType(inferredType, t => context.CompareTypes(t, constraintWithThis)) : neverType;
+                        var filteredByConstraint = inference.Priority == InferencePriority.ReturnType ? FilterType(inferredType, t => CompareTypesOfContext(context, t, constraintWithThis)) : neverType;
                         inferredType = (Types.Flags(filteredByConstraint) & TypeFlags.Never) == 0 ? filteredByConstraint : Type.None;
                     }
                 }
                 if (inferredType.IsNone)
                 {
                     // If the fallback type satisfies the constraint, we pick it. Otherwise, we pick the constraint.
-                    inferredType = !fallbackType.IsNone && context.CompareTypes(fallbackType, GetTypeWithThisArgument(instantiatedConstraint, fallbackType)) ? fallbackType : instantiatedConstraint;
+                    inferredType = !fallbackType.IsNone && CompareTypesOfContext(context, fallbackType,GetTypeWithThisArgument(instantiatedConstraint, fallbackType)) ? fallbackType : instantiatedConstraint;
                 }
                 inference.InferredType = inferredType;
             }
@@ -2022,7 +2287,7 @@ internal sealed partial class Checker
     internal bool HasInferenceCandidatesOrDefault(InferenceInfo info) => !info.Candidates.IsNone || !info.ContraCandidates.IsNone || HasTypeParameterDefault(info.TypeParameter);
 
     // checker.ts hasOverlappingInferences
-    private static bool HasOverlappingInferences(InferenceInfo[] a, InferenceInfo[] b)
+    private static bool HasOverlappingInferences(InferenceInfos a, InferenceInfos b)
     {
         for (var i = 0; i < a.Length; i++)
         {
@@ -2035,7 +2300,7 @@ internal sealed partial class Checker
     }
 
     // checker.ts mergeInferences
-    private static void MergeInferences(InferenceInfo[] target, InferenceInfo[] source)
+    private static void MergeInferences(InferenceInfos target, InferenceInfos source)
     {
         for (var i = 0; i < target.Length; i++)
         {
@@ -2055,12 +2320,12 @@ internal sealed partial class Checker
         foreach (var tp in typeParameters)
         {
             var name = NameOf(Types.Symbol(tp));
-            if (HasTypeParameterByName(context.InferredTypeParameters, name) || HasTypeParameterByName(result, name))
+            if (HasTypeParameterByName(InferredTypeParametersOf(context), name) || HasTypeParameterByName(result, name))
             {
                 var all = new List<Type>();
-                if (context.InferredTypeParameters is not null)
+                if (InferredTypeParametersOf(context) is { } inferredTypeParameters)
                 {
-                    all.AddRange(context.InferredTypeParameters);
+                    all.AddRange(inferredTypeParameters);
                 }
                 all.AddRange(result);
                 var newName = GetUniqueTypeParameterName(all, name);

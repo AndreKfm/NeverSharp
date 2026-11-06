@@ -78,8 +78,8 @@ internal enum TypeMapKind : byte
     Array,      // A: types chunk, B: offset of the sources (the targets follow them), C: count
     ArrayToAny, // A: types chunk, B: offset of the sources, C: count; every source maps to any
     Deferred,   // A: object index (DeferredTargets)
-    Fixing,     // A: object index (the InferenceContext)
-    NonFixing,  // A: object index (the InferenceContext)
+    Fixing,     // A, B: the InferenceContext record's address, low and high half (module MM1)
+    NonFixing,  // A, B: the InferenceContext record's address, low and high half (module MM1)
     Function,   // A: object index (Func<Type, Type>)
     Composite,  // A: mapper1, B: mapper2
     Merged,     // A: mapper1, B: mapper2
@@ -267,7 +267,7 @@ internal sealed partial class Checker
             case TypeMapKind.Fixing:
             case TypeMapKind.NonFixing:
             {
-                var context = (InferenceContext)Mappers.ObjectAt(record.A);
+                var context = InferenceContext.FromParts(record.A, record.B);
                 var fixing = record.Kind == TypeMapKind.Fixing;
                 var inferences = context.Inferences;
                 for (var i = 0; i < inferences.Length; i++)
