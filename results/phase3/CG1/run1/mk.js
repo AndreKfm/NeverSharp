@@ -1,0 +1,10 @@
+const S=process.argv[2];const R="D:/Private/Source/Andre/projects/NeverSharp/artifacts/bin/";
+const d={final:S+"/MM1m/final",v3:S+"/CG1/v3",speed:S+"/CG1/speed",v3speed:S+"/CG1/v3speed"};
+const ex=(k,g)=>d[k]+"/optimized-aot-"+g+"/parse-cs-optimized-aot-"+g+".exe";
+const v=[];for(const g of ["srv","ws"]) for(const k of Object.keys(d)) v.push({name:k+"-"+g,exe:ex(k,g),flags:["--check","--pool","tsrs"]});
+v.push({name:"tsrs",exe:R+"parse-rs.exe",flags:["--check"]});
+const fs=require("fs");fs.writeFileSync(S+"/CG1/variants-par.json",JSON.stringify(v,null,1));
+const v2=v.concat([{name:"final-single",exe:ex("final","ws"),flags:["--check","--single"]},{name:"v3speed-single",exe:ex("v3speed","ws"),flags:["--check","--single"]},{name:"v3-single",exe:ex("v3","ws"),flags:["--check","--single"]}]);
+fs.writeFileSync(S+"/CG1/variants-all.json",JSON.stringify(v2,null,1));
+for(const x of v2) if(!fs.existsSync(x.exe)) console.log("MISSING",x.exe);
+console.log(v.length,v2.length);
