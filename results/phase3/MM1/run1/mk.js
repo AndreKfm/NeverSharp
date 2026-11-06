@@ -1,0 +1,9 @@
+const S=process.argv[2];const B=S+"/MM1/base/optimized-aot-",F=S+"/MM1m/final/optimized-aot-";
+const ex=(p,g)=>p+g+"/parse-cs-optimized-aot-"+g+".exe";const R="D:/Private/Source/Andre/projects/NeverSharp/artifacts/bin/";
+const v=[{name:"base-srv-tsrs",exe:ex(B,"srv"),flags:["--check","--pool","tsrs"]},{name:"final-srv-tsrs",exe:ex(F,"srv"),flags:["--check","--pool","tsrs"]},
+{name:"base-ws-tsrs",exe:ex(B,"ws"),flags:["--check","--pool","tsrs"]},{name:"final-ws-tsrs",exe:ex(F,"ws"),flags:["--check","--pool","tsrs"]},
+{name:"final-ws-default",exe:ex(F,"ws"),flags:["--check"]},{name:"final-ws-single",exe:ex(F,"ws"),flags:["--check","--single"]},
+{name:"tsrs",exe:R+"parse-rs.exe",flags:["--check"]},{name:"tsgo",exe:R+"parse-go.exe",flags:["--check"]}];
+require("fs").writeFileSync(S+"/MM1m/variants.json",JSON.stringify(v,null,1));
+for(const x of v) if(!require("fs").existsSync(x.exe)) console.log("MISSING",x.exe);
+console.log(v.length);
