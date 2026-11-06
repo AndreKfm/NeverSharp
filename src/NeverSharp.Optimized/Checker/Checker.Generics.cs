@@ -2436,12 +2436,22 @@ internal sealed partial class Checker
     }
 
     // checker.ts getReducedApparentType
-    private Type GetReducedApparentType(Type type) =>
+    private Type GetReducedApparentType(Type type)
+    {
+        // (module PC1, Track O / tsrs-only shape: a plain object type that is not a mapped type is its own reduced type
+        // and its own apparent type, so the three calls return it unchanged; tsrs answers this case inline,
+        // notes/perf-icount-hillclimb.md "Inline fast paths ... getReducedApparentType for a plain object type".)
+        if ((Types.Flags(type) & (TypeFlags.Object | TypeFlags.Instantiable | TypeFlags.UnionOrIntersection)) == TypeFlags.Object &&
+            (Types.ObjectFlagsOf(type) & ObjectFlags.Mapped) == 0)
+        {
+            return type;
+        }
         // Since getApparentType may return a non-reduced union or intersection type, we need to perform
         // type reduction both before and after obtaining the apparent type. For example, given a type parameter
         // 'T extends A | B', the type 'T & X' becomes 'A & X | B & X' after obtaining the apparent type, and
         // that type may need further reduction to remove empty intersections.
-        GetReducedType(GetApparentType(GetReducedType(type)));
+        return GetReducedType(GetApparentType(GetReducedType(type)));
+    }
 
     private readonly Dictionary<Type, Type> resolvedReducedTypes = [];
 
