@@ -1828,3 +1828,10 @@ AR probe drivers built from 2fe9c1d with the probe added and removed again (scra
     - ws vs tsgo7-emit 0.782 [0.779, 0.786]; single 0.68; srv 0.73;
     - vs tsrs-emit 3.848; single vs tsrs-emit-single 1.350.
 - The endpoints are unchanged: check 1.680, emit 1.030, check12 1.305.
+
+## Project closed (2026-11-07)
+
+The author closed the project after the `prereg/v12` runs and report v1.4 (`docs/report-v1.md`). No further optimization or measurement is planned.
+- **Not pursued:** the instruction-count probe of the remaining tsrs gap (instructions and IPC per checked type, C# vs tsrs).
+- **Open:** the build issue NU1903. Builds need `WarningsNotAsErrors=NU1903`; upgrade or suppression is not decided.
+- **Not done:** republishing the report artifact. The artifact tools failed in the closing session. The page builds with `scripts/report-page.mjs`.

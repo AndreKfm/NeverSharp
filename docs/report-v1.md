@@ -2,6 +2,8 @@
 
 This report collects the results of the project, from the pre-registration (`prereg/v1`, 2026-10-21) to the last amendment (`prereg/v12`, 2026-11-06).
 
+**The project was closed by the author on 2026-11-07** after the `prereg/v12` runs. No further optimization or measurement is planned. The items in §13 stay open as listed.
+
 **v1.1** (2026-11-03) adds the optimization step CO6 and the two additional runs after it (profile `check` and profile `check12`). No endpoint changes. v1 was f157691.
 
 **v1.2** (2026-11-03) corrects §8, §9 and §11 after the analysis TG1 of the tsrs gap ([tsrs-gap.md](tsrs-gap.md)): what the gap consists of, tsrs's locality assignment and assignment-independent output, and its driver build without PGO. No numbers of the protocol change. (In v1.3 these sections are numbered §9, §10 and §12.)
@@ -478,6 +480,7 @@ All were fixed with a full Gate C.
 | 2026-11-04 | EA1 (emit allocation account); EO1, EO2 (emit, tsrs structures); tuning on the benchmark corpus begins |
 | 2026-11-05 | RS1, RS2 (checker, tsrs memos); SC1 (`--pool tsrs`); FE1 (front end); AR1, AR2 (arenas, gen0 budget) |
 | 2026-11-06 | PC1, MM1, CG1; full Gate C and Gate D pass on 1eabf90; `prereg/v12`; `checkpool` run (ws 2.149, srv 1.832 vs tsrs); additional runs check 0.756, emit 0.782 |
+| 2026-11-07 | Report v1.4; project closed by the author |
 
 The 18-week budget for Phase 1 (to 2027-02-24) was not needed. Every phase finished inside it.
 
@@ -488,4 +491,6 @@ The 18-week budget for Phase 1 (to 2027-02-24) was not needed. Every phase finis
 - Gates: `node harness/port/gate.mjs --track optimized --phase parser|binder|checker|emit`; Track F: `--track faithful`.
 - Emit equivalence of the programs: `node harness/bench/emit-equivalence.mjs`.
 - Protocol runs: `node harness/bench/bench.mjs --profile full|binder|check|check12|emit|checkpool`, then `node harness/bench/report.mjs <run.json>` ([benchmark-harness.md](benchmark-harness.md)).
+- The HTML page of this report: `node scripts/report-page.mjs docs/report-v1.md <out.html>`.
+- Builds currently need `WarningsNotAsErrors=NU1903` in the environment. The advisory GHSA-p3jp-9v83-76w9 on `Microsoft.DotNet.ILCompiler` 10.0.13 fails `dotnet publish`. Whether to upgrade or suppress it was left open by the author.
 - Verify a timestamp: `node scripts/ots.mjs verify docs/timestamps/prereg-vN.txt.ots`.
