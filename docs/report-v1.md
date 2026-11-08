@@ -26,7 +26,7 @@ The pre-registered question (§1) asks:
 > Does a faithful C# port of tsc land within 20 % of typescript-go's wall-clock on Microsoft's benchmark corpus?
 
 **For parsing, no.**
-- **Track F, the faithful port**, follows typescript-go's porting rules: no optimization without a typescript-go counterpart. It parses **6.31 [6.20, 6.41]** times as slow as typescript-go. This is the only pre-registered verdict on the question.
+- **Track F, the unoptimized faithful port**, follows typescript-go's porting rules: no optimization without a typescript-go counterpart. It parses **6.31 [6.20, 6.41]** times as slow as typescript-go. This is the only pre-registered verdict on the question.
 
 **A second question was registered separately.** How fast can a performance-optimized C# port of the same compiler be? Track O answers it, and it is never reported in place of the Track F verdict.
 - **Parsing:** Track O parses faster than typescript-go (endpoint G = **0.60**).
@@ -54,7 +54,7 @@ G is the geometric mean over the five repositories of median(C#) / median(refere
 
 | Scope | Comparison | G [95 % CI] | Verdict | Repositories above 1.20 | Peak working set (G) | Source |
 |---|---|---|---|---|---:|---|
-| Parsing, faithful (Track F) | `cs-aot-ws` vs `tsgo7-parse` | **6.31 [6.20, 6.41]** | **no parity** | all five | 1.14 | `results/m6/2026-10-22T07-01-02-524Z/` |
+| Parsing, unoptimized (Track F, faithful port) | `cs-aot-ws` vs `tsgo7-parse` | **6.31 [6.20, 6.41]** | **no parity** | all five | 1.14 | `results/m6/2026-10-22T07-01-02-524Z/` |
 | Parsing, optimized (Track O) | `cs-o-aot-ws` vs `tsgo7-parse` | **0.60 [0.59, 0.61]** | **faster** | none | 0.45 | `results/track-o/endpoint/2026-10-22T18-55-52-105Z/` |
 | Parse+bind, optimized | `cs-o-aot-ws-bind` vs `tsgo7-bind` | **1.207 [1.191, 1.219]** | **inconclusive** | sentry | 1.09 | `results/phase2/binder-endpoint/2026-10-24T11-21-53-808Z/` |
 | Parse+bind+check of a program, optimized, 4 checkers | `cs-o-aot-ws-check` vs `tsgo7-check` | **1.680 [1.675, 1.689]** | **no parity** | all five | 0.93 | `results/phase3/checker-endpoint/2026-10-29T14-41-57-488Z/` |
@@ -119,7 +119,7 @@ Peak working set (G) is the geometric mean over the repositories of the C# media
 
 ## 4. Phase 1: parsing
 
-### Track F (faithful)
+### Track F (unoptimized, faithful)
 
 Track F ports `scanner.ts` and `parser.ts`, with the parts of `types.ts`, `utilities.ts` and the diagnostic messages they need. It follows the port rules of §5: no optimization without a typescript-go counterpart, UTF-16 strings, classes as in the source.
 
@@ -305,7 +305,7 @@ At the TG1 analysis (after CO6) the check was 1.685.
 
 Every claim names the track and scope, and gives G with its interval.
 
-**Faithful track:**
+**Unoptimized faithful track (Track F):**
 - Parsing is more than 20 % slower than typescript-go: 6.31 [6.20, 6.41]. This is the answer to the pre-registered question.
 
 **Optimized track, endpoints:**

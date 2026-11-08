@@ -65,7 +65,7 @@ while (i < lines.length) {
 
 // Ratio scale: G with its interval on a log axis, the 1.00 and 1.20 lines of the decision rule.
 const rows = [
-  ["Parsing, faithful (Track F)", "endpoint", 6.31, 6.20, 6.41],
+  ["Parsing, unoptimized (Track F)", "endpoint", 6.31, 6.20, 6.41],
   ["Parsing, optimized", "endpoint", 0.60, 0.59, 0.61],
   ["Parsing, optimized", "last additional", 0.40, 0.39, 0.40],
   ["Parse+bind", "endpoint", 1.207, 1.191, 1.219],
