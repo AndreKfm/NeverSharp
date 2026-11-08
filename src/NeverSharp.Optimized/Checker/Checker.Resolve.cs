@@ -1,5 +1,6 @@
 // Copyright 2026 Andre Kaufmann
 // Portions Copyright (c) Microsoft Corporation.
+// Portions Copyright 2026 Max Schwenk and the tsrs contributors
 // SPDX-License-Identifier: Apache-2.0
 //
 // Ported from src/compiler/utilities.ts (createNameResolver) and src/compiler/checker.ts (resolveName's callbacks

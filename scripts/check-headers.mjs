@@ -31,7 +31,7 @@ let files = 0;
 for (const file of walk(join(root, "src"))) {
     files++;
     const rel = relative(root, file).split("\\").join("/");
-    const head = readFileSync(file, "utf8").replace(/\r\n/g, "\n").split("\n").slice(0, 12);
+    const head = readFileSync(file, "utf8").replace(/\r\n/g, "\n").split("\n").slice(0, 16);
     if (!/^\/\/ Copyright \d{4} Andre Kaufmann$/.test(head[0] ?? "")) problems.push(`${rel}: line 1 must be the copyright line`);
     const spdx = head.findIndex(l => l === "// SPDX-License-Identifier: Apache-2.0");
     if (spdx < 0) problems.push(`${rel}: missing "// SPDX-License-Identifier: Apache-2.0"`);

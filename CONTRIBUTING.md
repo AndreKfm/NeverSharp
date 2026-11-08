@@ -42,6 +42,9 @@ per upstream file.
   `// Original code (not ported): <reason>` as its third line.
 - Files generated from upstream data (`src/Generated/*.g.cs`) carry `// Generated from <path>` with the
   commit, `Portions Copyright (c) Microsoft Corporation.` and the change notice; the generator writes them.
+- A file that adapts data structures or code from tsrs (`oxc-project/tsrs`, tag `v0.18.0`, Apache-2.0; Track O
+  only) adds `// Portions Copyright 2026 Max Schwenk and the tsrs contributors` after the Microsoft line (after the
+  copyright line in original-code files) and names the tsrs file it follows in a comment at the place it is used.
 - `node scripts/check-headers.mjs` checks every file under `src/` (part of Gate 2).
 
 ## Reference checkouts

@@ -1,4 +1,5 @@
 // Copyright 2026 Andre Kaufmann
+// Portions Copyright 2026 Max Schwenk and the tsrs contributors
 // SPDX-License-Identifier: Apache-2.0
 // Original code (not ported): Track O / tsrs-only (module AR1), native memory per checker for the checker's
 // reference-free stores, after tsrs's per-thread checker arenas (tsrs crates/tsrs_core/src/arena.rs; external/tsrs

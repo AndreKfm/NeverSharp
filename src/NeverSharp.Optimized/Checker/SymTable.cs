@@ -1,4 +1,5 @@
 // Copyright 2026 Andre Kaufmann
+// Portions Copyright 2026 Max Schwenk and the tsrs contributors
 // SPDX-License-Identifier: Apache-2.0
 // Original code (not ported): Track O's symbol tables of the checker (modules C1, CO1, CO2, CO3;
 // docs/phase3-checker-layout.md).

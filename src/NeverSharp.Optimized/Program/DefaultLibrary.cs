@@ -1,4 +1,5 @@
 // Copyright 2026 Andre Kaufmann
+// Portions Copyright 2026 Max Schwenk and the tsrs contributors
 // SPDX-License-Identifier: Apache-2.0
 // Original code (not ported): Track O's shared default library (module C0, docs/phase3-checker-layout.md).
 
