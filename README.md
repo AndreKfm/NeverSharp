@@ -2,9 +2,11 @@
 
 A C# port of the TypeScript 6.0.3 compiler (scanner, parser, binder, type checker, emitter), measured against typescript-go 7.0.2 under a pre-registered protocol. tsrs, a Rust port, is a secondary reference.
 
-**Status: closed (2026-11-07).** This is a research project, not a usable compiler. There is no CLI for end users, and no further work is planned. All measurements are from one Windows machine (AMD Ryzen 9 3900X, 12 cores); a Linux replication was not run.
+**Status: closed (2026-11-07).** This is a research project, not a usable compiler. There is no CLI for end users, only the benchmark driver, and no further work is planned. All measurements are from one Windows machine (AMD Ryzen 9 3900X, 12 cores); a Linux replication was not run.
 
 The full write-up is [docs/report-v1.md](docs/report-v1.md) (report v1.4).
+
+The measured NativeAOT driver (Windows x64) can be downloaded from the [releases](https://github.com/AndreKfm/NeverSharp/releases). It checks and emits a list of TypeScript files as one program and prints counts as JSON; see the README in the zip.
 
 ## The question
 
