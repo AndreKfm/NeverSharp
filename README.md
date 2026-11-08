@@ -6,7 +6,7 @@ A C# port of the TypeScript 6.0.3 compiler (scanner, parser, binder, type checke
 
 The full write-up is [docs/report-v1.md](docs/report-v1.md) (report v1.4).
 
-The measured NativeAOT driver (Windows x64) can be downloaded from the [releases](https://github.com/AndreKfm/NeverSharp/releases). It checks and emits a list of TypeScript files as one program and prints counts as JSON; see the README in the zip.
+The measured NativeAOT driver for Windows x64, and a Linux x64 build checked for identical output, can be downloaded from the [releases](https://github.com/AndreKfm/NeverSharp/releases). It checks and emits a list of TypeScript files as one program and prints counts as JSON; see the README in the package.
 
 ## The question
 
