@@ -32,7 +32,7 @@ NeverSharp's time divided by the reference's time, as a geometric mean over the 
 | Type check, with tsrs's kind of pool (Workstation GC) | **0.42** (faster) | **2.15** |
 | Type check, single-threaded | **0.70** (faster) | **1.47** |
 | Type check + emit (.js and .d.ts) | **0.78** (faster) | **3.85** |
-| Parsing, unoptimized faithful port (Track F) | 6.31 (slower) | — |
+| Parsing, unoptimized C# | 6.31 (slower) | — |
 
 The pools differ by default:
 - **typescript-go:** 4 checkers.
