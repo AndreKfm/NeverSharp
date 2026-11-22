@@ -19,6 +19,39 @@ In short:
 
 The details are below and in the report.
 
+## Go and Rust at a glance
+
+NeverSharp's time divided by the reference's time, as a geometric mean over the five benchmark repositories (vscode, sentry, bluesky, playwright, tldraw). Below 1 means C# is faster. These are the latest measurements (Track O, NativeAOT, Workstation GC unless noted). They were taken after tuning on the same five repositories; the pre-registered endpoints, measured before that tuning, are under [Results](#results).
+
+| Work | vs Go (typescript-go 7.0.2) | vs Rust (tsrs 0.18.0) |
+|---|---:|---:|
+| Parsing | **0.40** (faster) | **1.04** |
+| Parsing + binding | **0.43** (faster) | **1.15** |
+| Type check, each tool with its default pool | **0.76** (faster) | **3.79** |
+| Type check, with tsrs's kind of pool (Server GC) | **0.36** (faster) | **1.83** |
+| Type check, with tsrs's kind of pool (Workstation GC) | **0.42** (faster) | **2.15** |
+| Type check, single-threaded | **0.70** (faster) | **1.47** |
+| Type check + emit (.js and .d.ts) | **0.78** (faster) | **3.85** |
+| Parsing, unoptimized faithful port (Track F) | 6.31 (slower) | — |
+
+The pools differ by default:
+- **typescript-go:** 4 checkers.
+- **tsrs:** up to 16 checkers, with directory-locality assignment and work stealing.
+- **NeverSharp:** 4 checkers like typescript-go by default; `--pool tsrs` switches to tsrs's scheme.
+
+With its default pool, typescript-go itself takes 5.10× tsrs's time.
+
+**Wall-clock time to type-check vscode** (11,724 files, one 12-core Windows machine):
+
+| Tool | Time |
+|---|---:|
+| typescript-go 7.0.2 (4 checkers) | 14.32 s |
+| NeverSharp (4 checkers) | 10.89 s |
+| NeverSharp (`--pool tsrs`, Server GC) | 4.34 s |
+| tsrs 0.18.0 | 2.21 s |
+
+The first two rows come from one run and the last two from another, on the same machine.
+
 ## The question
 
 The pre-registered question asks whether a faithful C# port of tsc lands within 20 % of typescript-go's wall-clock time on Microsoft's benchmark corpus (vscode, sentry, bluesky, playwright, tldraw).
