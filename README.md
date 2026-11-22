@@ -8,6 +8,17 @@ The full write-up is [docs/report-v1.md](docs/report-v1.md) (report v1.4).
 
 The measured NativeAOT driver for Windows x64, and a Linux x64 build checked for identical output, can be downloaded from the [releases](https://github.com/AndreKfm/NeverSharp/releases). It checks and emits a list of TypeScript files as one program and prints counts as JSON; see the README in the package.
 
+## Why
+
+When Microsoft announced that the TypeScript compiler would be ported to Go, one question came up again and again: why not C#? I wanted a measured answer instead of opinions, so I ported the TypeScript compiler to C#. First, to see whether it is possible at all. Second, to see how fast C# can get when the hot data stays away from the garbage collector, in structs, spans and native arenas instead of object graphs.
+
+In short:
+- A straight port is far slower than Go.
+- An optimized port beats Go: at parsing from the start, at checking and emitting only after tuning on the benchmark corpus.
+- Rust (tsrs) is still about twice as fast.
+
+The details are below and in the report.
+
 ## The question
 
 The pre-registered question asks whether a faithful C# port of tsc lands within 20 % of typescript-go's wall-clock time on Microsoft's benchmark corpus (vscode, sentry, bluesky, playwright, tldraw).
